@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vrunner Admin</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 2rem; background: #0d1117; color: #c9d1d9; }
+        h1 { color: #58a6ff; }
+        .command-list { border: 1px solid #30363d; border-radius: 6px; padding: 1rem; margin-top: 1rem; }
+        .command-item { padding: 0.5rem; border-bottom: 1px solid #21262d; }
+        .status-running { color: #3fb950; }
+        .status-exited { color: #f85149; }
+        .vtty-viewer { background: #161b22; border: 1px solid #30363d; padding: 1rem; font-family: monospace; white-space: pre; overflow: auto; height: 400px; margin-top: 1rem; }
+        .key-input { margin-top: 1rem; }
+        input, button { padding: 0.5rem; background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
+        button { cursor: pointer; }
+        button:hover { background: #30363d; }
+    </style>
+</head>
+<body>
+    <h1>vrunner Admin</h1>
+    <div id="commands" class="command-list">
+        <p>Loading commands...</p>
+    </div>
+    <div class="key-input">
+        <input type="text" id="keyInput" placeholder="Type keys to send...">
+        <button onclick="sendKeys()">Send</button>
+    </div>
+    <div id="vtty" class="vtty-viewer"></div>
+
+    <script>
+        let selectedCommandId = null;
+
+        async function loadCommands() {
+            const res = await fetch('/api/commands');
+            const json = await res.json();
+            const container = document.getElementById('commands');
+            if (json.status === 'ok' && json.data.length > 0) {
+                if (!selectedCommandId) selectedCommandId = json.data[0].id;
+                container.innerHTML = json.data.map(cmd => `
+                    <div class="command-item" onclick="selectCommand('${cmd.id}')" style="cursor:pointer;">
+                        <strong>${cmd.name || cmd.id}</strong>
+                        <span class="status-${cmd.status}">${cmd.status}</span>
+                        <button onclick="event.stopPropagation(); killCommand('${cmd.id}')">Kill</button>
+                    </div>
+                `).join('');
+                loadVtty();
+            } else {
+                container.innerHTML = '<p>No commands running.</p>';
+            }
+        }
+
+        function selectCommand(id) {
+            selectedCommandId = id;
+            loadVtty();
+        }
+
+        async function loadVtty() {
+            if (!selectedCommandId) return;
+            const res = await fetch(`/api/commands/${selectedCommandId}/vtty`);
+            const json = await res.json();
+            const viewer = document.getElementById('vtty');
+            if (json.status === 'ok') {
+                viewer.textContent = json.data.content || '(empty)';
+            }
+        }
+
+        async function sendKeys() {
+            const input = document.getElementById('keyInput');
+            if (!selectedCommandId || !input.value) return;
+            await fetch(`/api/commands/${selectedCommandId}/keys`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ keys: input.value })
+            });
+            input.value = '';
+        }
+
+        async function killCommand(id) {
+            await fetch(`/api/commands/${id}/kill`, { method: 'POST' });
+            if (selectedCommandId === id) selectedCommandId = null;
+            loadCommands();
+        }
+
+        setInterval(loadCommands, 2000);
+        loadCommands();
+    </script>
+</body>
+</html>

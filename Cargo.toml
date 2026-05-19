@@ -1,0 +1,78 @@
+[package]
+name = "vrunner"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <you@example.com>"]
+description = "A virtual terminal runner with web control plane"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/yourusername/vrunner"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Web framework
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace", "fs"] }
+
+# HTTP client (for CLI stop command)
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Configuration
+config = "0.14"
+
+# Error handling
+thiserror = "1"
+anyhow = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# IDs and time
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# PTY abstraction
+portable-pty = "0.8"
+
+# Terminal display
+crossterm = "0.27"
+
+# Daemonization (Unix only)
+daemonize = "0.5"
+
+# Directories
+dirs = "5"
+
+# Process info
+sysinfo = "0.29"
+
+# Async traits
+async-trait = "0.1"
+
+# Static file embedding
+rust-embed = { version = "8", features = ["axum", "mime-guess"] }
+
+# Utilities
+dashmap = "5"
+bytes = "1"
+futures = "0.3"
+
+# Synchronization (fast RwLock for VTTY buffer)
+parking_lot = "0.12"
+
+[profile.release]
+strip = "symbols"
+opt-level = "z"
+lto = true
+panic = "abort"
+codegen-units = 1

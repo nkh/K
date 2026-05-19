@@ -1,0 +1,35 @@
+# vrunner configuration file
+# Place this as vrunner.yaml in your project root
+
+server:
+  bind: "127.0.0.1"
+  port: 8080
+
+vtty:
+  rows: 24
+  cols: 80
+  term: "xterm-256color"
+  scrollback: 5000
+  truecolor: true
+  mouse: false
+
+display:
+  enabled: false
+  refresh_ms: 100
+
+command_log:
+  enabled: false
+  file: null
+
+daemon:
+  enabled: false
+  stdout_file: "/tmp/vrunner.out"
+  stderr_file: "/tmp/vrunner.err"
+
+# Default handles provided to every command
+handles:
+  - name: "debug"
+    sink: "file"
+    path: "./logs/debug-{id}.log"
+  - name: "aux"
+    sink: "vtty"
