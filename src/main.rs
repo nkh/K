@@ -3,21 +3,12 @@ use clap::Parser;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
-mod cli;
-mod config;
-mod daemon;
-mod handles;
-mod instance;
-mod logging;
-mod process;
-mod vtty;
-mod web;
-
-use cli::args::{Cli, Commands};
-use config::loader::load_config;
-use instance::registry::InstanceRegistry;
-use process::manager::CommandManager;
-use web::server::start_server;
+use vrunner::cli::args::{Cli, Commands};
+use vrunner::config::loader::load_config;
+use vrunner::daemon;
+use vrunner::instance::registry::InstanceRegistry;
+use vrunner::process::manager::CommandManager;
+use vrunner::web::server::start_server;
 
 
 #[tokio::main]
