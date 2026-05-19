@@ -5,6 +5,7 @@ pub struct Config {
     pub server: ServerConfig,
     pub security: SecurityConfig,
     pub tls: TlsConfig,
+    pub certificates: CertificatesConfig,
     pub vtty: VttyConfig,
     pub display: DisplayConfig,
     pub command_log: CommandLogConfig,
@@ -70,6 +71,37 @@ pub struct TlsConfig {
     /// Path to the PEM-encoded private key file.
     /// If not set, defaults to ~/.config/vrunner/key.pem.
     pub key_file: Option<String>,
+}
+
+/// Configuration for the certificate pool.
+///
+/// Each entry defines a named certificate that can be bound to running commands.
+/// When a command is bound to a certificate, only clients presenting that
+/// certificate (or its derived bearer token) can interact with the command.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct CertificatesConfig {
+    /// Directory where auto-generated certificates are stored.
+    /// Default: ~/.config/vrunner/certs/
+    #[serde(default)]
+    pub directory: Option<String>,
+    /// Named certificate definitions.
+    /// Each entry has a name, cert_file, and key_file.
+    /// Missing files are auto-generated on first use.
+    #[serde(default)]
+    pub entries: Vec<CertificateEntryConfig>,
+}
+
+/// A single named certificate in the pool.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CertificateEntryConfig {
+    /// Logical name for this certificate (e.g., "webapp-frontend").
+    pub name: String,
+    /// Path to the PEM-encoded certificate file.
+    /// Can be absolute or relative to certificates.directory.
+    pub cert_file: String,
+    /// Path to the PEM-encoded private key file.
+    /// Can be absolute or relative to certificates.directory.
+    pub key_file: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

@@ -3,12 +3,13 @@ use clap::Parser;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
-use vrunner::cli::args::{Cli, Commands};
+use vrunner::cli::args::{Cli, Commands, CertAction};
 use vrunner::config::loader::load_config;
 use vrunner::daemon;
 use vrunner::instance::registry::InstanceRegistry;
 use vrunner::process::manager::CommandManager;
 use vrunner::web::auth::AuthManager;
+use vrunner::web::certs::CertificateStore;
 use vrunner::web::server::start_server;
 
 /// Synchronous pre-runtime phase: parse CLI, handle subcommands, load config,
@@ -28,6 +29,11 @@ fn pre_runtime() -> Result<Option<Cli>> {
         Some(Commands::Stop { pid: _ }) => {
             // stop_instance is async (uses reqwest), so we need the runtime
             // Fall through to the async phase
+        }
+        Some(Commands::Cert { action }) => {
+            // Cert subcommands are synchronous — handle them here
+            handle_cert_command(action)?;
+            return Ok(None);
         }
         None => {}
     }
@@ -70,7 +76,7 @@ async fn async_main(cli: Cli) -> Result<()> {
         if !cmd_args.is_empty() {
             let cmd = cmd_args[0].clone();
             let args = cmd_args[1..].to_vec();
-            let _id = manager.spawn(cmd, args).await?;
+            let _id = manager.spawn(cmd, args, None).await?;
         }
     }
 
@@ -80,7 +86,7 @@ async fn async_main(cli: Cli) -> Result<()> {
     // Start the web server
     let server_handle = tokio::spawn(async move {
         start_server(
-            cfg.server.bind,
+            cfg.server.bind.clone(),
             cfg.server.port,
             manager.clone(),
             shutdown_tx,
@@ -88,6 +94,7 @@ async fn async_main(cli: Cli) -> Result<()> {
             cfg.tls.enabled,
             cfg.tls.cert_file.as_deref(),
             cfg.tls.key_file.as_deref(),
+            &cfg,
         ).await
     });
 
@@ -139,4 +146,118 @@ fn main() -> Result<()> {
         .enable_all()
         .build()?
         .block_on(async_main(cli))
+}
+
+/// Handle `vrunner cert` subcommands (generate, list, show, remove).
+///
+/// These are synchronous operations that don't require the tokio runtime.
+fn handle_cert_command(action: &CertAction) -> Result<()> {
+    match action {
+        CertAction::Generate { name } => {
+            let mut store = CertificateStore::new();
+            let entry = store.generate(name)?;
+            let token = entry.derive_token()?;
+            println!("Certificate '{}' generated successfully.", name);
+            println!("  Certificate: {}", entry.cert_file);
+            println!("  Key:        {}", entry.key_file);
+            println!("  Token:      {}... (first 16 of 64 chars)", &token[..16]);
+        }
+        CertAction::List => {
+            let cfg = load_config(None)?;
+            let entries: Vec<vrunner::web::certs::CertificateEntry> = cfg
+                .certificates
+                .entries
+                .iter()
+                .map(|e| vrunner::web::certs::CertificateEntry {
+                    name: e.name.clone(),
+                    cert_file: e.cert_file.clone(),
+                    key_file: e.key_file.clone(),
+                })
+                .collect();
+
+            if entries.is_empty() {
+                println!("No certificates configured.");
+                return Ok(());
+            }
+
+            match CertificateStore::load_or_generate(entries) {
+                Ok(store) => {
+                    let certs = store.list();
+                    if certs.is_empty() {
+                        println!("No certificates in the store.");
+                    } else {
+                        println!("{:<25} {:<50} {}", "NAME", "CERT FILE", "TOKEN (prefix)");
+                        println!("{}", "-".repeat(100));
+                        for cert in certs {
+                            let token_preview = cert
+                                .derive_token()
+                                .map(|t| format!("{}...", &t[..16]))
+                                .unwrap_or_else(|_| "<error>".to_string());
+                            println!("{:<25} {:<50} {}", cert.name, cert.cert_file, token_preview);
+                        }
+                    }
+                }
+                Err(e) => {
+                    anyhow::bail!("Failed to load certificates: {}", e);
+                }
+            }
+        }
+        CertAction::Show { name } => {
+            let cfg = load_config(None)?;
+            let entries: Vec<vrunner::web::certs::CertificateEntry> = cfg
+                .certificates
+                .entries
+                .iter()
+                .map(|e| vrunner::web::certs::CertificateEntry {
+                    name: e.name.clone(),
+                    cert_file: e.cert_file.clone(),
+                    key_file: e.key_file.clone(),
+                })
+                .collect();
+
+            let store = CertificateStore::load_or_generate(entries)?;
+
+            match store.get(name) {
+                Some(entry) => {
+                    let token = entry.derive_token()?;
+                    println!("Certificate: {}", entry.name);
+                    println!("  Certificate: {}", entry.cert_file);
+                    println!("  Key:        {}", entry.key_file);
+                    println!("  Token:      {} (full SHA-256 hex)", token);
+                    println!("  Token (16): {}...", &token[..16]);
+                }
+                None => {
+                    anyhow::bail!("Certificate '{}' not found in store", name);
+                }
+            }
+        }
+        CertAction::Remove { name } => {
+            let cfg = load_config(None)?;
+            let entries: Vec<vrunner::web::certs::CertificateEntry> = cfg
+                .certificates
+                .entries
+                .iter()
+                .map(|e| vrunner::web::certs::CertificateEntry {
+                    name: e.name.clone(),
+                    cert_file: e.cert_file.clone(),
+                    key_file: e.key_file.clone(),
+                })
+                .collect();
+
+            let mut store = CertificateStore::load_or_generate(entries)?;
+
+            match store.remove(name) {
+                Some(entry) => {
+                    println!("Certificate '{}' removed from store.", name);
+                    println!("  Certificate: {}", entry.cert_file);
+                    println!("  Key:        {}", entry.key_file);
+                    println!("  Note: Files were not deleted.");
+                }
+                None => {
+                    anyhow::bail!("Certificate '{}' not found in store", name);
+                }
+            }
+        }
+    }
+    Ok(())
 }

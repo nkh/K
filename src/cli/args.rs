@@ -42,6 +42,12 @@ pub struct Cli {
     #[arg(long, value_name = "FILE")]
     pub key_file: Option<String>,
 
+    /// Define a named certificate for the certificate pool (can be repeated).
+    /// Format: NAME:CERT_FILE:KEY_FILE
+    /// Example: --certificate "myapp:/path/to/cert.pem:/path/to/key.pem"
+    #[arg(long, value_name = "NAME:CERT:KEY")]
+    pub certificate: Option<Vec<String>>,
+
     /// Run as a background daemon (Unix only)
     #[arg(long)]
     pub daemon: bool,
@@ -106,7 +112,7 @@ pub struct Cli {
     #[arg(long)]
     pub no_mouse: bool,
 
-    /// Subcommand (list, stop)
+    /// Subcommand (list, stop, cert)
     #[command(subcommand)]
     pub command: Option<Commands>,
 
@@ -123,6 +129,32 @@ pub enum Commands {
     Stop {
         /// PID of the instance to stop
         pid: u32,
+    },
+    /// Manage named certificates for per-command access control
+    Cert {
+        #[command(subcommand)]
+        action: CertAction,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum CertAction {
+    /// Generate a new named certificate
+    Generate {
+        /// Name for the certificate (e.g., "webapp-frontend")
+        name: String,
+    },
+    /// List all certificates in the pool
+    List,
+    /// Show details of a specific certificate
+    Show {
+        /// Name of the certificate to display
+        name: String,
+    },
+    /// Remove a certificate from the pool
+    Remove {
+        /// Name of the certificate to remove
+        name: String,
     },
 }
 
@@ -159,6 +191,21 @@ impl Cli {
         }
         if let Some(key_file) = &self.key_file {
             cfg.tls.key_file = Some(key_file.clone());
+        }
+
+        // Certificates pool (from --certificate NAME:CERT:KEY flags)
+        if let Some(cert_defs) = &self.certificate {
+            for cert_def in cert_defs {
+                let parts: Vec<&str> = cert_def.splitn(3, ':').collect();
+                if parts.len() == 3 {
+                    use crate::config::schema::CertificateEntryConfig;
+                    cfg.certificates.entries.push(CertificateEntryConfig {
+                        name: parts[0].to_string(),
+                        cert_file: parts[1].to_string(),
+                        key_file: parts[2].to_string(),
+                    });
+                }
+            }
         }
 
         // Daemon

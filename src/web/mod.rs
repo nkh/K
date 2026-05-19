@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod certs;
 pub mod handlers;
 pub mod middleware;
 pub mod router;

@@ -3,6 +3,8 @@ use anyhow::Result;
 use tokio::sync::broadcast;
 
 use crate::process::manager::CommandManager;
+use crate::web::certs::CertificateStore;
+use crate::config::schema::Config;
 use super::router::create_router;
 use super::state::AppState;
 use super::tls::TlsManager;
@@ -17,8 +19,35 @@ pub async fn start_server(
     tls_enabled: bool,
     tls_cert_file: Option<&str>,
     tls_key_file: Option<&str>,
+    config: &Config,
 ) -> Result<()> {
-    let state = AppState::new(manager, shutdown_tx.clone(), auth_token);
+    // Initialize certificate store from config
+    let cert_entries: Vec<crate::web::certs::CertificateEntry> = config
+        .certificates
+        .entries
+        .iter()
+        .map(|e| crate::web::certs::CertificateEntry {
+            name: e.name.clone(),
+            cert_file: e.cert_file.clone(),
+            key_file: e.key_file.clone(),
+        })
+        .collect();
+
+    let cert_store = match CertificateStore::load_or_generate(cert_entries) {
+        Ok(store) => {
+            let count = store.list().len();
+            if count > 0 {
+                tracing::info!("Certificate store loaded with {} certificate(s)", count);
+            }
+            Arc::new(store)
+        }
+        Err(e) => {
+            tracing::warn!("Failed to initialize certificate store: {}, continuing without certs", e);
+            Arc::new(CertificateStore::new())
+        }
+    };
+
+    let state = AppState::new(manager, shutdown_tx.clone(), auth_token, cert_store);
     let router = create_router(state);
     let app = router.into_make_service();
 

@@ -12,6 +12,7 @@ Complete reference for all configuration entries, CLI flags, and their relations
    - [server](#server)
    - [security](#security)
    - [tls](#tls)
+   - [certificates](#certificates)
    - [vtty](#vtty)
    - [display](#display)
    - [command_log](#command_log)
@@ -97,6 +98,36 @@ tls:
   enabled: false
   cert_file: null
   key_file: null
+```
+
+### `certificates`
+
+Manages a pool of named certificates for per-command access control. Each certificate in the pool is a named cert/key pair with a derived bearer token (SHA-256 of the certificate PEM). Commands can be bound to a specific certificate, restricting access to only clients presenting that certificate's token.
+
+| Key | Type | Default | CLI Flag | Description |
+|-----|------|---------|----------|-------------|
+| `directory` | `string?` | `null` | — | Base directory for storing generated certificate files. When set, `vrunner cert generate` will save certs as subdirectories under this path. If `null`, generated certificates are stored in a temporary location. |
+| `entries` | `array<CertificateEntryConfig>` | `[]` | `--certificate NAME:CERT:KEY` | Pre-defined certificate entries to load into the pool at startup. Each entry specifies a name, certificate file, and key file. |
+
+**CertificateEntryConfig fields:**
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `name` | `string` | Unique identifier for the certificate in the pool. |
+| `cert_file` | `string` | Path to the PEM-encoded certificate file. |
+| `key_file` | `string` | Path to the PEM-encoded private key file. |
+
+**Example:**
+```yaml
+certificates:
+  directory: "~/.config/vrunner/certs"
+  entries:
+    - name: "my-app"
+      cert_file: "my-app/cert.pem"
+      key_file: "my-app/key.pem"
+    - name: "staging"
+      cert_file: "/etc/ssl/staging/cert.pem"
+      key_file: "/etc/ssl/staging/key.pem"
 ```
 
 ### `vtty`
@@ -308,6 +339,8 @@ Every configuration file entry has a corresponding CLI flag. This table summariz
 | `daemon` | `stdout_file` | `--stdout-file <FILE>` |
 | `daemon` | `stderr_file` | `--stderr-file <FILE>` |
 | `handles` | *(array)* | Config only — no CLI equivalent |
+| `certificates` | `directory` | Config only — no CLI equivalent |
+| `certificates` | `entries` | `--certificate NAME:CERT:KEY` |
 
 **CLI-only flags** (no config key, by design):
 

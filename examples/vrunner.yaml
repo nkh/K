@@ -29,6 +29,15 @@ tls:
   # Custom private key file path (optional — auto-generated if omitted).
   key_file: null
 
+certificates:
+  # Base directory for generated certificate files.
+  directory: "~/.config/vrunner/certs"
+  # Pre-defined certificate entries for the pool.
+  entries: []
+    # - name: "my-app"
+    #   cert_file: "my-app/cert.pem"
+    #   key_file: "my-app/key.pem"
+
 vtty:
   # Number of rows in the virtual terminal.
   rows: 24

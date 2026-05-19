@@ -13,6 +13,10 @@ pub struct CommandHandle {
     pub stdin_tx: mpsc::Sender<StdinMessage>,
     pub _exit_rx: oneshot::Receiver<()>,
     pub handle_registry: HandleRegistry,
+    /// Optional certificate name bound to this command.
+    /// When set, only clients presenting this certificate (or its derived token)
+    /// can interact with the command's endpoints.
+    pub certificate: Option<String>,
 }
 
 impl CommandHandle {

@@ -177,6 +177,7 @@ Extensible file descriptor routing.
 | `router.rs` | Route table with `AppState` injection. All handlers receive `State<AppState>`. |
 | `handlers/` | One module per endpoint group: `commands.rs`, `keys.rs`, `vtty.rs`, `admin.rs`, `handles.rs`. |
 | `middleware.rs` | CORS, authentication, request logging, JSON error envelopes. |
+| `certs.rs` | `CertificateStore`: manages a pool of named certificates for per-command access control. Generates self-signed certs via `rcgen`, derives bearer tokens from certificate content via SHA-256. |
 | `static_assets.rs` | Embedded admin SPA via `rust-embed`. |
 
 #### Route Table
@@ -200,6 +201,36 @@ pub fn create_router(state: AppState) -> Router {
 ### 3.13 Admin Interface (`static/admin/`)
 
 Lightweight SPA served from embedded assets. Communicates with the REST API.
+
+### 3.14 Certificate System (`src/web/certs.rs`)
+
+The certificate system provides a pool of named certificates that can be bound to individual commands for per-command access control.
+
+| Component | Description |
+|-----------|-------------|
+| `CertificateStore` | Thread-safe pool (`DashMap<String, CertificateEntry>`) holding named certificate/key pairs. Shared via `AppState`. Initialized from config entries and CLI `--certificate` flags. |
+| `CertificateEntry` | A named cert/key pair with a derived bearer token. The token is computed as `SHA-256(PEM certificate)`, hex-encoded. This allows clients to authenticate using the token derived from the certificate content. |
+| `CommandHandle.certificate` | Optional field on each running command. When set, only API requests bearing the matching derived token can interact with that command's endpoints. Unbound commands follow the normal auth rules. |
+| CLI subcommands | `cert generate <name>` creates a self-signed cert via `rcgen` and adds it to the pool. `cert list`, `cert show <name>`, and `cert remove <name>` manage the pool. |
+
+**Per-command access control flow:**
+
+```
+API Request → Auth Middleware
+                  │
+         ┌────────┴────────┐
+         │                 │
+   Command is cert-bound   Command is unbound
+         │                 │
+   Check cert-derived     Follow normal auth rules
+   token in header        (bearer token or no auth)
+         │                 │
+   ┌─────┴─────┐          │
+   │           │          │
+  Match     No match      │
+   │           │          │
+  Allow    403 Forbidden  │
+```
 
 ---
 
@@ -241,6 +272,12 @@ CLI: vrunner --port 9090 --tls -- htop
        ▼
 ┌──────────────┐
 │ TLS Manager  │──► Load or generate self-signed certs (if --tls)
+└──────────────┘
+       │
+       ▼
+┌──────────────┐
+│ Certificate  │──► Initialize cert pool from config + CLI --certificate flags
+│ Store        │──► Derive bearer tokens (SHA-256 of cert PEM) for each entry
 └──────────────┘
        │
        ▼
@@ -375,6 +412,8 @@ Request → CORS middleware → Auth middleware → Handler
 | `rust-embed` | Embed admin assets |
 | `dashmap` | Concurrent hash map |
 | `tower-http` | CORS middleware |
+| `sha2` | SHA-256 hashing for certificate token derivation |
+| `hex` | Hex encoding for certificate tokens |
 
 ---
 

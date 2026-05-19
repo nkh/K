@@ -158,6 +158,7 @@ impl ProcessSpawner {
             stdin_tx,
             _exit_rx: exit_rx,
             handle_registry,
+            certificate: None,
         })
     }
 }

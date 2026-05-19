@@ -134,6 +134,19 @@
 | FR-57 | Custom certificate and key paths must be supported via CLI flags (`--cert-file`, `--key-file`). | Should |
 | FR-58 | TLS must use `rustls` (no OpenSSL dependency). | Should |
 
+### 2.15 Certificate Management
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-59 | vrunner must support a pool of named certificates for per-command access control. | Must |
+| FR-60 | Certificates can be generated via CLI (`vrunner cert generate <name>`) or configured in the config file. | Must |
+| FR-61 | Each certificate in the pool must have a derived bearer token (SHA-256 of the certificate PEM). | Must |
+| FR-62 | When starting a command, a certificate name can be specified to bind the command to that certificate. | Must |
+| FR-63 | Only clients presenting the bound certificate's derived token can interact with the command's endpoints. | Must |
+| FR-64 | Unbound commands are accessible to any authenticated client (or unauthenticated on localhost). | Must |
+| FR-65 | Different vrunner instances can have completely different certificate pools. | Must |
+| FR-66 | The certificate pool must be configurable via YAML config file. | Should |
+
 ## 3. Non-Functional Requirements
 
 | ID | Requirement | Priority |
@@ -151,7 +164,7 @@
 
 - Persistent sessions across `vrunner` restarts.
 - Clustering or multi-node process distribution.
-- Public CA-signed certificates (users should use `--cert-file`/`--key-file` or a reverse proxy for that).
+- Public CA-signed certificates in the certificate pool (use `--cert-file`/`--key-file` for the instance TLS cert, or a reverse proxy for public CA certs).
 - Client certificate authentication (bearer token auth is used instead).
 
 ## 5. Glossary

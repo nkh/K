@@ -11,12 +11,13 @@ pub async fn list_commands(
 ) -> Json<Value> {
     let commands = state.manager.list();
     let data: Vec<Value> = commands.into_iter()
-        .map(|(id, name, pid)| {
+        .map(|(id, name, pid, certificate)| {
             serde_json::json!({
                 "id": id,
                 "name": name,
                 "pid": pid,
-                "status": "running"
+                "status": "running",
+                "certificate": certificate,
             })
         })
         .collect();
@@ -32,6 +33,9 @@ pub async fn start_command(
         .and_then(|v| v.as_array())
         .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
         .unwrap_or_default();
+    let certificate: Option<String> = body.get("certificate")
+        .and_then(|v| v.as_str())
+        .map(String::from);
 
     if cmd.is_empty() {
         return Json(serde_json::json!({
@@ -41,7 +45,18 @@ pub async fn start_command(
         }));
     }
 
-    match state.manager.spawn(cmd, args).await {
+    // Validate certificate name if provided
+    if let Some(ref cert_name) = certificate {
+        if !state.cert_store.exists(cert_name) {
+            return Json(serde_json::json!({
+                "status": "error",
+                "data": null,
+                "error": format!("Certificate '{}' not found in store", cert_name)
+            }));
+        }
+    }
+
+    match state.manager.spawn(cmd, args, certificate).await {
         Ok(id) => Json(serde_json::json!({
             "status": "ok",
             "data": { "id": id },

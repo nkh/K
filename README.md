@@ -20,6 +20,7 @@ A virtual terminal runner and process orchestrator with a web-first control plan
 - **Local VTTY Display** — Mirror a command's virtual terminal to your local screen on demand.
 - **Declarative Config** — Configure via YAML, overridden by CLI flags.
 - **Extensible Handles** — Route extra file descriptors to the VTTY or to managed log files.
+- **Certificate Pool** — Manage named certificates for per-command access control. Each running application can be bound to a specific certificate.
 
 ---
 
@@ -65,6 +66,12 @@ vrunner --display -- vim file.txt
 
 ```bash
 vrunner --port 9090 -- npm run dev
+```
+
+### Generate a certificate for an application
+
+```bash
+vrunner cert generate my-app
 ```
 
 ### Run with TLS (HTTPS)
@@ -132,6 +139,12 @@ vrunner [OPTIONS] [-- <COMMAND> [ARGS...]]
 | `--cert-file` | `<FILE>` | auto | Path to PEM certificate |
 | `--key-file` | `<FILE>` | auto | Path to PEM private key |
 
+### Certificate Options
+
+| Flag | Argument | Description |
+|------|----------|-------------|
+| `--certificate` | `NAME:CERT:KEY` | Define a named certificate for the pool (repeatable) |
+
 ### VTTY Options
 
 | Flag | Argument | Default | Description |
@@ -171,6 +184,10 @@ vrunner [OPTIONS] [-- <COMMAND> [ARGS...]]
 |---------|----------|-------------|
 | `list` | — | List all running vrunner instances |
 | `stop` | `<PID>` | Shut down a vrunner instance by PID |
+| `cert generate` | `<name>` | Generate a named certificate |
+| `cert list` | — | List all certificates in the pool |
+| `cert show` | `<name>` | Show certificate details and token |
+| `cert remove` | `<name>` | Remove a certificate from the pool |
 
 ### The `--` Separator
 
@@ -275,6 +292,14 @@ See [docs/configuration.md](docs/configuration.md) for full TLS documentation.
 
 ---
 
+## Certificate Management
+
+vrunner supports a pool of named certificates that can be bound to individual commands. When a command is bound to a certificate, only clients presenting that certificate's derived bearer token can interact with its endpoints.
+
+See [docs/certificates.md](docs/certificates.md) for the full certificate management guide.
+
+---
+
 ## Instance Management
 
 Multiple vrunner instances can run simultaneously on different ports. Each instance registers itself in a shared registry so you can discover and manage them.
@@ -315,6 +340,7 @@ This sends an HTTP shutdown request to the instance. If the instance is unrespon
 | `GET /api/commands/:id/vtty` | GET | Get full VTTY contents |
 | `GET /api/commands/:id/vtty/partial` | GET | Get partial VTTY contents |
 | `POST /api/shutdown` | POST | Shut down the vrunner instance |
+| `GET /api/certificates` | GET | List all certificates in the pool |
 
 ### Response Format
 
@@ -372,6 +398,7 @@ When TLS is enabled, use `https://localhost:8080/admin` instead.
 See [docs/architecture.md](docs/architecture.md) for technical details.
 See [docs/requirements.md](docs/requirements.md) for formal requirements.
 See [docs/configuration.md](docs/configuration.md) for the complete configuration reference.
+See [docs/certificates.md](docs/certificates.md) for the certificate management guide.
 
 ---
 

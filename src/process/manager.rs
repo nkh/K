@@ -28,17 +28,20 @@ impl CommandManager {
         }
     }
 
-    pub async fn spawn(&self, cmd: String, args: Vec<String>) -> anyhow::Result<CommandId> {
+    pub async fn spawn(&self, cmd: String, args: Vec<String>, certificate: Option<String>) -> anyhow::Result<CommandId> {
         let id = Uuid::new_v4().to_string();
-        self.logger.log("spawn", &format!("id={} cmd={} args={:?}", id, cmd, args));
+        self.logger.log("spawn", &format!("id={} cmd={} args={:?} cert={:?}", id, cmd, args, certificate));
 
         let spawner = ProcessSpawner::new(&self.config.vtty);
-        let handle = spawner.spawn(
+        let mut handle = spawner.spawn(
             cmd,
             args,
             self.config.handles.clone(),
             &id,
         ).await?;
+
+        // Bind certificate to this command for per-command access control
+        handle.certificate = certificate;
 
         self.commands.insert(id.clone(), handle);
         Ok(id)
@@ -48,12 +51,18 @@ impl CommandManager {
         self.commands.get(id)
     }
 
-    pub fn list(&self) -> Vec<(CommandId, String, u32)> {
+    /// Get the certificate name bound to a command (if any).
+    pub fn get_certificate(&self, id: &CommandId) -> Option<String> {
+        self.commands.get(id).map(|h| h.certificate.clone()).flatten()
+    }
+
+    /// List all commands. Returns (id, name, pid, certificate).
+    pub fn list(&self) -> Vec<(CommandId, String, u32, Option<String>)> {
         self.commands
             .iter()
             .map(|entry| {
                 let handle = entry.value();
-                (entry.key().clone(), handle.name.clone(), handle.pid)
+                (entry.key().clone(), handle.name.clone(), handle.pid, handle.certificate.clone())
             })
             .collect()
     }

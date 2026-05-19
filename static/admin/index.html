@@ -8,61 +8,160 @@
         body { font-family: system-ui, sans-serif; margin: 2rem; background: #0d1117; color: #c9d1d9; }
         h1 { color: #58a6ff; }
         .command-list { border: 1px solid #30363d; border-radius: 6px; padding: 1rem; margin-top: 1rem; }
-        .command-item { padding: 0.5rem; border-bottom: 1px solid #21262d; }
+        .command-item { padding: 0.5rem; border-bottom: 1px solid #21262d; display: flex; align-items: center; gap: 0.75rem; }
+        .command-item:last-child { border-bottom: none; }
         .status-running { color: #3fb950; }
         .status-exited { color: #f85149; }
+        .cert-badge { display: inline-block; background: #1f6feb22; color: #58a6ff; border: 1px solid #1f6feb44; border-radius: 4px; padding: 0.1rem 0.5rem; font-size: 0.75rem; font-family: monospace; }
+        .cert-badge.empty { background: #30363d; color: #484f58; border-color: #484f58; }
+        .cert-info { margin-top: 0.25rem; font-size: 0.8rem; color: #8b949e; }
         .vtty-viewer { background: #161b22; border: 1px solid #30363d; padding: 1rem; font-family: monospace; white-space: pre; overflow: auto; height: 400px; margin-top: 1rem; }
-        .key-input { margin-top: 1rem; }
+        .key-input { margin-top: 1rem; display: flex; gap: 0.5rem; }
+        .token-bar { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.75rem; font-size: 0.85rem; }
+        .token-bar label { color: #8b949e; }
+        .token-bar input { flex: 1; background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 4px; padding: 0.4rem 0.6rem; font-family: monospace; font-size: 0.85rem; }
+        .token-bar button { background: #238636; color: #fff; border: none; border-radius: 4px; padding: 0.4rem 0.8rem; cursor: pointer; font-size: 0.85rem; }
+        .token-bar button:hover { background: #2ea043; }
+        .cert-list { border: 1px solid #30363d; border-radius: 6px; padding: 1rem; margin-top: 1rem; }
+        .cert-list h3 { color: #58a6ff; margin-top: 0; margin-bottom: 0.75rem; font-size: 0.95rem; }
+        .cert-item { padding: 0.4rem 0; border-bottom: 1px solid #21262d; font-size: 0.85rem; font-family: monospace; }
+        .cert-item:last-child { border-bottom: none; }
+        .cert-item-name { color: #58a6ff; font-weight: 600; }
+        .cert-item-token { color: #8b949e; margin-left: 1rem; }
         input, button { padding: 0.5rem; background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
         button { cursor: pointer; }
         button:hover { background: #30363d; }
+        .kill-btn { background: #da3633; color: #fff; border: none; border-radius: 4px; padding: 0.2rem 0.6rem; font-size: 0.8rem; }
+        .kill-btn:hover { background: #f85149; }
+        .command-detail { margin-top: 0.5rem; padding: 0.5rem; background: #161b22; border-radius: 4px; font-size: 0.85rem; }
+        .command-detail strong { color: #8b949e; }
     </style>
 </head>
 <body>
     <h1>vrunner Admin</h1>
+
+    <!-- Auth token configuration -->
+    <div class="token-bar">
+        <label for="authToken">Auth Token:</label>
+        <input type="password" id="authToken" placeholder="Bearer token (leave empty if auth is disabled)">
+        <button onclick="saveToken()">Save</button>
+    </div>
+
+    <!-- Certificates section -->
+    <div id="certificates" class="cert-list">
+        <h3>Certificates</h3>
+        <p>Loading...</p>
+    </div>
+
+    <!-- Commands section -->
     <div id="commands" class="command-list">
         <p>Loading commands...</p>
     </div>
+
+    <!-- Key input -->
     <div class="key-input">
         <input type="text" id="keyInput" placeholder="Type keys to send...">
         <button onclick="sendKeys()">Send</button>
     </div>
+
+    <!-- VTTY viewer -->
     <div id="vtty" class="vtty-viewer"></div>
 
     <script>
         let selectedCommandId = null;
+        let authToken = localStorage.getItem('vrunner_auth_token') || '';
+
+        // Restore token from localStorage
+        document.getElementById('authToken').value = authToken;
+
+        function saveToken() {
+            authToken = document.getElementById('authToken').value.trim();
+            if (authToken) {
+                localStorage.setItem('vrunner_auth_token', authToken);
+            } else {
+                localStorage.removeItem('vrunner_auth_token');
+            }
+        }
+
+        function authHeaders() {
+            const headers = { 'Content-Type': 'application/json' };
+            if (authToken) {
+                headers['Authorization'] = 'Bearer ' + authToken;
+            }
+            return headers;
+        }
+
+        async function loadCertificates() {
+            try {
+                const res = await fetch('/api/certificates', { headers: authHeaders() });
+                const json = await res.json();
+                const container = document.getElementById('certificates');
+                if (json.status === 'ok' && json.data.length > 0) {
+                    container.innerHTML = '<h3>Certificates</h3>' + json.data.map(cert => `
+                        <div class="cert-item">
+                            <span class="cert-item-name">${escHtml(cert.name)}</span>
+                            <span class="cert-item-token">token: ${escHtml(cert.token_preview)}...</span>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = '<h3>Certificates</h3><p style="color:#484f58">No certificates configured.</p>';
+                }
+            } catch (e) {
+                document.getElementById('certificates').innerHTML = '<h3>Certificates</h3><p style="color:#f85149">Failed to load certificates.</p>';
+            }
+        }
 
         async function loadCommands() {
-            const res = await fetch('/api/commands');
-            const json = await res.json();
-            const container = document.getElementById('commands');
-            if (json.status === 'ok' && json.data.length > 0) {
-                if (!selectedCommandId) selectedCommandId = json.data[0].id;
-                container.innerHTML = json.data.map(cmd => `
-                    <div class="command-item" onclick="selectCommand('${cmd.id}')" style="cursor:pointer;">
-                        <strong>${cmd.name || cmd.id}</strong>
-                        <span class="status-${cmd.status}">${cmd.status}</span>
-                        <button onclick="event.stopPropagation(); killCommand('${cmd.id}')">Kill</button>
-                    </div>
-                `).join('');
-                loadVtty();
-            } else {
-                container.innerHTML = '<p>No commands running.</p>';
+            try {
+                const res = await fetch('/api/commands', { headers: authHeaders() });
+                const json = await res.json();
+                const container = document.getElementById('commands');
+                if (json.status === 'ok' && json.data.length > 0) {
+                    if (!selectedCommandId) selectedCommandId = json.data[0].id;
+                    container.innerHTML = json.data.map(cmd => {
+                        const cert = cmd.certificate || '';
+                        const certBadge = cert
+                            ? `<span class="cert-badge" title="Bound to certificate: ${escHtml(cert)}">${escHtml(cert)}</span>`
+                            : `<span class="cert-badge empty">no cert</span>`;
+                        const isSelected = cmd.id === selectedCommandId ? 'background:#21262d;border-radius:4px;' : '';
+                        return `
+                            <div class="command-item" onclick="selectCommand('${cmd.id}')" style="cursor:pointer;${isSelected}">
+                                <strong>${escHtml(cmd.name || cmd.id)}</strong>
+                                ${certBadge}
+                                <span class="status-${cmd.status}">${cmd.status}</span>
+                                <span style="color:#484f58;font-size:0.8rem;">PID ${cmd.pid}</span>
+                                <button class="kill-btn" onclick="event.stopPropagation(); killCommand('${cmd.id}')">Kill</button>
+                            </div>
+                        `;
+                    }).join('');
+                    loadVtty();
+                } else {
+                    container.innerHTML = '<p>No commands running.</p>';
+                    document.getElementById('vtty').textContent = '';
+                }
+            } catch (e) {
+                document.getElementById('commands').innerHTML = '<p style="color:#f85149">Failed to load commands.</p>';
             }
         }
 
         function selectCommand(id) {
             selectedCommandId = id;
             loadVtty();
+            // Re-render command list to update selection highlight
+            loadCommands();
         }
 
         async function loadVtty() {
             if (!selectedCommandId) return;
-            const res = await fetch(`/api/commands/${selectedCommandId}/vtty`);
-            const json = await res.json();
-            const viewer = document.getElementById('vtty');
-            if (json.status === 'ok') {
-                viewer.textContent = json.data.content || '(empty)';
+            try {
+                const res = await fetch(`/api/commands/${selectedCommandId}/vtty`, { headers: authHeaders() });
+                const json = await res.json();
+                const viewer = document.getElementById('vtty');
+                if (json.status === 'ok') {
+                    viewer.textContent = json.data.content || '(empty)';
+                }
+            } catch (e) {
+                document.getElementById('vtty').textContent = 'Failed to load terminal output.';
             }
         }
 
@@ -71,19 +170,30 @@
             if (!selectedCommandId || !input.value) return;
             await fetch(`/api/commands/${selectedCommandId}/keys`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: authHeaders(),
                 body: JSON.stringify({ keys: input.value })
             });
             input.value = '';
         }
 
         async function killCommand(id) {
-            await fetch(`/api/commands/${id}/kill`, { method: 'POST' });
+            await fetch(`/api/commands/${id}/kill`, {
+                method: 'POST',
+                headers: authHeaders(),
+                body: JSON.stringify({})
+            });
             if (selectedCommandId === id) selectedCommandId = null;
             loadCommands();
         }
 
+        function escHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
         setInterval(loadCommands, 2000);
+        loadCertificates();
         loadCommands();
     </script>
 </body>

@@ -13,6 +13,7 @@ pub fn create_router(state: AppState) -> Router {
     // API routes — protected by auth middleware when auth is enabled
     let api_routes = Router::new()
         .route("/api/commands", get(handlers::commands::list_commands).post(handlers::commands::start_command))
+        .route("/api/certificates", get(handlers::certificates::list_certificates))
         .route("/api/commands/:id/keys", post(handlers::keys::send_keys))
         .route("/api/commands/:id/kill", post(handlers::commands::kill_command))
         .route("/api/commands/:id/vtty", get(handlers::vtty::get_vtty_full))
