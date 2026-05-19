@@ -1,5 +1,11 @@
-use axum::response::Html;
+use axum::{
+    body::Body,
+    extract::Path,
+    http::{header, StatusCode},
+    response::{Html, IntoResponse, Response},
+};
 use rust_embed::RustEmbed;
+use std::path::PathBuf;
 
 #[derive(RustEmbed)]
 #[folder = "static/admin/"]
@@ -12,7 +18,50 @@ pub async fn admin_page() -> Html<String> {
     }
 }
 
-pub async fn admin_assets() -> Html<String> {
-    // TODO: Serve other static assets (CSS, JS) properly
-    Html("".to_string())
+pub async fn admin_assets(Path(path): Path<String>) -> Response {
+    // Clean the path to prevent directory traversal
+    let path = path.trim_start_matches('/');
+
+    // Default to index.html for root
+    let asset_path = if path.is_empty() { "index.html" } else { path };
+
+    match AdminAssets::get(asset_path) {
+        Some(content) => {
+            let mime_type = guess_mime_type(asset_path);
+            Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, mime_type)
+                .body(Body::from(content.data.to_vec()))
+                .unwrap()
+        }
+        None => {
+            Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Body::from("Asset not found"))
+                .unwrap()
+        }
+    }
+}
+
+fn guess_mime_type(path: &str) -> &'static str {
+    let ext = PathBuf::from(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
+
+    match ext {
+        "html" | "htm" => "text/html",
+        "css" => "text/css",
+        "js" => "application/javascript",
+        "json" => "application/json",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "svg" => "image/svg+xml",
+        "woff" => "font/woff",
+        "woff2" => "font/woff2",
+        "ttf" => "font/ttf",
+        "otf" => "font/otf",
+        _ => "application/octet-stream",
+    }
 }
