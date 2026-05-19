@@ -10,45 +10,45 @@ use vrunner::instance::registry::InstanceRegistry;
 use vrunner::process::manager::CommandManager;
 use vrunner::web::server::start_server;
 
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    tracing_subscriber::fmt::init();
-
+/// Synchronous pre-runtime phase: parse CLI, handle subcommands, load config,
+/// and daemonize. Daemonization MUST happen before the tokio runtime starts,
+/// because fork() only copies the calling thread while tokio's multi-threaded
+/// runtime creates internal threads for I/O, timers, and blocking tasks.
+fn pre_runtime() -> Result<Option<Cli>> {
     let cli = Cli::parse();
 
-    // Handle subcommands first (list, stop)
-    match cli.command {
+    // Handle subcommands that don't need the runtime
+    match &cli.command {
         Some(Commands::List) => {
             let registry = InstanceRegistry::new()?;
             registry.print_list();
-            return Ok(());
+            return Ok(None); // Exit without starting runtime
         }
-        Some(Commands::Stop { pid }) => {
-            let registry = InstanceRegistry::new()?;
-            registry.stop_instance(pid).await?;
-            return Ok(());
+        Some(Commands::Stop { pid: _ }) => {
+            // stop_instance is async (uses reqwest), so we need the runtime
+            // Fall through to the async phase
         }
         None => {}
+    }
+
+    Ok(Some(cli))
+}
+
+/// Async runtime phase: start the server and manage the application lifecycle.
+async fn async_main(cli: Cli) -> Result<()> {
+    // Initialize tracing (after daemonize, so logs go to the right place)
+    tracing_subscriber::fmt::init();
+
+    // Handle stop subcommand (needs async for HTTP request)
+    if let Some(Commands::Stop { pid }) = cli.command {
+        let registry = InstanceRegistry::new()?;
+        registry.stop_instance(pid).await?;
+        return Ok(());
     }
 
     // Load and merge configuration
     let mut cfg = load_config(cli.config.as_deref())?;
     cli.apply_overrides(&mut cfg);
-
-    // Daemonize if requested (Unix only) — must happen BEFORE tokio runtime
-    // starts any significant work (signal handlers, etc.). See the dedicated
-    // daemonize fix for the full architectural solution.
-    if cfg.daemon.enabled {
-        #[cfg(unix)]
-        {
-            daemon::unix::daemonize(&cfg)?;
-        }
-        #[cfg(not(unix))]
-        {
-            anyhow::bail!("--daemon is only supported on Unix-like systems");
-        }
-    }
 
     // Initialize instance registry
     let registry = InstanceRegistry::new()?;
@@ -81,4 +81,46 @@ async fn main() -> Result<()> {
     registry.unregister_current()?;
 
     Ok(())
+}
+
+fn main() -> Result<()> {
+    // Phase 1: Synchronous pre-runtime (no tokio threads yet)
+    let cli = match pre_runtime()? {
+        Some(cli) => cli,
+        None => return Ok(()), // Subcommand handled, exit
+    };
+
+    // Daemonize if requested — MUST happen before tokio::runtime is created.
+    // At this point, only the main thread exists, so fork() is safe.
+    // After daemonization, the original process exits and the daemon
+    // (grandchild of fork) continues as the new process.
+    if cli.daemon {
+        #[cfg(unix)]
+        {
+            // For daemon mode, we need to load config early to get log file paths.
+            // This is a minimal config load just for daemonization parameters.
+            let cfg = load_config(cli.config.as_deref())?;
+            let mut cfg = cfg;
+            cli.apply_overrides(&mut cfg);
+
+            if !cfg.daemon.enabled {
+                // CLI --daemon flag overrides config
+                cfg.daemon.enabled = true;
+            }
+
+            daemon::unix::daemonize(&cfg)?;
+            // After daemonize(), we are the daemon process.
+            // Only the main thread exists — safe to start tokio now.
+        }
+        #[cfg(not(unix))]
+        {
+            anyhow::bail!("--daemon is only supported on Unix-like systems");
+        }
+    }
+
+    // Phase 2: Start tokio runtime and run async main
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?
+        .block_on(async_main(cli))
 }
