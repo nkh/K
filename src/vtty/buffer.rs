@@ -127,10 +127,10 @@ impl Buffer {
         if let Some(row_cells) = self.rows.get_mut(row) {
             let count = count.min(self.width - col);
             for i in (col + count..self.width).rev() {
-                row_cells[i] = row_cells[i - count].clone();
+                row_cells[i] = row_cells[i - count];
             }
-            for i in col..(col + count).min(self.width) {
-                row_cells[i].clear();
+            for cell in row_cells.iter_mut().skip(col).take(count) {
+                cell.clear();
             }
         }
     }
@@ -139,10 +139,10 @@ impl Buffer {
         if let Some(row_cells) = self.rows.get_mut(row) {
             let count = count.min(self.width - col);
             for i in col..(self.width - count) {
-                row_cells[i] = row_cells[i + count].clone();
+                row_cells[i] = row_cells[i + count];
             }
-            for i in (self.width - count)..self.width {
-                row_cells[i].clear();
+            for cell in row_cells.iter_mut().take(self.width).skip(self.width - count) {
+                cell.clear();
             }
         }
     }

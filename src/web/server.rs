@@ -7,6 +7,7 @@ use super::router::create_router;
 use super::state::AppState;
 use super::tls::TlsManager;
 
+#[allow(clippy::too_many_arguments)]
 pub async fn start_server(
     bind: String,
     port: u16,

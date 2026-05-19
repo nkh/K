@@ -37,7 +37,7 @@ impl Default for Attributes {
 }
 
 impl Attributes {
-    fn to_cell(&self, ch: char) -> Cell {
+    fn make_cell(self, ch: char) -> Cell {
         let (fg, bg) = if self.reverse { (self.bg, self.fg) } else { (self.fg, self.bg) };
         Cell {
             ch, fg, bg,
@@ -162,7 +162,7 @@ impl VttyEmulator {
                 buf.insert_cells(self.cursor_row, self.cursor_col, 1);
             }
             if self.cursor_row < self.rows && self.cursor_col < self.cols {
-                let cell = self.attrs.to_cell(ch);
+                let cell = self.attrs.make_cell(ch);
                 buf.set(self.cursor_row, self.cursor_col, cell);
             }
         } // Drop the write guard before touching self again
@@ -182,16 +182,14 @@ impl VttyEmulator {
     fn process_control(&mut self, byte: u8) {
         match byte {
             0x07 => {}
-            0x08 => {
-                if self.cursor_col > 0 {
-                    self.cursor_col -= 1;
-                }
+            0x08 if self.cursor_col > 0 => {
+                self.cursor_col -= 1;
             }
             0x09 => {
                 let next_tab = ((self.cursor_col / 8) + 1) * 8;
                 self.cursor_col = next_tab.min(self.cols.saturating_sub(1));
             }
-            0x0a | 0x0b | 0x0c => {
+            0x0a..=0x0c => {
                 self.cursor_col = 0;
                 self.cursor_row += 1;
                 self.check_scroll();
@@ -299,15 +297,11 @@ impl VttyEmulator {
                 for _ in 0..n { buf.scroll_down(); }
             }
             b'm' => { self.process_sgr(&params); }
-            b'h' => {
-                if intermediate.first() == Some(&b'?') {
+            b'h' if intermediate.first() == Some(&b'?') => {
                     self.process_dec_private_mode(&params, true);
-                }
             }
-            b'l' => {
-                if intermediate.first() == Some(&b'?') {
+            b'l' if intermediate.first() == Some(&b'?') => {
                     self.process_dec_private_mode(&params, false);
-                }
             }
             b'r' => {
                 let top = param_1based(0, 1);
@@ -347,15 +341,13 @@ impl VttyEmulator {
                 38 => {
                     if let Some(next) = params.get(i + 1) {
                         match next.first().copied() {
-                            Some(2) => {
-                                if i + 4 < params.len() {
-                                    self.attrs.fg = [
-                                        params[i + 2].first().copied().unwrap_or(0) as u8,
-                                        params[i + 3].first().copied().unwrap_or(0) as u8,
-                                        params[i + 4].first().copied().unwrap_or(0) as u8,
-                                    ];
-                                    i += 4;
-                                }
+                            Some(2) if i + 4 < params.len() => {
+                                self.attrs.fg = [
+                                    params[i + 2].first().copied().unwrap_or(0) as u8,
+                                    params[i + 3].first().copied().unwrap_or(0) as u8,
+                                    params[i + 4].first().copied().unwrap_or(0) as u8,
+                                ];
+                                i += 4;
                             }
                             Some(5) => {
                                 if let Some(color_param) = params.get(i + 2) {
@@ -373,15 +365,13 @@ impl VttyEmulator {
                 48 => {
                     if let Some(next) = params.get(i + 1) {
                         match next.first().copied() {
-                            Some(2) => {
-                                if i + 4 < params.len() {
-                                    self.attrs.bg = [
-                                        params[i + 2].first().copied().unwrap_or(0) as u8,
-                                        params[i + 3].first().copied().unwrap_or(0) as u8,
-                                        params[i + 4].first().copied().unwrap_or(0) as u8,
-                                    ];
-                                    i += 4;
-                                }
+                            Some(2) if i + 4 < params.len() => {
+                                self.attrs.bg = [
+                                    params[i + 2].first().copied().unwrap_or(0) as u8,
+                                    params[i + 3].first().copied().unwrap_or(0) as u8,
+                                    params[i + 4].first().copied().unwrap_or(0) as u8,
+                                ];
+                                i += 4;
                             }
                             Some(5) => {
                                 if let Some(color_param) = params.get(i + 2) {

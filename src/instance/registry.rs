@@ -80,8 +80,8 @@ impl InstanceRegistry {
             println!("No running vrunner instances.");
             return;
         }
-        println!("{:<10} {:<8} {:<20} {:<10} {:<10} {}",
-            "PID", "PORT", "BIND", "DAEMON", "DISPLAY", "COMMAND");
+        println!("{:<10} {:<8} {:<20} {:<10} {:<10} COMMAND",
+            "PID", "PORT", "BIND", "DAEMON", "DISPLAY");
         for info in instances {
             println!("{:<10} {:<8} {:<20} {:<10} {:<10} {}",
                 info.pid,

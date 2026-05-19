@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct Config {
     pub server: ServerConfig,
     pub security: SecurityConfig,
@@ -10,21 +10,6 @@ pub struct Config {
     pub command_log: CommandLogConfig,
     pub daemon: DaemonConfig,
     pub handles: Vec<HandleConfig>,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            server: ServerConfig::default(),
-            security: SecurityConfig::default(),
-            tls: TlsConfig::default(),
-            vtty: VttyConfig::default(),
-            display: DisplayConfig::default(),
-            command_log: CommandLogConfig::default(),
-            daemon: DaemonConfig::default(),
-            handles: Vec::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -71,12 +56,13 @@ impl Default for SecurityConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct TlsConfig {
     /// Enable TLS (HTTPS). Default: false.
     /// When enabled, vrunner generates self-signed certificates on first run
     /// (or uses existing ones). The certificate and key are stored in
     /// ~/.config/vrunner/.
+    #[serde(default)]
     pub enabled: bool,
     /// Path to the PEM-encoded certificate file.
     /// If not set, defaults to ~/.config/vrunner/cert.pem.
@@ -84,16 +70,6 @@ pub struct TlsConfig {
     /// Path to the PEM-encoded private key file.
     /// If not set, defaults to ~/.config/vrunner/key.pem.
     pub key_file: Option<String>,
-}
-
-impl Default for TlsConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            cert_file: None,
-            key_file: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -142,22 +118,13 @@ impl Default for DisplayConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct CommandLogConfig {
     /// Enable logging of API commands.
     pub enabled: bool,
     /// Path to the command log file. If set, logs are written to this file
     /// in addition to the terminal.
     pub file: Option<String>,
-}
-
-impl Default for CommandLogConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            file: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

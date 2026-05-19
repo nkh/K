@@ -5,6 +5,12 @@ pub struct HandleRegistry {
     sinks: HashMap<String, Box<dyn Sink>>,
 }
 
+impl Default for HandleRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HandleRegistry {
     pub fn new() -> Self {
         Self {
@@ -16,8 +22,8 @@ impl HandleRegistry {
         self.sinks.insert(name, sink);
     }
 
-    pub fn get(&self, name: &str) -> Option<&Box<dyn Sink>> {
-        self.sinks.get(name)
+    pub fn get(&self, name: &str) -> Option<&dyn Sink> {
+        self.sinks.get(name).map(|s| s.as_ref())
     }
 
     pub fn list(&self) -> Vec<String> {

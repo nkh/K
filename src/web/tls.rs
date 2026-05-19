@@ -137,8 +137,8 @@ impl TlsManager {
         // Add Subject Alternative Names for localhost
         let san_entries = vec![
             rcgen::SanType::DnsName(rcgen::Ia5String::try_from("localhost").unwrap()),
-            rcgen::SanType::IpAddress(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST).into()),
-            rcgen::SanType::IpAddress(std::net::IpAddr::V6(std::net::Ipv6Addr::LOCALHOST).into()),
+            rcgen::SanType::IpAddress(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)),
+            rcgen::SanType::IpAddress(std::net::IpAddr::V6(std::net::Ipv6Addr::LOCALHOST)),
         ];
         params.subject_alt_names = san_entries;
 

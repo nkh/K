@@ -6,6 +6,12 @@ use super::sink::Sink;
 /// write to a secondary channel that the emulator reads from.
 pub struct VttySink;
 
+impl Default for VttySink {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VttySink {
     pub fn new() -> Self {
         Self

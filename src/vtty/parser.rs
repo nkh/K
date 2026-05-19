@@ -199,10 +199,7 @@ impl AnsiParser {
                 }
 
                 ParseState::DcsParam | ParseState::DcsIntermediate => {
-                    match byte {
-                        0x40..=0x7e => { self.state = ParseState::DcsString; }
-                        _ => {}
-                    }
+                    if let 0x40..=0x7e = byte { self.state = ParseState::DcsString; }
                 }
 
                 ParseState::DcsString => {
