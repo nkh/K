@@ -9,10 +9,16 @@ use crate::process::manager::CommandManager;
 pub struct AppState {
     pub manager: Arc<CommandManager>,
     pub shutdown_tx: broadcast::Sender<()>,
+    /// The bearer token for API authentication. `None` means auth is disabled.
+    pub auth_token: Option<String>,
 }
 
 impl AppState {
-    pub fn new(manager: Arc<CommandManager>, shutdown_tx: broadcast::Sender<()>) -> Self {
-        Self { manager, shutdown_tx }
+    pub fn new(
+        manager: Arc<CommandManager>,
+        shutdown_tx: broadcast::Sender<()>,
+        auth_token: Option<String>,
+    ) -> Self {
+        Self { manager, shutdown_tx, auth_token }
     }
 }

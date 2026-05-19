@@ -8,6 +8,7 @@ use vrunner::config::loader::load_config;
 use vrunner::daemon;
 use vrunner::instance::registry::InstanceRegistry;
 use vrunner::process::manager::CommandManager;
+use vrunner::web::auth::AuthManager;
 use vrunner::web::server::start_server;
 
 /// Synchronous pre-runtime phase: parse CLI, handle subcommands, load config,
@@ -54,6 +55,13 @@ async fn async_main(cli: Cli) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     registry.register_current(&cfg)?;
 
+    // Load or generate auth token if auth is required
+    let auth_token = if cfg.security.require_auth {
+        Some(AuthManager::load_or_generate(&cfg.security.token_file)?)
+    } else {
+        None
+    };
+
     // Initialize command manager
     let manager = Arc::new(CommandManager::new(cfg.clone()));
 
@@ -71,7 +79,16 @@ async fn async_main(cli: Cli) -> Result<()> {
 
     // Start the web server
     let server_handle = tokio::spawn(async move {
-        start_server(cfg.server.bind, cfg.server.port, manager.clone(), shutdown_tx).await
+        start_server(
+            cfg.server.bind,
+            cfg.server.port,
+            manager.clone(),
+            shutdown_tx,
+            auth_token,
+            cfg.tls.enabled,
+            cfg.tls.cert_file.as_deref(),
+            cfg.tls.key_file.as_deref(),
+        ).await
     });
 
     // Wait for server to finish
@@ -98,7 +115,6 @@ fn main() -> Result<()> {
         #[cfg(unix)]
         {
             // For daemon mode, we need to load config early to get log file paths.
-            // This is a minimal config load just for daemonization parameters.
             let cfg = load_config(cli.config.as_deref())?;
             let mut cfg = cfg;
             cli.apply_overrides(&mut cfg);

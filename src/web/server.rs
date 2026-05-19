@@ -1,35 +1,67 @@
-use std::net::SocketAddr;
 use std::sync::Arc;
 use anyhow::Result;
-use axum::serve;
-use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 
 use crate::process::manager::CommandManager;
 use super::router::create_router;
 use super::state::AppState;
+use super::tls::TlsManager;
 
 pub async fn start_server(
     bind: String,
     port: u16,
     manager: Arc<CommandManager>,
     shutdown_tx: broadcast::Sender<()>,
+    auth_token: Option<String>,
+    tls_enabled: bool,
+    tls_cert_file: Option<&str>,
+    tls_key_file: Option<&str>,
 ) -> Result<()> {
-    let addr: SocketAddr = format!("{}:{}", bind, port).parse()?;
-    let listener = TcpListener::bind(&addr).await?;
-    let state = AppState::new(manager, shutdown_tx.clone());
+    let state = AppState::new(manager, shutdown_tx.clone(), auth_token);
     let router = create_router(state);
+    let app = router.into_make_service();
 
+    let addr_str = format!("{}:{}", bind, port);
+    let handle = axum_server::Handle::new();
+
+    // Spawn graceful shutdown watcher
     let mut shutdown_rx = shutdown_tx.subscribe();
+    let shutdown_handle = handle.clone();
+    tokio::spawn(async move {
+        let _ = shutdown_rx.recv().await;
+        tracing::info!("Graceful shutdown initiated");
+        shutdown_handle.graceful_shutdown(None);
+    });
 
-    let server = serve(listener, router)
-        .with_graceful_shutdown(async move {
-            let _ = shutdown_rx.recv().await;
-        });
+    // Spawn signal handler (sends on shutdown channel)
+    spawn_signal_handler(shutdown_tx);
 
-    tracing::info!("Server listening on http://{}", addr);
+    if tls_enabled {
+        tracing::info!("Server listening on https://{}", addr_str);
 
-    // Spawn signal handler
+        // TLS mode — generate or load certificates
+        let tls_config = TlsManager::load_or_generate_config(tls_cert_file, tls_key_file)?;
+        let rustls_config = axum_server::tls_rustls::RustlsConfig::from_config(tls_config);
+
+        let server = axum_server::bind_rustls(addr_str.parse()?, rustls_config)
+            .handle(handle)
+            .serve(app);
+
+        server.await?;
+    } else {
+        tracing::info!("Server listening on http://{}", addr_str);
+
+        let server = axum_server::bind(addr_str.parse()?)
+            .handle(handle)
+            .serve(app);
+
+        server.await?;
+    }
+
+    Ok(())
+}
+
+fn spawn_signal_handler(shutdown_tx: broadcast::Sender<()>) {
     tokio::spawn(async move {
         #[cfg(unix)]
         {
@@ -43,12 +75,8 @@ pub async fn start_server(
         }
         #[cfg(not(unix))]
         {
-            use tokio::signal;
-            let _ = signal::ctrl_c().await;
+            let _ = tokio::signal::ctrl_c().await;
         }
         let _ = shutdown_tx.send(());
     });
-
-    server.await?;
-    Ok(())
 }

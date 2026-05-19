@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
     pub server: ServerConfig,
+    pub security: SecurityConfig,
+    pub tls: TlsConfig,
     pub vtty: VttyConfig,
     pub display: DisplayConfig,
     pub command_log: CommandLogConfig,
@@ -14,6 +16,8 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             server: ServerConfig::default(),
+            security: SecurityConfig::default(),
+            tls: TlsConfig::default(),
             vtty: VttyConfig::default(),
             display: DisplayConfig::default(),
             command_log: CommandLogConfig::default(),
@@ -25,7 +29,10 @@ impl Default for Config {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ServerConfig {
+    /// Bind address. Default "127.0.0.1" (localhost only).
+    /// Set to "0.0.0.0" to allow remote connections.
     pub bind: String,
+    /// TCP port to listen on.
     pub port: u16,
 }
 
@@ -39,12 +46,69 @@ impl Default for ServerConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SecurityConfig {
+    /// When false (default), no authentication is required.
+    /// When true, a bearer token must be provided in the Authorization header.
+    /// This should be enabled when server.bind is set to 0.0.0.0.
+    pub require_auth: bool,
+    /// Path to a file containing the bearer token. If the file does not exist
+    /// when auth is required, a random 256-bit token is generated and saved.
+    /// Default: ~/.config/vrunner/token
+    pub token_file: String,
+}
+
+impl Default for SecurityConfig {
+    fn default() -> Self {
+        Self {
+            require_auth: false,
+            token_file: dirs::config_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+                .join("vrunner")
+                .join("token")
+                .to_string_lossy()
+                .to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TlsConfig {
+    /// Enable TLS (HTTPS). Default: false.
+    /// When enabled, vrunner generates self-signed certificates on first run
+    /// (or uses existing ones). The certificate and key are stored in
+    /// ~/.config/vrunner/.
+    pub enabled: bool,
+    /// Path to the PEM-encoded certificate file.
+    /// If not set, defaults to ~/.config/vrunner/cert.pem.
+    pub cert_file: Option<String>,
+    /// Path to the PEM-encoded private key file.
+    /// If not set, defaults to ~/.config/vrunner/key.pem.
+    pub key_file: Option<String>,
+}
+
+impl Default for TlsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            cert_file: None,
+            key_file: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VttyConfig {
+    /// Number of rows in the virtual terminal.
     pub rows: u16,
+    /// Number of columns in the virtual terminal.
     pub cols: u16,
+    /// The TERM value reported to child processes.
     pub term: String,
+    /// Maximum number of scrollback lines retained.
     pub scrollback: usize,
+    /// Enable 24-bit truecolor support.
     pub truecolor: bool,
+    /// Enable mouse event forwarding.
     pub mouse: bool,
 }
 
@@ -63,7 +127,9 @@ impl Default for VttyConfig {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DisplayConfig {
+    /// Show VTTY output on the local terminal.
     pub enabled: bool,
+    /// Refresh interval in milliseconds when display is enabled.
     pub refresh_ms: u64,
 }
 
@@ -78,7 +144,10 @@ impl Default for DisplayConfig {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CommandLogConfig {
+    /// Enable logging of API commands.
     pub enabled: bool,
+    /// Path to the command log file. If set, logs are written to this file
+    /// in addition to the terminal.
     pub file: Option<String>,
 }
 
@@ -93,8 +162,11 @@ impl Default for CommandLogConfig {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DaemonConfig {
+    /// Run as a background daemon (Unix only).
     pub enabled: bool,
+    /// File to redirect stdout to when daemonized.
     pub stdout_file: String,
+    /// File to redirect stderr to when daemonized.
     pub stderr_file: String,
 }
 
@@ -110,7 +182,10 @@ impl Default for DaemonConfig {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct HandleConfig {
+    /// Name of the handle (used as the identifier in the API).
     pub name: String,
+    /// Sink type: "file", "vtty", or "null".
     pub sink: String,
+    /// Path for file sinks. Supports {id} and {name} placeholders.
     pub path: Option<String>,
 }

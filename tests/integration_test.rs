@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
 
-use vrunner::config::schema::{Config, ServerConfig, VttyConfig, DisplayConfig, CommandLogConfig, DaemonConfig};
+use vrunner::config::schema::{Config, ServerConfig, SecurityConfig, TlsConfig, VttyConfig, DisplayConfig, CommandLogConfig, DaemonConfig};
 use vrunner::process::manager::CommandManager;
 
 fn test_config() -> Config {
@@ -11,6 +11,8 @@ fn test_config() -> Config {
             bind: "127.0.0.1".to_string(),
             port: 0, // Let OS assign port
         },
+        security: SecurityConfig::default(),
+        tls: TlsConfig::default(),
         vtty: VttyConfig {
             rows: 10,
             cols: 40,

@@ -1,7 +1,9 @@
 use axum::{
     extract::Request,
+    http::header::AUTHORIZATION,
     middleware::Next,
     response::{IntoResponse, Response},
+    http::StatusCode,
 };
 use serde_json::json;
 use std::time::Instant;
@@ -13,6 +15,42 @@ pub fn cors_layer() -> tower_http::cors::CorsLayer {
         .allow_origin(tower_http::cors::Any)
         .allow_methods(tower_http::cors::Any)
         .allow_headers(tower_http::cors::Any)
+}
+
+/// Authentication middleware: validates Bearer token when auth is enabled.
+/// When the auth_token extension is None (localhost default), all requests are allowed.
+pub async fn auth_middleware(
+    req: Request,
+    next: Next,
+) -> Response {
+    // Extract the auth token from extensions (set by the router layer)
+    let token = req.extensions().get::<Option<String>>().cloned().flatten();
+
+    match token {
+        None => {
+            // No auth required — pass through
+            next.run(req).await
+        }
+        Some(expected) => {
+            // Auth required — validate Bearer token
+            let provided = req.headers()
+                .get(AUTHORIZATION)
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.strip_prefix("Bearer "));
+
+            match provided {
+                Some(t) if t == expected => next.run(req).await,
+                _ => (
+                    StatusCode::UNAUTHORIZED,
+                    axum::Json(json!({
+                        "status": "error",
+                        "data": null,
+                        "error": "Unauthorized — provide a valid Bearer token in the Authorization header"
+                    }))
+                ).into_response(),
+            }
+        }
+    }
 }
 
 /// Request logging middleware: logs method, path, duration, status
@@ -80,21 +118,4 @@ pub async fn error_handler(req: Request, next: Next) -> Response {
     }
 
     response
-}
-
-/// Wrap a handler result into the standard JSON envelope
-pub fn ok_response<T: serde::Serialize>(data: T) -> axum::Json<serde_json::Value> {
-    axum::Json(json!({
-        "status": "ok",
-        "data": data,
-        "error": null
-    }))
-}
-
-pub fn error_response(error: &str) -> axum::Json<serde_json::Value> {
-    axum::Json(json!({
-        "status": "error",
-        "data": null,
-        "error": error
-    }))
 }
