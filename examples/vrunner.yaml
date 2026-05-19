@@ -6,7 +6,7 @@
 
 server:
   # Bind address. "127.0.0.1" = localhost only (safe default).
-  # "0.0.0.0" = listen on all interfaces (use with auth).
+  # "0.0.0.0" = listen on all interfaces (use with --auth).
   bind: "127.0.0.1"
   # TCP port to listen on.
   port: 8080
@@ -65,10 +65,9 @@ daemon:
 
 # Default handles attached to every spawned command.
 # Each handle routes command output to a named sink.
-handles:
-  - name: "debug"
-    sink: "file"
-    # Path supports {id} (command UUID) and {name} (command name) placeholders.
-    path: "./logs/debug-{id}.log"
-  - name: "aux"
-    sink: "vtty"
+handles: []
+  # - name: "debug"       # sink identifier
+  #   sink: "file"         # "file", "vtty", or "null"
+  #   path: "./logs/debug-{id}.log"  # {id} = command UUID, {name} = command name
+  # - name: "aux"
+  #   sink: "vtty"
