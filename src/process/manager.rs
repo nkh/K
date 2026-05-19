@@ -44,7 +44,7 @@ impl CommandManager {
         Ok(id)
     }
 
-    pub fn get(&self, id: &CommandId) -> Option<dashmap::mapref::one::Ref<CommandId, CommandHandle>> {
+    pub fn get(&self, id: &CommandId) -> Option<dashmap::mapref::one::Ref<'_, CommandId, CommandHandle>> {
         self.commands.get(id)
     }
 

@@ -4,6 +4,7 @@ use std::io::Write;
 use super::sink::Sink;
 
 pub struct FileSink {
+    #[allow(dead_code)]
     path: String,
     file: std::fs::File,
 }
