@@ -10,6 +10,7 @@ mod handles;
 mod instance;
 mod logging;
 mod process;
+mod shutdown;
 mod vtty;
 mod web;
 
@@ -17,18 +18,9 @@ use cli::args::{Cli, Commands};
 use config::loader::load_config;
 use instance::registry::InstanceRegistry;
 use process::manager::CommandManager;
+use shutdown::set_shutdown_tx;
 use web::server::start_server;
 
-/// Global shutdown channel for cross-module signaling.
-static mut SHUTDOWN_TX: Option<broadcast::Sender<()>> = None;
-
-pub fn get_shutdown_tx() -> Option<broadcast::Sender<()>> {
-    unsafe { SHUTDOWN_TX.clone() }
-}
-
-pub fn set_shutdown_tx(tx: broadcast::Sender<()>) {
-    unsafe { SHUTDOWN_TX = Some(tx); }
-}
 
 #[tokio::main]
 async fn main() -> Result<()> {

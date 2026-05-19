@@ -2,7 +2,7 @@ use axum::{
     body::Body,
     extract::Path,
     http::{header, StatusCode},
-    response::{Html, IntoResponse, Response},
+    response::{Html, Response},
 };
 use rust_embed::RustEmbed;
 use std::path::PathBuf;
@@ -44,7 +44,8 @@ pub async fn admin_assets(Path(path): Path<String>) -> Response {
 }
 
 fn guess_mime_type(path: &str) -> &'static str {
-    let ext = PathBuf::from(path)
+    let path_buf = PathBuf::from(path);
+    let ext = path_buf
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("");

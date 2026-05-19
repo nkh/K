@@ -2,7 +2,7 @@ use anyhow::Result;
 use serde_json;
 use std::fs;
 use std::path::PathBuf;
-use sysinfo::{ProcessExt, System, SystemExt};
+use sysinfo::{System, SystemExt};
 
 use super::info::InstanceInfo;
 use crate::config::schema::Config;

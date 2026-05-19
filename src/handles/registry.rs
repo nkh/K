@@ -20,7 +20,7 @@ impl HandleRegistry {
         self.sinks.get(name)
     }
 
-    pub fn list(&self) -> Vec<&String> {
-        self.sinks.keys().collect()
+    pub fn list(&self) -> Vec<String> {
+        self.sinks.keys().cloned().collect()
     }
 }

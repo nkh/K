@@ -1,5 +1,4 @@
 use super::buffer::Buffer;
-use super::cell::Cell;
 
 /// Renders a VTTY buffer to various output formats.
 pub struct VttyRenderer;
@@ -128,6 +127,7 @@ impl VttyRenderer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::cell::Cell;
 
     #[test]
     fn test_to_plain() {

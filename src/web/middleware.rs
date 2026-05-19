@@ -1,7 +1,5 @@
 use axum::{
-    body::Body,
     extract::Request,
-    http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
 };
@@ -47,7 +45,7 @@ pub async fn error_handler(req: Request, next: Next) -> Response {
 
     // Only transform error responses
     if status.is_server_error() || status.is_client_error() {
-        let (parts, body) = response.into_parts();
+        let (_parts, body) = response.into_parts();
 
         // Try to read body
         let body_bytes = match axum::body::to_bytes(body, usize::MAX).await {

@@ -156,20 +156,23 @@ impl VttyEmulator {
             return;
         }
 
-        let mut buf = self.buffer.write();
-        if self.insert_mode {
-            buf.insert_cells(self.cursor_row, self.cursor_col, 1);
-        }
-        if self.cursor_row < self.rows && self.cursor_col < self.cols {
-            let cell = self.attrs.to_cell(ch);
-            buf.set(self.cursor_row, self.cursor_col, cell);
-        }
+        {
+            let mut buf = self.buffer.write();
+            if self.insert_mode {
+                buf.insert_cells(self.cursor_row, self.cursor_col, 1);
+            }
+            if self.cursor_row < self.rows && self.cursor_col < self.cols {
+                let cell = self.attrs.to_cell(ch);
+                buf.set(self.cursor_row, self.cursor_col, cell);
+            }
+        } // Drop the write guard before touching self again
+
         self.cursor_col += 1;
         if self.cursor_col >= self.cols {
             if self.auto_wrap {
                 self.cursor_col = 0;
                 self.cursor_row += 1;
-                self.check_scroll_with_buffer(&mut buf);
+                self.check_scroll();
             } else {
                 self.cursor_col = self.cols.saturating_sub(1);
             }
@@ -437,8 +440,7 @@ impl VttyEmulator {
             }
             b'M' => {
                 if self.cursor_row == 0 {
-                    let mut buf = self.buffer.write();
-                    buf.scroll_down();
+                    self.buffer.write().scroll_down();
                 } else {
                     self.cursor_row -= 1;
                 }
@@ -451,14 +453,10 @@ impl VttyEmulator {
     fn check_scroll(&mut self) {
         if self.cursor_row > self.scroll_bottom {
             let mut buf = self.buffer.write();
-            self.check_scroll_with_buffer(&mut buf);
-        }
-    }
-
-    fn check_scroll_with_buffer(&mut self, buf: &mut Buffer) {
-        while self.cursor_row > self.scroll_bottom {
-            buf.scroll_up();
-            self.cursor_row -= 1;
+            while self.cursor_row > self.scroll_bottom {
+                buf.scroll_up();
+                self.cursor_row -= 1;
+            }
         }
     }
 

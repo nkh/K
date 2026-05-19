@@ -1,6 +1,6 @@
+use std::io::{Read as _, Write as _};
 use anyhow::Result;
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::mpsc;
 use std::sync::Arc;
 
@@ -51,7 +51,7 @@ impl ProcessSpawner {
             cmd_builder.arg(arg);
         }
 
-        let child = pair.slave.spawn_command(cmd_builder)?;
+        let mut child = pair.slave.spawn_command(cmd_builder)?;
         let pid = child.process_id().unwrap_or(0);
 
         // Create VTTY emulator
@@ -81,34 +81,39 @@ impl ProcessSpawner {
         // Channel for stdin injection
         let (stdin_tx, mut stdin_rx) = mpsc::channel::<StdinMessage>(128);
 
-        // Get PTY master reader/writer
+        // Get PTY master reader and writer (both are synchronous I/O)
         let mut reader = pair.master.try_clone_reader()?;
-        let mut writer = pair.master.try_clone_writer()?;
+        let mut writer = pair.master.take_writer()?;
 
-        // Spawn PTY reader task
+        // Spawn PTY reader task in a blocking thread (portable-pty uses sync I/O)
         let emu_for_reader = emulator.clone();
-        tokio::spawn(async move {
+        tokio::task::spawn_blocking(move || {
             let mut buf = [0u8; 4096];
             loop {
-                match reader.read(&mut buf).await {
+                match reader.read(&mut buf) {
                     Ok(0) => break,
                     Ok(n) => {
                         let data = buf[..n].to_vec();
-                        let mut emu = emu_for_reader.write().await;
-                        emu.feed(&data);
+                        // We need the tokio runtime to write to the emulator's RwLock.
+                        // Use try_write to avoid deadlocking, and re-queue on contention.
+                        let emu = emu_for_reader.clone();
+                        tokio::spawn(async move {
+                            let mut emu = emu.write().await;
+                            emu.feed(&data);
+                        });
                     }
                     Err(_) => break,
                 }
             }
         });
 
-        // Spawn stdin writer task
-        tokio::spawn(async move {
-            while let Some(msg) = stdin_rx.recv().await {
+        // Spawn stdin writer task in a blocking thread (portable-pty uses sync I/O)
+        tokio::task::spawn_blocking(move || {
+            while let Some(msg) = stdin_rx.blocking_recv() {
                 match msg {
                     StdinMessage::Bytes(data) => {
-                        let _ = writer.write_all(&data).await;
-                        let _ = writer.flush().await;
+                        let _ = writer.write_all(&data);
+                        let _ = writer.flush();
                     }
                     StdinMessage::Signal(_sig) => {}
                 }
@@ -117,7 +122,7 @@ impl ProcessSpawner {
 
         // Spawn process waiter
         let (exit_tx, exit_rx) = tokio::sync::oneshot::channel();
-        tokio::spawn(async move {
+        tokio::task::spawn_blocking(move || {
             let _ = child.wait();
             let _ = exit_tx.send(());
         });

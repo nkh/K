@@ -6,7 +6,7 @@ use axum::{
 use serde_json::Value;
 
 use crate::process::manager::CommandManager;
-use crate::main::get_shutdown_tx;
+use crate::shutdown::get_shutdown_tx;
 
 pub async fn list_commands(
     State(manager): State<Arc<CommandManager>>,
