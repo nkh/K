@@ -1,6 +1,7 @@
-use super::sink::Sink;
+use async_trait::async_trait;
 use std::fs::OpenOptions;
 use std::io::Write;
+use super::sink::Sink;
 
 pub struct FileSink {
     path: String,
@@ -20,7 +21,7 @@ impl FileSink {
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait]
 impl Sink for FileSink {
     async fn write(&mut self, data: &[u8]) {
         let _ = self.file.write_all(data);
