@@ -12,11 +12,11 @@ pub async fn list_handles(
     Path(id): Path<String>,
 ) -> Json<Value> {
     match manager.get(&id) {
-        Some(_handle) => {
-            // TODO: Return actual handle list
+        Some(handle) => {
+            let handles = handle.list_handles();
             Json(serde_json::json!({
                 "status": "ok",
-                "data": { "id": id, "handles": [] },
+                "data": { "id": id, "handles": handles },
                 "error": null
             }))
         }
@@ -36,10 +36,10 @@ pub async fn add_handle(
     manager.logger().log("add_handle", &format!("id={} body={}", id, body));
     match manager.get(&id) {
         Some(_handle) => {
-            // TODO: Attach new handle to running command
+            // TODO: Dynamic handle attachment requires additional plumbing
             Json(serde_json::json!({
                 "status": "ok",
-                "data": { "id": id },
+                "data": { "id": id, "message": "Handle attachment not yet fully implemented" },
                 "error": null
             }))
         }

@@ -4,20 +4,23 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::mpsc;
 use std::sync::Arc;
 
-use crate::config::schema::VttyConfig;
+use crate::config::schema::{VttyConfig, HandleConfig};
+use crate::handles::{
+    file_sink::FileSink,
+    null_sink::NullSink,
+    registry::HandleRegistry,
+    sink::Sink,
+    vtty_sink::VttySink,
+};
 use crate::vtty::emulator::VttyEmulator;
 use super::handle::CommandHandle;
 
-/// A running process with its PTY, VTTY emulator, and communication channels.
 pub struct ProcessSpawner {
     vtty_cfg: VttyConfig,
 }
 
-/// Messages that can be sent to the process's stdin.
 pub enum StdinMessage {
-    /// Raw bytes to write
     Bytes(Vec<u8>),
-    /// Signal to send (e.g., SIGINT)
     Signal(String),
 }
 
@@ -28,11 +31,12 @@ impl ProcessSpawner {
         }
     }
 
-    /// Spawn a new process in a PTY and return a handle to control it.
     pub async fn spawn(
         &self,
         cmd: String,
         args: Vec<String>,
+        handle_configs: Vec<HandleConfig>,
+        command_id: &str,
     ) -> Result<CommandHandle> {
         let pty_system = native_pty_system();
         let pair = pty_system.openpty(PtySize {
@@ -50,27 +54,44 @@ impl ProcessSpawner {
         let child = pair.slave.spawn_command(cmd_builder)?;
         let pid = child.process_id().unwrap_or(0);
 
-        // Create the VTTY emulator
+        // Create VTTY emulator
         let emulator = Arc::new(tokio::sync::RwLock::new(VttyEmulator::new(
             self.vtty_cfg.rows,
             self.vtty_cfg.cols,
             self.vtty_cfg.scrollback,
         )));
 
+        // Create handle registry and wire sinks
+        let mut handle_registry = HandleRegistry::new();
+        for cfg in handle_configs {
+            let sink: Box<dyn Sink> = match cfg.sink.as_str() {
+                "file" => {
+                    let path = cfg.path.as_deref().unwrap_or("/dev/null");
+                    // Substitute placeholders
+                    let path = path.replace("{id}", command_id).replace("{name}", &cmd);
+                    Box::new(FileSink::new(&path)?)
+                }
+                "vtty" => Box::new(VttySink::new()),
+                "null" => Box::new(NullSink),
+                _ => Box::new(NullSink),
+            };
+            handle_registry.add(cfg.name, sink);
+        }
+
         // Channel for stdin injection
         let (stdin_tx, mut stdin_rx) = mpsc::channel::<StdinMessage>(128);
 
-        // Get the PTY master for reading/writing
+        // Get PTY master reader/writer
         let mut reader = pair.master.try_clone_reader()?;
         let mut writer = pair.master.try_clone_writer()?;
 
-        // Spawn PTY reader task: reads from PTY → feeds VTTY emulator
+        // Spawn PTY reader task
         let emu_for_reader = emulator.clone();
         tokio::spawn(async move {
             let mut buf = [0u8; 4096];
             loop {
                 match reader.read(&mut buf).await {
-                    Ok(0) => break, // EOF
+                    Ok(0) => break,
                     Ok(n) => {
                         let data = buf[..n].to_vec();
                         let mut emu = emu_for_reader.write().await;
@@ -81,7 +102,7 @@ impl ProcessSpawner {
             }
         });
 
-        // Spawn stdin writer task: receives from channel → writes to PTY
+        // Spawn stdin writer task
         tokio::spawn(async move {
             while let Some(msg) = stdin_rx.recv().await {
                 match msg {
@@ -89,15 +110,12 @@ impl ProcessSpawner {
                         let _ = writer.write_all(&data).await;
                         let _ = writer.flush().await;
                     }
-                    StdinMessage::Signal(_sig) => {
-                        // Signal handling would require platform-specific code
-                        // For now, we handle common signals via byte sequences
-                    }
+                    StdinMessage::Signal(_sig) => {}
                 }
             }
         });
 
-        // Spawn process waiter task
+        // Spawn process waiter
         let (exit_tx, exit_rx) = tokio::sync::oneshot::channel();
         tokio::spawn(async move {
             let _ = child.wait();
@@ -105,12 +123,13 @@ impl ProcessSpawner {
         });
 
         Ok(CommandHandle {
-            id: String::new(), // set by manager
+            id: command_id.to_string(),
             pid,
             name: cmd,
             emulator,
             stdin_tx,
             _exit_rx: exit_rx,
+            handle_registry,
         })
     }
 }

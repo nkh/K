@@ -33,8 +33,12 @@ impl CommandManager {
         self.logger.log("spawn", &format!("id={} cmd={} args={:?}", id, cmd, args));
 
         let spawner = ProcessSpawner::new(&self.config.vtty);
-        let mut handle = spawner.spawn(cmd, args).await?;
-        handle.id = id.clone();
+        let handle = spawner.spawn(
+            cmd,
+            args,
+            self.config.handles.clone(),
+            &id,
+        ).await?;
 
         self.commands.insert(id.clone(), handle);
         Ok(id)
@@ -66,7 +70,6 @@ impl CommandManager {
         self.logger.clone()
     }
 
-    /// Send keystrokes to a command by ID.
     pub async fn send_keys(&self, id: &CommandId, keys: &str) -> anyhow::Result<()> {
         self.logger.log("send_keys", &format!("id={} keys={}", id, keys));
         if let Some(handle) = self.commands.get(id) {
@@ -79,15 +82,12 @@ impl CommandManager {
     }
 }
 
-/// Encode a human-readable key string into terminal bytes.
-/// Supports: <C-x> (Ctrl), <A-x> (Alt), <Esc>, <Enter>, <Tab>, <Backspace>, <Delete>, <Up>, <Down>, <Left>, <Right>, <F1>-<F12>
 pub fn encode_keys(keys: &str) -> Vec<u8> {
     let mut result = Vec::new();
     let mut chars = keys.chars().peekable();
 
     while let Some(ch) = chars.next() {
         if ch == '<' {
-            // Parse special key sequence
             let mut seq = String::new();
             while let Some(&c) = chars.peek() {
                 if c == '>' {
@@ -109,8 +109,7 @@ pub fn encode_keys(keys: &str) -> Vec<u8> {
 fn encode_special_key(seq: &str) -> Vec<u8> {
     match seq {
         "Esc" => vec![0x1b],
-        "Enter" => vec![0x0d],
-        "Return" => vec![0x0d],
+        "Enter" | "Return" => vec![0x0d],
         "Tab" => vec![0x09],
         "Backspace" => vec![0x7f],
         "Delete" => vec![0x1b, b'[', b'3', b'~'],
@@ -136,7 +135,6 @@ fn encode_special_key(seq: &str) -> Vec<u8> {
         "F11" => vec![0x1b, b'[', b'2', b'3', b'~'],
         "F12" => vec![0x1b, b'[', b'2', b'4', b'~'],
         _ => {
-            // Check for Ctrl+key: C-x
             if let Some(rest) = seq.strip_prefix("C-") {
                 if let Some(key) = rest.chars().next() {
                     let byte = if key.is_ascii_alphabetic() {
@@ -156,13 +154,11 @@ fn encode_special_key(seq: &str) -> Vec<u8> {
                     return vec![byte];
                 }
             }
-            // Check for Alt+key: A-x
             if let Some(rest) = seq.strip_prefix("A-") {
                 if let Some(key) = rest.chars().next() {
                     return vec![0x1b, key as u8];
                 }
             }
-            // Unknown sequence, pass through as-is
             seq.as_bytes().to_vec()
         }
     }
