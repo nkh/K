@@ -7,6 +7,7 @@ use tokio::sync::broadcast;
 
 use crate::process::manager::CommandManager;
 use super::router::create_router;
+use super::state::AppState;
 
 pub async fn start_server(
     bind: String,
@@ -16,7 +17,8 @@ pub async fn start_server(
 ) -> Result<()> {
     let addr: SocketAddr = format!("{}:{}", bind, port).parse()?;
     let listener = TcpListener::bind(&addr).await?;
-    let router = create_router(manager);
+    let state = AppState::new(manager, shutdown_tx.clone());
+    let router = create_router(state);
 
     let mut shutdown_rx = shutdown_tx.subscribe();
 

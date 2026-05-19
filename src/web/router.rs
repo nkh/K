@@ -1,15 +1,14 @@
-use std::sync::Arc;
 use axum::{
     middleware,
     routing::{get, post},
     Router,
 };
 
-use crate::process::manager::CommandManager;
+use super::state::AppState;
 use super::handlers;
 use super::middleware::{cors_layer, request_logger, error_handler};
 
-pub fn create_router(manager: Arc<CommandManager>) -> Router {
+pub fn create_router(state: AppState) -> Router {
     Router::new()
         .route("/api/commands", get(handlers::commands::list_commands).post(handlers::commands::start_command))
         .route("/api/commands/:id/keys", post(handlers::keys::send_keys))
@@ -23,5 +22,5 @@ pub fn create_router(manager: Arc<CommandManager>) -> Router {
         .layer(cors_layer())
         .layer(middleware::from_fn(request_logger))
         .layer(middleware::from_fn(error_handler))
-        .with_state(manager)
+        .with_state(state)
 }

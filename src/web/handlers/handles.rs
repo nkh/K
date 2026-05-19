@@ -1,17 +1,16 @@
-use std::sync::Arc;
 use axum::{
     extract::{Path, State},
     Json,
 };
 use serde_json::Value;
 
-use crate::process::manager::CommandManager;
+use crate::web::state::AppState;
 
 pub async fn list_handles(
-    State(manager): State<Arc<CommandManager>>,
+    State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Json<Value> {
-    match manager.get(&id) {
+    match state.manager.get(&id) {
         Some(handle) => {
             let handles = handle.list_handles();
             Json(serde_json::json!({
@@ -29,12 +28,12 @@ pub async fn list_handles(
 }
 
 pub async fn add_handle(
-    State(manager): State<Arc<CommandManager>>,
+    State(state): State<AppState>,
     Path(id): Path<String>,
     Json(body): Json<Value>,
 ) -> Json<Value> {
-    manager.logger().log("add_handle", &format!("id={} body={}", id, body));
-    match manager.get(&id) {
+    state.manager.logger().log("add_handle", &format!("id={} body={}", id, body));
+    match state.manager.get(&id) {
         Some(_handle) => {
             // TODO: Dynamic handle attachment requires additional plumbing
             Json(serde_json::json!({

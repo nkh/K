@@ -5,6 +5,5 @@ pub mod handles;
 pub mod instance;
 pub mod logging;
 pub mod process;
-pub mod shutdown;
 pub mod vtty;
 pub mod web;

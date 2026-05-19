@@ -10,7 +10,6 @@ mod handles;
 mod instance;
 mod logging;
 mod process;
-mod shutdown;
 mod vtty;
 mod web;
 
@@ -18,7 +17,6 @@ use cli::args::{Cli, Commands};
 use config::loader::load_config;
 use instance::registry::InstanceRegistry;
 use process::manager::CommandManager;
-use shutdown::set_shutdown_tx;
 use web::server::start_server;
 
 
@@ -47,7 +45,9 @@ async fn main() -> Result<()> {
     let mut cfg = load_config(cli.config.as_deref())?;
     cli.apply_overrides(&mut cfg);
 
-    // Daemonize if requested (Unix only)
+    // Daemonize if requested (Unix only) — must happen BEFORE tokio runtime
+    // starts any significant work (signal handlers, etc.). See the dedicated
+    // daemonize fix for the full architectural solution.
     if cfg.daemon.enabled {
         #[cfg(unix)]
         {
@@ -75,9 +75,8 @@ async fn main() -> Result<()> {
         }
     }
 
-    // Create shutdown channel
+    // Create shutdown channel — passed explicitly, no globals
     let (shutdown_tx, _shutdown_rx) = broadcast::channel::<()>(1);
-    set_shutdown_tx(shutdown_tx.clone());
 
     // Start the web server
     let server_handle = tokio::spawn(async move {

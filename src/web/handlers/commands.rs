@@ -1,17 +1,15 @@
-use std::sync::Arc;
 use axum::{
     extract::{Path, State},
     Json,
 };
 use serde_json::Value;
 
-use crate::process::manager::CommandManager;
-use crate::shutdown::get_shutdown_tx;
+use crate::web::state::AppState;
 
 pub async fn list_commands(
-    State(manager): State<Arc<CommandManager>>,
+    State(state): State<AppState>,
 ) -> Json<Value> {
-    let commands = manager.list();
+    let commands = state.manager.list();
     let data: Vec<Value> = commands.into_iter()
         .map(|(id, name, pid)| {
             serde_json::json!({
@@ -26,7 +24,7 @@ pub async fn list_commands(
 }
 
 pub async fn start_command(
-    State(manager): State<Arc<CommandManager>>,
+    State(state): State<AppState>,
     Json(body): Json<Value>,
 ) -> Json<Value> {
     let cmd = body.get("cmd").and_then(|v| v.as_str()).unwrap_or("").to_string();
@@ -43,7 +41,7 @@ pub async fn start_command(
         }));
     }
 
-    match manager.spawn(cmd, args).await {
+    match state.manager.spawn(cmd, args).await {
         Ok(id) => Json(serde_json::json!({
             "status": "ok",
             "data": { "id": id },
@@ -58,12 +56,12 @@ pub async fn start_command(
 }
 
 pub async fn kill_command(
-    State(manager): State<Arc<CommandManager>>,
+    State(state): State<AppState>,
     Path(id): Path<String>,
     Json(body): Json<Value>,
 ) -> Json<Value> {
     let signal = body.get("signal").and_then(|v| v.as_str()).map(String::from);
-    match manager.kill(&id, signal).await {
+    match state.manager.kill(&id, signal).await {
         Ok(_) => Json(serde_json::json!({
             "status": "ok",
             "data": { "id": id },
@@ -78,20 +76,12 @@ pub async fn kill_command(
 }
 
 pub async fn shutdown(
-    State(_manager): State<Arc<CommandManager>>,
+    State(state): State<AppState>,
 ) -> Json<Value> {
-    if let Some(tx) = get_shutdown_tx() {
-        let _ = tx.send(());
-        Json(serde_json::json!({
-            "status": "ok",
-            "data": { "message": "shutdown initiated" },
-            "error": null
-        }))
-    } else {
-        Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": "Shutdown channel not initialized"
-        }))
-    }
+    let _ = state.shutdown_tx.send(());
+    Json(serde_json::json!({
+        "status": "ok",
+        "data": { "message": "shutdown initiated" },
+        "error": null
+    }))
 }

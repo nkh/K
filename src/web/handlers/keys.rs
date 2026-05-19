@@ -1,14 +1,13 @@
-use std::sync::Arc;
 use axum::{
     extract::{Path, State},
     Json,
 };
 use serde_json::Value;
 
-use crate::process::manager::CommandManager;
+use crate::web::state::AppState;
 
 pub async fn send_keys(
-    State(manager): State<Arc<CommandManager>>,
+    State(state): State<AppState>,
     Path(id): Path<String>,
     Json(body): Json<Value>,
 ) -> Json<Value> {
@@ -22,7 +21,7 @@ pub async fn send_keys(
         }));
     }
 
-    match manager.send_keys(&id, keys).await {
+    match state.manager.send_keys(&id, keys).await {
         Ok(_) => Json(serde_json::json!({
             "status": "ok",
             "data": { "id": id, "keys_sent": keys },
