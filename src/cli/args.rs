@@ -46,6 +46,14 @@ pub struct Cli {
     #[arg(long)]
     pub daemon: bool,
 
+    /// Redirect daemon stdout to this file
+    #[arg(long, value_name = "FILE")]
+    pub stdout_file: Option<String>,
+
+    /// Redirect daemon stderr to this file
+    #[arg(long, value_name = "FILE")]
+    pub stderr_file: Option<String>,
+
     /// Show VTTY on local terminal screen
     #[arg(long)]
     pub display: bool,
@@ -53,6 +61,10 @@ pub struct Cli {
     /// Disable local terminal display
     #[arg(long)]
     pub no_display: bool,
+
+    /// VTTY display refresh interval in milliseconds
+    #[arg(long, value_name = "MS")]
+    pub refresh_ms: Option<u64>,
 
     /// Log API commands to terminal
     #[arg(long)]
@@ -62,6 +74,10 @@ pub struct Cli {
     #[arg(long, value_name = "FILE")]
     pub log_file: Option<String>,
 
+    /// TERM value reported to child processes
+    #[arg(long, value_name = "TERM")]
+    pub term: Option<String>,
+
     /// VTTY rows
     #[arg(long, value_name = "N")]
     pub vtty_rows: Option<u16>,
@@ -69,6 +85,26 @@ pub struct Cli {
     /// VTTY columns
     #[arg(long, value_name = "N")]
     pub vtty_cols: Option<u16>,
+
+    /// VTTY scrollback buffer size (number of lines)
+    #[arg(long, value_name = "N")]
+    pub scrollback: Option<usize>,
+
+    /// Enable 24-bit truecolor in the virtual terminal
+    #[arg(long)]
+    pub truecolor: bool,
+
+    /// Disable 24-bit truecolor in the virtual terminal
+    #[arg(long)]
+    pub no_truecolor: bool,
+
+    /// Enable mouse event forwarding to child processes
+    #[arg(long)]
+    pub mouse: bool,
+
+    /// Disable mouse event forwarding to child processes
+    #[arg(long)]
+    pub no_mouse: bool,
 
     /// Subcommand (list, stop)
     #[command(subcommand)]
@@ -94,12 +130,15 @@ impl Cli {
     /// Apply CLI overrides to the loaded configuration.
     /// CLI flags take the highest precedence (override global and local config).
     pub fn apply_overrides(&self, cfg: &mut Config) {
+        // Server
         if let Some(bind) = &self.bind {
             cfg.server.bind = bind.clone();
         }
         if let Some(port) = self.port {
             cfg.server.port = port;
         }
+
+        // Security
         if self.remote {
             cfg.server.bind = "0.0.0.0".to_string();
             cfg.security.require_auth = true;
@@ -110,6 +149,8 @@ impl Cli {
         if let Some(token_file) = &self.token_file {
             cfg.security.token_file = token_file.clone();
         }
+
+        // TLS
         if self.tls {
             cfg.tls.enabled = true;
         }
@@ -119,16 +160,31 @@ impl Cli {
         if let Some(key_file) = &self.key_file {
             cfg.tls.key_file = Some(key_file.clone());
         }
+
+        // Daemon
+        if self.daemon {
+            cfg.daemon.enabled = true;
+            cfg.display.enabled = false;
+        }
+        if let Some(stdout_file) = &self.stdout_file {
+            cfg.daemon.stdout_file = stdout_file.clone();
+        }
+        if let Some(stderr_file) = &self.stderr_file {
+            cfg.daemon.stderr_file = stderr_file.clone();
+        }
+
+        // Display
         if self.display {
             cfg.display.enabled = true;
         }
         if self.no_display {
             cfg.display.enabled = false;
         }
-        if self.daemon {
-            cfg.daemon.enabled = true;
-            cfg.display.enabled = false;
+        if let Some(refresh_ms) = self.refresh_ms {
+            cfg.display.refresh_ms = refresh_ms;
         }
+
+        // Command logging
         if self.log {
             cfg.command_log.enabled = true;
         }
@@ -136,11 +192,31 @@ impl Cli {
             cfg.command_log.enabled = true;
             cfg.command_log.file = Some(file.clone());
         }
+
+        // VTTY
+        if let Some(term) = &self.term {
+            cfg.vtty.term = term.clone();
+        }
         if let Some(rows) = self.vtty_rows {
             cfg.vtty.rows = rows;
         }
         if let Some(cols) = self.vtty_cols {
             cfg.vtty.cols = cols;
+        }
+        if let Some(scrollback) = self.scrollback {
+            cfg.vtty.scrollback = scrollback;
+        }
+        if self.truecolor {
+            cfg.vtty.truecolor = true;
+        }
+        if self.no_truecolor {
+            cfg.vtty.truecolor = false;
+        }
+        if self.mouse {
+            cfg.vtty.mouse = true;
+        }
+        if self.no_mouse {
+            cfg.vtty.mouse = false;
         }
     }
 }

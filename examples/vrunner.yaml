@@ -1,35 +1,74 @@
 # vrunner configuration file
 # Place this as vrunner.yaml in your project root
+#
+# Precedence (highest wins):
+#   CLI flags > ./vrunner.yaml > ~/.config/vrunner/config.yaml > defaults
 
 server:
+  # Bind address. "127.0.0.1" = localhost only (safe default).
+  # "0.0.0.0" = listen on all interfaces (use with auth).
   bind: "127.0.0.1"
+  # TCP port to listen on.
   port: 8080
 
+security:
+  # Require bearer token authentication for all API requests.
+  # Automatically enabled by --remote (0.0.0.0 bind).
+  # When enabled, the token is loaded from token_file (or generated if missing).
+  require_auth: false
+  # Path to the bearer token file.
+  # Generated automatically on first use if the file does not exist.
+  token_file: "~/.config/vrunner/token"
+
+tls:
+  # Enable HTTPS with TLS encryption.
+  # On first use, self-signed certificates are auto-generated in ~/.config/vrunner/.
+  enabled: false
+  # Custom certificate file path (optional — auto-generated if omitted).
+  cert_file: null
+  # Custom private key file path (optional — auto-generated if omitted).
+  key_file: null
+
 vtty:
+  # Number of rows in the virtual terminal.
   rows: 24
+  # Number of columns in the virtual terminal.
   cols: 80
+  # The TERM value reported to child processes.
   term: "xterm-256color"
+  # Maximum number of scrollback lines retained.
   scrollback: 5000
+  # Enable 24-bit truecolor support.
   truecolor: true
+  # Enable mouse event forwarding to child processes.
   mouse: false
 
 display:
+  # Show VTTY output on the local terminal screen.
   enabled: false
+  # Refresh interval in milliseconds when display is enabled.
   refresh_ms: 100
 
 command_log:
+  # Log all API commands (spawn, kill, send_keys).
   enabled: false
+  # Path to the log file. If null, logs go to the terminal only.
   file: null
 
 daemon:
+  # Run as a background daemon (Unix only).
   enabled: false
+  # Redirect stdout to this file when daemonized.
   stdout_file: "/tmp/vrunner.out"
+  # Redirect stderr to this file when daemonized.
   stderr_file: "/tmp/vrunner.err"
 
-# Default handles provided to every command
+# Default handles attached to every spawned command.
+# Each handle routes command output to a named sink.
 handles:
   - name: "debug"
     sink: "file"
+    # Path supports {id} (command UUID) and {name} (command name) placeholders.
     path: "./logs/debug-{id}.log"
   - name: "aux"
     sink: "vtty"
