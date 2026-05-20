@@ -1,24 +1,45 @@
 use serde::{Deserialize, Serialize};
 
+/// Top-level configuration for vrunner.
+///
+/// All fields have sensible defaults, so a config file is entirely optional.
+/// When no config file is present, vrunner runs with localhost-only HTTP on
+/// port 8080, no authentication, and no TLS.
+///
+/// Config files are searched in this order (later files override earlier):
+/// 1. ~/.config/vrunner/config.yaml (or .toml)
+/// 2. ./vrunner.yaml (or .toml) in the current directory
+/// 3. Path specified with --config CLI flag
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct Config {
+    /// HTTP server bind address and port.
     #[serde(default)]
     pub server: ServerConfig,
+    /// Authentication settings (bearer token).
     #[serde(default)]
     pub security: SecurityConfig,
+    /// TLS/HTTPS certificate settings.
     #[serde(default)]
     pub tls: TlsConfig,
+    /// Per-command client certificate pool.
     #[serde(default)]
     pub certificates: CertificatesConfig,
+    /// Virtual terminal (VTTY) dimensions and behavior.
     #[serde(default)]
     pub vtty: VttyConfig,
+    /// Local terminal display of VTTY output.
     #[serde(default)]
     pub display: DisplayConfig,
+    /// Logging of API command events.
+    #[serde(default)]
     pub command_log: CommandLogConfig,
+    /// Daemon (background) mode settings.
     #[serde(default)]
     pub daemon: DaemonConfig,
+    /// Pre-configured output handles for spawned commands.
     #[serde(default)]
     pub handles: Vec<HandleConfig>,
+    /// Interactive terminal display settings (tab bar, keyboard).
     #[serde(default)]
     pub interactive: InteractiveConfig,
     /// Default exit configuration applied to all commands unless overridden per-command.
@@ -26,6 +47,7 @@ pub struct Config {
     pub default_exit: DefaultExitConfig,
 }
 
+/// HTTP server bind address and port.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ServerConfig {
     /// Bind address. Default "127.0.0.1" (localhost only).
@@ -44,6 +66,7 @@ impl Default for ServerConfig {
     }
 }
 
+/// Authentication and authorization settings.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SecurityConfig {
     /// When false (default), no authentication is required.
@@ -70,6 +93,9 @@ impl Default for SecurityConfig {
     }
 }
 
+/// TLS/HTTPS settings.
+/// When enabled without explicit cert/key paths, vrunner auto-generates
+/// self-signed certificates stored in ~/.config/vrunner/.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct TlsConfig {
     /// Enable TLS (HTTPS). Default: false.
@@ -119,6 +145,9 @@ pub struct CertificateEntryConfig {
     pub key_file: String,
 }
 
+/// Virtual terminal configuration.
+/// Controls the dimensions, TERM value, and capabilities of the pseudo-terminal
+/// allocated for each spawned command.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct VttyConfig {
     /// Number of rows in the virtual terminal.
@@ -148,6 +177,9 @@ impl Default for VttyConfig {
     }
 }
 
+/// Local terminal display settings.
+/// When enabled, vrunner renders VTTY output directly in the
+/// terminal it was launched from (similar to mprocs).
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DisplayConfig {
     /// Show VTTY output on the local terminal.
@@ -165,6 +197,8 @@ impl Default for DisplayConfig {
     }
 }
 
+/// Command logging configuration.
+/// Records API command events (spawn, kill, resize, etc.) to a log file.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct CommandLogConfig {
     /// Enable logging of API commands.
@@ -176,6 +210,9 @@ pub struct CommandLogConfig {
     pub file: Option<String>,
 }
 
+/// Daemon (background process) settings.
+/// When enabled, vrunner forks into the background after binding.
+/// Only available on Unix systems.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DaemonConfig {
     /// Run as a background daemon (Unix only).
@@ -250,12 +287,17 @@ impl Default for ExitConfig {
 }
 
 /// Default exit configuration (used when none is specified per-command).
+/// The inner ExitConfig values serve as global defaults for all spawned commands.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct DefaultExitConfig {
+    /// Exit behavior applied to every command unless overridden.
     #[serde(default)]
     pub exit: ExitConfig,
 }
 
+/// A pre-configured output handle.
+/// Handles can be attached to spawned commands to direct their output
+/// to a file, VTTY, or null sink by name.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct HandleConfig {
     /// Name of the handle (used as the identifier in the API).
