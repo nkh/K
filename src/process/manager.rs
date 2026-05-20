@@ -5,10 +5,29 @@ use tokio::sync::broadcast;
 
 use crate::config::schema::Config;
 use crate::logging::command_log::CommandLogger;
+use crate::vtty::buffer::Buffer;
 use super::handle::CommandHandle;
 use super::spawner::ProcessSpawner;
 
 pub type CommandId = String;
+
+/// Metadata stored alongside a named snapshot.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SnapshotMeta {
+    pub name: String,
+    pub command_id: String,
+    pub command_name: String,
+    pub command_args: Vec<String>,
+    pub pid: u32,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub runtime_secs: f64,
+}
+
+/// A stored VTTY buffer snapshot with its metadata.
+pub struct StoredSnapshot {
+    pub meta: SnapshotMeta,
+    pub buffer: Buffer,
+}
 
 pub struct CommandManager {
     commands: Arc<DashMap<CommandId, CommandHandle>>,
@@ -17,6 +36,11 @@ pub struct CommandManager {
     /// Broadcast channel for VTTY change notifications.
     /// Each message is a `(command_id, html_content)` pair.
     vtty_change_tx: broadcast::Sender<(String, String)>,
+    /// Named snapshots: (command_id, snapshot_name) -> StoredSnapshot
+    snapshots: Arc<DashMap<(CommandId, String), StoredSnapshot>>,
+    /// Last-sent buffer per command for incremental diff.
+    /// Key: command_id, Value: Buffer clone from the last broadcast.
+    last_buffer: Arc<DashMap<CommandId, Buffer>>,
 }
 
 impl CommandManager {
@@ -31,6 +55,8 @@ impl CommandManager {
             config,
             logger,
             vtty_change_tx,
+            snapshots: Arc::new(DashMap::new()),
+            last_buffer: Arc::new(DashMap::new()),
         }
     }
 
@@ -54,38 +80,83 @@ impl CommandManager {
 
         self.commands.insert(id.clone(), handle);
 
-        // Spawn a background watcher that detects VTTY changes and broadcasts them.
-        let watch_id = id.clone();
+        // Spawn a background watcher that detects VTTY changes and broadcasts them
+        // using the incremental diff protocol.
+        self.spawn_diff_watcher(id.clone());
+
+        Ok(id)
+    }
+
+    /// Spawn a background watcher that computes incremental diffs and broadcasts them.
+    fn spawn_diff_watcher(&self, watch_id: String) {
         let watch_commands = self.commands.clone();
         let watch_tx = self.vtty_change_tx.clone();
+        let last_buf_map = self.last_buffer.clone();
+
         tokio::spawn(async move {
-            let mut last_hash: String = String::new();
             loop {
                 tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
                 let entry = match watch_commands.get(&watch_id) {
                     Some(e) => e,
-                    None => break, // Command removed — stop watching
+                    None => {
+                        // Command removed — clean up last_buffer and stop watching
+                        last_buf_map.remove(&watch_id);
+                        break;
+                    }
                 };
 
-                let html = entry.vtty_html().await;
-                drop(entry); // Release the DashMap lock before potentially slow operations
+                // Clone the current buffer
+                let current_buffer = entry.vtty_snapshot().await;
+                let cursor_row = entry.cursor_position().await.0;
+                let cursor_col = entry.cursor_position().await.1;
+                let (rows, cols) = entry.dimensions().await;
+                let alt_screen = entry.is_alternate_screen().await;
+                drop(entry); // Release the DashMap lock
 
-                // Compute SHA-256 hash of the HTML content
-                use sha2::{Sha256, Digest};
-                let mut hasher = Sha256::new();
-                hasher.update(html.as_bytes());
-                let hash = hex::encode(hasher.finalize());
+                // Check if anything changed by comparing to the last sent buffer
+                let prev = last_buf_map.get(&watch_id);
+                let has_changed = match prev {
+                    Some(p) => {
+                        let p = p.value();
+                        p.width != current_buffer.width
+                            || p.height != current_buffer.height
+                            || p.rows != current_buffer.rows
+                    }
+                    None => true,
+                };
 
-                if hash != last_hash {
-                    last_hash = hash;
-                    // Ignore send errors (no subscribers or channel full)
-                    let _ = watch_tx.send((watch_id.clone(), html));
+                if !has_changed {
+                    continue;
+                }
+
+                // Compute the cell-level diff
+                let diff = match prev {
+                    Some(p) => current_buffer.diff(&p),
+                    None => Buffer::diff(&current_buffer, &Buffer::new(0, 0, 0)),
+                };
+
+                // Only send if there are actual changes
+                if diff.changed_count > 0 {
+                    // Store as last sent buffer
+                    last_buf_map.insert(watch_id.clone(), current_buffer);
+
+                    // Build a JSON message containing the diff
+                    let msg = serde_json::json!({
+                        "type": "vtty_diff",
+                        "data": {
+                            "id": &watch_id,
+                            "diff": diff,
+                            "cursor": { "row": cursor_row, "col": cursor_col },
+                            "dimensions": { "rows": rows, "cols": cols },
+                            "alternate_screen": alt_screen,
+                        }
+                    }).to_string();
+
+                    let _ = watch_tx.send((watch_id.clone(), msg));
                 }
             }
         });
-
-        Ok(id)
     }
 
     pub fn get(&self, id: &CommandId) -> Option<dashmap::mapref::one::Ref<'_, CommandId, CommandHandle>> {
@@ -97,15 +168,23 @@ impl CommandManager {
         self.commands.get(id).map(|h| h.certificate.clone()).flatten()
     }
 
-    /// List all commands. Returns (id, name, pid, certificate).
-    pub fn list(&self) -> Vec<(CommandId, String, u32, Option<String>)> {
+    /// List all commands. Returns (id, name, args, pid, certificate).
+    pub fn list(&self) -> Vec<(CommandId, String, Vec<String>, u32, Option<String>)> {
         self.commands
             .iter()
             .map(|entry| {
                 let handle = entry.value();
-                (entry.key().clone(), handle.name.clone(), handle.pid, handle.certificate.clone())
+                (entry.key().clone(), handle.name.clone(), handle.args.clone(), handle.pid, handle.certificate.clone())
             })
             .collect()
+    }
+
+    /// Find a command by PID.
+    pub fn find_by_pid(&self, pid: u32) -> Option<CommandId> {
+        self.commands
+            .iter()
+            .find(|entry| entry.value().pid == pid)
+            .map(|entry| entry.key().clone())
     }
 
     /// Freeze (suspend) a command by sending SIGSTOP.
@@ -158,6 +237,11 @@ impl CommandManager {
     pub async fn kill(&self, id: &CommandId, _signal: Option<String>) -> anyhow::Result<()> {
         self.logger.log("kill", &format!("id={}", id));
         if let Some((_, handle)) = self.commands.remove(id) {
+            // Clean up associated state
+            self.last_buffer.remove(id);
+            // Remove all snapshots for this command
+            self.snapshots.retain(|k, _| k.0 != *id);
+
             // Send Ctrl+C (SIGINT) for graceful shutdown
             let _ = handle.send_bytes(vec![0x03]).await;
 
@@ -206,8 +290,81 @@ impl CommandManager {
         Ok(())
     }
 
+    /// Kill a command by its PID.
+    pub async fn kill_by_pid(&self, pid: u32) -> anyhow::Result<()> {
+        if let Some(id) = self.find_by_pid(pid) {
+            self.kill(&id, None).await
+        } else {
+            anyhow::bail!("No command found with PID {}", pid)
+        }
+    }
+
+    /// Store a named snapshot of a command's current VTTY buffer.
+    pub fn store_snapshot(&self, id: &CommandId, name: &str) -> anyhow::Result<SnapshotMeta> {
+        let entry = self.commands.get(id).ok_or_else(|| anyhow::anyhow!("Command {} not found", id))?;
+        let buffer = entry.vtty_snapshot_blocking();
+        let meta = SnapshotMeta {
+            name: name.to_string(),
+            command_id: id.clone(),
+            command_name: entry.name.clone(),
+            command_args: entry.args.clone(),
+            pid: entry.pid,
+            timestamp: chrono::Utc::now(),
+            runtime_secs: entry.runtime_secs(),
+        };
+        self.snapshots.insert((id.clone(), name.to_string()), StoredSnapshot {
+            meta: meta.clone(),
+            buffer,
+        });
+        self.logger.log("snapshot", &format!("id={} name={}", id, name));
+        Ok(meta)
+    }
+
+    /// List all snapshots for a command.
+    pub fn list_snapshots(&self, id: &CommandId) -> Vec<SnapshotMeta> {
+        self.snapshots
+            .iter()
+            .filter(|k, _| k.0 == *id)
+            .map(|_, v| v.meta.clone())
+            .collect()
+    }
+
+    /// List all snapshots across all commands.
+    pub fn list_all_snapshots(&self) -> Vec<SnapshotMeta> {
+        self.snapshots
+            .iter()
+            .map(|_, v| v.meta.clone())
+            .collect()
+    }
+
+    /// Compute a diff of the current buffer against a stored named snapshot.
+    pub fn diff_snapshot(&self, id: &CommandId, name: &str) -> anyhow::Result<crate::vtty::buffer::BufferDiff> {
+        let entry = self.commands.get(id).ok_or_else(|| anyhow::anyhow!("Command {} not found", id))?;
+        let current = entry.vtty_snapshot_blocking();
+        drop(entry);
+
+        let key = (id.clone(), name.to_string());
+        let stored = self.snapshots.get(&key)
+            .ok_or_else(|| anyhow::anyhow!("Snapshot '{}' not found for command {}", name, id))?;
+
+        let diff = current.diff(&stored.buffer);
+        self.logger.log("diff", &format!("id={} name={} changed={}", id, name, diff.changed_count));
+        Ok(diff)
+    }
+
+    /// Delete a stored snapshot.
+    pub fn delete_snapshot(&self, id: &CommandId, name: &str) -> anyhow::Result<()> {
+        let key = (id.clone(), name.to_string());
+        if self.snapshots.remove(&key).is_some() {
+            self.logger.log("snapshot_delete", &format!("id={} name={}", id, name));
+            Ok(())
+        } else {
+            anyhow::bail!("Snapshot '{}' not found for command {}", name, id)
+        }
+    }
+
     /// Subscribe to VTTY change notifications.
-    /// Returns a receiver that yields `(command_id, html_content)` pairs.
+    /// Returns a receiver that yields `(command_id, message_json)` pairs.
     pub fn subscribe_vtty(&self) -> broadcast::Receiver<(String, String)> {
         self.vtty_change_tx.subscribe()
     }
@@ -274,34 +431,9 @@ impl CommandManager {
 
         self.commands.insert(id.clone(), handle);
 
-        // Spawn a background watcher that detects VTTY changes and broadcasts them.
-        let watch_id = id.clone();
-        let watch_commands = self.commands.clone();
-        let watch_tx = self.vtty_change_tx.clone();
-        tokio::spawn(async move {
-            let mut last_hash: String = String::new();
-            loop {
-                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-                let entry = match watch_commands.get(&watch_id) {
-                    Some(e) => e,
-                    None => break,
-                };
-
-                let html = entry.vtty_html().await;
-                drop(entry);
-
-                use sha2::{Sha256, Digest};
-                let mut hasher = Sha256::new();
-                hasher.update(html.as_bytes());
-                let hash = hex::encode(hasher.finalize());
-
-                if hash != last_hash {
-                    last_hash = hash;
-                    let _ = watch_tx.send((watch_id.clone(), html));
-                }
-            }
-        });
+        // Spawn a background watcher that detects VTTY changes and broadcasts them
+        // using the incremental diff protocol.
+        self.spawn_diff_watcher(id.clone());
 
         Ok(id)
     }

@@ -166,6 +166,103 @@ impl Buffer {
     }
 }
 
+/// A single changed cell in a buffer diff.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CellDiff {
+    pub row: usize,
+    pub col: usize,
+    pub ch: char,
+    pub fg: [u8; 3],
+    pub bg: [u8; 3],
+    pub bold: bool,
+    pub italic: bool,
+    pub underline: bool,
+    pub blink: bool,
+    pub reverse: bool,
+    pub invisible: bool,
+    pub strikethrough: bool,
+}
+
+/// Result of diffing two buffers.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct BufferDiff {
+    pub width: usize,
+    pub height: usize,
+    pub cells: Vec<CellDiff>,
+    pub changed_count: usize,
+}
+
+impl Buffer {
+    /// Compute a cell-level diff between `self` and `other`.
+    /// Returns the list of cells that differ (by position).
+    /// If the dimensions differ, all cells are considered changed.
+    pub fn diff(&self, other: &Buffer) -> BufferDiff {
+        let mut cells = Vec::new();
+
+        if self.width != other.width || self.height != other.height {
+            // Dimensions changed — return all cells from self as changed
+            for row in 0..self.height {
+                for col in 0..self.width {
+                    let c = self.get(row, col).cloned().unwrap_or_default();
+                    cells.push(CellDiff {
+                        row,
+                        col,
+                        ch: c.ch,
+                        fg: c.fg,
+                        bg: c.bg,
+                        bold: c.bold,
+                        italic: c.italic,
+                        underline: c.underline,
+                        blink: c.blink,
+                        reverse: c.reverse,
+                        invisible: c.invisible,
+                        strikethrough: c.strikethrough,
+                    });
+                }
+            }
+            return BufferDiff {
+                width: self.width,
+                height: self.height,
+                changed_count: cells.len(),
+                cells,
+            };
+        }
+
+        // Same dimensions — compare cell by cell
+        for row in 0..self.height {
+            for col in 0..self.width {
+                if let Some(a) = self.get(row, col) {
+                    if let Some(b) = other.get(row, col) {
+                        if a != b {
+                            cells.push(CellDiff {
+                                row,
+                                col,
+                                ch: a.ch,
+                                fg: a.fg,
+                                bg: a.bg,
+                                bold: a.bold,
+                                italic: a.italic,
+                                underline: a.underline,
+                                blink: a.blink,
+                                reverse: a.reverse,
+                                invisible: a.invisible,
+                                strikethrough: a.strikethrough,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        BufferDiff {
+            width: self.width,
+            height: self.height,
+            changed_count: cells.len(),
+            cells,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

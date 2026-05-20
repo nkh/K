@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, State, Query},
     Json,
 };
 use serde_json::Value;
@@ -13,7 +13,7 @@ pub async fn list_commands(
 ) -> Json<Value> {
     let commands = state.manager.list();
     let data: Vec<Value> = commands.into_iter()
-        .map(|(id, name, pid, certificate)| {
+        .map(|(id, name, args, pid, certificate)| {
             // Look up exit config for the command
             let exit_info = state.manager.get(&id).map(|h| {
                 serde_json::json!({
@@ -25,6 +25,7 @@ pub async fn list_commands(
             serde_json::json!({
                 "id": id,
                 "name": name,
+                "args": args,
                 "pid": pid,
                 "status": "running",
                 "certificate": certificate,
@@ -134,6 +135,26 @@ pub async fn kill_command(
     }
 }
 
+/// POST /api/commands/kill-pid/:pid
+/// Kill a command by its OS PID (as opposed to command UUID).
+pub async fn kill_command_by_pid(
+    State(state): State<AppState>,
+    Path(pid): Path<u32>,
+) -> Json<Value> {
+    match state.manager.kill_by_pid(pid).await {
+        Ok(_) => Json(serde_json::json!({
+            "status": "ok",
+            "data": { "pid": pid },
+            "error": null
+        })),
+        Err(e) => Json(serde_json::json!({
+            "status": "error",
+            "data": null,
+            "error": e.to_string()
+        })),
+    }
+}
+
 /// Freeze (suspend) a running command via SIGSTOP.
 pub async fn freeze_command(
     State(state): State<AppState>,
@@ -200,4 +221,101 @@ pub async fn get_info(
         },
         "error": null
     }))
+}
+
+/// POST /api/commands/:id/snapshot
+/// Store a named snapshot of the command's current VTTY buffer.
+/// Body: { "name": "snapshot-name" }
+pub async fn snapshot_command(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<Value>,
+) -> Json<Value> {
+    let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("default").to_string();
+
+    match state.manager.store_snapshot(&id, &name) {
+        Ok(meta) => Json(serde_json::json!({
+            "status": "ok",
+            "data": {
+                "id": id,
+                "name": meta.name,
+                "command_name": meta.command_name,
+                "command_args": meta.command_args,
+                "pid": meta.pid,
+                "timestamp": meta.timestamp.to_rfc3339(),
+                "runtime_secs": meta.runtime_secs,
+            },
+            "error": null
+        })),
+        Err(e) => Json(serde_json::json!({
+            "status": "error",
+            "data": null,
+            "error": e.to_string()
+        })),
+    }
+}
+
+/// GET /api/commands/:id/snapshots
+/// List all snapshots for a command.
+pub async fn list_snapshots(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Json<Value> {
+    let snapshots = state.manager.list_snapshots(&id);
+    Json(serde_json::json!({
+        "status": "ok",
+        "data": snapshots,
+        "error": null
+    }))
+}
+
+/// POST /api/commands/:id/diff
+/// Compute a diff of the current buffer against a stored snapshot.
+/// Body: { "name": "snapshot-name" }
+pub async fn diff_command(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<Value>,
+) -> Json<Value> {
+    let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("default").to_string();
+
+    match state.manager.diff_snapshot(&id, &name) {
+        Ok(diff) => Json(serde_json::json!({
+            "status": "ok",
+            "data": {
+                "id": id,
+                "name": name,
+                "width": diff.width,
+                "height": diff.height,
+                "changed_count": diff.changed_count,
+                "cells": diff.cells,
+            },
+            "error": null
+        })),
+        Err(e) => Json(serde_json::json!({
+            "status": "error",
+            "data": null,
+            "error": e.to_string()
+        })),
+    }
+}
+
+/// DELETE /api/commands/:id/snapshots/:name
+/// Delete a stored snapshot.
+pub async fn delete_snapshot(
+    State(state): State<AppState>,
+    Path((id, name)): Path<(String, String)>,
+) -> Json<Value> {
+    match state.manager.delete_snapshot(&id, &name) {
+        Ok(_) => Json(serde_json::json!({
+            "status": "ok",
+            "data": { "id": id, "name": name },
+            "error": null
+        })),
+        Err(e) => Json(serde_json::json!({
+            "status": "error",
+            "data": null,
+            "error": e.to_string()
+        })),
+    }
 }

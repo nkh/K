@@ -1,7 +1,7 @@
 use axum::{
     extract::Request,
     middleware,
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
 
@@ -16,6 +16,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/certificates", get(handlers::certificates::list_certificates))
         .route("/api/info", get(handlers::commands::get_info))
         .route("/api/log", get(handlers::logs::get_log))
+        .route("/api/commands/kill-pid/{pid}", post(handlers::commands::kill_command_by_pid))
         .route("/api/commands/:id/keys", post(handlers::keys::send_keys))
         .route("/api/commands/:id/kill", post(handlers::commands::kill_command))
         .route("/api/commands/:id/freeze", post(handlers::commands::freeze_command))
@@ -25,6 +26,10 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/commands/:id/vtty/buffer", get(handlers::vtty::get_vtty_buffer))
         .route("/api/commands/:id/vtty/partial", get(handlers::vtty::get_vtty_partial))
         .route("/api/commands/:id/resize", post(handlers::vtty::resize_vtty))
+        .route("/api/commands/:id/snapshot", post(handlers::commands::snapshot_command))
+        .route("/api/commands/:id/snapshots", get(handlers::commands::list_snapshots))
+        .route("/api/commands/:id/diff", post(handlers::commands::diff_command))
+        .route("/api/commands/:id/snapshots/{name}", delete(handlers::commands::delete_snapshot))
         .route("/api/commands/:id/handles", get(handlers::handles::list_handles).post(handlers::handles::add_handle))
         .route("/api/commands/:id/ws", get(handlers::ws::ws_vtty_stream))
         .route("/api/ws/logs", get(handlers::ws::ws_log_stream))

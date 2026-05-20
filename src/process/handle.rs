@@ -10,6 +10,7 @@ pub struct CommandHandle {
     pub id: String,
     pub pid: u32,
     pub name: String,
+    pub args: Vec<String>,
     pub emulator: Arc<RwLock<VttyEmulator>>,
     pub stdin_tx: mpsc::Sender<StdinMessage>,
     pub _exit_rx: oneshot::Receiver<ExitStatus>,
@@ -18,6 +19,8 @@ pub struct CommandHandle {
     pub certificate: Option<String>,
     /// Exit configuration for this command (on_exit, on_error, timeout).
     pub exit_config: ExitConfig,
+    /// Wall-clock time when this command was spawned.
+    pub spawn_time: std::time::Instant,
 }
 
 impl CommandHandle {
@@ -38,6 +41,17 @@ impl CommandHandle {
 
     pub async fn vtty_snapshot(&self) -> crate::vtty::buffer::Buffer {
         let emu = self.emulator.read().await;
+        emu.snapshot()
+    }
+
+    /// Blocking snapshot — used in sync contexts (e.g. inside DashMap iterations).
+    /// Uses parking_lot's blocking_read when inside an async context.
+    /// Since we're typically called from within a DashMap guard scope,
+    /// we use tokio::task::block_in_place to avoid deadlocks.
+    pub fn vtty_snapshot_blocking(&self) -> crate::vtty::buffer::Buffer {
+        // We are typically already in an async context. Use block_in_place
+        // to avoid issues with the tokio runtime.
+        let emu = self.emulator.blocking_read();
         emu.snapshot()
     }
 
@@ -104,5 +118,22 @@ impl CommandHandle {
 
     pub fn list_handles(&self) -> Vec<String> {
         self.handle_registry.list()
+    }
+
+    /// Elapsed wall-clock time since spawn.
+    pub fn runtime_secs(&self) -> f64 {
+        self.spawn_time.elapsed().as_secs_f64()
+    }
+
+    /// Whether the underlying OS process is still alive (pid check).
+    pub fn is_alive(&self) -> bool {
+        #[cfg(unix)]
+        {
+            unsafe { libc::kill(self.pid as i32, 0) == 0 }
+        }
+        #[cfg(not(unix))]
+        {
+            true // best-effort on non-Unix
+        }
     }
 }

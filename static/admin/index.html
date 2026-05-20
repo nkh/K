@@ -28,7 +28,7 @@
 
         /* Layout */
         .app { display: flex; flex-direction: column; height: 100vh; }
-        .topbar { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 1rem; background: var(--bg-secondary); border-bottom: 1px solid var(--border); flex-shrink: 0; z-index: 10; }
+        .topbar { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 1rem; background: var(--bg-secondary); border-bottom: 1px solid var(--border); flex-shrink: 0; z-index: 10; flex-wrap: wrap; }
         .topbar h1 { font-size: 1rem; color: var(--accent); white-space: nowrap; }
         .topbar .spacer { flex: 1; }
         .topbar button, .topbar select, .topbar input { font-size: 0.8rem; }
@@ -86,7 +86,7 @@
         /* Token bar */
         .token-bar { display: flex; align-items: center; gap: 0.5rem; }
         .token-bar label { color: var(--text-secondary); font-size: 0.75rem; white-space: nowrap; }
-        .token-bar input { font-family: var(--font-mono); font-size: 0.75rem; width: 180px; }
+        .token-bar input { font-family: var(--font-mono); font-size: 0.75rem; width: 120px; min-width: 60px; flex-shrink: 1; }
 
         /* Spawn form */
         .spawn-form { padding: 0.5rem; }
@@ -166,6 +166,12 @@
         .modal label { display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.2rem; }
         .modal input { width: 100%; }
         .modal .actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
+
+        /* Diff cells for incremental VTTY protocol */
+        .diff-cell {
+            position: absolute;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
@@ -195,6 +201,7 @@
         <button class="small" onclick="toggleSidebar()" title="Toggle sidebar">&#9776;</button>
         <button class="small" onclick="addPanel()" title="Add panel (multi-view)">+ Panel</button>
         <button class="small" onclick="showDocs()" title="Documentation">Docs</button>
+        <button id="pauseRunBtn" class="small" onclick="togglePauseRun()" title="Pause/Resume the selected command">&#9208; Pause</button>
         <div class="token-bar">
             <label for="authToken">Token:</label>
             <input type="password" id="authToken" placeholder="Bearer token" title="Authorization token">
@@ -324,6 +331,10 @@ const state = {
     vttyWsCmdId: null,
     // Buffer view: 'current', 'main', 'alt'
     bufferView: 'current',
+    // Incremental diff protocol state
+    _termRows: null,
+    _termCols: null,
+    _lastFullHtml: null,
 };
 
 // ─── Initialization ───
@@ -435,7 +446,7 @@ async function loadCommands() {
             inst._lastError = null;
         } catch (e) {
             inst._commands = [];
-            inst._lastError = e.message;
+            inst._lastError = inst.label + ': connection lost (instance may have exited)';
         }
     }
 
@@ -502,6 +513,10 @@ function selectCommand(instUrl, cmdId, name) {
     state.selectedCommandId = instUrl + ':' + cmdId;
     state.bufferView = 'current';
     document.getElementById('bufferSelect').value = 'current';
+    // Reset diff protocol state
+    state._termRows = null;
+    state._termCols = null;
+    state._lastFullHtml = null;
     loadCommands(); // Re-render to update selection
     // Connect WebSocket for real-time VTTY streaming
     connectVttyWs(instUrl, cmdId);
@@ -514,6 +529,30 @@ function getSelectedPanel() {
     if (parts.length < 2) return state.panels[0];
     const instUrl = parts.slice(0, -1).join(':');
     return state.panels.find(p => p.instUrl === instUrl) || state.panels[0];
+}
+
+// ─── Pause/Run Toggle ───
+async function togglePauseRun() {
+    if (!state.selectedCommandId) return;
+    const parts = state.selectedCommandId.split(':');
+    const cmdId = parts[parts.length - 1];
+    const instUrl = parts.slice(0, -1).join(':');
+
+    const btn = document.getElementById('pauseRunBtn');
+    const isFrozen = btn.dataset.frozen === 'true';
+
+    const endpoint = isFrozen ? 'thaw' : 'freeze';
+    try {
+        await fetch(apiUrl(`/api/commands/${cmdId}/${endpoint}`, { url: instUrl }), {
+            method: 'POST',
+            headers: authHeadersForInstance({ url: instUrl }),
+            body: JSON.stringify({}),
+        });
+        btn.dataset.frozen = isFrozen ? 'false' : 'true';
+        btn.textContent = isFrozen ? '\u23F8 Pause' : '\u25B6 Run';
+        btn.className = 'small ' + (isFrozen ? '' : 'primary');
+        loadCommands();
+    } catch (e) { /* ignore */ }
 }
 
 // ─── WebSocket VTTY Streaming ───
@@ -538,20 +577,28 @@ function connectVttyWs(instUrl, cmdId) {
         ws.onmessage = (event) => {
             try {
                 const msg = JSON.parse(event.data);
-                if (msg.type === 'vtty_update' && msg.data) {
-                    // Only update if we're viewing 'current' buffer
+                if (msg.type === 'vtty_full' && msg.data) {
+                    // Initial full snapshot — apply it directly
                     if (state.bufferView === 'current') {
                         updateVttyDisplay(msg.data);
                     }
-                    // Update alt screen badge
+                    const badge = document.getElementById('altScreenBadge');
+                    if (badge) badge.style.display = msg.data.alternate_screen ? '' : 'none';
+                    // Mark this as the initial state for diff protocol
+                    state._lastFullHtml = msg.data.html || '';
+                } else if (msg.type === 'vtty_diff' && msg.data) {
+                    // Incremental diff — apply only changed cells
+                    if (state.bufferView === 'current') {
+                        applyVttyDiff(msg.data);
+                    }
                     const badge = document.getElementById('altScreenBadge');
                     if (badge) badge.style.display = msg.data.alternate_screen ? '' : 'none';
                 } else if (msg.type === 'command_ended') {
                     document.getElementById('connStatus').textContent = 'Command ended';
                     disconnectVttyWs();
+                    state._lastFullHtml = null;
                 } else if (msg.type === 'connected') {
-                    // Connected — request initial snapshot via HTTP
-                    loadVttyHttp(instUrl, cmdId);
+                    // Server sends initial full snapshot — no need for separate HTTP load
                 }
             } catch (e) { /* ignore parse errors */ }
         };
@@ -579,6 +626,9 @@ function disconnectVttyWs() {
         state.vttyWsUrl = null;
         state.vttyWsCmdId = null;
     }
+    state._termRows = null;
+    state._termCols = null;
+    state._lastFullHtml = null;
 }
 
 function updateVttyDisplay(data) {
@@ -608,6 +658,41 @@ function updateVttyDisplay(data) {
         cursorEl.style.height = charH + 'px';
         cursorEl.style.display = '';
     }
+
+    state._termRows = dims.rows;
+    state._termCols = dims.cols;
+}
+
+function applyVttyDiff(data) {
+    // The backend sends incremental diffs over WebSocket to save bandwidth.
+    // On the frontend, we refresh the full HTML via HTTP to keep the display correct.
+    // This avoids complex DOM diffing while still benefiting from the server-side
+    // optimization of only sending diffs when the buffer actually changes.
+    if (!data.diff) return;
+
+    const parts = state.selectedCommandId.split(':');
+    if (parts.length < 2) return;
+    const cmdId = parts[parts.length - 1];
+    const instUrl = parts.slice(0, -1).join(':');
+    loadVttyHttp(instUrl, cmdId);
+
+    // Update cursor and dimensions from the diff message (immediate feedback)
+    const cursor = data.cursor || {};
+    const dims = data.dimensions || {};
+    if (cursor.row !== undefined) {
+        document.getElementById('cursorPos').textContent = `Cursor: ${(cursor.row + 1)},${(cursor.col + 1)}`;
+    }
+    if (dims.rows && dims.cols) {
+        document.getElementById('termDims').textContent = `${dims.rows}x${dims.cols}`;
+        document.getElementById('resizeRows').value = dims.rows;
+        document.getElementById('resizeCols').value = dims.cols;
+        state._termRows = dims.rows;
+        state._termCols = dims.cols;
+    }
+
+    // Update alt screen badge
+    const badge = document.getElementById('altScreenBadge');
+    if (badge) badge.style.display = data.alternate_screen ? '' : 'none';
 }
 
 async function loadVttyHttp(instUrl, cmdId) {
@@ -1099,7 +1184,7 @@ function startRefresh() {
     if (state.refreshInterval) clearInterval(state.refreshInterval);
     state.refreshInterval = setInterval(() => {
         loadCommands();
-    }, 2000);
+    }, 1000);
 }
 
 // ─── Keyboard handling ───

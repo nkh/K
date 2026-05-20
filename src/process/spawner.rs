@@ -246,13 +246,15 @@ impl ProcessSpawner {
         Ok(CommandHandle {
             id: command_id.to_string(),
             pid,
-            name: cmd,
+            name: cmd.clone(),
+            args: args.clone(),
             emulator,
             stdin_tx,
             _exit_rx: exit_rx,
             handle_registry,
             certificate: None,
             exit_config,
+            spawn_time: std::time::Instant::now(),
         })
     }
 }

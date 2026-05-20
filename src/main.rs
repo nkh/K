@@ -23,9 +23,7 @@ fn pre_runtime() -> Result<Option<Cli>> {
     // Handle subcommands that don't need the runtime
     match &cli.command {
         Some(Commands::List) => {
-            let registry = InstanceRegistry::new()?;
-            registry.print_list();
-            return Ok(None); // Exit without starting runtime
+            // list is async (needs to query instances for their commands), fall through
         }
         Some(Commands::Stop { pid: _ }) => {
             // stop_instance is async (uses reqwest), so we need the runtime
@@ -56,10 +54,21 @@ async fn async_main(cli: Cli) -> Result<()> {
     // Initialize tracing (after daemonize, so logs go to the right place)
     tracing_subscriber::fmt::init();
 
+    // Handle list subcommand — query running instances and show their commands
+    if let Some(Commands::List) = cli.command {
+        handle_list_command(&cli).await?;
+        return Ok(());
+    }
+
     // Handle stop subcommand (needs async for HTTP request)
     if let Some(Commands::Stop { pid }) = cli.command {
-        let registry = InstanceRegistry::new()?;
-        registry.stop_instance(pid).await?;
+        // First try to stop a specific command by PID on any instance
+        let stopped = handle_stop_command_by_pid(&cli, pid).await?;
+        if !stopped {
+            // Fall back to stopping the whole instance
+            let registry = InstanceRegistry::new()?;
+            registry.stop_instance(pid).await?;
+        }
         return Ok(());
     }
 
@@ -269,7 +278,7 @@ async fn run_display_loop(
                 // Find the command to display (prefer the direct child)
                 let commands = manager.list();
                 let target_id = active_id.as_ref()
-                    .or_else(|| commands.first().map(|(id, _, _, _)| id))
+                    .or_else(|| commands.first().map(|(id, _, _, _, _)| id))
                     .cloned();
 
                 let mut should_break = false;
@@ -602,7 +611,124 @@ async fn handle_thaw_command(cli: &Cli, id: &str) -> Result<()> {
     Ok(())
 }
 
-/// Handle `vrunner cert` subcommands (generate, list, show, remove).
+/// Handle the `vrunner list` subcommand.
+/// Queries all running instances and shows their commands with arguments.
+async fn handle_list_command(cli: &Cli) -> Result<()> {
+    let registry = InstanceRegistry::new()?;
+    let instances = registry.list_instances();
+
+    if instances.is_empty() {
+        println!("No running vrunner instances.");
+        return Ok(());
+    }
+
+    let client = reqwest::Client::new();
+
+    println!("{:<10} {:<8} {:<20} {:<10} {:<10} COMMAND",
+        "PID", "PORT", "BIND", "DAEMON", "DISPLAY");
+
+    for info in &instances {
+        let url = instance_url(info, &None);
+        let label = if info.display { "yes" } else { "no" };
+        let daemon = if info.daemon { "yes" } else { "no" };
+
+        // Query the instance's command list
+        let cmd_str = info.command.as_deref().unwrap_or("(idle)");
+        let mut printed_instance = false;
+
+        // Try to fetch commands from the instance API
+        match client.get(format!("{}/api/commands", url)).send().await {
+            Ok(resp) => {
+                if let Ok(json) = resp.json::<serde_json::Value>().await {
+                    if json["status"] == "ok" {
+                        if let Some(cmds) = json["data"].as_array() {
+                            if cmds.is_empty() {
+                                println!("{:<10} {:<8} {:<20} {:<10} {:<10} {} (no commands)",
+                                    info.pid, info.port, info.bind, daemon, label, cmd_str);
+                            } else {
+                                for (i, cmd) in cmds.iter().enumerate() {
+                                    let name = cmd["name"].as_str().unwrap_or("?");
+                                    let args = cmd["args"].as_array()
+                                        .map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
+                                        .unwrap_or_default();
+                                    let args_str = if args.is_empty() {
+                                        String::new()
+                                    } else {
+                                        format!(" {:?}", args)
+                                    };
+                                    let pid = cmd["pid"].as_u64().unwrap_or(0);
+                                    let id_short = cmd["id"].as_str()
+                                        .map(|id| &id[..8])
+                                        .unwrap_or("?");
+                                    let cert = cmd["certificate"].as_str();
+
+                                    let line = if i == 0 {
+                                        format!("{:<10} {:<8} {:<20} {:<10} {:<10} {} -> {}{} [{}]{}",
+                                            info.pid, info.port, info.bind, daemon, label,
+                                            cmd_str, name, args_str,
+                                            cert.unwrap_or("-"),
+                                    } else {
+                                        format!("{:<10} {:<8} {:<20} {:<10} {:<10}     {}{}{}",
+                                            "", "", "", "", "",
+                                            cmd_str, name, args_str,
+                                            cert.unwrap_or("-")),
+                                    };
+                                    println!("{}", line);
+                                }
+                            }
+                            printed_instance = true;
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                // Instance not reachable — show basic info
+                println!("{:<10} {:<8} {:<20} {:<10} {:<10} {} (unreachable: {})",
+                    info.pid, info.port, info.bind, daemon, label, cmd_str, e);
+                printed_instance = true;
+            }
+        }
+
+        if !printed_instance {
+            println!("{:<10} {:<8} {:<20} {:<10} {:<10} {}",
+                info.pid, info.port, info.bind, daemon, label, cmd_str);
+        }
+    }
+
+    Ok(())
+}
+
+/// Try to stop a specific command by PID on any running instance.
+/// Returns true if the command was found and stopped, false otherwise.
+async fn handle_stop_command_by_pid(cli: &Cli, pid: u32) -> Result<bool> {
+    let registry = InstanceRegistry::new()?;
+    let instances = registry.list_instances();
+
+    if instances.is_empty() {
+        return Ok(false);
+    }
+
+    let client = reqwest::Client::new();
+
+    for info in &instances {
+        let url = instance_url(info, &None);
+        let resp = client
+            .post(format!("{}/api/commands/kill-pid/{}", url, pid))
+            .send()
+            .await;
+
+        if let Ok(resp) = resp {
+            if resp.status().is_success() {
+                println!("Command with PID {} stopped on instance {} (PID {})", pid, info.pid, info.pid);
+                return Ok(true);
+            }
+        }
+    }
+
+    Ok(false)
+}
+
+/// Handle the `vrunner cert` subcommands (generate, list, show, remove).
 ///
 /// These are synchronous operations that don't require the tokio runtime.
 fn handle_cert_command(action: &CertAction) -> Result<()> {

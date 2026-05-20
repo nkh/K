@@ -16,10 +16,10 @@ use crate::web::state::AppState;
 ///
 /// After upgrade, the server:
 /// 1. Sends a `{"type":"connected","id":"..."}` welcome message.
-/// 2. Subscribes to VTTY change notifications for this command and forwards
-///    `{"type":"vtty_update","data":{...}}` messages whenever the terminal
-///    content changes.
-/// 3. Listens for incoming client messages:
+/// 2. Sends an initial full HTML snapshot via `{"type":"vtty_full",...}`.
+/// 3. Subscribes to VTTY diff notifications and forwards
+///    `{"type":"vtty_diff","data":{...}}` messages with only changed cells.
+/// 4. Listens for incoming client messages:
 ///    - `{"type":"keys","keys":"..."}` — send keystrokes to the command.
 ///    - `{"type":"resize","rows":N,"cols":N}` — resize the VTTY.
 ///    - `{"type":"ping"}` — respond with `{"type":"pong"}`.
@@ -54,7 +54,29 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
         return;
     }
 
-    // Subscribe to VTTY change notifications.
+    // Send the initial full HTML snapshot so the client has a complete picture.
+    if let Some(handle) = state.manager.get(&id) {
+        let html = handle.vtty_html().await;
+        let (cursor_row, cursor_col) = handle.cursor_position().await;
+        let (rows, cols) = handle.dimensions().await;
+        let alt_screen = handle.is_alternate_screen().await;
+        let full_msg = json!({
+            "type": "vtty_full",
+            "data": {
+                "id": &id,
+                "html": html,
+                "cursor": {"row": cursor_row, "col": cursor_col},
+                "dimensions": {"rows": rows, "cols": cols},
+                "alternate_screen": alt_screen,
+            }
+        }).to_string();
+        if ws_tx.send(Message::Text(full_msg.into())).await.is_err() {
+            tracing::warn!(?id, "ws_vtty: failed to send initial snapshot");
+            return;
+        }
+    }
+
+    // Subscribe to VTTY change notifications (diff messages).
     let mut vtty_rx = state.vtty_events.subscribe();
 
     // We need to hold a reference to the manager for sending keys and resize.
@@ -66,17 +88,35 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
             // --- Outgoing: VTTY change notifications ---
             result = vtty_rx.recv() => {
                 match result {
-                    Ok((cmd_id, html)) => {
+                    Ok((cmd_id, msg_json)) => {
                         if cmd_id != watch_id {
                             continue; // Not our command — skip
                         }
-                        // Fetch cursor and dimensions from the handle.
-                        let msg = if let Some(handle) = manager.get(&watch_id) {
+
+                        // Check if command still exists
+                        if manager.get(&watch_id).is_none() {
+                            let end_msg = json!({"type": "command_ended", "id": &watch_id}).to_string();
+                            let _ = ws_tx.send(Message::Text(end_msg.into())).await;
+                            break;
+                        }
+
+                        // Forward the diff message directly to the client.
+                        // The diff protocol messages are pre-serialized JSON.
+                        if ws_tx.send(Message::Text(msg_json.into())).await.is_err() {
+                            tracing::debug!(?watch_id, "ws_vtty: client disconnected");
+                            break;
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                        tracing::warn!(?watch_id, lagged = n, "ws_vtty: broadcast lagged, catching up");
+                        // Re-send a full snapshot to resync
+                        if let Some(handle) = manager.get(&watch_id) {
+                            let html = handle.vtty_html().await;
                             let (cursor_row, cursor_col) = handle.cursor_position().await;
                             let (rows, cols) = handle.dimensions().await;
                             let alt_screen = handle.is_alternate_screen().await;
-                            json!({
-                                "type": "vtty_update",
+                            let resync_msg = json!({
+                                "type": "vtty_full",
                                 "data": {
                                     "id": &watch_id,
                                     "html": html,
@@ -84,19 +124,9 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
                                     "dimensions": {"rows": rows, "cols": cols},
                                     "alternate_screen": alt_screen,
                                 }
-                            }).to_string()
-                        } else {
-                            // Command was removed while we were subscribed.
-                            json!({"type": "command_ended", "id": &watch_id}).to_string()
-                        };
-                        if ws_tx.send(Message::Text(msg.into())).await.is_err() {
-                            tracing::debug!(?watch_id, "ws_vtty: client disconnected");
-                            break;
+                            }).to_string();
+                            let _ = ws_tx.send(Message::Text(resync_msg.into())).await;
                         }
-                    }
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                        tracing::warn!(?watch_id, lagged = n, "ws_vtty: broadcast lagged, catching up");
-                        // Continue — we just missed some updates.
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => {
                         tracing::debug!(?watch_id, "ws_vtty: broadcast channel closed");
