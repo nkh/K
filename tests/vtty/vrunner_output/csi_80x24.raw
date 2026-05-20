@@ -1,0 +1,16 @@
+CONTENT_LENGTH=1978
+FIRST_200='\x1b[38;2;204;204;204;48;2;0;0;0m| Row 02                                                                        \n| Row 03                                                                        \n| Row 04'
+LAST_200='                                 \n+------------------------------------------------------------------------------+\n                                                                                \n\x1b[0m'
+LINE_COUNT=25
+MAX_LINE_LEN=80
+MIN_LINE_LEN=80
+LINE_0_LEN=80
+LINE_1_LEN=80
+LINE_2_LEN=80
+LINE_3_LEN=80
+LINE_4_LEN=80
+LINE_5_LEN=80
+LINE_6_LEN=80
+LINE_7_LEN=80
+LINE_8_LEN=80
+LINE_9_LEN=80

@@ -17,27 +17,18 @@ impl TerminalDisplay {
     ///
     /// Each row is explicitly positioned with MoveTo(0, row) to avoid
     /// cursor drift in raw mode, where \n moves down without returning
-    /// to column 0.  Output is clipped to the physical terminal dimensions
-    /// so that a VTTY buffer wider/taller than the visible area does not
-    /// cause wrapping or spurious line breaks.
+    /// to column 0.
     pub fn render(buffer: &Buffer) -> io::Result<()> {
         let mut stdout = stdout();
-
-        // Query the physical terminal size and clip to it.
-        let (term_rows, term_cols) = crossterm::terminal::size()
-            .unwrap_or((buffer.rows.len() as u16, buffer.width as u16));
 
         // Clear screen and move to top-left
         stdout.queue(Clear(ClearType::All))?;
 
-        let render_rows = (buffer.rows.len() as u16).min(term_rows) as usize;
-        let render_cols = (buffer.width as u16).min(term_cols) as usize;
-
-        for (row_idx, row) in buffer.rows.iter().enumerate().take(render_rows) {
+        for (row_idx, row) in buffer.rows.iter().enumerate() {
             // Move to the start of each row — critical in raw mode
             // where \n does NOT reset the column to 0.
             stdout.queue(MoveTo(0, row_idx as u16))?;
-            for cell in row.iter().take(render_cols) {
+            for cell in row {
                 Self::render_cell(&mut stdout, cell)?;
             }
         }

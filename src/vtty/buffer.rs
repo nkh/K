@@ -89,37 +89,62 @@ impl Buffer {
         self.clear_line_to(end_row, end_col);
     }
 
+    /// Scroll the entire buffer up by one line.
+    /// The top line goes to scrollback; a blank line appears at the bottom.
     pub fn scroll_up(&mut self) {
-        if !self.rows.is_empty() {
-            let removed = self.rows.remove(0);
-            if self.scrollback.len() < self.max_scrollback {
+        self.scroll_region_up(0, self.height.saturating_sub(1));
+    }
+
+    /// Scroll the entire buffer down by one line.
+    /// The bottom line is lost; a blank line appears at the top.
+    pub fn scroll_down(&mut self) {
+        self.scroll_region_down(0, self.height.saturating_sub(1));
+    }
+
+    /// Scroll a region [top..=bottom] up by one line.
+    /// The line at `top` goes to scrollback; a blank line appears at `bottom`.
+    pub fn scroll_region_up(&mut self, top: usize, bottom: usize) {
+        if !self.rows.is_empty() && top <= bottom && bottom < self.height {
+            let removed = self.rows.remove(top);
+            if top == 0 && self.scrollback.len() < self.max_scrollback {
                 self.scrollback.push(removed);
-            } else if !self.scrollback.is_empty() {
+            } else if top == 0 && !self.scrollback.is_empty() {
                 self.scrollback.remove(0);
                 self.scrollback.push(removed);
             }
-            self.rows.push(vec![Cell::default(); self.width]);
+            // When top > 0, the scrolled-out line is simply discarded (not scrollback).
+            self.rows.insert(bottom, vec![Cell::default(); self.width]);
         }
     }
 
-    pub fn scroll_down(&mut self) {
-        if !self.rows.is_empty() {
-            self.rows.pop();
-            self.rows.insert(0, vec![Cell::default(); self.width]);
+    /// Scroll a region [top..=bottom] down by one line.
+    /// The line at `bottom` is lost; a blank line appears at `top`.
+    pub fn scroll_region_down(&mut self, top: usize, bottom: usize) {
+        if !self.rows.is_empty() && top <= bottom && bottom < self.height {
+            self.rows.remove(bottom);
+            self.rows.insert(top, vec![Cell::default(); self.width]);
         }
     }
 
-    pub fn insert_line(&mut self, row: usize) {
-        if row < self.height {
+    /// Insert a blank line at `row`, pushing lines downward.
+    /// Lines that fall past `bottom` are discarded.
+    /// If `bottom` is None, the last line of the buffer is discarded.
+    pub fn insert_line(&mut self, row: usize, bottom: Option<usize>) {
+        let bottom = bottom.unwrap_or(self.height.saturating_sub(1));
+        if row < self.height && bottom < self.height && row <= bottom {
             self.rows.insert(row, vec![Cell::default(); self.width]);
-            self.rows.pop();
+            self.rows.remove(bottom + 1);
         }
     }
 
-    pub fn delete_line(&mut self, row: usize) {
-        if row < self.height {
+    /// Delete the line at `row`, shifting lines below it upward.
+    /// A blank line is inserted at `bottom`.
+    /// If `bottom` is None, the bottom of the buffer is used.
+    pub fn delete_line(&mut self, row: usize, bottom: Option<usize>) {
+        let bottom = bottom.unwrap_or(self.height.saturating_sub(1));
+        if row < self.height && bottom < self.height && row <= bottom {
             self.rows.remove(row);
-            self.rows.push(vec![Cell::default(); self.width]);
+            self.rows.insert(bottom, vec![Cell::default(); self.width]);
         }
     }
 
@@ -298,11 +323,44 @@ mod tests {
     fn test_buffer_insert_delete_line() {
         let mut b = Buffer::new(10, 5, 100);
         b.rows[1][0].ch = 'B';
-        b.insert_line(1);
+        b.insert_line(1, None);
         assert_eq!(b.rows[1][0].ch, ' ');
         assert_eq!(b.rows[2][0].ch, 'B');
-        b.delete_line(1);
+        b.delete_line(1, None);
         assert_eq!(b.rows[1][0].ch, 'B');
+    }
+
+    #[test]
+    fn test_buffer_scroll_region() {
+        let mut b = Buffer::new(10, 5, 100);
+        // Mark each row with its index
+        for i in 0..5 { b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap(); }
+        // Scroll only rows 1-3 (leave rows 0 and 4 untouched)
+        b.scroll_region_up(1, 3);
+        // Row 0 (char '0') unchanged
+        assert_eq!(b.rows[0][0].ch, '0');
+        // Row 1 should now have what was row 2 ('2')
+        assert_eq!(b.rows[1][0].ch, '2');
+        // Row 2 should now have what was row 3 ('3')
+        assert_eq!(b.rows[2][0].ch, '3');
+        // Row 3 should be blank (scrolled in)
+        assert_eq!(b.rows[3][0].ch, ' ');
+        // Row 4 (char '4') unchanged
+        assert_eq!(b.rows[4][0].ch, '4');
+    }
+
+    #[test]
+    fn test_buffer_insert_delete_line_with_region() {
+        let mut b = Buffer::new(10, 6, 100);
+        for i in 0..6 { b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap(); }
+        // Insert at row 2, scroll region 2-4
+        b.insert_line(2, Some(4));
+        assert_eq!(b.rows[0][0].ch, '0'); // unchanged
+        assert_eq!(b.rows[1][0].ch, '1'); // unchanged
+        assert_eq!(b.rows[2][0].ch, ' '); // new blank
+        assert_eq!(b.rows[3][0].ch, '2'); // shifted from 2
+        assert_eq!(b.rows[4][0].ch, '3'); // shifted from 3, '4' discarded
+        assert_eq!(b.rows[5][0].ch, '5'); // unchanged (outside region)
     }
 
     #[test]

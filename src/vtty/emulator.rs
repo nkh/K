@@ -260,6 +260,10 @@ impl VttyEmulator {
                     2 | 3 => buf.clear_all(),
                     _ => {}
                 }
+                // After erasing, clamp cursor to scroll region
+                if mode == 0 {
+                    // Cursor stays, but content from cursor to scroll_bottom is cleared
+                }
             }
             b'K' => {
                 let mode = param(0, 0);
@@ -274,12 +278,12 @@ impl VttyEmulator {
             b'L' => {
                 let n = param(0, 1) as usize;
                 let mut buf = self.buffer.write();
-                for _ in 0..n { buf.insert_line(self.cursor_row); }
+                for _ in 0..n { buf.insert_line(self.cursor_row, Some(self.scroll_bottom)); }
             }
             b'M' => {
                 let n = param(0, 1) as usize;
                 let mut buf = self.buffer.write();
-                for _ in 0..n { buf.delete_line(self.cursor_row); }
+                for _ in 0..n { buf.delete_line(self.cursor_row, Some(self.scroll_bottom)); }
             }
             b'P' => {
                 let n = param(0, 1) as usize;
@@ -294,12 +298,12 @@ impl VttyEmulator {
             b'S' => {
                 let n = param(0, 1) as usize;
                 let mut buf = self.buffer.write();
-                for _ in 0..n { buf.scroll_up(); }
+                for _ in 0..n { buf.scroll_region_up(self.scroll_top, self.scroll_bottom); }
             }
             b'T' => {
                 let n = param(0, 1) as usize;
                 let mut buf = self.buffer.write();
-                for _ in 0..n { buf.scroll_down(); }
+                for _ in 0..n { buf.scroll_region_down(self.scroll_top, self.scroll_bottom); }
             }
             b'm' => { self.process_sgr(&params); }
             b'h' if intermediate.first() == Some(&b'?') => {
@@ -449,7 +453,7 @@ impl VttyEmulator {
         if self.cursor_row > self.scroll_bottom {
             let mut buf = self.buffer.write();
             while self.cursor_row > self.scroll_bottom {
-                buf.scroll_up();
+                buf.scroll_region_up(self.scroll_top, self.scroll_bottom);
                 self.cursor_row -= 1;
             }
         }

@@ -1,0 +1,16 @@
+CONTENT_LENGTH=3664
+FIRST_200='\x1b[38;2;204;204;204;48;2;0;0;0m| Row 02                                                                                                                \n| Row 03                                         '
+LAST_200='-------------------------------------------------------------------------+\n                                                                                                                        \n\x1b[0m'
+LINE_COUNT=31
+MAX_LINE_LEN=120
+MIN_LINE_LEN=120
+LINE_0_LEN=120
+LINE_1_LEN=120
+LINE_2_LEN=120
+LINE_3_LEN=120
+LINE_4_LEN=120
+LINE_5_LEN=120
+LINE_6_LEN=120
+LINE_7_LEN=120
+LINE_8_LEN=120
+LINE_9_LEN=120
