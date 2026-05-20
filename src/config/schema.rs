@@ -6,7 +6,9 @@ pub struct Config {
     pub server: ServerConfig,
     #[serde(default)]
     pub security: SecurityConfig,
+    #[serde(default)]
     pub tls: TlsConfig,
+    #[serde(default)]
     pub certificates: CertificatesConfig,
     #[serde(default)]
     pub vtty: VttyConfig,
