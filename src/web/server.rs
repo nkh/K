@@ -62,7 +62,9 @@ pub async fn start_server(
     tokio::spawn(async move {
         let _ = shutdown_rx.recv().await;
         tracing::info!("Graceful shutdown initiated");
-        shutdown_handle.graceful_shutdown(None);
+        // Use a 2-second timeout so vrunner doesn't hang waiting for
+        // persistent connections (HTTP keep-alive, SSE, WebSocket) to drain.
+        shutdown_handle.graceful_shutdown(Some(std::time::Duration::from_secs(2)));
     });
 
     // Spawn signal handler (sends on shutdown channel)

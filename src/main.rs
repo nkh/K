@@ -245,6 +245,7 @@ async fn run_display_loop(
     use vrunner::vtty::display::TerminalDisplay;
     use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
     use crossterm::{cursor, ExecutableCommand};
+    use std::io::Write;
 
     // Set up the alternate screen and raw mode.
     let mut stdout = std::io::stdout();
@@ -411,9 +412,13 @@ async fn run_display_loop(
     }
 
     // Restore the terminal before returning.
+    // Flush to ensure all queued crossterm commands are applied.
+    let _ = stdout.flush();
     let _ = stdout.execute(cursor::Show);
     let _ = stdout.execute(LeaveAlternateScreen);
+    let _ = stdout.flush();
     let _ = terminal::disable_raw_mode();
+    let _ = stdout.flush();
 
     // Trigger server shutdown so async_main can unwind.
     let _ = shutdown_tx.send(());

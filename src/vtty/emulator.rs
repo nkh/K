@@ -984,4 +984,66 @@ mod tests {
         // The 'G' at (0, 0) should be green
         assert_eq!(buf.rows[0][0].fg, [0, 170, 0]);
     }
+
+    #[test]
+    fn test_el_mode_0_erase_to_end() {
+        // CSI K (mode 0) — erase from cursor to end of line
+        let mut emu = VttyEmulator::new(5, 10, 100);
+        emu.feed_str("ABCDEFGHIJ"); // Fill row 0
+        emu.feed_str("\x1b[1;5H"); // Move to (0, 4) — column 5 (1-based)
+        emu.feed_str("\x1b[44m");   // Set blue background
+        emu.feed_str("\x1b[K");     // Erase from cursor to end of line
+        let buf = emu.buffer();
+        // Columns 0-3 should still have original text
+        assert_eq!(buf.rows[0][0].ch, 'A');
+        assert_eq!(buf.rows[0][3].ch, 'D');
+        // Column 4 (cursor position) and beyond should be erased with blue bg
+        assert_eq!(buf.rows[0][4].ch, ' ');
+        assert_eq!(buf.rows[0][4].bg, [0, 0, 170]);
+        assert_eq!(buf.rows[0][9].ch, ' ');
+        assert_eq!(buf.rows[0][9].bg, [0, 0, 170]);
+        // Original cells should have default bg
+        assert_eq!(buf.rows[0][0].bg, [0, 0, 0]);
+    }
+
+    #[test]
+    fn test_el_mode_1_erase_to_beginning() {
+        // CSI 1 K — erase from beginning of line to cursor (inclusive)
+        let mut emu = VttyEmulator::new(5, 10, 100);
+        emu.feed_str("ABCDEFGHIJ"); // Fill row 0
+        emu.feed_str("\x1b[1;5H"); // Move to (0, 4) — column 5 (1-based)
+        emu.feed_str("\x1b[44m");   // Set blue background
+        emu.feed_str("\x1b[1K");    // Erase from beginning to cursor
+        let buf = emu.buffer();
+        // Columns 0-4 (inclusive) should be erased with blue bg
+        assert_eq!(buf.rows[0][0].ch, ' ');
+        assert_eq!(buf.rows[0][0].bg, [0, 0, 170]);
+        assert_eq!(buf.rows[0][4].ch, ' ');
+        assert_eq!(buf.rows[0][4].bg, [0, 0, 170]);
+        // Columns 5-9 should still have original text
+        assert_eq!(buf.rows[0][5].ch, 'F');
+        assert_eq!(buf.rows[0][5].bg, [0, 0, 0]);
+        assert_eq!(buf.rows[0][9].ch, 'J');
+    }
+
+    #[test]
+    fn test_el_mode_2_erase_entire_line() {
+        // CSI 2 K — erase entire line
+        let mut emu = VttyEmulator::new(5, 10, 100);
+        emu.feed_str("ABCDEFGHIJ"); // Fill row 0
+        emu.feed_str("\x1b[2;1H"); // Move to (1, 0)
+        emu.feed_str("KLMNOPQRST"); // Fill row 1
+        emu.feed_str("\x1b[1;1H"); // Move back to (0, 0)
+        emu.feed_str("\x1b[44m");   // Set blue background
+        emu.feed_str("\x1b[2K");    // Erase entire line 0
+        let buf = emu.buffer();
+        // Row 0 should be entirely erased with blue bg
+        for cell in &buf.rows[0] {
+            assert_eq!(cell.ch, ' ');
+            assert_eq!(cell.bg, [0, 0, 170]);
+        }
+        // Row 1 should be unaffected
+        assert_eq!(buf.rows[1][0].ch, 'K');
+        assert_eq!(buf.rows[1][0].bg, [0, 0, 0]);
+    }
 }

@@ -106,26 +106,39 @@ impl AnsiParser {
         }
     }
 
+    /// Process a single byte in Ground state.  Extracted so that abort
+    /// paths from other states can reprocess a byte from Ground without
+    /// duplicating logic.
+    fn process_ground_byte(&mut self, byte: u8, tokens: &mut Vec<AnsiToken>) {
+        match byte {
+            0x1b => {
+                self.flush_text_bytes(tokens);
+                self.state = ParseState::Escape;
+                self.buffer.clear();
+                self.buffer.push(byte);
+            }
+            0x00..=0x08 | 0x0b..=0x0c | 0x0e..=0x1a | 0x1c..=0x1f => {
+                self.flush_text_bytes(tokens);
+                tokens.push(AnsiToken::Control(byte));
+            }
+            0x7f => {}
+            _ => { self.text_bytes.push(byte); }
+        }
+    }
+
     pub fn parse(&mut self, input: &[u8]) -> Vec<AnsiToken> {
         let mut tokens = Vec::new();
 
-        for &byte in input {
+        // Use a manual index so that abort paths can reprocess the current
+        // byte from Ground state instead of silently consuming it.
+        let mut i = 0;
+        while i < input.len() {
+            let byte = input[i];
+            let mut advance = true; // set to false to reprocess this byte
+
             match self.state {
                 ParseState::Ground => {
-                    match byte {
-                        0x1b => {
-                            self.flush_text_bytes(&mut tokens);
-                            self.state = ParseState::Escape;
-                            self.buffer.clear();
-                            self.buffer.push(byte);
-                        }
-                        0x00..=0x08 | 0x0b..=0x0c | 0x0e..=0x1a | 0x1c..=0x1f => {
-                            self.flush_text_bytes(&mut tokens);
-                            tokens.push(AnsiToken::Control(byte));
-                        }
-                        0x7f => {}
-                        _ => { self.text_bytes.push(byte); }
-                    }
+                    self.process_ground_byte(byte, &mut tokens);
                 }
 
                 ParseState::Escape => {
@@ -159,7 +172,13 @@ impl AnsiParser {
                             tokens.push(AnsiToken::Escape(byte));
                             self.reset_to_ground();
                         }
-                        _ => { self.reset_to_ground(); }
+                        _ => {
+                            // Unknown byte after ESC — abort the escape.
+                            // The ESC is silently dropped (non-printable),
+                            // but the aborting byte must be reprocessed.
+                            self.reset_to_ground();
+                            advance = false;
+                        }
                     }
                 }
 
@@ -205,7 +224,14 @@ impl AnsiParser {
                             });
                             self.reset_to_ground();
                         }
-                        _ => { self.reset_to_ground(); }
+                        _ => {
+                            // CSI sequence aborted by an unexpected byte.
+                            // Emit the consumed '[' as text (so it is visible),
+                            // then reprocess the aborting byte from Ground.
+                            self.text_bytes.push(b'[');
+                            self.reset_to_ground();
+                            advance = false;
+                        }
                     }
                 }
 
@@ -220,7 +246,16 @@ impl AnsiParser {
                             });
                             self.reset_to_ground();
                         }
-                        _ => { self.reset_to_ground(); }
+                        _ => {
+                            // CSI intermediate sequence aborted.
+                            // Emit the consumed '[' and intermediate bytes as text.
+                            self.text_bytes.push(b'[');
+                            for &ib in &self.intermediate {
+                                self.text_bytes.push(ib);
+                            }
+                            self.reset_to_ground();
+                            advance = false;
+                        }
                     }
                 }
 
@@ -273,7 +308,10 @@ impl AnsiParser {
                         0x3c..=0x3f => {
                             self.intermediate.push(byte);
                         }
-                        _ => { self.reset_to_ground(); }
+                        _ => {
+                            self.reset_to_ground();
+                            advance = false;
+                        }
                     }
                 }
 
@@ -309,7 +347,10 @@ impl AnsiParser {
                             self.reset_to_ground();
                         }
                         0x20..=0x2f => { self.intermediate.push(byte); }
-                        _ => { self.reset_to_ground(); }
+                        _ => {
+                            self.reset_to_ground();
+                            advance = false;
+                        }
                     }
                 }
 
@@ -338,6 +379,10 @@ impl AnsiParser {
                         self.reset_to_ground();
                     }
                 }
+            }
+
+            if advance {
+                i += 1;
             }
         }
 
@@ -504,5 +549,58 @@ mod tests {
         let tokens2 = parser.parse(&[0x82]);
         assert_eq!(tokens2.len(), 1);
         assert!(matches!(&tokens2[0], AnsiToken::Text(s) if s == "│"));
+    }
+
+    #[test]
+    fn test_csi_aborted_by_control_char() {
+        // ESC [ followed by LF (0x0a) — CSI sequence is aborted.
+        // The '[' should be emitted as text, and the LF should be emitted
+        // as text (it's in the text range, not control range, in Ground state).
+        let tokens = parse_ansi(b"\x1b[\nHello");
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(&tokens[0], AnsiToken::Text(s) if s == "[\nHello"));
+    }
+
+    #[test]
+    fn test_csi_aborted_by_high_byte() {
+        // ESC [ followed by a high byte (0xff) that's not a CSI byte.
+        // High bytes fall through to the default abort path in CsiParam.
+        // The '[' is emitted as text. The 0xff stays in text_bytes
+        // and is dropped by flush_text_bytes_preserve_incomplete (since
+        // it's an invalid UTF-8 start byte). The remaining 'X' is flushed
+        // in the next call.
+        let input: &[u8] = b"\x1b[\xffX";
+        let mut parser = AnsiParser::new();
+        let tokens = parser.parse(input);
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(&tokens[0], AnsiToken::Text(s) if s == "["));
+        // 'X' is still in text_bytes; feed 'Y' to flush it
+        let tokens2 = parser.parse(b"Y");
+        assert_eq!(tokens2.len(), 1);
+        assert!(matches!(&tokens2[0], AnsiToken::Text(s) if s == "XY"));
+    }
+
+    #[test]
+    fn test_escape_aborted_by_control() {
+        // ESC followed by a non-ESC-sequence byte (0x01 = SOH control).
+        // The ESC is dropped (non-printable), and 0x01 is reprocessed.
+        let tokens = parse_ansi(b"\x1b\x01A");
+        // 0x01 is in the control range (0x00..=0x08), so it's a Control token.
+        // 'A' is text.
+        assert_eq!(tokens.len(), 2);
+        assert!(matches!(&tokens[0], AnsiToken::Control(0x01)));
+        assert!(matches!(&tokens[1], AnsiToken::Text(s) if s == "A"));
+    }
+
+    #[test]
+    fn test_csi_valid_then_aborted() {
+        // A valid CSI sequence followed by an aborted one:
+        // ESC[31m (valid) then ESC[ + LF (aborted)
+        let tokens = parse_ansi(b"\x1b[31m\x1b[\nRed");
+        // Token 1: CSI 31m
+        // Token 2: Text "[\nRed"
+        assert_eq!(tokens.len(), 2);
+        assert!(matches!(&tokens[0], AnsiToken::Csi { final_byte: b'm', .. }));
+        assert!(matches!(&tokens[1], AnsiToken::Text(s) if s == "[\nRed"));
     }
 }
