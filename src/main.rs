@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use std::sync::Arc;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, mpsc};
 
 use vrunner::cli::args::{Cli, Commands, CertAction};
 use vrunner::config::loader::load_config;
@@ -105,6 +105,22 @@ async fn async_main(cli: Cli) -> Result<()> {
     // Apply CLI overrides (highest precedence)
     cli.apply_overrides(&mut cfg);
 
+    // When --display is enabled, detect the real terminal size and use it
+    // for the VTTY so that the child process (e.g. htop) formats its output
+    // for the actual visible area.
+    if cfg.display.enabled {
+        match crossterm::terminal::size() {
+            Ok((rows, cols)) => {
+                tracing::info!(rows, cols, "Detected terminal size for display mode");
+                cfg.vtty.rows = rows;
+                cfg.vtty.cols = cols;
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to detect terminal size, using config defaults");
+            }
+        }
+    }
+
     // Initialize instance registry
     let registry = InstanceRegistry::new()?;
     registry.register_current(&cfg)?;
@@ -156,65 +172,35 @@ async fn async_main(cli: Cli) -> Result<()> {
         }
     });
 
-    // If --display is enabled, run a local terminal display loop that renders
-    // the active command's VTTY output directly to stdout (like mprocs).
+    // Brief pause to let the server bind before we enter the display loop.
+    // If the server fails to start, the server_handle will resolve with an
+    // error which we propagate after the loop.
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
     if cfg.display.enabled {
-        let display_manager = manager.clone();
-        let display_id = spawned_id.clone();
-        let mut shutdown_rx = shutdown_tx.subscribe();
-        let refresh_ms = cfg.display.refresh_ms;
-
-        tokio::spawn(async move {
-            use vrunner::vtty::display::TerminalDisplay;
-            use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
-            use crossterm::{cursor, ExecutableCommand};
-
-            // Switch to alternate screen for our display so we don't
-            // corrupt the user's terminal history.
-            let mut stdout = std::io::stdout();
-            let _ = terminal::enable_raw_mode();
-            let _ = stdout.execute(EnterAlternateScreen);
-            let _ = stdout.execute(cursor::Hide);
-
-            let mut last_html: String = String::new();
-            let interval = tokio::time::Duration::from_millis(refresh_ms);
-
-            loop {
-                tokio::select! {
-                    _ = tokio::time::sleep(interval) => {
-                        // Find a command to display
-                        let commands = display_manager.list();
-                        let target_id = display_id.as_ref()
-                            .or_else(|| commands.first().map(|(id, _, _, _)| id));
-
-                        if let Some(id) = target_id {
-                            if let Some(handle) = display_manager.get(id) {
-                                let html = handle.vtty_html().await;
-                                drop(handle);
-                                if html != last_html {
-                                    last_html = html;
-                                    // Render the buffer directly to the terminal
-                                    let buf = display_manager.get(id).unwrap().vtty_snapshot().await;
-                                    let _ = TerminalDisplay::render(&buf);
-                                }
-                            } else {
-                                // Command was removed
-                                let _ = TerminalDisplay::clear();
-                                break;
-                            }
-                        }
-                    }
-                    _ = shutdown_rx.recv() => {
-                        break;
-                    }
-                }
-            }
-
-            // Restore terminal
-            let _ = stdout.execute(cursor::Show);
-            let _ = stdout.execute(LeaveAlternateScreen);
-            let _ = terminal::disable_raw_mode();
-        });
+        // ── Display mode ──
+        // Run an inline display loop (like mprocs).  The loop renders the
+        // active command's VTTY buffer directly to the local terminal,
+        // forwards keystrokes to the child, and exits on Ctrl+\ or child
+        // death (when a direct child was spawned).
+        run_display_loop(
+            &manager,
+            spawned_id.as_deref(),
+            cfg.display.refresh_ms,
+            shutdown_tx.clone(),
+        ).await;
+    } else if let Some(ref id) = spawned_id {
+        // ── Headless mode with direct child ──
+        // No display, but a child was spawned directly via CLI.  Wait for
+        // the child process to exit, then shut down the server.
+        wait_for_child(&manager, id).await;
+        let _ = shutdown_tx.send(());
+    } else {
+        // ── Idle server mode ──
+        // No display, no direct child.  Wait for an external shutdown
+        // signal (SIGINT, SIGTERM, or the /api/shutdown endpoint).
+        let mut rx = shutdown_tx.subscribe();
+        let _ = rx.recv().await;
     }
 
     // Wait for server to finish — propagate both JoinError and server errors
@@ -224,6 +210,157 @@ async fn async_main(cli: Cli) -> Result<()> {
     registry.unregister_current()?;
 
     Ok(())
+}
+
+/// Run the interactive terminal display loop.
+///
+/// This function blocks (in the async sense) until the user quits (Ctrl+\),
+/// the direct child exits, or a shutdown signal is received.  It renders
+/// the VTTY buffer to the local terminal using crossterm and forwards all
+/// keystrokes to the active child command.
+async fn run_display_loop(
+    manager: &Arc<CommandManager>,
+    direct_child_id: Option<&str>,
+    refresh_ms: u64,
+    shutdown_tx: broadcast::Sender<()>,
+) {
+    use vrunner::vtty::display::TerminalDisplay;
+    use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
+    use crossterm::{cursor, ExecutableCommand};
+
+    // Set up the alternate screen and raw mode.
+    let mut stdout = std::io::stdout();
+    if let Err(e) = terminal::enable_raw_mode() {
+        tracing::warn!(error = %e, "Failed to enable raw mode");
+        return;
+    }
+    let _ = stdout.execute(EnterAlternateScreen);
+    let _ = stdout.execute(cursor::Hide);
+
+    // Spawn a blocking stdin reader that sends individual bytes through a
+    // channel.  In raw mode each keystroke is available immediately.
+    let (stdin_tx, mut stdin_rx) = mpsc::channel::<u8>(128);
+    tokio::task::spawn_blocking(move || {
+        use std::io::Read;
+        let mut stdin = std::io::stdin();
+        let mut buf = [0u8; 1];
+        loop {
+            match stdin.read(&mut buf) {
+                Ok(1) => {
+                    if stdin_tx.blocking_send(buf[0]).is_err() {
+                        break; // receiver dropped
+                    }
+                }
+                Ok(_) => break, // EOF or unexpected read size
+                Err(_) => break, // read error
+            }
+        }
+    });
+
+    let mut shutdown_rx = shutdown_tx.subscribe();
+    let interval = tokio::time::Duration::from_millis(refresh_ms);
+    // Track which command we're displaying so we can forward keystrokes.
+    let mut active_id: Option<String> = direct_child_id.map(String::from);
+
+    loop {
+        tokio::select! {
+            // ── Periodic VTTY render ──
+            _ = tokio::time::sleep(interval) => {
+                // Find the command to display (prefer the direct child)
+                let commands = manager.list();
+                let target_id = active_id.as_ref()
+                    .or_else(|| commands.first().map(|(id, _, _, _)| id))
+                    .cloned();
+
+                let mut should_break = false;
+
+                if let Some(ref id) = target_id {
+                    if let Some(handle) = manager.get(id) {
+                        // Check if the child process is still alive.
+                        let pid = handle.pid as i32;
+                        let alive = unsafe { libc::kill(pid, 0) == 0 };
+                        if !alive {
+                            should_break = true;
+                        } else {
+                            // Render the VTTY buffer to the terminal.
+                            let buf = handle.vtty_snapshot().await;
+                            drop(handle);
+                            let _ = TerminalDisplay::render(&buf);
+                        }
+                    } else {
+                        // Command was removed (killed via API).
+                        should_break = true;
+                    }
+                } else {
+                    // No commands — clear and show empty.
+                    let _ = TerminalDisplay::clear();
+                }
+
+                if should_break {
+                    let _ = TerminalDisplay::clear();
+                    break;
+                }
+
+                active_id = target_id;
+            }
+
+            // ── Keystroke forwarding ──
+            byte = stdin_rx.recv() => {
+                match byte {
+                    Some(b) if b == 0x1c => {
+                        // Ctrl+\ (SIGQUIT) — quit display mode
+                        break;
+                    }
+                    Some(b) => {
+                        // Forward the byte to the active command.
+                        if let Some(ref id) = active_id {
+                            if let Some(handle) = manager.get(id) {
+                                let _ = handle.send_bytes(vec![b]).await;
+                            }
+                        }
+                    }
+                    None => {
+                        // Stdin channel closed (EOF).
+                        break;
+                    }
+                }
+            }
+
+            // ── External shutdown ──
+            _ = shutdown_rx.recv() => {
+                break;
+            }
+        }
+    }
+
+    // Restore the terminal before returning.
+    let _ = stdout.execute(cursor::Show);
+    let _ = stdout.execute(LeaveAlternateScreen);
+    let _ = terminal::disable_raw_mode();
+
+    // Trigger server shutdown so async_main can unwind.
+    let _ = shutdown_tx.send(());
+}
+
+/// Wait for a direct child command to exit (headless, non-display mode).
+///
+/// Polls `kill(pid, 0)` at 500 ms intervals.  When the child is no longer
+/// alive the function returns.
+async fn wait_for_child(manager: &Arc<CommandManager>, id: &str) {
+    loop {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        if let Some(handle) = manager.get(&id.to_string()) {
+            let pid = handle.pid as i32;
+            let alive = unsafe { libc::kill(pid, 0) == 0 };
+            if !alive {
+                tracing::info!(id, "Direct child exited");
+                return;
+            }
+        } else {
+            tracing::info!(id, "Direct child removed from manager");
+            return;
+        }
+    }
 }
 
 fn main() -> Result<()> {

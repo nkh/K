@@ -473,6 +473,17 @@ async function loadCommands() {
     // Update spawn instance dropdown
     updateInstanceDropdown();
 
+    // Auto-select the first command if none is selected yet
+    if (!state.selectedCommandId) {
+        for (const inst of state.instanceUrls) {
+            if (inst._commands && inst._commands.length > 0) {
+                const cmd = inst._commands[0];
+                selectCommand(inst.url, cmd.id, cmd.name || cmd.id);
+                return; // selectCommand triggers loadCommands, so stop here
+            }
+        }
+    }
+
     // If a command is selected, refresh its VTTY
     if (state.selectedCommandId) {
         const parts = state.selectedCommandId.split(':');

@@ -63,8 +63,10 @@ impl VttyRenderer {
     }
 
     /// Serialize buffer to HTML with inline styles.
+    /// Returns the inner content only (no outer <pre> wrapper) so that
+    /// callers can control their own container element.
     pub fn to_html(buffer: &Buffer) -> String {
-        let mut html = String::from("<pre style='background:#000;color:#ccc;font-family:monospace;'>");
+        let mut html = String::new();
 
         for row in &buffer.rows {
             for cell in row {
@@ -91,7 +93,6 @@ impl VttyRenderer {
             html.push('\n');
         }
 
-        html.push_str("</pre>");
         html
     }
 
@@ -155,10 +156,8 @@ mod tests {
         buf.rows[0][0].ch = 'X';
         buf.rows[0][0].fg = [0, 255, 0];
         let html = VttyRenderer::to_html(&buf);
-        assert!(html.contains("<pre"));
         assert!(html.contains("rgb(0,255,0)"));
         assert!(html.contains("X"));
-        assert!(html.contains("</pre>"));
     }
 
     #[test]

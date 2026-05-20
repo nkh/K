@@ -14,20 +14,22 @@ pub struct TerminalDisplay;
 
 impl TerminalDisplay {
     /// Render the buffer to stdout with full color support.
+    ///
+    /// Each row is explicitly positioned with MoveTo(0, row) to avoid
+    /// cursor drift in raw mode, where \n moves down without returning
+    /// to column 0.
     pub fn render(buffer: &Buffer) -> io::Result<()> {
         let mut stdout = stdout();
 
         // Clear screen and move to top-left
         stdout.queue(Clear(ClearType::All))?;
-        stdout.queue(MoveTo(0, 0))?;
 
         for (row_idx, row) in buffer.rows.iter().enumerate() {
+            // Move to the start of each row — critical in raw mode
+            // where \n does NOT reset the column to 0.
+            stdout.queue(MoveTo(0, row_idx as u16))?;
             for cell in row {
                 Self::render_cell(&mut stdout, cell)?;
-            }
-            // Only move to next line if not the last row
-            if row_idx < buffer.rows.len() - 1 {
-                stdout.queue(Print("\n"))?;
             }
         }
 
