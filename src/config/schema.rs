@@ -2,14 +2,20 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct Config {
+    #[serde(default)]
     pub server: ServerConfig,
+    #[serde(default)]
     pub security: SecurityConfig,
     pub tls: TlsConfig,
     pub certificates: CertificatesConfig,
+    #[serde(default)]
     pub vtty: VttyConfig,
+    #[serde(default)]
     pub display: DisplayConfig,
     pub command_log: CommandLogConfig,
+    #[serde(default)]
     pub daemon: DaemonConfig,
+    #[serde(default)]
     pub handles: Vec<HandleConfig>,
 }
 
@@ -98,9 +104,11 @@ pub struct CertificateEntryConfig {
     pub name: String,
     /// Path to the PEM-encoded certificate file.
     /// Can be absolute or relative to certificates.directory.
+    #[serde(default)]
     pub cert_file: String,
     /// Path to the PEM-encoded private key file.
     /// Can be absolute or relative to certificates.directory.
+    #[serde(default)]
     pub key_file: String,
 }
 
@@ -153,9 +161,11 @@ impl Default for DisplayConfig {
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct CommandLogConfig {
     /// Enable logging of API commands.
+    #[serde(default)]
     pub enabled: bool,
     /// Path to the command log file. If set, logs are written to this file
     /// in addition to the terminal.
+    #[serde(default)]
     pub file: Option<String>,
 }
 

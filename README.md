@@ -18,7 +18,7 @@ A virtual terminal runner and process orchestrator with a web-first control plan
 - **Instance Management** — Run multiple vrunner instances on different ports; list and shut them down by PID.
 - **Command Logging** — Audit all incoming API commands to the terminal or a file.
 - **Local VTTY Display** — Mirror a command's virtual terminal to your local screen on demand.
-- **Declarative Config** — Configure via YAML, overridden by CLI flags.
+- **Declarative Config** — Configure via YAML, TOML, or JSON, overridden by CLI flags.
 - **Extensible Handles** — Route extra file descriptors to the VTTY or to managed log files.
 - **Certificate Pool** — Manage named certificates for per-command access control. Each running application can be bound to a specific certificate.
 
@@ -203,13 +203,14 @@ Here `--port 3000` and `--display` are vrunner options, while `python -m http.se
 
 ## Configuration
 
-`vrunner` reads configuration from multiple YAML sources, resolved in order of precedence:
+`vrunner` reads configuration from multiple sources, resolved in order of precedence. YAML, TOML, and JSON formats are supported (detected by file extension):
 
 | Priority | Source | Path |
 |----------|--------|------|
 | Highest | CLI flags | Command-line arguments |
-| High | Local config | `./vrunner.yaml` |
-| Medium | Global config | `~/.config/vrunner/config.yaml` |
+| High | Explicit config | `-c <FILE>` (any supported format) |
+| Medium | Local config | `./vrunner.yaml` or `./vrunner.toml` |
+| Low | Global config | `~/.config/vrunner/config.yaml` or `~/.config/vrunner/config.toml` |
 | Lowest | Built-in defaults | Compiled into the binary |
 
 ### Example `vrunner.yaml`
@@ -337,8 +338,14 @@ This sends an HTTP shutdown request to the instance. If the instance is unrespon
 | `POST /api/commands` | POST | Start a new command |
 | `POST /api/commands/:id/keys` | POST | Send keystrokes to a command |
 | `POST /api/commands/:id/kill` | POST | Kill a running command |
-| `GET /api/commands/:id/vtty` | GET | Get full VTTY contents |
-| `GET /api/commands/:id/vtty/partial` | GET | Get partial VTTY contents |
+| `GET /api/commands/:id/vtty` | GET | Get full VTTY contents (raw ANSI) |
+| `GET /api/commands/:id/vtty/html` | GET | Get VTTY contents as rendered HTML |
+| `GET /api/commands/:id/vtty/partial` | GET | Get partial VTTY contents (paginated) |
+| `POST /api/commands/:id/resize` | POST | Resize a command's virtual terminal |
+| `GET /api/commands/:id/handles` | GET | List output handles for a command |
+| `POST /api/commands/:id/handles` | POST | Add an output handle to a command |
+| `GET /api/info` | GET | Get instance info (counts, auth status) |
+| `GET /api/log` | GET | Get command log entries (search, pagination) |
 | `POST /api/shutdown` | POST | Shut down the vrunner instance |
 | `GET /api/certificates` | GET | List all certificates in the pool |
 
@@ -369,7 +376,7 @@ Error responses:
 # Start a command
 curl -X POST http://localhost:8080/api/commands \
   -H "Content-Type: application/json" \
-  -d '{"command": "htop", "args": []}'
+  -d '{"cmd": "htop", "args": []}'
 
 # Send keystrokes
 curl -X POST http://localhost:8080/api/commands/<id>/keys \
@@ -393,12 +400,29 @@ When TLS is enabled, use `https://localhost:8080/admin` instead.
 
 ---
 
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [docs/usage.md](docs/usage.md) | Practical user guide with curl and web UI examples |
+| [docs/configuration.md](docs/configuration.md) | Complete configuration reference |
+| [docs/certificates.md](docs/certificates.md) | Certificate management guide |
+| [docs/architecture.md](docs/architecture.md) | Technical architecture details |
+| [docs/requirements.md](docs/requirements.md) | Formal requirements specification |
+| [man/vrunner.1](man/vrunner.1) | Unix manpage |
+
+Install the manpage:
+```bash
+cp man/vrunner.1 /usr/local/share/man/man1/
+man vrunner
+```
+
+---
+
 ## Architecture
 
 See [docs/architecture.md](docs/architecture.md) for technical details.
 See [docs/requirements.md](docs/requirements.md) for formal requirements.
-See [docs/configuration.md](docs/configuration.md) for the complete configuration reference.
-See [docs/certificates.md](docs/certificates.md) for the certificate management guide.
 
 ---
 

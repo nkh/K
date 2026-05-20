@@ -9,7 +9,7 @@ repository = "https://github.com/yourusername/vrunner"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-axum = { version = "0.7", features = ["macros"] }
+axum = { version = "0.7", features = ["macros", "ws"] }
 axum-server = { version = "0.7", features = ["tls-rustls"] }
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "trace", "fs"] }

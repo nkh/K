@@ -2,10 +2,13 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::sync::Mutex;
 use chrono::Utc;
+use tokio::sync::broadcast;
 
 pub struct CommandLogger {
     enabled: bool,
     file: Option<Mutex<std::fs::File>>,
+    /// Broadcast channel for streaming log entries to WebSocket subscribers.
+    log_tx: broadcast::Sender<String>,
 }
 
 impl CommandLogger {
@@ -20,7 +23,18 @@ impl CommandLogger {
             }
             None => None,
         };
-        Ok(Self { enabled, file })
+        let (log_tx, _) = broadcast::channel(256);
+        Ok(Self { enabled, file, log_tx })
+    }
+
+    /// Subscribe to log entries. Returns a broadcast receiver.
+    pub fn subscribe(&self) -> broadcast::Receiver<String> {
+        self.log_tx.subscribe()
+    }
+
+    /// Get a clone of the log broadcast sender.
+    pub fn log_sender(&self) -> broadcast::Sender<String> {
+        self.log_tx.clone()
     }
 
     pub fn log(&self, command: &str, details: &str) {
@@ -34,7 +48,6 @@ impl CommandLogger {
         // Always print to stdout if enabled and no file specified
         if self.file.is_none() {
             println!("{}", line.trim_end());
-            return;
         }
 
         // Write to file if configured
@@ -44,5 +57,9 @@ impl CommandLogger {
                 let _ = file.flush();
             }
         }
+
+        // Broadcast log entry to WebSocket subscribers.
+        // Ignore send errors (no subscribers or channel full).
+        let _ = self.log_tx.send(line.trim_end().to_string());
     }
 }

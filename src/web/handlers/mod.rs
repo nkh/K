@@ -5,3 +5,4 @@ pub mod handles;
 pub mod keys;
 pub mod logs;
 pub mod vtty;
+pub mod ws;

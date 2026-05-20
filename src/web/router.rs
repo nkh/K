@@ -23,6 +23,8 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/commands/:id/vtty/partial", get(handlers::vtty::get_vtty_partial))
         .route("/api/commands/:id/resize", post(handlers::vtty::resize_vtty))
         .route("/api/commands/:id/handles", get(handlers::handles::list_handles).post(handlers::handles::add_handle))
+        .route("/api/commands/:id/ws", get(handlers::ws::ws_vtty_stream))
+        .route("/api/ws/logs", get(handlers::ws::ws_log_stream))
         .route("/api/shutdown", post(handlers::commands::shutdown));
 
     // Public routes — admin panel and static assets

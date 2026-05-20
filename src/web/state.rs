@@ -14,6 +14,10 @@ pub struct AppState {
     pub auth_token: Option<String>,
     /// The certificate store for per-command access control.
     pub cert_store: Arc<CertificateStore>,
+    /// Broadcast sender for VTTY change notifications. `(command_id, html_content)`.
+    pub vtty_events: broadcast::Sender<(String, String)>,
+    /// Broadcast sender for log entries.
+    pub log_events: broadcast::Sender<String>,
 }
 
 impl AppState {
@@ -22,7 +26,9 @@ impl AppState {
         shutdown_tx: broadcast::Sender<()>,
         auth_token: Option<String>,
         cert_store: Arc<CertificateStore>,
+        vtty_events: broadcast::Sender<(String, String)>,
+        log_events: broadcast::Sender<String>,
     ) -> Self {
-        Self { manager, shutdown_tx, auth_token, cert_store }
+        Self { manager, shutdown_tx, auth_token, cert_store, vtty_events, log_events }
     }
 }

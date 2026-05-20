@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use dashmap::DashMap;
 use uuid::Uuid;
+use tokio::sync::broadcast;
 
 use crate::config::schema::Config;
 use crate::logging::command_log::CommandLogger;
@@ -13,6 +14,9 @@ pub struct CommandManager {
     commands: Arc<DashMap<CommandId, CommandHandle>>,
     config: Config,
     logger: Arc<CommandLogger>,
+    /// Broadcast channel for VTTY change notifications.
+    /// Each message is a `(command_id, html_content)` pair.
+    vtty_change_tx: broadcast::Sender<(String, String)>,
 }
 
 impl CommandManager {
@@ -21,10 +25,12 @@ impl CommandManager {
             CommandLogger::new(config.command_log.enabled, config.command_log.file.as_deref())
                 .expect("Failed to initialize command logger")
         );
+        let (vtty_change_tx, _) = broadcast::channel(256);
         Self {
             commands: Arc::new(DashMap::new()),
             config,
             logger,
+            vtty_change_tx,
         }
     }
 
@@ -44,6 +50,38 @@ impl CommandManager {
         handle.certificate = certificate;
 
         self.commands.insert(id.clone(), handle);
+
+        // Spawn a background watcher that detects VTTY changes and broadcasts them.
+        let watch_id = id.clone();
+        let watch_commands = self.commands.clone();
+        let watch_tx = self.vtty_change_tx.clone();
+        tokio::spawn(async move {
+            let mut last_hash: String = String::new();
+            loop {
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+                let entry = match watch_commands.get(&watch_id) {
+                    Some(e) => e,
+                    None => break, // Command removed — stop watching
+                };
+
+                let html = entry.vtty_html().await;
+                drop(entry); // Release the DashMap lock before potentially slow operations
+
+                // Compute SHA-256 hash of the HTML content
+                use sha2::{Sha256, Digest};
+                let mut hasher = Sha256::new();
+                hasher.update(html.as_bytes());
+                let hash = hex::encode(hasher.finalize());
+
+                if hash != last_hash {
+                    last_hash = hash;
+                    // Ignore send errors (no subscribers or channel full)
+                    let _ = watch_tx.send((watch_id.clone(), html));
+                }
+            }
+        });
+
         Ok(id)
     }
 
@@ -73,6 +111,17 @@ impl CommandManager {
             handle.kill().await?;
         }
         Ok(())
+    }
+
+    /// Subscribe to VTTY change notifications.
+    /// Returns a receiver that yields `(command_id, html_content)` pairs.
+    pub fn subscribe_vtty(&self) -> broadcast::Receiver<(String, String)> {
+        self.vtty_change_tx.subscribe()
+    }
+
+    /// Get a clone of the VTTY change broadcast sender.
+    pub fn vtty_change_sender(&self) -> broadcast::Sender<(String, String)> {
+        self.vtty_change_tx.clone()
     }
 
     pub fn logger(&self) -> Arc<CommandLogger> {

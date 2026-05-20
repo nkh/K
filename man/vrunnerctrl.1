@@ -1,0 +1,665 @@
+.\" Title: vrunnerctrl
+.\" Author: vrunner contributors
+.\" Manual section: 1
+.\" Process this file with
+.\"   groff -man -Tascii vrunnerctrl.1
+
+.TH VRUNNERCTRL 1 "2025" "vrunner" "User Commands"
+
+.SH NAME
+vrunnerctrl \- CLI controller for vrunner instances (subcommands of vrunner)
+
+.SH SYNOPSIS
+.B vrunner
+\fBlist\fR
+
+.B vrunner
+\fBstop\fR \fIPID\fR
+
+.B vrunner
+\fBcert generate\fR \fINAME\fR
+
+.B vrunner
+\fBcert list\fR
+
+.B vrunner
+\fBcert show\fR \fINAME\fR
+
+.B vrunner
+\fBcert remove\fR \fINAME\fR
+
+.SH DESCRIPTION
+\fBvrunnerctrl\fR is not a separate binary. It documents the CLI controller subcommands built into the \fBvrunner\fR(1) binary. These subcommands connect to running vrunner instances over HTTP to inspect, manage, and shut them down remotely. They are the command-line equivalent of the web admin interface.
+
+When you run \fBvrunner list\fR, \fBvrunner stop\fR, or \fBvrunner cert\fR, vrunner acts as a controller \[em] it does not start a server. Instead, it queries or sends commands to an already-running instance.
+
+For the full server binary documentation, see \fBvrunner\fR(1).
+
+.SH SUBCOMMANDS
+
+.SS list
+
+List all running vrunner instances on the system. Each vrunner instance registers itself in a shared registry when it starts, allowing discovery from the CLI.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner list
+.RE
+.RE
+
+.PP
+Output columns:
+.RS
+.TP
+.B PID
+Process ID of the vrunner instance.
+.TP
+.B PORT
+TCP port the instance is listening on.
+.TP
+.B BIND
+Bind address (e.g., \fB127.0.0.1\fR or \fB0.0.0.0\fR).
+.TP
+.B DAEMON
+Whether the instance is running as a background daemon (\fByes\fR/\fBno\fR).
+.TP
+.B DISPLAY
+Whether local VTTY display is enabled (\fByes\fR/\fBno\fR).
+.TP
+.B COMMAND
+The initial command the instance was started with, or \fB(idle)\fR if no command was given.
+.RE
+
+.PP
+Example output:
+.RS
+.PP
+.nf
+PID        PORT     BIND                 DAEMON     DISPLAY    COMMAND
+12345      8080     127.0.0.1            yes        no         (idle)
+12346      9090     127.0.0.1            no         yes        vim
+.RE
+
+.SS stop
+
+Gracefully shut down a running vrunner instance by its process ID. This sends an HTTP \fBPOST /api/shutdown\fR request to the instance, allowing it to clean up resources, kill managed commands, and exit cleanly.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner stop \fIPID\fR
+.RE
+.RE
+
+.PP
+If the instance is unresponsive (e.g., frozen or network issue), the command may time out. In that case, use \fBkill(1)\fR or \fBkill -9\fR as a fallback.
+
+.PP
+Example:
+.RS
+.PP
+.nf
+\fB$ vrunner list\fR
+PID        PORT     BIND        DAEMON     COMMAND
+12345      8080     127.0.0.1   yes        (idle)
+12346      9090     127.0.0.1   yes        htop
+
+\fB$ vrunner stop 12346\fR
+Sent shutdown request to PID 12346 (port 9090)
+.RE
+
+.SS cert generate
+
+Generate a new self-signed X.509 certificate and add it to the certificate pool. The certificate is stored in \fB~/.config/vrunner/certs/<name>/\fR with a derived bearer token (SHA-256 hash of the certificate PEM, hex-encoded as 64 characters).
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner cert generate \fINAME\fR
+.RE
+.RE
+
+.PP
+Arguments:
+.RS
+.TP
+.B NAME
+A unique identifier for the certificate (e.g., \fBmy-app\fR, \fBteam-alpha\fR, \fBci-pipeline\fR). Used to reference the certificate when binding it to commands.
+.RE
+
+.PP
+Output:
+.RS
+.PP
+.nf
+Certificate 'my-app' generated successfully.
+  Certificate: /home/user/.config/vrunner/certs/my-app/cert.pem
+  Key:        /home/user/.config/vrunner/certs/my-app/key.pem
+  Token:      a3f8c1e2b7d94001... (first 16 of 64 chars)
+.RE
+
+.SS cert list
+
+List all certificates configured in the certificate pool. Reads from the configuration file (global or local \fBvrunner.yaml\fR/\fBvrunner.toml\fR) and displays each certificate's name, file path, and the first 16 characters of its derived bearer token.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner cert list
+.RE
+.RE
+
+.PP
+Output:
+.RS
+.PP
+.nf
+NAME                     CERT FILE                                         TOKEN (prefix)
+my-app                   /home/user/.config/vrunner/certs/my-app/cert.pem   a3f8c1e2b7d94001
+ci-pipeline              /home/user/.config/vrunner/certs/ci-pipeline/cert.pem 7c1e9d4a8f2...
+.RE
+
+.SS cert show
+
+Display full details of a specific certificate, including the complete 64-character bearer token. This token is used in the \fBAuthorization: Bearer\fR header when making API requests to certificate-bound commands.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner cert show \fINAME\fR
+.RE
+.RE
+
+.PP
+Output:
+.RS
+.PP
+.nf
+Certificate: my-app
+  Certificate: /home/user/.config/vrunner/certs/my-app/cert.pem
+  Key:        /home/user/.config/vrunner/certs/my-app/key.pem
+  Token:      a3f8c1e2b7d94001... (full SHA-256 hex)
+  Token (16): a3f8c1e2b7d94001...
+.RE
+
+.SS cert remove
+
+Remove a certificate from the pool registry. This removes the certificate from vrunner's internal registry so it can no longer be used to bind commands. The PEM files on disk are \fBnot\fR deleted.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner cert remove \fINAME\fR
+.RE
+.RE
+
+.SH HTTP API CONTROLLER
+
+The CLI subcommands are wrappers around the vrunner HTTP API. You can also control vrunner instances directly with \fBcurl\fR(1) or any HTTP client. This is useful for scripting, automation, and integration with other tools.
+
+.SS Authentication
+
+When the server has auth enabled (via \fB\-\-auth\fR, \fB\-\-remote\fR, or configuration), include a bearer token:
+
+.RS
+.PP
+.nf
+export TOKEN=$(cat ~/.config/vrunner/token)
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/commands
+.fi
+.RE
+
+.SS Listing commands
+
+.RS
+.PP
+.nf
+\fB# Plain HTTP (localhost, no auth)\fR
+curl http://localhost:8080/api/commands
+
+\fB# HTTPS with auth (remote)\fR
+curl --cacert ~/.config/vrunner/cert.pem \e
+     -H "Authorization: Bearer $TOKEN" \e
+     https://server:8080/api/commands
+
+\fB# Pretty-print JSON\fR
+curl -s http://localhost:8080/api/commands | python -m json.tool
+.fi
+.RE
+
+.SS Spawning a command
+
+.RS
+.PP
+.nf
+\fB# Start htop\fR
+curl -s -X POST http://localhost:8080/api/commands \e
+  -H "Content-Type: application/json" \e
+  -d '{"cmd": "htop", "args": []}'
+
+\fB# Start with arguments\fR
+curl -s -X POST http://localhost:8080/api/commands \e
+  -H "Content-Type: application/json" \e
+  -d '{"cmd": "python", "args": ["-m", "http.server", "8000"]}'
+
+\fB# Start bound to a certificate\fR
+curl -s -X POST http://localhost:8080/api/commands \e
+  -H "Content-Type: application/json" \e
+  -d '{"cmd": "node", "args": ["server.js"], "certificate": "my-app"}'
+
+\fB# Save the command ID for later use\fR
+ID=$(curl -s -X POST http://localhost:8080/api/commands \e
+  -H "Content-Type: application/json" \e
+  -d '{"cmd": "htop", "args": []}' | python -c "import sys,json; print(json.load(sys.stdin)['data']['id'])")
+.fi
+.RE
+
+.SS Sending keystrokes
+
+.RS
+.PP
+.nf
+\fB# Quit htop\fR
+curl -s -X POST "http://localhost:8080/api/commands/$ID/keys" \e
+  -H "Content-Type: application/json" \e
+  -d '{"keys": "q"}'
+
+\fB# Type text and press Enter\fR
+curl -s -X POST "http://localhost:8080/api/commands/$ID/keys" \e
+  -H "Content-Type: application/json" \e
+  -d '{"keys": "ls -la\\r"}'
+
+\fB# Send Ctrl+C\fR
+curl -s -X POST "http://localhost:8080/api/commands/$ID/keys" \e
+  -H "Content-Type: application/json" \e
+  -d '{"keys": "\\x03"}'
+
+\fB# Quit vim: Escape, then :q! Enter\fR
+curl -s -X POST "http://localhost:8080/api/commands/$ID/keys" \e
+  -H "Content-Type: application/json" \e
+  -d '{"keys": "\\x1b:q!\\r"}'
+.fi
+.RE
+
+Common escape sequences for the \fBkeys\fR field:
+.RS
+.TP
+.B \\x03
+Ctrl+C (SIGINT)
+.TP
+.B \\x04
+Ctrl+D (EOF)
+.TP
+.B \\x1b
+Escape
+.TP
+.B \\r
+Enter/Return
+.TP
+.B \\t
+Tab
+.TP
+.B \\x7f
+Backspace
+.TP
+.B \\x1b[A
+Up arrow
+.TP
+.B \\x1b[B
+Down arrow
+.TP
+.B \\x1b[C
+Right arrow
+.TP
+.B \\x1b[D
+Left arrow
+.RE
+
+.SS Viewing terminal output
+
+.RS
+.PP
+.nf
+\fB# Raw ANSI output\fR
+curl http://localhost:8080/api/commands/$ID/vtty
+
+\fB# HTML-rendered output (with cursor position and dimensions)\fR
+curl http://localhost:8080/api/commands/$ID/vtty/html
+
+\fB# Partial content (paginated)\fR
+curl "http://localhost:8080/api/commands/$ID/vtty/partial?offset=0&limit=50"
+
+\fB# Extract just the HTML for embedding\fR
+curl -s http://localhost:8080/api/commands/$ID/vtty/html | \e
+  python -c "import sys,json; print(json.load(sys.stdin)['data']['html'])"
+.fi
+.RE
+
+.SS Resizing the terminal
+
+.RS
+.PP
+.nf
+curl -s -X POST "http://localhost:8080/api/commands/$ID/resize" \e
+  -H "Content-Type: application/json" \e
+  -d '{"rows": 40, "cols": 120}'
+.fi
+.RE
+
+Valid ranges: rows 1-200, cols 1-500.
+
+.SS Killing a command
+
+.RS
+.PP
+.nf
+\fB# Graceful kill (SIGTERM)\fR
+curl -s -X POST "http://localhost:8080/api/commands/$ID/kill" \e
+  -H "Content-Type: application/json" \e
+  -d '{}'
+
+\fB# Force kill (SIGKILL)\fR
+curl -s -X POST "http://localhost:8080/api/commands/$ID/kill" \e
+  -H "Content-Type: application/json" \e
+  -d '{"signal": "SIGKILL"}'
+.fi
+.RE
+
+.SS Searching command logs
+
+.RS
+.PP
+.nf
+\fB# Get recent logs\fR
+curl "http://localhost:8080/api/log?limit=50"
+
+\fB# Search for spawn events\fR
+curl "http://localhost:8080/api/log?search=spawn&limit=100"
+
+\fB# Paginated search\fR
+curl "http://localhost:8080/api/log?search=kill&offset=0&limit=50"
+curl "http://localhost:8080/api/log?search=kill&offset=50&limit=50"
+.fi
+.RE
+
+.SS Getting server info
+
+.RS
+.PP
+.nf
+curl http://localhost:8080/api/info
+.fi
+.RE
+
+Returns command count, certificate count, certificate names, and whether auth is enabled.
+
+.SS Listing certificates
+
+.RS
+.PP
+.nf
+curl http://localhost:8080/api/certificates
+.fi
+.RE
+
+.SS Shutting down the server
+
+.RS
+.PP
+.nf
+curl -s -X POST http://localhost:8080/api/shutdown
+.fi
+.RE
+
+.SS WebSocket endpoints
+
+vrunner also supports WebSocket connections for real-time streaming:
+
+.RS
+.TP
+.B GET /api/commands/:id/ws
+Real-time VTTY output streaming. After connecting, the server sends JSON messages with type \fBvtty_update\fR whenever the terminal content changes. Clients can send \fBkeys\fR and \fBresize\fR messages.
+
+.TP
+.B GET /api/ws/logs
+Real-time log entry streaming. The server pushes each new log entry as a JSON message with type \fBlog_entry\fR.
+.RE
+
+WebSocket connection example with \fBwebsocat\fR(1):
+.RS
+.PP
+.nf
+\fB# Stream VTTY output in real time\fR
+websocat "ws://localhost:8080/api/commands/$ID/ws"
+
+\fB# Stream logs in real time\fR
+websocat "ws://localhost:8080/api/ws/logs"
+.fi
+.RE
+
+.SH SCRIPTING EXAMPLES
+
+.SS Automating a build job
+
+.RS
+.PP
+.nf
+#!/bin/bash
+HOST="http://localhost:8080"
+
+# Start a build
+ID=$(curl -s -X POST "$HOST/api/commands" \e
+  -H "Content-Type: application/json" \e
+  -d '{"cmd": "./build.sh", "args": ["--release"]}' \e
+  | python -c "import sys,json; print(json.load(sys.stdin)['data']['id'])")
+
+echo "Build started: $ID"
+
+# Wait for completion (poll every 5 seconds)
+while true; do
+  STATUS=$(curl -s "$HOST/api/commands" \e
+    | python -c "
+import sys, json
+cmds = json.load(sys.stdin)['data']
+for c in cmds:
+    if c['id'] == '$ID':
+        print(c['status'])
+        break
+" 2>/dev/null)
+  [ -z "$STATUS" ] && echo "Build finished" && break
+  sleep 5
+done
+
+# Retrieve the full build log
+curl -s "$HOST/api/commands/$ID/vtty"
+.fi
+.RE
+
+.SS Managing multiple instances
+
+.RS
+.PP
+.nf
+#!/bin/bash
+# Stop all idle instances
+vrunner list | while read pid port bind daemon display cmd; do
+  # Skip header
+  [ "$pid" = "PID" ] && continue
+  if [ "$cmd" = "(idle)" ]; then
+    echo "Stopping idle instance $pid on port $port..."
+    vrunner stop "$pid"
+  fi
+done
+.fi
+.RE
+
+.SS Certificate-based workflow
+
+.RS
+.PP
+.nf
+#!/bin/bash
+HOST="http://localhost:8080"
+
+# Generate a certificate for this deployment
+vrunner cert generate "deploy-$(date +%Y%m%d)"
+
+# Get the token
+TOKEN=$(vrunner cert show "deploy-$(date +%Y%m%d)" \e
+  | grep "Token (16)" | awk '{print $3}')...
+
+# Start a deployment bound to this cert
+ID=$(curl -s -X POST "$HOST/api/commands" \e
+  -H "Content-Type: application/json" \e
+  -d "{\"cmd\": \"./deploy.sh\", \"args\": [], \"certificate\": \"deploy-$(date +%Y%m%d)\"}" \e
+  | python -c "import sys,json; print(json.load(sys.stdin)['data']['id'])")
+
+# Monitor with cert-specific token
+curl -s -H "Authorization: Bearer $FULL_TOKEN" \e
+  "$HOST/api/commands/$ID/vtty/html"
+.fi
+.RE
+
+.SH API RESPONSE FORMAT
+
+All API responses use a standard JSON envelope:
+
+.RS
+.PP
+.nf
+{
+  "status": "ok",
+  "data": { ... },
+  "error": null
+}
+.fi
+.RE
+
+Error responses:
+.RS
+.PP
+.nf
+{
+  "status": "error",
+  "data": null,
+  "error": "Description of what went wrong"
+}
+.fi
+.RE
+
+The HTTP status code is always 200 (the envelope distinguishes success from failure). Check the \fBstatus\fR field to determine the outcome.
+
+.SH COMPLETE API REFERENCE
+
+.TP
+.B GET /api/commands
+List all running commands.
+
+.TP
+.B POST /api/commands
+Start a new command. Body: \fB{"cmd": "...", "args": [...], "certificate": "..."|null}\fR
+
+.TP
+.B POST /api/commands/:id/keys
+Send keystrokes. Body: \fB{"keys": "..."}\fR
+
+.TP
+.B POST /api/commands/:id/kill
+Kill a command. Body: \fB{"signal": "..."}\fR (optional)
+
+.TP
+.B GET /api/commands/:id/vtty
+Get full VTTY contents as raw ANSI text.
+
+.TP
+.B GET /api/commands/:id/vtty/html
+Get VTTY contents as rendered HTML with cursor and dimensions.
+
+.TP
+.B GET /api/commands/:id/vtty/partial?offset=N&limit=N
+Get paginated VTTY content.
+
+.TP
+.B POST /api/commands/:id/resize
+Resize virtual terminal. Body: \fB{"rows": N, "cols": N}\fR
+
+.TP
+.B GET /api/commands/:id/handles
+List output handles for a command.
+
+.TP
+.B POST /api/commands/:id/handles
+Add an output handle to a command.
+
+.TP
+.B GET /api/commands/:id/ws
+WebSocket endpoint for real-time VTTY streaming.
+
+.TP
+.B GET /api/certificates
+List all certificates in the pool.
+
+.TP
+.B GET /api/info
+Get instance information (counts, auth status).
+
+.TP
+.B GET /api/log?search=TERM&offset=N&limit=N
+Get command log entries with optional search and pagination.
+
+.TP
+.B GET /api/ws/logs
+WebSocket endpoint for real-time log streaming.
+
+.TP
+.B POST /api/shutdown
+Gracefully shut down the vrunner instance.
+
+.SH FILES
+
+.TP
+.B ~/.config/vrunner/token
+Default bearer token for API authentication.
+
+.TP
+.B ~/.config/vrunner/cert.pem
+Auto-generated TLS server certificate.
+
+.TP
+.B ~/.config/vrunner/certs/
+Directory for certificate pool entries.
+
+.SH ENVIRONMENT
+
+.TP
+.B VRUNNER_TOKEN
+Can be used to store the bearer token for scripts (read by convention; vrunner itself uses \fB\-\-token\-file\fR).
+
+.TP
+.B VRUNNER_CACERT
+Can be used to store the CA certificate path for scripts (read by convention).
+
+.SH EXIT STATUS
+
+.TP
+.B 0
+Successful operation.
+
+.TP
+.B 1
+Error (instance not found, connection refused, invalid arguments, etc.).
+
+.SH SEE ALSO
+
+.BR vrunner (1),
+.BR curl (1),
+.BR kill (1)
+
+Full documentation: \fBdocs/usage.md\fR, \fBdocs/certificates.md\fR, \fBdocs/configuration.md\fR
