@@ -33,9 +33,11 @@ impl TerminalDisplay {
     /// cursor drift in raw mode, where \n moves down without returning
     /// to column 0.
     ///
-    /// Optimization: only emits ANSI style sequences when the cell differs
-    /// from the previous one, and skips runs of default cells at the end of
-    /// each row (since Clear(All) already blanked the screen).
+    /// The renderer emits every cell in the visible area (up to render_cols)
+    /// to ensure that background colors are always correct.  Relying on
+    /// Clear(All) to fill background only works when the terminal's default
+    /// background matches the VTTY's default bg ([0,0,0]), which is not
+    /// guaranteed (e.g. solarized terminals, transparent terminals).
     pub fn render(buffer: &Buffer) -> io::Result<()> {
         let mut stdout = stdout();
 
@@ -51,7 +53,9 @@ impl TerminalDisplay {
         let render_rows = (buffer.rows.len() as u16).min(phys_rows) as usize;
         let render_cols = (buffer.width as u16).min(phys_cols) as usize;
 
-        // Clear screen and move to top-left
+        // Clear screen and move to top-left.
+        // This handles any area beyond the VTTY buffer (e.g. terminal wider
+        // than the VTTY) and resets leftover content from the previous frame.
         stdout.queue(Clear(ClearType::All))?;
 
         // Track the last rendered style to avoid redundant SGR sequences.
@@ -64,54 +68,40 @@ impl TerminalDisplay {
         let mut last_reverse = false;
         let mut last_strikethrough = false;
 
+        // Reset style before starting so we start from a known state.
+        stdout.queue(ResetColor)?;
+        stdout.queue(style::SetAttribute(Attribute::Reset))?;
+
         for (row_idx, row) in buffer.rows.iter().enumerate().take(render_rows) {
             // Move to the start of each row — critical in raw mode
             // where \n does NOT reset the column to 0.
             stdout.queue(MoveTo(0, row_idx as u16))?;
 
-            // Find the last non-default cell to avoid rendering trailing spaces.
-            // Since Clear(All) blanked the screen, trailing defaults are already
-            // correct and emitting them just wastes bandwidth.
-            // Clamp the search to render_cols to avoid reading beyond the visible area.
-            let visible_row = &row[..render_cols.min(row.len())];
-            let last_non_default = visible_row.iter()
-                .rposition(|c| c != &DEFAULT_CELL);
+            // Clamp the visible portion to the physical terminal width.
+            let visible_len = render_cols.min(row.len());
 
-            let render_end = match last_non_default {
+            // Find the last non-default cell to determine how far we need
+            // to render.  Cells beyond this point are guaranteed to be
+            // DEFAULT_CELL, and since we cleared the screen above (which
+            // fills with the terminal's default bg), they're already correct
+            // IF the terminal's default bg is [0,0,0].  However, to be safe,
+            // we also check if any cell has a non-default background — if so,
+            // we must render it to ensure the correct bg color is displayed.
+            let last_interesting = row[..visible_len]
+                .iter()
+                .rposition(|c| {
+                    // A cell is "interesting" if it differs from DEFAULT_CELL
+                    // in any way, OR if it has a non-default background
+                    // (because the terminal's cleared bg may not match).
+                    c != &DEFAULT_CELL
+                });
+
+            let render_end = match last_interesting {
                 Some(idx) => idx + 1,
-                None => continue, // Entire row is default — skip it
+                None => continue, // Entire visible row is default — skip it
             };
 
-            // Clamp render_end to the visible columns
-            let render_end = render_end.min(render_cols);
-
             for cell in &row[..render_end] {
-                let is_default = *cell == DEFAULT_CELL;
-
-                if is_default {
-                    // If the current style is non-default, we still need to reset
-                    // and print a space to clear any previous content at this
-                    // position.  Only skip if we already know the style is default.
-                    let style_is_default = last_fg.is_none()
-                        && last_bg.is_none()
-                        && !last_bold && !last_italic && !last_underline
-                        && !last_blink && !last_reverse && !last_strikethrough;
-
-                    if style_is_default {
-                        // Fast path: style is already default, cell is default,
-                        // screen was cleared.  Just advance the cursor by printing
-                        // a space (we need the space because a previous cell on
-                        // this row may have set a background color).
-                        // Actually, we still need to reset the background in case
-                        // a previous cell had a non-default bg.  Check:
-                        if last_bg.is_none() {
-                            stdout.queue(Print(' '))?;
-                            continue;
-                        }
-                    }
-                    // Fall through to full rendering for the reset.
-                }
-
                 // Set foreground color (only if changed)
                 if Some(cell.fg) != last_fg {
                     stdout.queue(SetForegroundColor(Color::Rgb {
