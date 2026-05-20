@@ -4,6 +4,8 @@ use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use tokio::sync::{mpsc, oneshot};
 use std::sync::Arc;
 
+use std::collections::HashMap;
+
 use crate::config::schema::{VttyConfig, HandleConfig, ExitConfig};
 use crate::handles::{
     file_sink::FileSink,
@@ -62,6 +64,7 @@ impl ProcessSpawner {
         handle_configs: Vec<HandleConfig>,
         command_id: &str,
         exit_config: ExitConfig,
+        env_vars: HashMap<String, String>,
         _manager: &CommandManager,
     ) -> Result<CommandHandle> {
         let pty_system = native_pty_system();
@@ -75,6 +78,20 @@ impl ProcessSpawner {
         let mut cmd_builder = CommandBuilder::new(&cmd);
         for arg in &args {
             cmd_builder.arg(arg);
+        }
+
+        // Apply environment variables.
+        // portable_pty inherits the parent environment by default.
+        // We clear it and set only the explicitly provided vars so that
+        // per-command env isolation is controlled and predictable.
+        if !env_vars.is_empty() {
+            cmd_builder.env("TERM", &self.vtty_cfg.term);
+            for (key, value) in &env_vars {
+                cmd_builder.env(key, value);
+            }
+        } else {
+            // No explicit env vars — still ensure TERM is set correctly
+            cmd_builder.env("TERM", &self.vtty_cfg.term);
         }
 
         let mut child = pair.slave.spawn_command(cmd_builder)?;

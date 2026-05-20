@@ -5,6 +5,7 @@ use tokio::sync::broadcast;
 
 use vrunner::cli::args::{Cli, Commands, CertAction};
 use vrunner::config::loader::load_config;
+use vrunner::config::merge::apply_profile;
 use vrunner::daemon;
 use vrunner::instance::registry::InstanceRegistry;
 use vrunner::process::manager::CommandManager;
@@ -30,6 +31,15 @@ fn pre_runtime() -> Result<Option<Cli>> {
             // stop_instance is async (uses reqwest), so we need the runtime
             // Fall through to the async phase
         }
+        Some(Commands::Spawn { .. }) => {
+            // spawn is async (uses reqwest), fall through to async phase
+        }
+        Some(Commands::Freeze { .. }) => {
+            // freeze is async (uses reqwest), fall through to async phase
+        }
+        Some(Commands::Thaw { .. }) => {
+            // thaw is async (uses reqwest), fall through to async phase
+        }
         Some(Commands::Cert { action }) => {
             // Cert subcommands are synchronous — handle them here
             handle_cert_command(action)?;
@@ -53,8 +63,46 @@ async fn async_main(cli: Cli) -> Result<()> {
         return Ok(());
     }
 
+    // Handle spawn subcommand — send to a running vrunner instance
+    if let Some(Commands::Spawn { ref cmd, ref args }) = cli.command {
+        handle_spawn_command(&cli, &cmd, &args).await?;
+        return Ok(());
+    }
+
+    // Handle freeze subcommand
+    if let Some(Commands::Freeze { ref id }) = cli.command {
+        handle_freeze_command(&cli, &id).await?;
+        return Ok(());
+    }
+
+    // Handle thaw subcommand
+    if let Some(Commands::Thaw { ref id }) = cli.command {
+        handle_thaw_command(&cli, &id).await?;
+        return Ok(());
+    }
+
     // Load and merge configuration
     let mut cfg = load_config(cli.config.as_deref())?;
+
+    // Apply named profile if specified
+    if let Some(ref profile_name) = cli.profile {
+        if let Some(profile) = cfg.profiles.entries.clone().get(profile_name) {
+            tracing::info!(profile = %profile_name, "Applying configuration profile");
+            cfg = apply_profile(cfg, profile);
+        } else {
+            anyhow::bail!(
+                "Profile '{}' not found. Available profiles: {}",
+                profile_name,
+                if cfg.profiles.entries.is_empty() {
+                    "(none defined in config)".to_string()
+                } else {
+                    cfg.profiles.entries.keys().cloned().collect::<Vec<_>>().join(", ")
+                }
+            );
+        }
+    }
+
+    // Apply CLI overrides (highest precedence)
     cli.apply_overrides(&mut cfg);
 
     // Initialize instance registry
@@ -76,7 +124,7 @@ async fn async_main(cli: Cli) -> Result<()> {
         if !cmd_args.is_empty() {
             let cmd = cmd_args[0].clone();
             let args = cmd_args[1..].to_vec();
-            let _id = manager.spawn(cmd, args, None).await?;
+            let _id = manager.spawn(cmd, args, None, cfg.environment.variables.clone()).await?;
         }
     }
 
@@ -124,6 +172,14 @@ fn main() -> Result<()> {
             // For daemon mode, we need to load config early to get log file paths.
             let cfg = load_config(cli.config.as_deref())?;
             let mut cfg = cfg;
+
+            // Apply profile if specified
+            if let Some(ref profile_name) = cli.profile {
+                if let Some(profile) = cfg.profiles.entries.clone().get(profile_name) {
+                    cfg = apply_profile(cfg, profile);
+                }
+            }
+
             cli.apply_overrides(&mut cfg);
 
             if !cfg.daemon.enabled {
@@ -146,6 +202,196 @@ fn main() -> Result<()> {
         .enable_all()
         .build()?
         .block_on(async_main(cli))
+}
+
+/// Build the base URL for a vrunner instance, handling auth and TLS.
+fn instance_url(info: &vrunner::instance::info::InstanceInfo, _auth_token: &Option<String>) -> String {
+    let scheme = if info.port == 443 { "https" } else { "http" };
+    let mut url = format!("{}://{}:{}", scheme, info.bind, info.port);
+    // For simplicity, we try HTTP first. TLS instances will reject and
+    // the error message will guide the user.
+    url = format!("http://{}:{}", info.bind, info.port);
+    url
+}
+
+/// Discover running vrunner instances and resolve to a single target.
+/// Returns the selected InstanceInfo or an error.
+fn resolve_instance(
+    cli: &Cli,
+    registry: &InstanceRegistry,
+) -> Result<vrunner::instance::info::InstanceInfo> {
+    let instances = registry.list_instances();
+
+    if instances.is_empty() {
+        anyhow::bail!("No running vrunner instances found. Start one first with: vrunner -- <command>");
+    }
+
+    // If --target PID was specified, use that instance
+    if let Some(target_pid) = cli.target {
+        match instances.iter().find(|i| i.pid == target_pid) {
+            Some(info) => return Ok(info.clone()),
+            None => anyhow::bail!(
+                "No vrunner instance found with PID {}. Running instances:\n{}",
+                target_pid,
+                format_instance_list(&instances)
+            ),
+        }
+    }
+
+    // Only one instance — use it automatically
+    if instances.len() == 1 {
+        return Ok(instances.into_iter().next().unwrap());
+    }
+
+    // Multiple instances — prompt the user
+    eprintln!("Multiple vrunner instances are running:");
+    eprintln!("{}", format_instance_list(&instances));
+    eprintln!();
+    eprint!("Enter the PID of the instance to use (or Ctrl+C to abort): ");
+    eprintln!();
+
+    // Since we can't easily read stdin in all contexts (piped, daemon, etc.),
+    // return an error with instructions
+    anyhow::bail!(
+        "Multiple vrunner instances are running. Use --target PID to select one.\n\
+         Running instances:\n{}",
+        format_instance_list(&instances)
+    );
+}
+
+fn format_instance_list(instances: &[vrunner::instance::info::InstanceInfo]) -> String {
+    let mut out = String::new();
+    out.push_str(&format!("{:<10} {:<8} {:<20} {:<10} {:<10} COMMAND\n",
+        "PID", "PORT", "BIND", "DAEMON", "DISPLAY"));
+    for info in instances {
+        out.push_str(&format!("{:<10} {:<8} {:<20} {:<10} {:<10} {}\n",
+            info.pid,
+            info.port,
+            info.bind,
+            if info.daemon { "yes" } else { "no" },
+            if info.display { "yes" } else { "no" },
+            info.command.as_deref().unwrap_or("(idle)")
+        ));
+    }
+    out
+}
+
+/// Handle the `vrunner spawn` subcommand.
+/// Discovers a running vrunner instance and sends a spawn request via HTTP API.
+async fn handle_spawn_command(cli: &Cli, cmd: &str, args: &[String]) -> Result<()> {
+    let registry = InstanceRegistry::new()?;
+    let info = resolve_instance(cli, &registry)?;
+
+    let url = instance_url(&info, &None);
+    let client = reqwest::Client::new();
+
+    let mut body = serde_json::json!({
+        "cmd": cmd,
+        "args": args,
+    });
+
+    // Add --env variables if provided
+    let cli_env = cli.parse_env_vars();
+    if !cli_env.is_empty() {
+        body["env"] = serde_json::json!(cli_env);
+    }
+
+    // Add --no-env flag to skip config-level environment
+    if cli.no_env {
+        body["no_env"] = serde_json::json!(true);
+    }
+
+    // Add exit configuration if provided
+    if let Some(ref on_exit) = cli.on_exit {
+        body["on_exit"] = serde_json::json!(on_exit);
+    }
+    if let Some(ref on_error) = cli.on_error {
+        body["on_error"] = serde_json::json!(on_error);
+    }
+    if let Some(timeout) = cli.exit_timeout {
+        body["exit_timeout"] = serde_json::json!(timeout);
+    }
+
+    // Add profile if specified
+    if let Some(ref profile) = cli.profile {
+        body["profile"] = serde_json::json!(profile);
+    }
+
+    tracing::info!(target_pid = info.pid, cmd = cmd, "Spawning command on remote instance");
+
+    let resp = client
+        .post(format!("{}/api/commands", url))
+        .json(&body)
+        .send()
+        .await?;
+
+    let status = resp.status();
+    let result: serde_json::Value = resp.json().await?;
+
+    if status.is_success() {
+        let id = result["data"]["id"].as_str().unwrap_or("?");
+        println!("Command spawned successfully on instance {} (PID {})", info.pid, info.pid);
+        println!("  Command ID: {}", id);
+        println!("  VTTY:      {}/api/commands/{}/vtty/html", url, id);
+    } else {
+        let error = result["error"].as_str().unwrap_or("Unknown error");
+        eprintln!("Failed to spawn command: {}", error);
+        std::process::exit(1);
+    }
+
+    Ok(())
+}
+
+/// Handle the `vrunner freeze` subcommand.
+async fn handle_freeze_command(cli: &Cli, id: &str) -> Result<()> {
+    let registry = InstanceRegistry::new()?;
+    let info = resolve_instance(cli, &registry)?;
+    let url = instance_url(&info, &None);
+    let client = reqwest::Client::new();
+
+    let resp = client
+        .post(format!("{}/api/commands/{}/freeze", url, id))
+        .send()
+        .await?;
+
+    let status = resp.status();
+    let result: serde_json::Value = resp.json().await?;
+
+    if status.is_success() {
+        println!("Command {} frozen (SIGSTOP) on instance {}", id, info.pid);
+    } else {
+        let error = result["error"].as_str().unwrap_or("Unknown error");
+        eprintln!("Failed to freeze command: {}", error);
+        std::process::exit(1);
+    }
+
+    Ok(())
+}
+
+/// Handle the `vrunner thaw` subcommand.
+async fn handle_thaw_command(cli: &Cli, id: &str) -> Result<()> {
+    let registry = InstanceRegistry::new()?;
+    let info = resolve_instance(cli, &registry)?;
+    let url = instance_url(&info, &None);
+    let client = reqwest::Client::new();
+
+    let resp = client
+        .post(format!("{}/api/commands/{}/thaw", url, id))
+        .send()
+        .await?;
+
+    let status = resp.status();
+    let result: serde_json::Value = resp.json().await?;
+
+    if status.is_success() {
+        println!("Command {} thawed (SIGCONT) on instance {}", id, info.pid);
+    } else {
+        let error = result["error"].as_str().unwrap_or("Unknown error");
+        eprintln!("Failed to thaw command: {}", error);
+        std::process::exit(1);
+    }
+
+    Ok(())
 }
 
 /// Handle `vrunner cert` subcommands (generate, list, show, remove).

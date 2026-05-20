@@ -45,6 +45,18 @@ pub struct Config {
     /// Default exit configuration applied to all commands unless overridden per-command.
     #[serde(default)]
     pub default_exit: DefaultExitConfig,
+    /// Environment variables applied to all spawned commands by default.
+    /// Can be overridden per-command via the API or CLI.
+    /// Ignored when --no-env is passed on the command line.
+    #[serde(default)]
+    pub environment: EnvironmentConfig,
+    /// Named configuration presets.
+    /// Each named config is a partial Config that can be referenced by name
+    /// via --profile NAME (CLI) or "profile": "NAME" (API).
+    /// When a profile is selected, only the fields present in the named config
+    /// override the base config. CLI flags always take final precedence.
+    #[serde(default)]
+    pub profiles: ProfilesConfig,
 }
 
 /// HTTP server bind address and port.
@@ -306,4 +318,81 @@ pub struct HandleConfig {
     pub sink: String,
     /// Path for file sinks. Supports {id} and {name} placeholders.
     pub path: Option<String>,
+}
+
+/// Environment variable configuration for spawned commands.
+///
+/// Variables defined here are applied to every spawned command unless:
+/// - The command is spawned with --no-env (CLI), which skips config env vars
+/// - The variable is overridden by a per-command env var (API or CLI)
+///
+/// Per-command environment variables (from API or CLI --env flags) are always
+/// merged on top of config environment variables, allowing overrides.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct EnvironmentConfig {
+    /// Key-value pairs of environment variables to set in child processes.
+    /// Example: { "RUST_LOG": "debug", "DATABASE_URL": "postgres://..." }
+    #[serde(default)]
+    pub variables: std::collections::HashMap<String, String>,
+}
+
+/// Named configuration profiles.
+///
+/// Each profile is a partial configuration that can be selected by name.
+/// When selected, only the fields present in the profile override the base config.
+/// This allows defining reusable configurations for different environments
+/// (e.g., "production", "development", "testing").
+///
+/// Example:
+/// ```yaml
+/// profiles:
+///   production:
+///     server:
+///       bind: "0.0.0.0"
+///     security:
+///       require_auth: true
+///     environment:
+///       variables:
+///         RUST_LOG: "warn"
+///   development:
+///     vtty:
+///       rows: 40
+///       cols: 120
+///     environment:
+///       variables:
+///         RUST_LOG: "debug"
+/// ```
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct ProfilesConfig {
+    /// Named configuration presets. The key is the profile name.
+    #[serde(default)]
+    pub entries: std::collections::HashMap<String, PartialConfig>,
+}
+
+/// A partial configuration used in profiles.
+///
+/// All fields are optional. When a profile is applied, only the fields
+/// that are `Some(..)` override the corresponding fields in the base Config.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct PartialConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server: Option<ServerConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub security: Option<SecurityConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls: Option<TlsConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vtty: Option<VttyConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display: Option<DisplayConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command_log: Option<CommandLogConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handles: Option<Vec<HandleConfig>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interactive: Option<InteractiveConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_exit: Option<DefaultExitConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub environment: Option<EnvironmentConfig>,
 }

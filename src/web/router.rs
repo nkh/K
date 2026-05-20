@@ -18,6 +18,8 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/log", get(handlers::logs::get_log))
         .route("/api/commands/:id/keys", post(handlers::keys::send_keys))
         .route("/api/commands/:id/kill", post(handlers::commands::kill_command))
+        .route("/api/commands/:id/freeze", post(handlers::commands::freeze_command))
+        .route("/api/commands/:id/thaw", post(handlers::commands::thaw_command))
         .route("/api/commands/:id/vtty", get(handlers::vtty::get_vtty_full))
         .route("/api/commands/:id/vtty/html", get(handlers::vtty::get_vtty_html))
         .route("/api/commands/:id/vtty/partial", get(handlers::vtty::get_vtty_partial))

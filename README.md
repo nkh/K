@@ -23,6 +23,10 @@ A virtual terminal runner and process orchestrator with a web-first control plan
 - **Certificate Pool** — Manage named certificates for per-command access control. Each running application can be bound to a specific certificate.
 - **WebSocket Streaming** — Real-time VTTY output and log streaming via WebSocket, with bidirectional keyboard input support.
 - **Exit Handlers** — Run commands on child exit (clean or error), with configurable grace period before force-kill.
+- **Environment Variables** — Three-layer env var control: config defaults, per-command overrides, and --no-env flag.
+- **Configuration Profiles** — Named configuration presets for different environments (dev, prod, CI).
+- **CLI Spawn** — Dynamically spawn commands on running instances with `vrunner spawn`.
+- **Freeze/Thaw** — Suspend and resume running commands via SIGSTOP/SIGCONT.
 
 ---
 
@@ -188,6 +192,20 @@ vrunner [OPTIONS] [-- <COMMAND> [ARGS...]]
 | `--on-error` | `<CMD>` | — | Run command on error exit (non-zero) |
 | `--exit-timeout` | `<SECS>` | `10` | Grace period before SIGKILL |
 
+### Environment Variable Options
+
+| Flag | Argument | Description |
+|------|----------|-------------|
+| `--env` | `<KEY=VALUE>` | Set environment variable (repeatable) |
+| `--no-env` | — | Ignore config file environment variables |
+
+### Profile Options
+
+| Flag | Argument | Description |
+|------|----------|-------------|
+| `--profile` | `<NAME>` | Apply a named configuration profile from config |
+| `--target` | `<PID>` | Target a specific vrunner instance by PID (for spawn/freeze/thaw) |
+
 ### Interactive Options
 
 | Flag | Argument | Default | Description |
@@ -200,6 +218,9 @@ vrunner [OPTIONS] [-- <COMMAND> [ARGS...]]
 |---------|----------|-------------|
 | `list` | — | List all running vrunner instances |
 | `stop` | `<PID>` | Shut down a vrunner instance by PID |
+| `spawn` | `<cmd> [args...]` | Spawn a command on a running instance |
+| `freeze` | `<id>` | Freeze (suspend) a running command via SIGSTOP |
+| `thaw` | `<id>` | Thaw (resume) a frozen command via SIGCONT |
 | `cert generate` | `<name>` | Generate a named certificate |
 | `cert list` | — | List all certificates in the pool |
 | `cert show` | `<name>` | Show certificate details and token |
@@ -276,9 +297,13 @@ default_exit:
     on_exit: null
     on_error: null
     timeout_secs: 10
-```
 
-For the complete configuration reference with all entries, types, defaults, and CLI flag mappings, see [docs/configuration.md](docs/configuration.md).
+environment:
+  variables: {}
+
+profiles: {}
+
+For the complete configuration reference with all entries, types, defaults, and CLI flag mappings, see [docs/configuration.md](docs/configuration.md). For environment variables and profiles, see [docs/usage.md](docs/usage.md).
 
 ---
 
@@ -363,6 +388,8 @@ This sends an HTTP shutdown request to the instance. If the instance is unrespon
 | `POST /api/commands` | POST | Start a new command |
 | `POST /api/commands/:id/keys` | POST | Send keystrokes to a command |
 | `POST /api/commands/:id/kill` | POST | Kill a running command |
+| `POST /api/commands/:id/freeze` | POST | Freeze (suspend) a running command |
+| `POST /api/commands/:id/thaw` | POST | Thaw (resume) a frozen command |
 | `GET /api/commands/:id/vtty` | GET | Get full VTTY contents (raw ANSI) |
 | `GET /api/commands/:id/vtty/html` | GET | Get VTTY contents as rendered HTML |
 | `GET /api/commands/:id/vtty/partial` | GET | Get partial VTTY contents (paginated) |

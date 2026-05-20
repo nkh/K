@@ -216,12 +216,37 @@ vrunner --term xterm-256color --display -- tmux
 
 ### Spawning Commands via the CLI
 
-The CLI can spawn commands at startup (via `--`), but cannot dynamically spawn additional commands after the server is running. For dynamic spawning, use the web UI or API. The CLI is primarily used for:
+The CLI can spawn commands in three ways:
 
-- Starting an instance with an initial command
-- Listing running instances across the system
-- Stopping instances by PID
-- Managing certificates
+1. **At startup** with `--`: `vrunner -- htop`
+2. **Dynamically** via `vrunner spawn` to send commands to a running instance
+3. **Via API** (curl, web UI, programmatic clients)
+
+#### `vrunner spawn` — Dynamic CLI Spawning
+
+The `spawn` subcommand discovers running vrunner instances and sends a spawn request to one of them:
+
+```bash
+# If exactly one instance is running, it is used automatically
+vrunner spawn htop
+
+# With arguments
+vrunner spawn python -m http.server 8000
+
+# With environment variables
+vrunner spawn --env RUST_LOG=debug --env DATABASE_URL=postgres://localhost/mydb -- cargo run
+
+# Ignore config environment variables (--no-env)
+vrunner spawn --no-env --env PATH=/usr/bin -- ./my-script.sh
+
+# Target a specific instance by PID
+vrunner spawn --target 12345 -- npm run dev
+
+# With exit handlers
+vrunner spawn --on-exit "notify-send Done" --on-error "notify-send Failed" -- ./build.sh
+```
+
+When multiple vrunner instances are running and no `--target` is specified, vrunner prints a list of all instances and asks you to use `--target PID` to select one.
 
 ---
 
@@ -520,6 +545,36 @@ Response:
 
 The admin dashboard at `/admin` automatically lists all running commands. Each entry shows the command name, PID, status, and any certificate binding.
 
+### Freezing and Thawing Commands
+
+vrunner can freeze (suspend) and thaw (resume) running commands using POSIX signals (SIGSTOP/SIGCONT). A frozen command is paused — it consumes no CPU but remains in memory and can be resumed at any time.
+
+#### Via CLI
+
+```bash
+# Freeze a command (pause it)
+vrunner freeze 550e8400-e29b-41d4-a716-446655440000
+
+# Thaw a command (resume it)
+vrunner thaw 550e8400-e29b-41d4-a716-446655440000
+
+# Use --target to select which vrunner instance
+vrunner --target 12345 freeze 550e8400-e29b-41d4-a716-446655440000
+```
+
+#### Via curl
+
+```bash
+# Freeze
+ID="550e8400-e29b-41d4-a716-446655440000"
+curl -X POST http://127.0.0.1:8080/api/commands/$ID/freeze
+
+# Thaw
+curl -X POST http://127.0.0.1:8080/api/commands/$ID/thaw
+```
+
+Freeze sends SIGSTOP to the child process, which causes the OS to stop scheduling it. Thaw sends SIGCONT to resume execution. This is useful for temporarily freeing CPU resources or for debugging — you can freeze a process, inspect its VTTY output, then resume it. Note that freeze/thaw is only supported on Unix-like systems.
+
 ### Killing Commands
 
 #### Via curl
@@ -700,6 +755,160 @@ command_log:
   enabled: true
   file: "/var/log/vrunner.log"
 ```
+
+---
+
+## Environment Variables
+
+vrunner provides three layers of environment variable configuration for spawned commands. Each layer can override the previous one, giving fine-grained control over the environment each command sees.
+
+### Layer 1: Config File (Global Defaults)
+
+Set environment variables that apply to all spawned commands by default:
+
+```yaml
+environment:
+  variables:
+    RUST_LOG: "info"
+    DATABASE_URL: "postgres://localhost/mydb"
+    NODE_ENV: "development"
+```
+
+These variables are automatically passed to every command unless overridden or disabled.
+
+### Layer 2: Per-Command (API or CLI)
+
+Pass environment variables when spawning a command — these override config defaults for that specific command only.
+
+**Via CLI --env flags:**
+```bash
+vrunner spawn --env RUST_LOG=debug --env DATABASE_URL=postgres://prod/db -- cargo run
+
+# At startup
+vrunner --env RUST_LOG=debug -- ./my-app
+```
+
+**Via API "env" field:**
+```bash
+curl -s -X POST http://127.0.0.1:8080/api/commands \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cmd": "cargo",
+    "args": ["run"],
+    "env": {
+      "RUST_LOG": "debug",
+      "DATABASE_URL": "postgres://prod/db"
+    }
+  }'
+```
+
+### Layer 3: --no-env Flag
+
+The `--no-env` flag tells vrunner to ignore all environment variables from the config file. Only variables set via `--env` CLI flags or the API `env` field will be passed to the command.
+
+```bash
+# Config has RUST_LOG=info, but we want a clean environment
+vrunner spawn --no-env --env PATH=/usr/bin -- ./my-script.sh
+
+# Via API
+curl -s -X POST http://127.0.0.1:8080/api/commands \
+  -H "Content-Type: application/json" \
+  -d '{"cmd": "./my-script.sh", "no_env": true, "env": {"PATH": "/usr/bin"}}'
+```
+
+### Precedence Summary
+
+```
+CLI --env flags / API "env" field  (highest — always wins)
+        ↓
+Config environment.variables     (global defaults)
+        ↓
+--no-env clears config env vars   (but CLI/API env vars still apply)
+```
+
+The `TERM` environment variable is always set to the configured `vtty.term` value (default: `xterm-256color`) regardless of other settings.
+
+---
+
+## Configuration Profiles
+
+Profiles let you define named sets of configuration values in your config file. When you select a profile, only the fields present in that profile override the base configuration. CLI flags always take final precedence over both the base config and the profile.
+
+### Defining Profiles
+
+```yaml
+# vrunner.yaml
+profiles:
+  development:
+    vtty:
+      rows: 40
+      cols: 120
+    display:
+      enabled: true
+      refresh_ms: 50
+    environment:
+      variables:
+        RUST_LOG: "debug"
+        NODE_ENV: "development"
+
+  production:
+    server:
+      bind: "0.0.0.0"
+      port: 443
+    security:
+      require_auth: true
+    tls:
+      enabled: true
+    environment:
+      variables:
+        RUST_LOG: "warn"
+        NODE_ENV: "production"
+
+  ci:
+    vtty:
+      rows: 10
+      cols: 80
+      scrollback: 1000
+    command_log:
+      enabled: true
+      file: "/tmp/vrunner-ci.log"
+```
+
+### Using Profiles
+
+**Via CLI:**
+```bash
+# Use the "development" profile
+vrunner --profile development -- cargo run
+
+# Use "production" profile with TLS
+vrunner --profile production --tls -- ./my-server
+
+# Use a profile and override specific values with CLI flags
+vrunner --profile production --port 8443 -- ./my-server
+```
+
+**Via API (spawn request):**
+```bash
+curl -s -X POST http://127.0.0.1:8080/api/commands \
+  -H "Content-Type: application/json" \
+  -d '{"cmd": "./my-app", "profile": "development"}'
+```
+
+### How Profiles Work
+
+1. The base configuration is loaded from config files and defaults.
+2. If a profile is selected, only the fields present in the profile override the base config.
+3. CLI flags are applied last and always take final precedence.
+
+For example, with the `production` profile above:
+- `server.bind` becomes `0.0.0.0` (from profile)
+- `server.port` becomes `443` (from profile, unless `--port` overrides it)
+- `security.require_auth` becomes `true` (from profile)
+- `vtty.rows` stays at `24` (not in the profile, so base config/default is used)
+- `environment.variables.RUST_LOG` becomes `warn` (from profile)
+
+If a profile name is specified that does not exist, vrunner exits with an error listing all available profile names.
 
 ### Real-Time Log Streaming via WebSocket
 

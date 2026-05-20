@@ -128,7 +128,30 @@ pub struct Cli {
     #[arg(long)]
     pub tabs: bool,
 
-    /// Subcommand (list, stop, cert)
+    /// Set environment variables for the spawned command (can be repeated).
+    /// Format: KEY=VALUE
+    /// Example: --env RUST_LOG=debug --env DATABASE_URL=postgres://localhost/mydb
+    #[arg(long, value_name = "KEY=VALUE")]
+    pub env: Option<Vec<String>>,
+
+    /// Ignore environment variables from the config file.
+    /// Only environment variables set via --env flags (CLI) or the API
+    /// "env" field will be passed to the spawned command.
+    #[arg(long)]
+    pub no_env: bool,
+
+    /// Apply a named configuration profile from the config file.
+    /// Profile fields override the base config; CLI flags override both.
+    /// Example: --profile production
+    #[arg(long, value_name = "NAME")]
+    pub profile: Option<String>,
+
+    /// Target a specific vrunner instance by PID when using the spawn subcommand.
+    /// If omitted and multiple instances are running, you will be prompted to choose.
+    #[arg(long, value_name = "PID")]
+    pub target: Option<u32>,
+
+    /// Subcommand (list, stop, spawn, freeze, thaw, cert)
     #[command(subcommand)]
     pub command: Option<Commands>,
 
@@ -145,6 +168,28 @@ pub enum Commands {
     Stop {
         /// PID of the instance to stop
         pid: u32,
+    },
+    /// Spawn a new command on a running vrunner instance.
+    /// If one instance is running, it is used automatically.
+    /// If multiple instances exist, you will be prompted to choose.
+    /// Use --target PID to skip the prompt.
+    Spawn {
+        /// Command to run
+        cmd: String,
+        /// Arguments for the command
+        #[arg(trailing_var_arg = true)]
+        args: Vec<String>,
+    },
+    /// Freeze (suspend) a running command via SIGSTOP.
+    /// The command is paused but not terminated.
+    Freeze {
+        /// ID of the command to freeze
+        id: String,
+    },
+    /// Thaw (resume) a frozen command via SIGCONT.
+    Thaw {
+        /// ID of the command to thaw
+        id: String,
     },
     /// Manage named certificates for per-command access control
     Cert {
@@ -175,6 +220,19 @@ pub enum CertAction {
 }
 
 impl Cli {
+    /// Parse --env KEY=VALUE flags into a HashMap.
+    pub fn parse_env_vars(&self) -> std::collections::HashMap<String, String> {
+        let mut map = std::collections::HashMap::new();
+        if let Some(env_list) = &self.env {
+            for item in env_list {
+                if let Some((key, value)) = item.split_once('=') {
+                    map.insert(key.to_string(), value.to_string());
+                }
+            }
+        }
+        map
+    }
+
     /// Apply CLI overrides to the loaded configuration.
     /// CLI flags take the highest precedence (override global and local config).
     pub fn apply_overrides(&self, cfg: &mut Config) {
@@ -297,5 +355,15 @@ impl Cli {
         if self.tabs {
             cfg.interactive.tabs = true;
         }
+
+        // --no-env: clear config-level environment variables
+        if self.no_env {
+            cfg.environment.variables.clear();
+        }
+
+        // --env KEY=VALUE: merge CLI env vars into config env vars
+        // (CLI always adds/overrides config)
+        let cli_env = self.parse_env_vars();
+        cfg.environment.variables.extend(cli_env);
     }
 }

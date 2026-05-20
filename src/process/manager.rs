@@ -34,9 +34,9 @@ impl CommandManager {
         }
     }
 
-    pub async fn spawn(&self, cmd: String, args: Vec<String>, certificate: Option<String>) -> anyhow::Result<CommandId> {
+    pub async fn spawn(&self, cmd: String, args: Vec<String>, certificate: Option<String>, env_vars: std::collections::HashMap<String, String>) -> anyhow::Result<CommandId> {
         let id = Uuid::new_v4().to_string();
-        self.logger.log("spawn", &format!("id={} cmd={} args={:?} cert={:?}", id, cmd, args, certificate));
+        self.logger.log("spawn", &format!("id={} cmd={} args={:?} cert={:?} env={:?}", id, cmd, args, certificate, env_vars.keys().collect::<Vec<_>>()));
 
         let spawner = ProcessSpawner::new(&self.config.vtty);
         let mut handle = spawner.spawn(
@@ -45,6 +45,7 @@ impl CommandManager {
             self.config.handles.clone(),
             &id,
             self.config.default_exit.exit.clone(),
+            env_vars,
             self,
         ).await?;
 
@@ -105,6 +106,53 @@ impl CommandManager {
                 (entry.key().clone(), handle.name.clone(), handle.pid, handle.certificate.clone())
             })
             .collect()
+    }
+
+    /// Freeze (suspend) a command by sending SIGSTOP.
+    /// The process is paused but not terminated — it can be resumed with thaw().
+    pub fn freeze(&self, id: &CommandId) -> anyhow::Result<()> {
+        self.logger.log("freeze", &format!("id={}", id));
+        if let Some(handle) = self.commands.get(id) {
+            let pid = handle.pid;
+            drop(handle);
+            #[cfg(unix)]
+            {
+                let ret = unsafe { libc::kill(pid as i32, libc::SIGSTOP) };
+                if ret != 0 {
+                    anyhow::bail!("Failed to freeze command {}: SIGSTOP returned {}", id, ret);
+                }
+            }
+            #[cfg(not(unix))]
+            {
+                anyhow::bail!("freeze is only supported on Unix-like systems");
+            }
+            Ok(())
+        } else {
+            anyhow::bail!("Command {} not found", id)
+        }
+    }
+
+    /// Thaw (resume) a frozen command by sending SIGCONT.
+    pub fn thaw(&self, id: &CommandId) -> anyhow::Result<()> {
+        self.logger.log("thaw", &format!("id={}", id));
+        if let Some(handle) = self.commands.get(id) {
+            let pid = handle.pid;
+            drop(handle);
+            #[cfg(unix)]
+            {
+                let ret = unsafe { libc::kill(pid as i32, libc::SIGCONT) };
+                if ret != 0 {
+                    anyhow::bail!("Failed to thaw command {}: SIGCONT returned {}", id, ret);
+                }
+            }
+            #[cfg(not(unix))]
+            {
+                anyhow::bail!("thaw is only supported on Unix-like systems");
+            }
+            Ok(())
+        } else {
+            anyhow::bail!("Command {} not found", id)
+        }
     }
 
     pub async fn kill(&self, id: &CommandId, _signal: Option<String>) -> anyhow::Result<()> {
@@ -173,6 +221,11 @@ impl CommandManager {
         self.logger.clone()
     }
 
+    /// Get a reference to the configuration (used by API handlers to access env vars etc.)
+    pub fn config(&self) -> &Config {
+        &self.config
+    }
+
     pub async fn send_keys(&self, id: &CommandId, keys: &str) -> anyhow::Result<()> {
         self.logger.log("send_keys", &format!("id={} keys={}", id, keys));
         if let Some(handle) = self.commands.get(id) {
@@ -184,8 +237,8 @@ impl CommandManager {
         }
     }
 
-    /// Spawn a command with per-command exit configuration.
-    /// This is used by the API handler to allow on_exit/on_error per-command.
+    /// Spawn a command with per-command exit configuration and environment variables.
+    /// This is used by the API handler to allow on_exit/on_error/env per-command.
     pub async fn spawn_with_exit(
         &self,
         cmd: String,
@@ -194,9 +247,10 @@ impl CommandManager {
         on_exit: Option<String>,
         on_error: Option<String>,
         exit_timeout: u64,
+        env_vars: std::collections::HashMap<String, String>,
     ) -> anyhow::Result<CommandId> {
         let id = Uuid::new_v4().to_string();
-        self.logger.log("spawn", &format!("id={} cmd={} args={:?} cert={:?}", id, cmd, args, certificate));
+        self.logger.log("spawn", &format!("id={} cmd={} args={:?} cert={:?} env={:?}", id, cmd, args, certificate, env_vars.keys().collect::<Vec<_>>()));
 
         // Override default exit config with per-command values
         let exit_config = crate::config::schema::ExitConfig {
@@ -212,6 +266,7 @@ impl CommandManager {
             self.config.handles.clone(),
             &id,
             exit_config,
+            env_vars,
             self,
         ).await?;
 
