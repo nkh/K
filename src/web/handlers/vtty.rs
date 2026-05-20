@@ -38,6 +38,7 @@ pub async fn get_vtty_html(
             let (cursor_row, cursor_col) = handle.cursor_position().await;
             let (rows, cols) = handle.dimensions().await;
             let scrollback = handle.scrollback_count().await;
+            let alt_screen = handle.is_alternate_screen().await;
             Json(serde_json::json!({
                 "status": "ok",
                 "data": {
@@ -46,6 +47,49 @@ pub async fn get_vtty_html(
                     "cursor": { "row": cursor_row, "col": cursor_col },
                     "dimensions": { "rows": rows, "cols": cols },
                     "scrollback_lines": scrollback,
+                    "alternate_screen": alt_screen,
+                },
+                "error": null
+            }))
+        }
+        None => Json(serde_json::json!({
+            "status": "error",
+            "data": null,
+            "error": format!("Command {} not found", id)
+        })),
+    }
+}
+
+/// GET /api/commands/:id/vtty/buffer?screen=main|alt|current
+///
+/// Fetch a specific screen buffer as HTML. Supports:
+/// - `screen=current` (default): the currently active buffer
+/// - `screen=main`: the main buffer (even if alt screen is active)
+/// - `screen=alt`: the alternate screen buffer (or last known if switched back)
+pub async fn get_vtty_buffer(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Json<Value> {
+    let screen = params.get("screen").map(|s| s.as_str()).unwrap_or("current");
+
+    match state.manager.get(&id) {
+        Some(handle) => {
+            let (html, label) = match screen {
+                "main" => (handle.vtty_html_main().await, "main"),
+                "alt" => (handle.vtty_html_alt().await, "alt"),
+                _ => (handle.vtty_html().await, "current"),
+            };
+            let alt_screen = handle.is_alternate_screen().await;
+            let (rows, cols) = handle.dimensions().await;
+            Json(serde_json::json!({
+                "status": "ok",
+                "data": {
+                    "id": id,
+                    "screen": label,
+                    "html": html,
+                    "alternate_screen": alt_screen,
+                    "dimensions": { "rows": rows, "cols": cols },
                 },
                 "error": null
             }))

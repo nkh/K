@@ -186,6 +186,12 @@
             <input type="number" id="resizeCols" value="80" min="1" max="500" title="Terminal columns">
             <button class="small" onclick="resizeTerminal()">Resize</button>
         </div>
+        <select id="bufferSelect" onchange="switchBuffer(this.value)" title="Which terminal buffer to view" style="font-size:0.7rem;padding:0.15rem 0.3rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;">
+            <option value="current">Current</option>
+            <option value="main">Main Buffer</option>
+            <option value="alt">Alt Buffer</option>
+        </select>
+        <span id="altScreenBadge" style="display:none;font-size:0.65rem;color:var(--yellow);background:rgba(210,153,34,0.15);border:1px solid rgba(210,153,34,0.3);border-radius:3px;padding:0 0.3rem;">ALT SCREEN</span>
         <button class="small" onclick="toggleSidebar()" title="Toggle sidebar">&#9776;</button>
         <button class="small" onclick="addPanel()" title="Add panel (multi-view)">+ Panel</button>
         <button class="small" onclick="showDocs()" title="Documentation">Docs</button>
@@ -312,6 +318,12 @@ const state = {
     fontSize: parseInt(localStorage.getItem('vrunner_font_size') || '13'),
     instanceUrls: [],
     currentView: 'vtty',
+    // WebSocket for real-time VTTY streaming
+    vttyWs: null,
+    vttyWsUrl: null,
+    vttyWsCmdId: null,
+    // Buffer view: 'current', 'main', 'alt'
+    bufferView: 'current',
 };
 
 // ─── Initialization ───
@@ -467,14 +479,21 @@ async function loadCommands() {
         if (parts.length >= 2) {
             const instUrl = parts.slice(0, -1).join(':');
             const cmdId = parts[parts.length - 1];
-            loadVttyHtml(instUrl, cmdId);
+            // Only poll via HTTP if WebSocket is not connected
+            if (!state.vttyWs || state.bufferView !== 'current') {
+                loadVttyHttp(instUrl, cmdId);
+            }
         }
     }
 }
 
 function selectCommand(instUrl, cmdId, name) {
     state.selectedCommandId = instUrl + ':' + cmdId;
+    state.bufferView = 'current';
+    document.getElementById('bufferSelect').value = 'current';
     loadCommands(); // Re-render to update selection
+    // Connect WebSocket for real-time VTTY streaming
+    connectVttyWs(instUrl, cmdId);
 }
 
 function getSelectedPanel() {
@@ -486,40 +505,146 @@ function getSelectedPanel() {
     return state.panels.find(p => p.instUrl === instUrl) || state.panels[0];
 }
 
-async function loadVttyHtml(instUrl, cmdId) {
+// ─── WebSocket VTTY Streaming ───
+function connectVttyWs(instUrl, cmdId) {
+    // Close existing connection if any
+    disconnectVttyWs();
+
+    const wsUrl = instUrl.replace(/^http/, 'ws');
+    const token = state.authToken;
+    const url = `${wsUrl}/api/commands/${cmdId}/ws`;
+
+    try {
+        const ws = new WebSocket(url);
+        state.vttyWs = ws;
+        state.vttyWsUrl = instUrl;
+        state.vttyWsCmdId = cmdId;
+
+        ws.onopen = () => {
+            document.getElementById('connStatus').textContent = 'WS Connected';
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'vtty_update' && msg.data) {
+                    // Only update if we're viewing 'current' buffer
+                    if (state.bufferView === 'current') {
+                        updateVttyDisplay(msg.data);
+                    }
+                    // Update alt screen badge
+                    const badge = document.getElementById('altScreenBadge');
+                    if (badge) badge.style.display = msg.data.alternate_screen ? '' : 'none';
+                } else if (msg.type === 'command_ended') {
+                    document.getElementById('connStatus').textContent = 'Command ended';
+                    disconnectVttyWs();
+                } else if (msg.type === 'connected') {
+                    // Connected — request initial snapshot via HTTP
+                    loadVttyHttp(instUrl, cmdId);
+                }
+            } catch (e) { /* ignore parse errors */ }
+        };
+
+        ws.onclose = () => {
+            if (state.vttyWs === ws) {
+                state.vttyWs = null;
+                document.getElementById('connStatus').textContent = 'WS Disconnected';
+            }
+        };
+
+        ws.onerror = () => {
+            document.getElementById('connStatus').textContent = 'WS Error';
+        };
+    } catch (e) {
+        console.error('WebSocket connect failed:', e);
+    }
+}
+
+function disconnectVttyWs() {
+    if (state.vttyWs) {
+        state.vttyWs.onclose = null; // prevent re-entry
+        state.vttyWs.close();
+        state.vttyWs = null;
+        state.vttyWsUrl = null;
+        state.vttyWsCmdId = null;
+    }
+}
+
+function updateVttyDisplay(data) {
+    const panel = getSelectedPanel();
+    if (!panel || !data.html) return;
+
+    const vttyEl = panel.querySelector('.vtty-container');
+    const pre = vttyEl ? vttyEl.querySelector('pre') : null;
+    if (pre) pre.innerHTML = data.html || '<span style="color:#484f58">(empty)</span>';
+
+    // Cursor position
+    const cursor = data.cursor || {};
+    const dims = data.dimensions || {};
+    document.getElementById('cursorPos').textContent = `Cursor: ${cursor.row + 1},${cursor.col + 1}`;
+    document.getElementById('termDims').textContent = `${dims.rows}x${dims.cols}`;
+    document.getElementById('resizeRows').value = dims.rows || 24;
+    document.getElementById('resizeCols').value = dims.cols || 80;
+
+    // Show cursor indicator
+    const cursorEl = vttyEl ? vttyEl.querySelector('.cursor-indicator') : null;
+    if (cursorEl && cursor.row !== undefined) {
+        const charW = state.fontSize * 0.6;
+        const charH = state.fontSize * 1.2;
+        cursorEl.style.top = (cursor.row * charH) + 'px';
+        cursorEl.style.left = (cursor.col * charW) + 'px';
+        cursorEl.style.width = charW + 'px';
+        cursorEl.style.height = charH + 'px';
+        cursorEl.style.display = '';
+    }
+}
+
+async function loadVttyHttp(instUrl, cmdId) {
     const panel = getSelectedPanel();
     if (!panel) return;
 
+    // If viewing a specific buffer, use the buffer endpoint
+    const screenParam = state.bufferView !== 'current' ? `?screen=${state.bufferView}` : '';
+    const endpoint = state.bufferView !== 'current'
+        ? `/api/commands/${cmdId}/vtty/buffer${screenParam}`
+        : `/api/commands/${cmdId}/vtty/html`;
+
     try {
-        const res = await fetch(apiUrl(`/api/commands/${cmdId}/vtty/html`, { url: instUrl }), { headers: authHeadersForInstance({ url: instUrl }) });
+        const res = await fetch(apiUrl(endpoint, { url: instUrl }), { headers: authHeadersForInstance({ url: instUrl }) });
         const json = await res.json();
         if (json.status === 'ok' && json.data) {
             const vttyEl = panel.querySelector('.vtty-container');
             const pre = vttyEl.querySelector('pre');
             if (pre) pre.innerHTML = json.data.html || '<span style="color:#484f58">(empty)</span>';
 
-            // Cursor position
             const cursor = json.data.cursor || {};
             const dims = json.data.dimensions || {};
-            document.getElementById('cursorPos').textContent = `Cursor: ${cursor.row + 1},${cursor.col + 1}`;
-            document.getElementById('termDims').textContent = `${dims.rows}x${dims.cols} | Scrollback: ${json.data.scrollback_lines || 0}`;
-            document.getElementById('resizeRows').value = dims.rows || 24;
-            document.getElementById('resizeCols').value = dims.cols || 80;
+            document.getElementById('cursorPos').textContent = `Cursor: ${(cursor.row + 1) || '-'},${(cursor.col + 1) || '-'}`;
+            document.getElementById('termDims').textContent = `${dims.rows || '-'}x${dims.cols || '-'}`;
 
-            // Show cursor indicator
-            const cursorEl = vttyEl.querySelector('.cursor-indicator');
-            if (cursorEl && cursor.row !== undefined) {
-                const charW = state.fontSize * 0.6;
-                const charH = state.fontSize * 1.2;
-                cursorEl.style.top = (cursor.row * charH) + 'px';
-                cursorEl.style.left = (cursor.col * charW) + 'px';
-                cursorEl.style.width = charW + 'px';
-                cursorEl.style.height = charH + 'px';
-                cursorEl.style.display = '';
-            }
+            // Update alt screen badge
+            const badge = document.getElementById('altScreenBadge');
+            if (badge) badge.style.display = json.data.alternate_screen ? '' : 'none';
         }
     } catch (e) {
         console.error('Failed to load VTTY:', e);
+    }
+}
+
+function switchBuffer(view) {
+    state.bufferView = view;
+    if (!state.selectedCommandId) return;
+    const parts = state.selectedCommandId.split(':');
+    const cmdId = parts[parts.length - 1];
+    const instUrl = parts.slice(0, -1).join(':');
+
+    if (view === 'current') {
+        // Re-enable WebSocket for live updates
+        connectVttyWs(instUrl, cmdId);
+    } else {
+        // Disconnect WebSocket — we're viewing a static snapshot
+        disconnectVttyWs();
+        loadVttyHttp(instUrl, cmdId);
     }
 }
 
@@ -583,7 +708,7 @@ async function sendKeys() {
         });
         input.value = '';
         // Immediately refresh VTTY
-        loadVttyHtml(instUrl, cmdId);
+        loadVttyHttp(instUrl, cmdId);
     } catch (e) { /* ignore */ }
 }
 
@@ -751,7 +876,7 @@ async function sendKeysToPanel(panelId) {
             body: JSON.stringify({ keys: input.value }),
         });
         input.value = '';
-        loadVttyHtml(panel.instUrl, cmdId);
+        loadVttyHttp(panel.instUrl, cmdId);
     } catch (e) { /* ignore */ }
 }
 

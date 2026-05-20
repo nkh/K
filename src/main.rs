@@ -120,31 +120,102 @@ async fn async_main(cli: Cli) -> Result<()> {
     let manager = Arc::new(CommandManager::new(cfg.clone()));
 
     // If a child command was provided, spawn it immediately
-    if let Some(cmd_args) = cli.cmd_args {
+    let spawned_id = if let Some(cmd_args) = cli.cmd_args {
         if !cmd_args.is_empty() {
             let cmd = cmd_args[0].clone();
             let args = cmd_args[1..].to_vec();
-            let _id = manager.spawn(cmd, args, None, cfg.environment.variables.clone()).await?;
+            let id = manager.spawn(cmd, args, None, cfg.environment.variables.clone()).await?;
+            Some(id)
+        } else {
+            None
         }
-    }
+    } else {
+        None
+    };
 
     // Create shutdown channel — passed explicitly, no globals
     let (shutdown_tx, _shutdown_rx) = broadcast::channel::<()>(1);
 
     // Start the web server
-    let server_handle = tokio::spawn(async move {
-        start_server(
-            cfg.server.bind.clone(),
-            cfg.server.port,
-            manager.clone(),
-            shutdown_tx,
-            auth_token,
-            cfg.tls.enabled,
-            cfg.tls.cert_file.as_deref(),
-            cfg.tls.key_file.as_deref(),
-            &cfg,
-        ).await
+    let server_handle = tokio::spawn({
+        let manager = manager.clone();
+        let shutdown_tx = shutdown_tx.clone();
+        let cfg = cfg.clone();
+        async move {
+            start_server(
+                cfg.server.bind.clone(),
+                cfg.server.port,
+                manager.clone(),
+                shutdown_tx,
+                auth_token,
+                cfg.tls.enabled,
+                cfg.tls.cert_file.as_deref(),
+                cfg.tls.key_file.as_deref(),
+                &cfg,
+            ).await
+        }
     });
+
+    // If --display is enabled, run a local terminal display loop that renders
+    // the active command's VTTY output directly to stdout (like mprocs).
+    if cfg.display.enabled {
+        let display_manager = manager.clone();
+        let display_id = spawned_id.clone();
+        let mut shutdown_rx = shutdown_tx.subscribe();
+        let refresh_ms = cfg.display.refresh_ms;
+
+        tokio::spawn(async move {
+            use vrunner::vtty::display::TerminalDisplay;
+            use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
+            use crossterm::{cursor, ExecutableCommand};
+
+            // Switch to alternate screen for our display so we don't
+            // corrupt the user's terminal history.
+            let mut stdout = std::io::stdout();
+            let _ = terminal::enable_raw_mode();
+            let _ = stdout.execute(EnterAlternateScreen);
+            let _ = stdout.execute(cursor::Hide);
+
+            let mut last_html: String = String::new();
+            let interval = tokio::time::Duration::from_millis(refresh_ms);
+
+            loop {
+                tokio::select! {
+                    _ = tokio::time::sleep(interval) => {
+                        // Find a command to display
+                        let commands = display_manager.list();
+                        let target_id = display_id.as_ref()
+                            .or_else(|| commands.first().map(|(id, _, _, _)| id));
+
+                        if let Some(id) = target_id {
+                            if let Some(handle) = display_manager.get(id) {
+                                let html = handle.vtty_html().await;
+                                drop(handle);
+                                if html != last_html {
+                                    last_html = html;
+                                    // Render the buffer directly to the terminal
+                                    let buf = display_manager.get(id).unwrap().vtty_snapshot().await;
+                                    let _ = TerminalDisplay::render(&buf);
+                                }
+                            } else {
+                                // Command was removed
+                                let _ = TerminalDisplay::clear();
+                                break;
+                            }
+                        }
+                    }
+                    _ = shutdown_rx.recv() => {
+                        break;
+                    }
+                }
+            }
+
+            // Restore terminal
+            let _ = stdout.execute(cursor::Show);
+            let _ = stdout.execute(LeaveAlternateScreen);
+            let _ = terminal::disable_raw_mode();
+        });
+    }
 
     // Wait for server to finish — propagate both JoinError and server errors
     server_handle.await??;

@@ -74,6 +74,7 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
                         let msg = if let Some(handle) = manager.get(&watch_id) {
                             let (cursor_row, cursor_col) = handle.cursor_position().await;
                             let (rows, cols) = handle.dimensions().await;
+                            let alt_screen = handle.is_alternate_screen().await;
                             json!({
                                 "type": "vtty_update",
                                 "data": {
@@ -81,6 +82,7 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
                                     "html": html,
                                     "cursor": {"row": cursor_row, "col": cursor_col},
                                     "dimensions": {"rows": rows, "cols": cols},
+                                    "alternate_screen": alt_screen,
                                 }
                             }).to_string()
                         } else {

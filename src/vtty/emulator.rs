@@ -73,6 +73,7 @@ pub struct VttyEmulator {
     cursor_visible: bool,
     alternate_screen: bool,
     main_buffer: Option<Buffer>,
+    alt_buffer: Option<Buffer>,
     max_scrollback: usize,
     cols: usize,
     rows: usize,
@@ -98,6 +99,7 @@ impl VttyEmulator {
             cursor_visible: true,
             alternate_screen: false,
             main_buffer: None,
+            alt_buffer: None,
             max_scrollback,
             cols,
             rows,
@@ -463,12 +465,15 @@ impl VttyEmulator {
         let mut buf = self.buffer.write();
         let old = std::mem::replace(&mut *buf, Buffer::new(self.cols, self.rows, self.max_scrollback));
         self.main_buffer = Some(old);
+        self.alt_buffer = None; // Clear any stale alt buffer
         self.cursor_row = 0;
         self.cursor_col = 0;
     }
 
     fn exit_alternate_screen(&mut self) {
         self.alternate_screen = false;
+        // Save the current (alt screen) buffer before switching back
+        self.alt_buffer = Some(self.buffer.read().clone());
         if let Some(main) = self.main_buffer.take() {
             let mut buf = self.buffer.write();
             *buf = main;
@@ -498,6 +503,12 @@ impl VttyEmulator {
         if self.alternate_screen {
             self.exit_alternate_screen();
         }
+        self.alt_buffer = None;
+    }
+
+    /// Whether the emulator is currently showing the alternate screen.
+    pub fn is_alternate_screen(&self) -> bool {
+        self.alternate_screen
     }
 
     // Public API
@@ -505,8 +516,33 @@ impl VttyEmulator {
         self.buffer.read().clone()
     }
 
+    /// Snapshot the currently active buffer (main or alternate).
     pub fn snapshot(&self) -> Buffer {
         self.buffer.read().clone()
+    }
+
+    /// Snapshot the main buffer (returns the main buffer even if the
+    /// alternate screen is currently active).
+    pub fn snapshot_main(&self) -> Buffer {
+        if self.alternate_screen {
+            self.main_buffer.clone()
+                .unwrap_or_else(|| self.buffer.read().clone())
+        } else {
+            self.buffer.read().clone()
+        }
+    }
+
+    /// Snapshot the alternate buffer (returns the alt buffer if active,
+    /// or the last known alt buffer if the app has switched back to main).
+    pub fn snapshot_alt(&self) -> Buffer {
+        if self.alternate_screen {
+            self.buffer.read().clone()
+        } else {
+            // Not on alt screen — return the last saved alt buffer if available.
+            self.alt_buffer.as_ref()
+                .cloned()
+                .unwrap_or_else(|| Buffer::new(self.cols, self.rows, self.max_scrollback))
+        }
     }
 
     pub fn contents_plain(&self) -> String {

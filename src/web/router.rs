@@ -22,6 +22,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/commands/:id/thaw", post(handlers::commands::thaw_command))
         .route("/api/commands/:id/vtty", get(handlers::vtty::get_vtty_full))
         .route("/api/commands/:id/vtty/html", get(handlers::vtty::get_vtty_html))
+        .route("/api/commands/:id/vtty/buffer", get(handlers::vtty::get_vtty_buffer))
         .route("/api/commands/:id/vtty/partial", get(handlers::vtty::get_vtty_partial))
         .route("/api/commands/:id/resize", post(handlers::vtty::resize_vtty))
         .route("/api/commands/:id/handles", get(handlers::handles::list_handles).post(handlers::handles::add_handle))

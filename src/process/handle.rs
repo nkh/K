@@ -61,6 +61,26 @@ impl CommandHandle {
         crate::vtty::renderer::VttyRenderer::to_html(&buf)
     }
 
+    /// Whether the process is currently using the alternate screen buffer.
+    pub async fn is_alternate_screen(&self) -> bool {
+        let emu = self.emulator.read().await;
+        emu.is_alternate_screen()
+    }
+
+    /// Get the main buffer as HTML (even if alt screen is active).
+    pub async fn vtty_html_main(&self) -> String {
+        let emu = self.emulator.read().await;
+        let buf = emu.snapshot_main();
+        crate::vtty::renderer::VttyRenderer::to_html(&buf)
+    }
+
+    /// Get the alternate buffer as HTML (or empty if never used).
+    pub async fn vtty_html_alt(&self) -> String {
+        let emu = self.emulator.read().await;
+        let buf = emu.snapshot_alt();
+        crate::vtty::renderer::VttyRenderer::to_html(&buf)
+    }
+
     pub async fn cursor_position(&self) -> (usize, usize) {
         let emu = self.emulator.read().await;
         emu.cursor()
