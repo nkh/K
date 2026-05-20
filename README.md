@@ -21,12 +21,15 @@ A virtual terminal runner and process orchestrator with a web-first control plan
 - **Declarative Config** — Configure via YAML, TOML, or JSON, overridden by CLI flags.
 - **Extensible Handles** — Route extra file descriptors to the VTTY or to managed log files.
 - **Certificate Pool** — Manage named certificates for per-command access control. Each running application can be bound to a specific certificate.
-- **WebSocket Streaming** — Real-time VTTY output and log streaming via WebSocket, with bidirectional keyboard input support.
+- **WebSocket Streaming** — Real-time VTTY output and log streaming via WebSocket, with bidirectional keyboard input support and an incremental diff protocol that transmits only changed cells.
 - **Exit Handlers** — Run commands on child exit (clean or error), with configurable grace period before force-kill.
 - **Environment Variables** — Three-layer env var control: config defaults, per-command overrides, and --no-env flag.
 - **Configuration Profiles** — Named configuration presets for different environments (dev, prod, CI).
 - **CLI Spawn** — Dynamically spawn commands on running instances with `vrunner spawn`.
 - **Freeze/Thaw** — Suspend and resume running commands via SIGSTOP/SIGCONT.
+- **Snapshot & Diff** — Store named snapshots of VTTY buffers and compute cell-level diffs against the current buffer for debugging and testing.
+- **Kill by PID** — Stop individual commands by their OS process ID from the CLI or API, without stopping the entire vrunner instance.
+- **Enhanced Instance Listing** — `vrunner list` queries running instances to show their active commands, arguments, PIDs, and certificate bindings in a unified table.
 
 ---
 
@@ -361,20 +364,26 @@ Multiple vrunner instances can run simultaneously on different ports. Each insta
 vrunner list
 ```
 
-Output:
+Queries all running vrunner instances and their active commands. Each instance is contacted via HTTP to retrieve its current command list, showing command names, arguments, PIDs, and certificate bindings:
+
 ```
 PID        PORT     BIND                 DAEMON     DISPLAY    COMMAND
-12345      8080     127.0.0.1            no         yes        vim
-12346      9090     127.0.0.1            yes        no         (idle)
+12345      8080     127.0.0.1            yes        no         (idle) -> htop [80x24]
+12346      9090     127.0.0.1            yes        no         (no commands)
+12347      3000     127.0.0.1            no         no         (idle) -> cargo test ["--release"] [my-app]
 ```
 
-### Stop an instance gracefully
+### Stop an instance or command
 
 ```bash
+# Stop a specific command by its OS PID (queries all instances)
 vrunner stop 12345
+
+# If no command with that PID is found, falls back to stopping the entire instance
+vrunner stop 12346
 ```
 
-This sends an HTTP shutdown request to the instance. If the instance is unresponsive, you can fall back to `kill 12345`.
+This first attempts to kill a command with the given PID on any running instance via the API. If no matching command is found, it falls back to sending an HTTP shutdown request to stop the entire instance. If the instance is unresponsive, you can also use `kill 12346` directly.
 
 ---
 
@@ -400,7 +409,12 @@ This sends an HTTP shutdown request to the instance. If the instance is unrespon
 | `GET /api/log` | GET | Get command log entries (search, pagination) |
 | `POST /api/shutdown` | POST | Shut down the vrunner instance |
 | `GET /api/certificates` | GET | List all certificates in the pool |
-| `GET /api/commands/:id/ws` | GET (WS) | WebSocket: real-time VTTY streaming |
+| `POST /api/commands/kill-pid/:pid` | POST | Kill a command by its OS PID |
+| `GET /api/commands/:id/ws` | GET (WS) | WebSocket: real-time VTTY streaming (incremental diff protocol) |
+| `POST /api/commands/:id/snapshot` | POST | Store a named snapshot of the VTTY buffer |
+| `GET /api/commands/:id/snapshots` | GET | List all snapshots for a command |
+| `POST /api/commands/:id/diff` | POST | Compute diff against a stored snapshot |
+| `DELETE /api/commands/:id/snapshots/:name` | DELETE | Delete a stored snapshot |
 | `GET /api/ws/logs` | GET (WS) | WebSocket: real-time log streaming |
 
 ### Response Format
@@ -451,6 +465,8 @@ curl -X POST http://localhost:8080/api/shutdown
 Open `http://localhost:8080/admin` in your browser for a built-in web dashboard.
 
 When TLS is enabled, use `https://localhost:8080/admin` instead.
+
+The admin interface features a real-time VTTY viewer powered by the incremental diff WebSocket protocol, a Pause/Run button to freeze and thaw commands, 1-second polling for HTTP fallback, and auto-selection of the first available command.
 
 ---
 

@@ -18,30 +18,38 @@ A practical guide to using vrunner for common tasks. This document covers the we
    - [Web Admin VTTY Viewer](#web-admin-vtty-viewer)
    - [VTTY API Endpoints](#vtty-api-endpoints)
    - [WebSocket Real-Time Streaming](#websocket-real-time-streaming)
+   - [Incremental VTTY Diff Protocol](#incremental-vtty-diff-protocol)
 5. [Sending Keystrokes](#sending-keystrokes)
 6. [Managing Running Commands](#managing-running-commands)
    - [Listing Commands](#listing-commands)
    - [Killing Commands](#killing-commands)
+   - [Kill by PID](#kill-by-pid)
    - [Resizing the Terminal](#resizing-the-terminal)
-7. [Exit Handlers and Timeouts](#exit-handlers-and-timeouts)
+7. [Freezing and Thawing Commands](#freezing-and-thawing-commands)
+8. [Snapshot and Diff](#snapshot-and-diff)
+   - [Storing Snapshots](#storing-snapshots)
+   - [Listing Snapshots](#listing-snapshots)
+   - [Computing Diffs](#computing-diffs)
+   - [Deleting Snapshots](#deleting-snapshots)
+9. [Exit Handlers and Timeouts](#exit-handlers-and-timeouts)
    - [Per-Command Exit Handlers via API](#per-command-exit-handlers-via-api)
    - [Default Exit Handlers via Config and CLI](#default-exit-handlers-via-config-and-cli)
    - [Graceful Shutdown with Timeout](#graceful-shutdown-with-timeout)
-8. [Viewing Logs](#viewing-logs)
+10. [Viewing Logs](#viewing-logs)
    - [Real-Time Log Streaming via WebSocket](#real-time-log-streaming-via-websocket)
-9. [Certificate-Based Access Control](#certificate-based-access-control)
-10. [Remote Access and TLS](#remote-access-and-tls)
-11. [Daemon Mode](#daemon-mode)
-12. [Interactive Display](#interactive-display)
-13. [Multi-Instance Management](#multi-instance-management)
-14. [Configuration File Reference](#configuration-file-reference)
-15. [Common Use Cases](#common-use-cases)
+11. [Certificate-Based Access Control](#certificate-based-access-control)
+12. [Remote Access and TLS](#remote-access-and-tls)
+13. [Daemon Mode](#daemon-mode)
+14. [Interactive Display](#interactive-display)
+15. [Multi-Instance Management](#multi-instance-management)
+16. [Configuration File Reference](#configuration-file-reference)
+17. [Common Use Cases](#common-use-cases)
     - [Development Server Orchestration](#development-server-orchestration)
     - [CI/CD Pipeline Runner](#cicd-pipeline-runner)
     - [Remote Server Administration](#remote-server-administration)
     - [Pair Programming and Collaboration](#pair-programming-and-collaboration)
     - [Long-Running Background Tasks](#long-running-background-tasks)
-16. [Troubleshooting](#troubleshooting)
+18. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -365,11 +373,13 @@ ws.onmessage = (event) => {
     case 'connected':
       console.log('Connected to command', msg.id);
       break;
-    case 'vtty_update':
-      // msg.data.html — rendered HTML of the terminal
-      // msg.data.cursor — {row, col}
-      // msg.data.dimensions — {rows, cols}
+    case 'vtty_full':
+      // Initial full snapshot — render the complete terminal
       document.getElementById('terminal').innerHTML = msg.data.html;
+      break;
+    case 'vtty_diff':
+      // Incremental diff — apply only changed cells
+      applyVttyDiff(msg.data);
       break;
     case 'command_ended':
       console.log('Command', msg.id, 'has exited');
@@ -393,13 +403,7 @@ ws.send(JSON.stringify({ type: 'ping' }));
 
 **Incoming server messages:**
 
-| Message Type | Fields | Description |
-|-------------|--------|-------------|
-| `connected` | `id` | Sent immediately after WebSocket upgrade confirms the connection |
-| `vtty_update` | `id`, `html`, `cursor`, `dimensions` | Sent whenever the terminal content changes (debounced at ~200ms) |
-| `command_ended` | `id` | Sent when the command exits and is removed from the manager |
-| `error` | `message` | Sent when an incoming client message fails to process |
-| `pong` | — | Response to a `ping` message from the client |
+The VTTY WebSocket uses an incremental diff protocol. See [Incremental VTTY Diff Protocol](#incremental-vtty-diff-protocol) for the full protocol specification and message format details.
 
 **Outgoing client messages:**
 
@@ -434,6 +438,64 @@ const ws = new WebSocket('wss://127.0.0.1:8080/api/commands/.../ws');
 ```javascript
 const ws = new WebSocket('wss://host:8080/api/commands/.../ws?token=YOUR_TOKEN');
 ```
+
+### Incremental VTTY Diff Protocol
+
+The VTTY WebSocket uses an incremental diff protocol to minimize bandwidth usage. Instead of sending the full terminal HTML on every update, the server transmits only the cells that have changed since the last broadcast. The protocol works in three phases:
+
+**Phase 1 — Initial Full Snapshot:** Upon connection, the server sends a `vtty_full` message containing the complete terminal HTML, cursor position, dimensions, and alternate screen status. This gives the client a complete picture of the terminal state:
+
+```json
+{
+  "type": "vtty_full",
+  "data": {
+    "id": "550e8400-...",
+    "html": "<span>...</span>",
+    "cursor": { "row": 5, "col": 12 },
+    "dimensions": { "rows": 24, "cols": 80 },
+    "alternate_screen": false
+  }
+}
+```
+
+**Phase 2 — Incremental Diffs:** On subsequent updates, the server sends `vtty_diff` messages containing only the cells that changed. The server maintains a copy of the last-sent buffer and computes a cell-level diff (comparing character, foreground/background colors, and text attributes) every 200ms:
+
+```json
+{
+  "type": "vtty_diff",
+  "data": {
+    "id": "550e8400-...",
+    "diff": {
+      "width": 80,
+      "height": 24,
+      "changed_count": 3,
+      "cells": [
+        { "row": 5, "col": 10, "ch": "A", "fg": [255,255,255], "bg": [0,0,0], "bold": false, ... },
+        { "row": 5, "col": 11, "ch": "B", "fg": [255,255,255], "bg": [0,0,0], "bold": false, ... },
+        { "row": 5, "col": 12, "ch": "C", "fg": [255,255,255], "bg": [0,0,0], "bold": false, ... }
+      ]
+    },
+    "cursor": { "row": 5, "col": 13 },
+    "dimensions": { "rows": 24, "cols": 80 },
+    "alternate_screen": false
+  }
+}
+```
+
+**Phase 3 — Resynchronization:** If the client falls behind (broadcast lag), the server automatically sends a new `vtty_full` message to resynchronize the client to the current state. This happens transparently and ensures the client always has a consistent view of the terminal.
+
+**Updated incoming message types:**
+
+| Message Type | Fields | Description |
+|-------------|--------|-------------|
+| `connected` | `id` | Sent immediately after WebSocket upgrade confirms the connection |
+| `vtty_full` | `id`, `html`, `cursor`, `dimensions`, `alternate_screen` | Full terminal snapshot (sent on connect and after lag recovery) |
+| `vtty_diff` | `id`, `diff`, `cursor`, `dimensions`, `alternate_screen` | Incremental diff with only changed cells |
+| `command_ended` | `id` | Sent when the command exits and is removed from the manager |
+| `error` | `message` | Sent when an incoming client message fails to process |
+| `pong` | — | Response to a `ping` message from the client |
+
+The admin web interface handles both `vtty_full` and `vtty_diff` messages. On `vtty_diff`, it falls back to an HTTP full-refresh to ensure correct rendering, while still benefiting from the server-side optimization of only sending diffs when the buffer actually changes. This approach avoids complex DOM diffing while keeping bandwidth usage low.
 
 ---
 
@@ -508,7 +570,7 @@ curl -s -X POST "http://127.0.0.1:8080/api/commands/$ID/keys" \
 vrunner list
 ```
 
-This queries all running vrunner instances on the system and displays their PID, port, bind address, daemon status, display status, and current command.
+This queries all running vrunner instances and contacts each one via HTTP to retrieve its active commands. The output shows each instance's PID, port, bind address, daemon/display status, and all running commands with their arguments and certificate bindings. If an instance is unreachable, it is marked accordingly.
 
 #### Via curl
 
@@ -525,6 +587,7 @@ Response:
     {
       "id": "550e8400-e29b-41d4-a716-446655440000",
       "name": "htop",
+      "args": [],
       "pid": 12345,
       "status": "running",
       "certificate": null
@@ -532,6 +595,7 @@ Response:
     {
       "id": "660e8400-e29b-41d4-a716-446655440001",
       "name": "python",
+      "args": ["-m", "http.server", "8000"],
       "pid": 12346,
       "status": "running",
       "certificate": "my-app"
@@ -543,11 +607,11 @@ Response:
 
 #### Via the Web UI
 
-The admin dashboard at `/admin` automatically lists all running commands. Each entry shows the command name, PID, status, and any certificate binding.
+The admin dashboard at `/admin` automatically lists all running commands. Each entry shows the command name, PID, status, and any certificate binding. The admin interface also includes a Pause/Run button in the top bar that freezes or thaws the currently selected command.
 
 ### Freezing and Thawing Commands
 
-vrunner can freeze (suspend) and thaw (resume) running commands using POSIX signals (SIGSTOP/SIGCONT). A frozen command is paused — it consumes no CPU but remains in memory and can be resumed at any time.
+vrunner can freeze (suspend) and thaw (resume) running commands using POSIX signals (SIGSTOP/SIGCONT). A frozen command is paused — it consumes no CPU but remains in memory and can be resumed at any time. The admin web interface includes a Pause/Run button that toggles between freeze and thaw for the currently selected command.
 
 #### Via CLI
 
@@ -602,7 +666,21 @@ Click the kill button next to a command in the admin dashboard.
 vrunner stop 12345
 ```
 
-Note: `vrunner stop <pid>` shuts down the entire vrunner instance (including all commands it manages), not an individual command. To kill individual commands, use the API or web UI.
+Note: `vrunner stop <pid>` first attempts to find and kill a command with that OS PID on any running instance. If no matching command is found, it falls back to shutting down the entire vrunner instance.
+
+### Kill by PID
+
+You can kill individual commands by their OS process ID without stopping the entire vrunner instance. This is useful when you know the PID of a specific child process and want to terminate it without affecting other running commands.
+
+```bash
+# Kill a command by its OS PID
+curl -X POST http://127.0.0.1:8080/api/commands/kill-pid/12345
+
+# From the CLI (queries all instances)
+vrunner stop 12345
+```
+
+The CLI `vrunner stop` command now tries the kill-by-PID API first across all running instances. If a command with that PID is found, only that command is killed. If no command matches, it falls back to the traditional instance shutdown behavior.
 
 ### Resizing the Terminal
 
@@ -618,7 +696,130 @@ Valid ranges: rows 1-200, cols 1-500. The child process receives a `SIGWINCH` si
 
 ---
 
-## Exit Handlers and Timeouts
+## 8. Snapshot and Diff
+
+vrunner can store named snapshots of a command's VTTY buffer and later compute cell-level diffs against the current buffer. This is useful for automated testing (compare expected vs actual terminal output), debugging (capture a baseline and see what changed), and auditing (save terminal state at key points in a workflow). Snapshots are stored in memory and are automatically cleaned up when the command is killed or the instance shuts down.
+
+### Storing Snapshots
+
+Create a named snapshot of a command's current VTTY buffer:
+
+```bash
+ID="550e8400-e29b-41d4-a716-446655440000"
+
+# Store a snapshot with a custom name
+curl -X POST http://127.0.0.1:8080/api/commands/$ID/snapshot \
+  -H "Content-Type: application/json" \
+  -d '{"name": "after-build"}'
+```
+
+Response:
+```json
+{
+  "status": "ok",
+  "data": {
+    "id": "550e8400-...",
+    "name": "after-build",
+    "command_name": "cargo",
+    "command_args": ["test", "--release"],
+    "pid": 12345,
+    "timestamp": "2025-01-15T10:30:00Z",
+    "runtime_secs": 42.5
+  },
+  "error": null
+}
+```
+
+Each snapshot records the command name, arguments, PID, timestamp, and wall-clock runtime alongside the full VTTY buffer contents.
+
+### Listing Snapshots
+
+List all snapshots stored for a command:
+
+```bash
+curl http://127.0.0.1:8080/api/commands/$ID/snapshots
+```
+
+Response:
+```json
+{
+  "status": "ok",
+  "data": [
+    {
+      "name": "initial",
+      "command_id": "550e8400-...",
+      "command_name": "cargo",
+      "command_args": ["test", "--release"],
+      "pid": 12345,
+      "timestamp": "2025-01-15T10:25:00Z",
+      "runtime_secs": 0.1
+    },
+    {
+      "name": "after-build",
+      "command_id": "550e8400-...",
+      "command_name": "cargo",
+      "command_args": ["test", "--release"],
+      "pid": 12345,
+      "timestamp": "2025-01-15T10:30:00Z",
+      "runtime_secs": 42.5
+    }
+  ],
+  "error": null
+}
+```
+
+### Computing Diffs
+
+Compare the current VTTY buffer against a stored snapshot. The diff is computed cell-by-cell, comparing character value, foreground/background RGB colors, and text attributes (bold, italic, underline, etc.):
+
+```bash
+curl -X POST http://127.0.0.1:8080/api/commands/$ID/diff \
+  -H "Content-Type: application/json" \
+  -d '{"name": "after-build"}'
+```
+
+Response:
+```json
+{
+  "status": "ok",
+  "data": {
+    "id": "550e8400-...",
+    "name": "after-build",
+    "width": 80,
+    "height": 24,
+    "changed_count": 7,
+    "cells": [
+      { "row": 12, "col": 0, "ch": "E", "fg": [0,255,0], "bg": [0,0,0], "bold": true, "italic": false, ... },
+      { "row": 12, "col": 1, "ch": "r", "fg": [0,255,0], "bg": [0,0,0], "bold": true, "italic": false, ... },
+      " "..."
+    ]
+  },
+  "error": null
+}
+```
+
+The `changed_count` field tells you how many cells differ. The `cells` array contains the details of each changed cell from the current buffer. If the buffer dimensions have changed since the snapshot was taken, all cells are considered changed.
+
+### Deleting Snapshots
+
+Remove a stored snapshot:
+
+```bash
+curl -X DELETE http://127.0.0.1:8080/api/commands/$ID/snapshots/after-build
+```
+
+Response:
+```json
+{
+  "status": "ok",
+  "data": { "id": "550e8400-...", "name": "after-build" },
+  "error": null
+}
+```
+
+---
+
+## 9. Exit Handlers and Timeouts
 
 vrunner can automatically run external commands when a child process exits, and enforce graceful shutdown timeouts before force-killing stubborn processes.
 
@@ -1146,18 +1347,25 @@ vrunner --port 443 --tls \
 vrunner list
 ```
 
-Output format:
+The enhanced `vrunner list` command contacts each running instance via HTTP to retrieve its active commands. The output shows instance metadata alongside all running commands with their arguments and certificate bindings:
+
 ```
 PID        PORT     BIND                 DAEMON     DISPLAY    COMMAND
-12345      8080     127.0.0.1            yes        no         (idle)
-12346      9090     127.0.0.1            yes        no         (idle)
-12347      443      0.0.0.0              yes        no         (idle)
+12345      8080     127.0.0.1            yes        no         (idle) -> htop [80x24]
+12346      9090     127.0.0.1            yes        no         (no commands)
+12347      3000     127.0.0.1            no         no         (idle) -> cargo test ["--release"] [my-app]
 ```
 
-### Stopping a Specific Instance
+If an instance is unreachable, the output indicates the connection error instead of showing commands.
+
+### Stopping a Specific Instance or Command
 
 ```bash
+# Kill a specific command by its OS PID (queries all instances first)
 vrunner stop 12345
+
+# If no command with that PID is found, stops the entire instance
+vrunner stop 12346
 ```
 
 ### Using Different Configs Per Instance

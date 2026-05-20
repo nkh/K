@@ -604,8 +604,36 @@ List output handles for a command.
 Add an output handle to a command.
 
 .TP
+.B POST /api/commands/kill-pid/:pid
+Kill a command by its OS PID.
+
+.TP
+.B POST /api/commands/:id/freeze
+Freeze (suspend) a command via SIGSTOP.
+
+.TP
+.B POST /api/commands/:id/thaw
+Thaw (resume) a frozen command via SIGCONT.
+
+.TP
 .B GET /api/commands/:id/ws
-WebSocket endpoint for real-time VTTY streaming.
+WebSocket endpoint for real-time VTTY streaming (incremental diff protocol).
+
+.TP
+.B POST /api/commands/:id/snapshot
+Store a named snapshot of the VTTY buffer. Body: \fB{"name": "..."}\fR
+
+.TP
+.B GET /api/commands/:id/snapshots
+List all snapshots for a command.
+
+.TP
+.B POST /api/commands/:id/diff
+Compute cell-level diff against a stored snapshot. Body: \fB{"name": "..."}\fR
+
+.TP
+.B DELETE /api/commands/:id/snapshots/:name
+Delete a stored snapshot.
 
 .TP
 .B GET /api/certificates

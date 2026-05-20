@@ -147,6 +147,51 @@
 | FR-65 | Different vrunner instances can have completely different certificate pools. | Must |
 | FR-66 | The certificate pool must be configurable via YAML config file. | Should |
 
+### 2.16 WebSocket Incremental Diff Protocol
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-67 | The VTTY WebSocket must use an incremental diff protocol that transmits only changed cells instead of the full buffer on every update. | Must |
+| FR-68 | Upon WebSocket connection, the server must send an initial full snapshot (`vtty_full`) with the complete terminal HTML, cursor position, and dimensions. | Must |
+| FR-69 | Subsequent updates must be sent as `vtty_diff` messages containing only the cells that changed (character, colors, and text attributes). | Must |
+| FR-70 | If the client falls behind (broadcast lag), the server must automatically send a new `vtty_full` message to resynchronize. | Should |
+| FR-71 | The diff computation must compare cell-by-cell including character value, foreground/background RGB colors, and text attributes (bold, italic, underline, etc.). | Must |
+
+### 2.17 Snapshot and Diff API
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-72 | vrunner must support storing named snapshots of a command's VTTY buffer via `POST /api/commands/:id/snapshot`. | Must |
+| FR-73 | Each snapshot must include metadata: name, command name, command arguments, PID, timestamp, and wall-clock runtime. | Must |
+| FR-74 | vrunner must support listing all snapshots for a command via `GET /api/commands/:id/snapshots`. | Must |
+| FR-75 | vrunner must support computing a cell-level diff between the current buffer and a stored snapshot via `POST /api/commands/:id/diff`. | Must |
+| FR-76 | vrunner must support deleting snapshots via `DELETE /api/commands/:id/snapshots/:name`. | Must |
+| FR-77 | All snapshots for a command must be automatically cleaned up when the command is killed. | Should |
+
+### 2.18 Kill by PID
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-78 | vrunner must support killing individual commands by their OS process ID via `POST /api/commands/kill-pid/:pid`. | Must |
+| FR-79 | The `vrunner stop <pid>` CLI command must first attempt to kill a command with that PID on any running instance before falling back to instance shutdown. | Should |
+
+### 2.19 Enhanced Instance Listing
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-80 | `vrunner list` must contact each running instance via HTTP to retrieve its active commands. | Should |
+| FR-81 | The list output must include command name, arguments, PID, and certificate binding for each command on each instance. | Should |
+| FR-82 | Unreachable instances must be clearly indicated in the list output. | Should |
+
+### 2.20 Admin Interface Enhancements
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-83 | The admin interface must include a Pause/Run button to freeze and thaw the currently selected command. | Must |
+| FR-84 | The admin interface must use 1-second HTTP polling as a fallback when WebSocket is not available. | Should |
+| FR-85 | The admin interface must auto-select the first available command when no command is selected. | Should |
+| FR-86 | The admin interface topbar layout must be responsive and not overflow on narrow screens. | Should |
+
 ## 3. Non-Functional Requirements
 
 | ID | Requirement | Priority |
@@ -175,3 +220,5 @@
 - **Instance**: A single running `vrunner` process with its own web server and registry entry.
 - **Bearer Token**: A secret string used in the `Authorization` header to authenticate API requests.
 - **Self-Signed Certificate**: An X.509 certificate signed by vrunner itself (not by a public CA), distributed to authorized clients out of band.
+- **Incremental Diff Protocol**: A bandwidth optimization for the VTTY WebSocket that transmits only changed cells rather than the full terminal buffer on each update.
+- **Snapshot**: A named, point-in-time capture of a command's VTTY buffer contents, stored in memory with metadata for later comparison via diffs.

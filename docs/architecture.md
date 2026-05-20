@@ -145,9 +145,9 @@ Manages a directory of JSON pidfiles (`~/.local/share/vrunner/instances/<PID>.js
 
 | Component | Responsibility |
 |-----------|-------------|
-| `manager.rs` | `CommandManager`: owns `DashMap<CommandId, CommandHandle>`. Spawns, lists, kills. Injects `CommandLogger`. |
+| `manager.rs` | `CommandManager`: owns `DashMap<CommandId, CommandHandle>`. Spawns, lists, kills, freezes, thaws. Injects `CommandLogger`. Manages named VTTY buffer snapshots with metadata. Implements the incremental diff protocol for WebSocket streaming via `spawn_diff_watcher()`. |
 | `spawner.rs` | Platform-specific PTY creation via `portable-pty`. Uses `mpsc::channel` bridge between synchronous PTY reads and async VTTY writes — a blocking thread reads from the PTY and sends chunks through the channel, while a single async receiver task feeds them to the VTTY emulator. |
-| `handle.rs` | `CommandHandle`: per-command state (ID, PID, name, VTTY reference). |
+| `handle.rs` | `CommandHandle`: per-command state (ID, PID, name, args, VTTY reference, spawn time). Provides synchronous and asynchronous buffer snapshot methods, process liveness checks, and wall-clock runtime tracking. |
 
 ### 3.10 VTTY Emulator (`src/vtty/`)
 
@@ -155,7 +155,7 @@ Manages a directory of JSON pidfiles (`~/.local/share/vrunner/instances/<PID>.js
 |-----------|-------------|
 | `emulator.rs` | Terminal state machine supporting cursor movement, erase operations, scroll, SGR attributes (16/256/truecolor), DEC private modes, alternate screen, save/restore cursor, scroll regions. |
 | `parser.rs` | Streaming ANSI parser with state machine (CSI, OSC, DCS, simple escapes). |
-| `buffer.rs` | 2D cell grid with scrollback, insert/delete lines/cells, clear operations. |
+| `buffer.rs` | 2D cell grid with scrollback, insert/delete lines/cells, clear operations, and cell-level diff computation. `Buffer::diff()` compares two buffers and returns a `BufferDiff` containing only changed cells (character, colors, and text attributes). |
 | `renderer.rs` | Serialize buffer to ANSI, HTML, or plain text. |
 | `display.rs` | `TerminalDisplay`: renders the buffer to the local terminal using `crossterm` (only when `--display` is active). |
 
@@ -186,10 +186,18 @@ Extensible file descriptor routing.
 pub fn create_router(state: AppState) -> Router {
     Router::new()
         .route("/api/commands", get(list_commands).post(start_command))
+        .route("/api/commands/kill-pid/{pid}", post(kill_command_by_pid))
         .route("/api/commands/:id/keys", post(send_keys))
         .route("/api/commands/:id/kill", post(kill_command))
+        .route("/api/commands/:id/freeze", post(freeze_command))
+        .route("/api/commands/:id/thaw", post(thaw_command))
         .route("/api/commands/:id/vtty", get(get_vtty_full))
+        .route("/api/commands/:id/vtty/html", get(get_vtty_html))
         .route("/api/commands/:id/vtty/partial", get(get_vtty_partial))
+        .route("/api/commands/:id/snapshot", post(snapshot_command))
+        .route("/api/commands/:id/snapshots", get(list_snapshots))
+        .route("/api/commands/:id/diff", post(diff_command))
+        .route("/api/commands/:id/snapshots/{name}", delete(delete_snapshot))
         .route("/api/commands/:id/handles", get(list_handles).post(add_handle))
         .route("/api/shutdown", post(shutdown))
         .route("/admin", get(admin_page))
@@ -200,9 +208,34 @@ pub fn create_router(state: AppState) -> Router {
 
 ### 3.13 Admin Interface (`static/admin/`)
 
-Lightweight SPA served from embedded assets. Communicates with the REST API.
+Lightweight SPA served from embedded assets. Communicates with the REST API and WebSocket endpoints. Features include real-time VTTY viewing via the incremental diff WebSocket protocol, Pause/Run controls for freeze/thaw, 1-second HTTP polling fallback, auto-selection of the first available command, and a responsive topbar layout.
 
-### 3.14 Certificate System (`src/web/certs.rs`)
+### 3.14 Incremental VTTY Diff Protocol
+
+The WebSocket VTTY streaming uses an incremental diff protocol to minimize bandwidth. The protocol operates in three layers:
+
+**Server-side diff computation (`CommandManager::spawn_diff_watcher`):**
+1. A background task polls the VTTY buffer every 200ms for each running command.
+2. It clones the current buffer and compares it against the last-sent buffer using `Buffer::diff()`.
+3. The diff comparison checks dimensions first (if dimensions changed, all cells are considered changed). For same-dimension buffers, it compares each cell's character, foreground/background RGB, and text attributes.
+4. Only if cells have actually changed does it serialize a `vtty_diff` JSON message with the cell list and broadcast it.
+5. When no previous buffer exists (first poll after connect), it sends a `vtty_full` message with the complete HTML.
+6. If the broadcast receiver falls behind (lag), a full `vtty_full` resynchronization message is sent automatically.
+
+**Client-side handling (admin SPA):**
+1. On receiving `vtty_full`, the complete HTML is rendered directly.
+2. On receiving `vtty_diff`, the client triggers an HTTP full-refresh to ensure correct rendering while still benefiting from the server-side optimization of only sending diffs when the buffer actually changes.
+
+**Data structures:**
+- `CellDiff`: A single changed cell with row, column, character, RGB colors, and text attribute flags.
+- `BufferDiff`: Contains width, height, total changed count, and a vector of `CellDiff` entries.
+- `StoredSnapshot`: A named VTTY buffer snapshot with `SnapshotMeta` (name, command info, PID, timestamp, runtime).
+
+### 3.15 Snapshot and Diff System
+
+The command manager maintains an in-memory store of named VTTY buffer snapshots using `DashMap<(CommandId, String), StoredSnapshot>`. Snapshots are created via `POST /api/commands/:id/snapshot`, listed via `GET /api/commands/:id/snapshots`, compared against the current buffer via `POST /api/commands/:id/diff`, and deleted via `DELETE /api/commands/:id/snapshots/:name`. All snapshots for a command are automatically cleaned up when the command is killed.
+
+### 3.16 Certificate System (`src/web/certs.rs`)
 
 The certificate system provides a pool of named certificates that can be bound to individual commands for per-command access control.
 

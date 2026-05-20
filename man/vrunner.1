@@ -276,11 +276,17 @@ The built-in web admin dashboard is available at \fB/admin\fR on the running ins
 .PP
 The admin interface provides:
 .IP \(bu 4
-A list of all running commands with their status and certificate bindings
+A list of all running commands with their status, arguments, and certificate bindings
 .IP \(bu 4
-A VTTY viewer that renders terminal output in the browser
+A VTTY viewer that renders terminal output in the browser using the incremental diff WebSocket protocol
+.IP \(bu 4
+A Pause/Run button to freeze (SIGSTOP) and thaw (SIGCONT) the selected command
 .IP \(bu 4
 Controls for spawning new commands, sending keystrokes, and killing commands
+.IP \(bu 4
+Auto-selection of the first available command on load
+.IP \(bu 4
+1-second HTTP polling fallback when WebSocket is unavailable
 .IP \(bu 4
 A log viewer with search and pagination
 .RE
@@ -330,6 +336,26 @@ List output handles attached to a command.
 .TP
 .B POST /api/commands/:id/handles
 Add an output handle to a command.
+
+.TP
+.B POST /api/commands/kill-pid/:pid
+Kill a running command by its OS process ID (as opposed to command UUID).
+
+.TP
+.B POST /api/commands/:id/snapshot
+Store a named snapshot of the command's VTTY buffer. Body: \fB{"name": "snapshot-name"}\fR. Returns snapshot metadata including timestamp and runtime.
+
+.TP
+.B GET /api/commands/:id/snapshots
+List all stored snapshots for a command.
+
+.TP
+.B POST /api/commands/:id/diff
+Compute a cell-level diff of the current buffer against a stored snapshot. Body: \fB{"name": "snapshot-name"}\fR. Returns the list of changed cells.
+
+.TP
+.B DELETE /api/commands/:id/snapshots/:name
+Delete a stored snapshot.
 
 .TP
 .B GET /api/certificates
