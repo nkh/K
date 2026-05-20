@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State, Query},
+    extract::{Path, State},
     Json,
 };
 use serde_json::Value;

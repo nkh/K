@@ -116,7 +116,7 @@ impl CommandManager {
 
                 // Check if anything changed by comparing to the last sent buffer
                 let prev = last_buf_map.get(&watch_id);
-                let has_changed = match prev {
+                let has_changed = match &prev {
                     Some(p) => {
                         let p = p.value();
                         p.width != current_buffer.width
@@ -324,8 +324,8 @@ impl CommandManager {
     pub fn list_snapshots(&self, id: &CommandId) -> Vec<SnapshotMeta> {
         self.snapshots
             .iter()
-            .filter(|k, _| k.0 == *id)
-            .map(|_, v| v.meta.clone())
+            .filter(|e| e.key().0 == *id)
+            .map(|e| e.value().meta.clone())
             .collect()
     }
 
@@ -333,7 +333,7 @@ impl CommandManager {
     pub fn list_all_snapshots(&self) -> Vec<SnapshotMeta> {
         self.snapshots
             .iter()
-            .map(|_, v| v.meta.clone())
+            .map(|e| e.value().meta.clone())
             .collect()
     }
 
