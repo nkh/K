@@ -613,7 +613,7 @@ async fn handle_thaw_command(cli: &Cli, id: &str) -> Result<()> {
 
 /// Handle the `vrunner list` subcommand.
 /// Queries all running instances and shows their commands with arguments.
-async fn handle_list_command(cli: &Cli) -> Result<()> {
+async fn handle_list_command(_cli: &Cli) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let instances = registry.list_instances();
 
@@ -656,22 +656,22 @@ async fn handle_list_command(cli: &Cli) -> Result<()> {
                                     } else {
                                         format!(" {:?}", args)
                                     };
-                                    let pid = cmd["pid"].as_u64().unwrap_or(0);
-                                    let id_short = cmd["id"].as_str()
+                                    let _pid = cmd["pid"].as_u64().unwrap_or(0);
+                                    let _id_short = cmd["id"].as_str()
                                         .map(|id| &id[..8])
                                         .unwrap_or("?");
                                     let cert = cmd["certificate"].as_str();
 
                                     let line = if i == 0 {
-                                        format!("{:<10} {:<8} {:<20} {:<10} {:<10} {} -> {}{} [{}]{}",
+                                        format!("{:<10} {:<8} {:<20} {:<10} {:<10} {} -> {}{} [{}]",
                                             info.pid, info.port, info.bind, daemon, label,
                                             cmd_str, name, args_str,
-                                            cert.unwrap_or("-"),
+                                            cert.unwrap_or("-"))
                                     } else {
-                                        format!("{:<10} {:<8} {:<20} {:<10} {:<10}     {}{}{}",
+                                        format!("{:<10} {:<8} {:<20} {:<10} {:<10}     {}{}{} [{}]",
                                             "", "", "", "", "",
                                             cmd_str, name, args_str,
-                                            cert.unwrap_or("-")),
+                                            cert.unwrap_or("-"))
                                     };
                                     println!("{}", line);
                                 }
@@ -700,7 +700,7 @@ async fn handle_list_command(cli: &Cli) -> Result<()> {
 
 /// Try to stop a specific command by PID on any running instance.
 /// Returns true if the command was found and stopped, false otherwise.
-async fn handle_stop_command_by_pid(cli: &Cli, pid: u32) -> Result<bool> {
+async fn handle_stop_command_by_pid(_cli: &Cli, pid: u32) -> Result<bool> {
     let registry = InstanceRegistry::new()?;
     let instances = registry.list_instances();
 
