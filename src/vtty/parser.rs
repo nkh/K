@@ -182,7 +182,9 @@ impl AnsiParser {
                             self.reset_to_ground();
                         }
                         0x1b => {
-                            // Potential ST start, store and check next byte
+                            // Potential ST (String Terminator) start — ESC
+                            // Push to buffer so the next byte can detect ESC + "\"
+                            self.buffer.push(byte);
                         }
                         _ => {
                             if self.buffer.ends_with(&[0x1b]) && byte == b'\\' {
@@ -198,20 +200,74 @@ impl AnsiParser {
                 ParseState::DcsEntry => {
                     match byte {
                         0x30..=0x39 | b';' | b':' => {
+                            // Parse the first parameter byte before transitioning
+                            if byte.is_ascii_digit() {
+                                if let Some(last) = self.current_param.last_mut() {
+                                    *last = (*last * 10) + ((byte - b'0') as u16);
+                                } else {
+                                    self.current_param.push((byte - b'0') as u16);
+                                }
+                            } else if byte == b';' {
+                                if self.current_param.is_empty() {
+                                    self.csi_params.push(vec![0]);
+                                } else {
+                                    self.csi_params.push(self.current_param.clone());
+                                    self.current_param.clear();
+                                }
+                            } else if byte == b':' {
+                                self.current_param.push(0);
+                            }
                             self.state = ParseState::DcsParam;
                         }
                         0x20..=0x2f => { self.state = ParseState::DcsIntermediate; }
                         0x40..=0x7e => { self.state = ParseState::DcsString; }
+                        0x3c..=0x3f => {
+                            self.intermediate.push(byte);
+                        }
                         _ => { self.reset_to_ground(); }
                     }
                 }
 
                 ParseState::DcsParam | ParseState::DcsIntermediate => {
-                    if let 0x40..=0x7e = byte { self.state = ParseState::DcsString; }
+                    match byte {
+                        0x30..=0x39 => {
+                            if let Some(last) = self.current_param.last_mut() {
+                                *last = (*last * 10) + ((byte - b'0') as u16);
+                            } else {
+                                self.current_param.push((byte - b'0') as u16);
+                            }
+                        }
+                        b';' => {
+                            if self.current_param.is_empty() {
+                                self.csi_params.push(vec![0]);
+                            } else {
+                                self.csi_params.push(self.current_param.clone());
+                                self.current_param.clear();
+                            }
+                        }
+                        b':' => {
+                            self.current_param.push(0);
+                        }
+                        0x40..=0x7e => {
+                            // Flush any pending parameter, then transition to DcsString
+                            self.flush_csi_param();
+                            tokens.push(AnsiToken::Dcs {
+                                params: self.csi_params.clone(),
+                                intermediate: self.intermediate.clone(),
+                                final_byte: byte,
+                                data: self.string_content.clone(),
+                            });
+                            self.reset_to_ground();
+                        }
+                        0x20..=0x2f => { self.intermediate.push(byte); }
+                        _ => { self.reset_to_ground(); }
+                    }
                 }
 
                 ParseState::DcsString => {
                     if byte == 0x1b {
+                        // Potential ST start — store for detection
+                        self.buffer.push(byte);
                     } else if self.buffer.ends_with(&[0x1b]) && byte == b'\\' {
                         tokens.push(AnsiToken::Dcs {
                             params: self.csi_params.clone(),
@@ -227,6 +283,8 @@ impl AnsiParser {
 
                 ParseState::String => {
                     if byte == 0x1b {
+                        // Potential ST start — store for detection
+                        self.buffer.push(byte);
                     } else if self.buffer.ends_with(&[0x1b]) && byte == b'\\' {
                         self.reset_to_ground();
                     }

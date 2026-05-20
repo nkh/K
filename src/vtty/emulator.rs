@@ -82,6 +82,10 @@ pub struct VttyEmulator {
     origin_mode: bool,
     scroll_top: usize,
     scroll_bottom: usize,
+    /// When true, the cursor is at the last column and a wrap to the
+    /// next line is pending.  The wrap is executed when the next
+    /// printable character is written (VT100 deferred-wrap semantics).
+    wrap_pending: bool,
 }
 
 impl VttyEmulator {
@@ -108,6 +112,7 @@ impl VttyEmulator {
             origin_mode: false,
             scroll_top: 0,
             scroll_bottom: rows.saturating_sub(1),
+            wrap_pending: false,
         }
     }
 
@@ -144,19 +149,32 @@ impl VttyEmulator {
     fn write_char(&mut self, ch: char) {
         if ch == '\r' {
             self.cursor_col = 0;
+            self.wrap_pending = false;
             return;
         }
         if ch == '\n' {
             // LF: move cursor down only (no carriage return).
             // Programs that want CR+LF send \r\n explicitly.
+            self.wrap_pending = false;
             self.cursor_row += 1;
             self.check_scroll();
             return;
         }
         if ch == '\t' {
+            self.wrap_pending = false;
             let next_tab = ((self.cursor_col / 8) + 1) * 8;
             self.cursor_col = next_tab.min(self.cols.saturating_sub(1));
             return;
+        }
+
+        // VT100 deferred wrap: if a previous character left us at the
+        // right margin with wrap_pending, advance to the next line now
+        // before writing the new character.
+        if self.wrap_pending {
+            self.wrap_pending = false;
+            self.cursor_col = 0;
+            self.cursor_row += 1;
+            self.check_scroll();
         }
 
         {
@@ -170,12 +188,16 @@ impl VttyEmulator {
             }
         } // Drop the write guard before touching self again
 
+        // Advance cursor.  If we land exactly at cols (one past the last
+        // column), stay put but set wrap_pending so the next printable
+        // character triggers the wrap.
         self.cursor_col += 1;
         if self.cursor_col >= self.cols {
             if self.auto_wrap {
-                self.cursor_col = 0;
-                self.cursor_row += 1;
-                self.check_scroll();
+                self.wrap_pending = true;
+                // Keep cursor_col at cols-1 (the last column) visually;
+                // the pending flag ensures the next char wraps.
+                self.cursor_col = self.cols.saturating_sub(1);
             } else {
                 self.cursor_col = self.cols.saturating_sub(1);
             }
@@ -187,17 +209,23 @@ impl VttyEmulator {
             0x07 => {}
             0x08 if self.cursor_col > 0 => {
                 self.cursor_col -= 1;
+                self.wrap_pending = false;
             }
             0x09 => {
+                self.wrap_pending = false;
                 let next_tab = ((self.cursor_col / 8) + 1) * 8;
                 self.cursor_col = next_tab.min(self.cols.saturating_sub(1));
             }
             0x0a..=0x0c => {
                 // LF/VT/FF: move cursor down only (no carriage return).
+                self.wrap_pending = false;
                 self.cursor_row += 1;
                 self.check_scroll();
             }
-            0x0d => { self.cursor_col = 0; }
+            0x0d => {
+                self.cursor_col = 0;
+                self.wrap_pending = false;
+            }
             _ => {}
         }
     }
@@ -214,42 +242,82 @@ impl VttyEmulator {
             (param(idx, default as u16) as usize).saturating_sub(1)
         };
 
+        // Any explicit cursor-movement sequence clears the wrap-pending flag.
+        let mut clear_wrap = || { self.wrap_pending = false; };
+
         match final_byte {
             b'H' | b'f' => {
+                clear_wrap();
                 let row = param_1based(0, 1);
                 let col = param_1based(1, 1);
-                self.cursor_row = row.min(self.rows.saturating_sub(1));
+                if self.origin_mode {
+                    self.cursor_row = (self.scroll_top + row).min(self.scroll_bottom);
+                } else {
+                    self.cursor_row = row.min(self.rows.saturating_sub(1));
+                }
                 self.cursor_col = col.min(self.cols.saturating_sub(1));
             }
             b'A' => {
+                clear_wrap();
                 let n = param(0, 1) as usize;
                 self.cursor_row = self.cursor_row.saturating_sub(n);
             }
             b'B' => {
+                clear_wrap();
                 let n = param(0, 1) as usize;
                 self.cursor_row = (self.cursor_row + n).min(self.rows.saturating_sub(1));
             }
             b'C' => {
+                clear_wrap();
                 let n = param(0, 1) as usize;
                 self.cursor_col = (self.cursor_col + n).min(self.cols.saturating_sub(1));
             }
             b'D' => {
+                clear_wrap();
                 let n = param(0, 1) as usize;
                 self.cursor_col = self.cursor_col.saturating_sub(n);
             }
             b'E' => {
+                clear_wrap();
                 let n = param(0, 1) as usize;
                 self.cursor_row = (self.cursor_row + n).min(self.rows.saturating_sub(1));
                 self.cursor_col = 0;
             }
             b'F' => {
+                clear_wrap();
                 let n = param(0, 1) as usize;
                 self.cursor_row = self.cursor_row.saturating_sub(n);
                 self.cursor_col = 0;
             }
             b'G' => {
+                clear_wrap();
                 let col = param_1based(0, 1);
                 self.cursor_col = col.min(self.cols.saturating_sub(1));
+            }
+            b'd' => {
+                // CSI n d — Vertical Position Absolute (VPA)
+                // Move cursor to row n (1-based), column unchanged.
+                clear_wrap();
+                let row = param_1based(0, 1);
+                if self.origin_mode {
+                    self.cursor_row = (self.scroll_top + row).min(self.scroll_bottom);
+                } else {
+                    self.cursor_row = row.min(self.rows.saturating_sub(1));
+                }
+            }
+            b'X' => {
+                // CSI n X — Erase Characters (ECH)
+                // Erase n characters starting at cursor (overwrites with spaces
+                // using current attributes).  Cursor does not move.
+                let n = param(0, 1) as usize;
+                let mut buf = self.buffer.write();
+                for i in 0..n {
+                    let col = self.cursor_col + i;
+                    if col < self.cols {
+                        let cell = self.attrs.make_cell(' ');
+                        buf.set(self.cursor_row, col, cell);
+                    }
+                }
             }
             b'J' => {
                 let mode = param(0, 0);
@@ -259,10 +327,6 @@ impl VttyEmulator {
                     1 => buf.clear_screen_to(self.cursor_row, self.cursor_col),
                     2 | 3 => buf.clear_all(),
                     _ => {}
-                }
-                // After erasing, clamp cursor to scroll region
-                if mode == 0 {
-                    // Cursor stays, but content from cursor to scroll_bottom is cleared
                 }
             }
             b'K' => {
@@ -276,11 +340,13 @@ impl VttyEmulator {
                 }
             }
             b'L' => {
+                clear_wrap();
                 let n = param(0, 1) as usize;
                 let mut buf = self.buffer.write();
                 for _ in 0..n { buf.insert_line(self.cursor_row, Some(self.scroll_bottom)); }
             }
             b'M' => {
+                clear_wrap();
                 let n = param(0, 1) as usize;
                 let mut buf = self.buffer.write();
                 for _ in 0..n { buf.delete_line(self.cursor_row, Some(self.scroll_bottom)); }
@@ -306,6 +372,24 @@ impl VttyEmulator {
                 for _ in 0..n { buf.scroll_region_down(self.scroll_top, self.scroll_bottom); }
             }
             b'm' => { self.process_sgr(&params); }
+            b's' => {
+                // CSI s — Save cursor position (ANSI.SYS / SGR-like)
+                clear_wrap();
+                self.saved_cursor = Some(SavedCursor {
+                    row: self.cursor_row,
+                    col: self.cursor_col,
+                    attrs: self.attrs,
+                });
+            }
+            b'u' => {
+                // CSI u — Restore cursor position (ANSI.SYS / SGR-like)
+                if let Some(saved) = self.saved_cursor {
+                    self.cursor_row = saved.row.min(self.rows.saturating_sub(1));
+                    self.cursor_col = saved.col.min(self.cols.saturating_sub(1));
+                    self.attrs = saved.attrs;
+                    self.wrap_pending = false;
+                }
+            }
             b'h' if intermediate.first() == Some(&b'?') => {
                     self.process_dec_private_mode(&params, true);
             }
@@ -500,6 +584,7 @@ impl VttyEmulator {
         self.origin_mode = false;
         self.scroll_top = 0;
         self.scroll_bottom = self.rows.saturating_sub(1);
+        self.wrap_pending = false;
         {
             let mut buf = self.buffer.write();
             buf.clear_all();
@@ -652,8 +737,12 @@ mod tests {
     fn test_newline() {
         let mut emu = VttyEmulator::new(10, 10, 100);
         emu.feed_str("Hello\nWorld");
-        // LF moves to row 1 col 5, "World" fills cols 5-9, then auto-wraps to (2, 0)
-        assert_eq!(emu.cursor(), (2, 0));
+        // LF moves to row 1 col 5, "World" fills cols 5-9.
+        // With deferred wrap, after writing 'd' at col 9 the cursor stays
+        // at (1, 9) with wrap_pending.  It only wraps when the next char
+        // is actually written.
+        assert_eq!(emu.cursor(), (1, 9));
+        assert!(emu.wrap_pending);
         let buf = emu.buffer();
         assert_eq!(buf.rows[0][0].ch, 'H');
         assert_eq!(buf.rows[1][5].ch, 'W');
@@ -786,5 +875,102 @@ mod tests {
         assert_eq!(emu.dimensions(), (5, 5));
         let buf = emu.buffer();
         assert_eq!(buf.rows[0][0].ch, 'H');
+    }
+
+    #[test]
+    fn test_wrap_pending_defers_wrap() {
+        // Deferred wrap: cursor stays at last column until next char is written.
+        let mut emu = VttyEmulator::new(5, 5, 100);
+        emu.feed_str("ABCDE"); // Fill row 0
+        assert_eq!(emu.cursor(), (0, 4)); // cursor at last col
+        assert!(emu.wrap_pending);
+    }
+
+    #[test]
+    fn test_wrap_pending_triggers_on_next_char() {
+        let mut emu = VttyEmulator::new(5, 5, 100);
+        emu.feed_str("ABCDEF"); // Fill row 0 + first char of row 1
+        assert_eq!(emu.cursor(), (1, 1)); // 'F' wraps to row 1
+        let buf = emu.buffer();
+        assert_eq!(buf.rows[0][4].ch, 'E');
+        assert_eq!(buf.rows[1][0].ch, 'F');
+    }
+
+    #[test]
+    fn test_wrap_pending_cleared_by_csi_k() {
+        // Programs commonly write to last column then use CSI K to clear
+        // the rest of the line.  With deferred wrap, the cursor should
+        // still be on the same row so CSI K clears the right line.
+        let mut emu = VttyEmulator::new(5, 5, 100);
+        emu.feed_str("ABCDE"); // Fill cols 0-4, wrap_pending
+        assert_eq!(emu.cursor(), (0, 4));
+        assert!(emu.wrap_pending);
+
+        // CSI K should clear from cursor position to end of line 0.
+        // Since cursor is at (0, 4), only col 4 gets cleared.
+        emu.feed_str("\x1b[K");
+        let buf = emu.buffer();
+        assert_eq!(buf.rows[0][3].ch, 'D'); // Not cleared
+        assert_eq!(buf.rows[0][4].ch, ' '); // Cleared by CSI K
+    }
+
+    #[test]
+    fn test_wrap_pending_cleared_by_cursor_move() {
+        let mut emu = VttyEmulator::new(5, 5, 100);
+        emu.feed_str("ABCDE"); // Fill row 0, wrap_pending
+        assert!(emu.wrap_pending);
+        // CSI H (cursor home) should clear wrap_pending
+        emu.feed_str("\x1b[H");
+        assert!(!emu.wrap_pending);
+        assert_eq!(emu.cursor(), (0, 0));
+    }
+
+    #[test]
+    fn test_erase_characters() {
+        // CSI 3 X — erase 3 characters at cursor, cursor doesn't move
+        let mut emu = VttyEmulator::new(5, 10, 100);
+        emu.feed_str("ABCDEFGH");
+        emu.feed_str("\x1b[2;3H"); // Move to row 2, col 3
+        emu.feed_str("\x1b[31m");   // Set red foreground
+        emu.feed_str("XYZ");         // Write red XYZ at (1, 2), (1, 3), (1, 4)
+        emu.feed_str("\x1b[2;4H"); // Move back to (1, 3)
+        emu.feed_str("\x1b[2X");    // Erase 2 chars at cursor (Y, Z become spaces)
+        let buf = emu.buffer();
+        assert_eq!(buf.rows[1][2].ch, 'X'); // Unaffected
+        assert_eq!(buf.rows[1][3].ch, ' '); // Erased
+        assert_eq!(buf.rows[1][4].ch, ' '); // Erased
+        // Cursor should NOT have moved
+        assert_eq!(emu.cursor(), (1, 3));
+    }
+
+    #[test]
+    fn test_vpa_vertical_position() {
+        // CSI 3 d — move cursor to row 3 (1-based), column unchanged
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed_str("\x1b[5;5H"); // Move to (4, 4)
+        emu.feed_str("\x1b[2d");    // Move to row 2 (1-based) = (1, _), column stays 4
+        assert_eq!(emu.cursor(), (1, 4));
+    }
+
+    #[test]
+    fn test_csi_s_u_save_restore_cursor() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed_str("\x1b[3;5H");     // Move to (2, 4)
+        emu.feed_str("\x1b[31m");      // Red
+        emu.feed_str("X");             // Write a red 'X' at (2, 4), cursor now at (2, 5)
+        emu.feed_str("\x1b[s");         // Save cursor at (2, 5) with red attrs
+        emu.feed_str("\x1b[1;1H");     // Move to (0, 0)
+        emu.feed_str("\x1b[32m");      // Green
+        emu.feed_str("G");             // Write a green 'G' at (0, 0)
+        emu.feed_str("\x1b[u");         // Restore cursor to (2, 5) with red attrs
+        assert_eq!(emu.cursor(), (2, 5));
+        emu.feed_str("Y");             // Write with restored red attrs at (2, 5)
+        let buf = emu.buffer();
+        // The 'X' at (2, 4) should be red
+        assert_eq!(buf.rows[2][4].fg, [170, 0, 0]);
+        // The 'Y' at (2, 5) should also be red (restored attrs)
+        assert_eq!(buf.rows[2][5].fg, [170, 0, 0]);
+        // The 'G' at (0, 0) should be green
+        assert_eq!(buf.rows[0][0].fg, [0, 170, 0]);
     }
 }
