@@ -146,8 +146,8 @@ async fn async_main(cli: Cli) -> Result<()> {
         ).await
     });
 
-    // Wait for server to finish
-    let _ = server_handle.await?;
+    // Wait for server to finish — propagate both JoinError and server errors
+    server_handle.await??;
 
     // Cleanup on exit
     registry.unregister_current()?;

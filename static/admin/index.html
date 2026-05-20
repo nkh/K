@@ -542,6 +542,11 @@ async function spawnCommand() {
         if (json.status === 'ok') {
             document.getElementById('spawnCmd').value = '';
             document.getElementById('spawnArgs').value = '';
+            // Auto-select the newly spawned command so its terminal output appears
+            const newId = json.data && json.data.id ? json.data.id : null;
+            if (newId) {
+                state.selectedCommandId = instUrl + ':' + newId;
+            }
             loadCommands();
         } else {
             alert('Spawn failed: ' + (json.error || 'unknown'));
@@ -722,7 +727,7 @@ function renderPanels() {
                     ${state.panels.length > 1 ? `<button class="small danger" onclick="removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
                 </div>
                 <div class="vtty-container" id="vtty-${panel.id}">
-                    <pre style="color:#484f58;">Connecting to ${escHtml(panel.label)}...</pre>
+                    <pre style="color:#484f58;">No command selected — spawn or select a command to view its output</pre>
                     <div class="cursor-indicator" style="display:none;"></div>
                 </div>
             </div>`;

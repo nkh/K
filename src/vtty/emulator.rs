@@ -145,7 +145,8 @@ impl VttyEmulator {
             return;
         }
         if ch == '\n' {
-            self.cursor_col = 0;
+            // LF: move cursor down only (no carriage return).
+            // Programs that want CR+LF send \r\n explicitly.
             self.cursor_row += 1;
             self.check_scroll();
             return;
@@ -190,7 +191,7 @@ impl VttyEmulator {
                 self.cursor_col = next_tab.min(self.cols.saturating_sub(1));
             }
             0x0a..=0x0c => {
-                self.cursor_col = 0;
+                // LF/VT/FF: move cursor down only (no carriage return).
                 self.cursor_row += 1;
                 self.check_scroll();
             }
@@ -200,9 +201,11 @@ impl VttyEmulator {
     }
 
     fn process_csi(&mut self, params: Vec<Vec<u16>>, intermediate: Vec<u8>, final_byte: u8) {
+        // ECMA-48: a parameter value of 0 or missing means "use default".
         let param = |idx: usize, default: u16| -> u16 {
             params.get(idx)
                 .and_then(|p| p.first().copied())
+                .map(|v| if v == 0 { default } else { v })
                 .unwrap_or(default)
         };
         let param_1based = |idx: usize, default: usize| -> usize {
@@ -609,8 +612,21 @@ mod tests {
     fn test_newline() {
         let mut emu = VttyEmulator::new(10, 10, 100);
         emu.feed_str("Hello\nWorld");
+        // LF moves to row 1 col 5, "World" fills cols 5-9, then auto-wraps to (2, 0)
+        assert_eq!(emu.cursor(), (2, 0));
+        let buf = emu.buffer();
+        assert_eq!(buf.rows[0][0].ch, 'H');
+        assert_eq!(buf.rows[1][5].ch, 'W');
+    }
+
+    #[test]
+    fn test_carriage_return_linefeed() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed_str("Hello\r\nWorld");
+        // \r resets column, \n moves down
         assert_eq!(emu.cursor(), (1, 5));
         let buf = emu.buffer();
+        assert_eq!(buf.rows[0][0].ch, 'H');
         assert_eq!(buf.rows[1][0].ch, 'W');
     }
 
@@ -651,8 +667,12 @@ mod tests {
     #[test]
     fn test_scroll() {
         let mut emu = VttyEmulator::new(3, 10, 100);
-        emu.feed_str("Line1\nLine2\nLine3\nLine4");
+        emu.feed_str("Line1\r\nLine2\r\nLine3\r\nLine4");
         let buf = emu.buffer();
+        // With CR+LF: each line starts at col 0, no wrapping.
+        // Line1 on row 0, Line2 on row 1, Line3 on row 2,
+        // \r\n moves to row 3 which triggers scroll → Line3 goes to scrollback.
+        // Line4 on row 2.
         assert_eq!(buf.scrollback.len(), 1);
         assert_eq!(buf.rows[0][0].ch, 'L');
         assert_eq!(buf.rows[2][0].ch, 'L');
@@ -663,13 +683,15 @@ mod tests {
         let mut emu = VttyEmulator::new(10, 10, 100);
         emu.feed_str("\x1b[5;5H");
         emu.feed_str("\x1b[31m");
-        emu.feed_str("\x1b7");
+        emu.feed_str("X");  // Write a character so the red color is applied to the cell
+        emu.feed_str("\x1b7");            // save cursor at (4, 5)
         emu.feed_str("\x1b[1;1H");
         emu.feed_str("\x1b[32m");
-        emu.feed_str("\x1b8");
-        assert_eq!(emu.cursor(), (4, 4));
+        emu.feed_str("\x1b8");            // restore cursor to (4, 5)
+        assert_eq!(emu.cursor(), (4, 5));
         let buf = emu.buffer();
         assert_eq!(buf.rows[4][4].fg, [170, 0, 0]);
+        assert_eq!(buf.rows[4][4].ch, 'X');
     }
 
     #[test]

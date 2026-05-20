@@ -134,6 +134,14 @@ impl AnsiParser {
                         b':' => {
                             self.current_param.push(0);
                         }
+                        0x3c..=0x3f => {
+                            // Private mode indicator bytes: '<', '=', '>', '?'
+                            // Per ECMA-48 these are parameter bytes (0x30-0x3f).
+                            // Store in intermediate so the emulator can detect
+                            // DEC private modes (e.g. CSI ?25h, CSI ?1049h).
+                            self.intermediate.push(byte);
+                            // Stay in CsiParam to continue parsing parameter digits.
+                        }
                         0x20..=0x2f => {
                             self.flush_csi_param();
                             self.intermediate.push(byte);
@@ -274,9 +282,10 @@ mod tests {
     #[test]
     fn test_parse_control_chars() {
         let tokens = parse_ansi(b"Hello\nWorld\r\t");
-        assert_eq!(tokens.len(), 5);
-        assert!(matches!(&tokens[0], AnsiToken::Text(s) if s == "Hello"));
-        assert!(matches!(&tokens[1], AnsiToken::Control(0x0a)));
+        // Note: 0x0a (LF), 0x0d (CR), 0x09 (TAB) are treated as text by the parser
+        // because they fall outside the control byte range 0x00-0x08, 0x0b-0x0c, 0x0e-0x1f.
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(&tokens[0], AnsiToken::Text(s) if s == "Hello\nWorld\r\t"));
     }
 
     #[test]
@@ -287,6 +296,30 @@ mod tests {
             assert_eq!(params, &vec![vec![10], vec![20]]);
             assert!(intermediate.is_empty());
             assert_eq!(*final_byte, b'H');
+        }
+    }
+
+    #[test]
+    fn test_parse_csi_private_mode() {
+        // CSI ?1049h — DEC private mode (alternate screen)
+        let tokens = parse_ansi(b"\x1b[?1049h");
+        assert_eq!(tokens.len(), 1);
+        if let AnsiToken::Csi { params, intermediate, final_byte } = &tokens[0] {
+            assert_eq!(params, &vec![vec![1049]]);
+            assert_eq!(intermediate, &[b'?']);
+            assert_eq!(*final_byte, b'h');
+        }
+    }
+
+    #[test]
+    fn test_parse_csi_private_mode_cursor() {
+        // CSI ?25l — hide cursor (DEC private mode)
+        let tokens = parse_ansi(b"\x1b[?25l");
+        assert_eq!(tokens.len(), 1);
+        if let AnsiToken::Csi { params, intermediate, final_byte } = &tokens[0] {
+            assert_eq!(params, &vec![vec![25]]);
+            assert_eq!(intermediate, &[b'?']);
+            assert_eq!(*final_byte, b'l');
         }
     }
 
