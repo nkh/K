@@ -118,20 +118,23 @@ async fn async_main(cli: Cli) -> Result<()> {
     // for the VTTY so that the child process (e.g. htop) formats its output
     // for the actual visible area.  However, if the user explicitly set
     // --vtty-rows or --vtty-cols on the command line, those take precedence.
+    //
+    // We use a robust multi-method detection:
+    //   1. ioctl(TIOCGWINSZ) on /dev/tty (most reliable on Unix)
+    //   2. ioctl(TIOCGWINSZ) on stdout (crossterm's approach)
+    //   3. COLUMNS/LINES env vars as last resort
     if cfg.display.enabled {
-        match crossterm::terminal::size() {
-            Ok((rows, cols)) => {
-                tracing::info!(rows, cols, "Detected terminal size for display mode");
-                if cli.vtty_rows.is_none() {
-                    cfg.vtty.rows = rows;
-                }
-                if cli.vtty_cols.is_none() {
-                    cfg.vtty.cols = cols;
-                }
+        let detected = detect_terminal_size();
+        if let Some((rows, cols)) = detected {
+            tracing::info!(rows, cols, method = "multi", "Detected terminal size for display mode");
+            if cli.vtty_rows.is_none() {
+                cfg.vtty.rows = rows;
             }
-            Err(e) => {
-                tracing::warn!(error = %e, "Failed to detect terminal size, using config defaults");
+            if cli.vtty_cols.is_none() {
+                cfg.vtty.cols = cols;
             }
+        } else {
+            tracing::warn!("Failed to detect terminal size, using config defaults");
         }
     }
 
@@ -375,6 +378,70 @@ async fn wait_for_child(manager: &Arc<CommandManager>, id: &str) {
             return;
         }
     }
+}
+
+/// Detect the terminal size using multiple methods, returning the most
+/// reliable result.  Tries /dev/tty first (always the controlling terminal),
+/// then stdout, then COLUMNS/LINES environment variables.
+#[cfg(unix)]
+fn detect_terminal_size() -> Option<(u16, u16)> {
+    use std::fs::File;
+    use std::os::fd::AsRawFd;
+
+    // Method 1: ioctl(TIOCGWINSZ) on /dev/tty — the controlling terminal.
+    // This is the most reliable method because /dev/tty always refers to the
+    // controlling terminal even if stdout has been redirected.
+    if let Ok(tty) = File::open("/dev/tty") {
+        let fd = tty.as_raw_fd();
+        let mut size: libc::winsize = unsafe { std::mem::zeroed() };
+        if unsafe { libc::ioctl(fd, libc::TIOCGWINSZ, &mut size) } == 0 {
+            let rows = size.ws_row;
+            let cols = size.ws_col;
+            if rows > 0 && cols > 0 {
+                tracing::debug!(
+                    rows, cols, method = "/dev/tty",
+                    "Terminal size from /dev/tty"
+                );
+                return Some((rows, cols));
+            }
+        }
+    }
+
+    // Method 2: crossterm on stdout (uses ioctl on stdout fd).
+    // This works when stdout is directly connected to a terminal.
+    if let Ok((rows, cols)) = crossterm::terminal::size() {
+        if rows > 0 && cols > 0 {
+            tracing::debug!(
+                rows, cols, method = "crossterm",
+                "Terminal size from crossterm (stdout)"
+            );
+            return Some((rows, cols));
+        }
+    }
+
+    // Method 3: COLUMNS / LINES environment variables.
+    if let (Ok(cols_str), Ok(rows_str)) = (
+        std::env::var("COLUMNS"),
+        std::env::var("LINES"),
+    ) {
+        if let (Ok(cols), Ok(rows)) = (cols_str.parse::<u16>(), rows_str.parse::<u16>()) {
+            if rows > 0 && cols > 0 {
+                tracing::debug!(
+                    rows, cols, method = "env",
+                    "Terminal size from COLUMNS/LINES env vars"
+                );
+                return Some((rows, cols));
+            }
+        }
+    }
+
+    tracing::warn!("All terminal size detection methods failed");
+    None
+}
+
+#[cfg(not(unix))]
+fn detect_terminal_size() -> Option<(u16, u16)> {
+    crossterm::terminal::size().ok()
 }
 
 fn main() -> Result<()> {

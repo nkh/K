@@ -310,32 +310,34 @@ impl VttyEmulator {
                 // Erase n characters starting at cursor (overwrites with spaces
                 // using current attributes).  Cursor does not move.
                 let n = param(0, 1) as usize;
+                let blank = self.attrs.make_cell(' ');
                 let mut buf = self.buffer.write();
                 for i in 0..n {
                     let col = self.cursor_col + i;
                     if col < self.cols {
-                        let cell = self.attrs.make_cell(' ');
-                        buf.set(self.cursor_row, col, cell);
+                        buf.set(self.cursor_row, col, blank);
                     }
                 }
             }
             b'J' => {
                 let mode = param(0, 0);
+                let blank = self.attrs.make_cell(' ');
                 let mut buf = self.buffer.write();
                 match mode {
-                    0 => buf.clear_screen_from(self.cursor_row, self.cursor_col),
-                    1 => buf.clear_screen_to(self.cursor_row, self.cursor_col),
-                    2 | 3 => buf.clear_all(),
+                    0 => buf.clear_screen_from_with(self.cursor_row, self.cursor_col, &blank),
+                    1 => buf.clear_screen_to_with(self.cursor_row, self.cursor_col, &blank),
+                    2 | 3 => buf.clear_all_with(&blank),
                     _ => {}
                 }
             }
             b'K' => {
                 let mode = param(0, 0);
+                let blank = self.attrs.make_cell(' ');
                 let mut buf = self.buffer.write();
                 match mode {
-                    0 => buf.clear_line_from(self.cursor_row, self.cursor_col),
-                    1 => buf.clear_line_to(self.cursor_row, self.cursor_col),
-                    2 => buf.clear_line(self.cursor_row),
+                    0 => buf.clear_line_from_with(self.cursor_row, self.cursor_col, &blank),
+                    1 => buf.clear_line_to_with(self.cursor_row, self.cursor_col, &blank),
+                    2 => buf.clear_line_with(self.cursor_row, &blank),
                     _ => {}
                 }
             }

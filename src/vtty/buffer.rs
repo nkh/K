@@ -43,6 +43,7 @@ impl Buffer {
         }
     }
 
+    /// Clear the entire buffer to default cells.
     pub fn clear_all(&mut self) {
         for row in &mut self.rows {
             for cell in row {
@@ -51,6 +52,18 @@ impl Buffer {
         }
     }
 
+    /// Clear the entire buffer using a template cell (respects current SGR attributes).
+    /// The template's character is replaced with a space.
+    pub fn clear_all_with(&mut self, template: &Cell) {
+        let blank = Cell { ch: ' ', ..*template };
+        for row in &mut self.rows {
+            for cell in row {
+                *cell = blank;
+            }
+        }
+    }
+
+    /// Clear from the given column to end of line.
     pub fn clear_line_from(&mut self, row: usize, col: usize) {
         if let Some(row_cells) = self.rows.get_mut(row) {
             for cell in row_cells.iter_mut().skip(col) {
@@ -59,6 +72,17 @@ impl Buffer {
         }
     }
 
+    /// Clear from the given column to end of line, using a template cell.
+    pub fn clear_line_from_with(&mut self, row: usize, col: usize, template: &Cell) {
+        if let Some(row_cells) = self.rows.get_mut(row) {
+            let blank = Cell { ch: ' ', ..*template };
+            for cell in row_cells.iter_mut().skip(col) {
+                *cell = blank;
+            }
+        }
+    }
+
+    /// Clear from the start of line to the given column (inclusive).
     pub fn clear_line_to(&mut self, row: usize, col: usize) {
         if let Some(row_cells) = self.rows.get_mut(row) {
             for cell in row_cells.iter_mut().take(col + 1) {
@@ -67,6 +91,17 @@ impl Buffer {
         }
     }
 
+    /// Clear from the start of line to the given column (inclusive), using a template cell.
+    pub fn clear_line_to_with(&mut self, row: usize, col: usize, template: &Cell) {
+        if let Some(row_cells) = self.rows.get_mut(row) {
+            let blank = Cell { ch: ' ', ..*template };
+            for cell in row_cells.iter_mut().take(col + 1) {
+                *cell = blank;
+            }
+        }
+    }
+
+    /// Clear an entire line.
     pub fn clear_line(&mut self, row: usize) {
         if let Some(row_cells) = self.rows.get_mut(row) {
             for cell in row_cells {
@@ -75,6 +110,17 @@ impl Buffer {
         }
     }
 
+    /// Clear an entire line, using a template cell.
+    pub fn clear_line_with(&mut self, row: usize, template: &Cell) {
+        if let Some(row_cells) = self.rows.get_mut(row) {
+            let blank = Cell { ch: ' ', ..*template };
+            for cell in row_cells {
+                *cell = blank;
+            }
+        }
+    }
+
+    /// Clear from (start_row, start_col) to end of screen.
     pub fn clear_screen_from(&mut self, start_row: usize, start_col: usize) {
         self.clear_line_from(start_row, start_col);
         for row in (start_row + 1)..self.height {
@@ -82,11 +128,28 @@ impl Buffer {
         }
     }
 
+    /// Clear from (start_row, start_col) to end of screen, using a template cell.
+    pub fn clear_screen_from_with(&mut self, start_row: usize, start_col: usize, template: &Cell) {
+        self.clear_line_from_with(start_row, start_col, template);
+        for row in (start_row + 1)..self.height {
+            self.clear_line_with(row, template);
+        }
+    }
+
+    /// Clear from start of screen to (end_row, end_col).
     pub fn clear_screen_to(&mut self, end_row: usize, end_col: usize) {
         for row in 0..end_row {
             self.clear_line(row);
         }
         self.clear_line_to(end_row, end_col);
+    }
+
+    /// Clear from start of screen to (end_row, end_col), using a template cell.
+    pub fn clear_screen_to_with(&mut self, end_row: usize, end_col: usize, template: &Cell) {
+        for row in 0..end_row {
+            self.clear_line_with(row, template);
+        }
+        self.clear_line_to_with(end_row, end_col, template);
     }
 
     /// Scroll the entire buffer up by one line.
@@ -370,6 +433,33 @@ mod tests {
         b.clear_screen_from(2, 5);
         assert_eq!(b.rows[2][5].ch, ' ');
         assert_eq!(b.rows[3][0].ch, ' ');
+    }
+
+    #[test]
+    fn test_buffer_clear_with_attrs() {
+        let mut b = Buffer::new(10, 5, 100);
+        b.rows[0][0].ch = 'X';
+        b.rows[0][0].fg = [255, 0, 0];
+        let template = Cell { ch: ' ', fg: [0, 128, 255], bg: [40, 40, 40], ..Default::default() };
+        b.clear_all_with(&template);
+        assert_eq!(b.rows[0][0].ch, ' ');
+        assert_eq!(b.rows[0][0].fg, [0, 128, 255]);
+        assert_eq!(b.rows[0][0].bg, [40, 40, 40]);
+        assert_eq!(b.rows[4][9].bg, [40, 40, 40]);
+    }
+
+    #[test]
+    fn test_buffer_clear_line_from_with() {
+        let mut b = Buffer::new(10, 3, 100);
+        b.rows[1][3].ch = 'A';
+        b.rows[1][7].ch = 'B';
+        let template = Cell { ch: ' ', bg: [10, 20, 30], ..Default::default() };
+        b.clear_line_from_with(1, 5, &template);
+        assert_eq!(b.rows[1][3].ch, 'A'); // before col 5: untouched
+        assert_eq!(b.rows[1][5].ch, ' '); // cleared
+        assert_eq!(b.rows[1][5].bg, [10, 20, 30]); // template bg
+        assert_eq!(b.rows[1][7].ch, ' '); // cleared
+        assert_eq!(b.rows[1][7].bg, [10, 20, 30]); // template bg
     }
 
     #[test]

@@ -39,6 +39,16 @@ impl TerminalDisplay {
     pub fn render(buffer: &Buffer) -> io::Result<()> {
         let mut stdout = stdout();
 
+        // Determine the physical terminal size and clamp to it.
+        // Even though we try to match the VTTY to the terminal, the user
+        // might resize the terminal between size detection and rendering,
+        // or there might be a slight mismatch.  Rendering beyond the
+        // physical screen causes unwanted scrolling which appears as
+        // inverted/wrapped content.
+        let (phys_rows, phys_cols) = crossterm::terminal::size().unwrap_or((buffer.height as u16, buffer.width as u16));
+        let render_rows = (buffer.rows.len() as u16).min(phys_rows) as usize;
+        let render_cols = (buffer.width as u16).min(phys_cols) as usize;
+
         // Clear screen and move to top-left
         stdout.queue(Clear(ClearType::All))?;
 
@@ -52,7 +62,7 @@ impl TerminalDisplay {
         let mut last_reverse = false;
         let mut last_strikethrough = false;
 
-        for (row_idx, row) in buffer.rows.iter().enumerate() {
+        for (row_idx, row) in buffer.rows.iter().enumerate().take(render_rows) {
             // Move to the start of each row — critical in raw mode
             // where \n does NOT reset the column to 0.
             stdout.queue(MoveTo(0, row_idx as u16))?;
@@ -60,13 +70,18 @@ impl TerminalDisplay {
             // Find the last non-default cell to avoid rendering trailing spaces.
             // Since Clear(All) blanked the screen, trailing defaults are already
             // correct and emitting them just wastes bandwidth.
-            let last_non_default = row.iter()
+            // Clamp the search to render_cols to avoid reading beyond the visible area.
+            let visible_row = &row[..render_cols.min(row.len())];
+            let last_non_default = visible_row.iter()
                 .rposition(|c| c != &DEFAULT_CELL);
 
             let render_end = match last_non_default {
                 Some(idx) => idx + 1,
                 None => continue, // Entire row is default — skip it
             };
+
+            // Clamp render_end to the visible columns
+            let render_end = render_end.min(render_cols);
 
             for cell in &row[..render_end] {
                 let is_default = *cell == DEFAULT_CELL;
