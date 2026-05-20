@@ -116,13 +116,18 @@ async fn async_main(cli: Cli) -> Result<()> {
 
     // When --display is enabled, detect the real terminal size and use it
     // for the VTTY so that the child process (e.g. htop) formats its output
-    // for the actual visible area.
+    // for the actual visible area.  However, if the user explicitly set
+    // --vtty-rows or --vtty-cols on the command line, those take precedence.
     if cfg.display.enabled {
         match crossterm::terminal::size() {
             Ok((rows, cols)) => {
                 tracing::info!(rows, cols, "Detected terminal size for display mode");
-                cfg.vtty.rows = rows;
-                cfg.vtty.cols = cols;
+                if cli.vtty_rows.is_none() {
+                    cfg.vtty.rows = rows;
+                }
+                if cli.vtty_cols.is_none() {
+                    cfg.vtty.cols = cols;
+                }
             }
             Err(e) => {
                 tracing::warn!(error = %e, "Failed to detect terminal size, using config defaults");
