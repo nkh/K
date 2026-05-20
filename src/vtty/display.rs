@@ -1,7 +1,7 @@
 use crossterm::{
     cursor::{self, MoveTo},
     style::{self, Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor, Attribute},
-    terminal::{Clear, ClearType},
+    terminal::ClearType,
     ExecutableCommand, QueueableCommand,
 };
 use std::io::{self, stdout, Write};
@@ -29,34 +29,24 @@ pub struct TerminalDisplay;
 impl TerminalDisplay {
     /// Render the buffer to stdout with full color support.
     ///
+    /// Every cell in the visible area is rendered explicitly to guarantee
+    /// that background colors are always correct, regardless of the
+    /// terminal's own default background color.  This avoids a class of
+    /// bugs where `Clear(All)` fills with the terminal's theme color
+    /// (e.g. solarized, transparent) while the VTTY expects [0,0,0].
+    ///
     /// Each row is explicitly positioned with MoveTo(0, row) to avoid
     /// cursor drift in raw mode, where \n moves down without returning
     /// to column 0.
-    ///
-    /// The renderer emits every cell in the visible area (up to render_cols)
-    /// to ensure that background colors are always correct.  Relying on
-    /// Clear(All) to fill background only works when the terminal's default
-    /// background matches the VTTY's default bg ([0,0,0]), which is not
-    /// guaranteed (e.g. solarized terminals, transparent terminals).
     pub fn render(buffer: &Buffer) -> io::Result<()> {
         let mut stdout = stdout();
 
         // Determine the physical terminal size and clamp to it.
-        // Even though we try to match the VTTY to the terminal, the user
-        // might resize the terminal between size detection and rendering,
-        // or there might be a slight mismatch.  Rendering beyond the
-        // physical screen causes unwanted scrolling which appears as
-        // inverted/wrapped content.
         // NOTE: crossterm::terminal::size() returns (columns, rows).
         let (phys_cols, phys_rows) = crossterm::terminal::size()
             .unwrap_or((buffer.width as u16, buffer.height as u16));
         let render_rows = (buffer.rows.len() as u16).min(phys_rows) as usize;
         let render_cols = (buffer.width as u16).min(phys_cols) as usize;
-
-        // Clear screen and move to top-left.
-        // This handles any area beyond the VTTY buffer (e.g. terminal wider
-        // than the VTTY) and resets leftover content from the previous frame.
-        stdout.queue(Clear(ClearType::All))?;
 
         // Track the last rendered style to avoid redundant SGR sequences.
         let mut last_fg: Option<[u8; 3]> = None;
@@ -68,10 +58,6 @@ impl TerminalDisplay {
         let mut last_reverse = false;
         let mut last_strikethrough = false;
 
-        // Reset style before starting so we start from a known state.
-        stdout.queue(ResetColor)?;
-        stdout.queue(style::SetAttribute(Attribute::Reset))?;
-
         for (row_idx, row) in buffer.rows.iter().enumerate().take(render_rows) {
             // Move to the start of each row — critical in raw mode
             // where \n does NOT reset the column to 0.
@@ -80,28 +66,33 @@ impl TerminalDisplay {
             // Clamp the visible portion to the physical terminal width.
             let visible_len = render_cols.min(row.len());
 
-            // Find the last non-default cell to determine how far we need
-            // to render.  Cells beyond this point are guaranteed to be
-            // DEFAULT_CELL, and since we cleared the screen above (which
-            // fills with the terminal's default bg), they're already correct
-            // IF the terminal's default bg is [0,0,0].  However, to be safe,
-            // we also check if any cell has a non-default background — if so,
-            // we must render it to ensure the correct bg color is displayed.
-            let last_interesting = row[..visible_len]
-                .iter()
-                .rposition(|c| {
-                    // A cell is "interesting" if it differs from DEFAULT_CELL
-                    // in any way, OR if it has a non-default background
-                    // (because the terminal's cleared bg may not match).
-                    c != &DEFAULT_CELL
-                });
+            // Render EVERY cell in the visible range.
+            // We cannot skip "default" cells because:
+            //   - The terminal's default background may not match
+            //     the VTTY's default [0,0,0] (e.g. solarized terminals).
+            //   - ESC[K fills cells with the current SGR background,
+            //     which may be non-default, and those must be rendered.
+            //   - Programs like htop rely on background colors being
+            //     correct for every cell, including trailing spaces.
+            //
+            // The cost is ~2000 SGR-set + Print calls per 80x24 frame,
+            // which is negligible at 100ms refresh intervals.
+            for cell in &row[..visible_len] {
+                // Optimization: if this cell IS the default, AND the
+                // terminal's bg is [0,0,0] (which we assume for now),
+                // we could skip it.  But since we can't reliably know
+                // the terminal's bg, we always emit.  To keep performance
+                // acceptable, we at least skip SGR emission when the
+                // style hasn't changed.
+                if cell == &DEFAULT_CELL && last_fg.is_none() && last_bg.is_none()
+                    && !last_bold && !last_italic && !last_underline
+                    && !last_blink && !last_reverse && !last_strikethrough
+                {
+                    // Already in default state, just print the space
+                    stdout.queue(Print(' '))?;
+                    continue;
+                }
 
-            let render_end = match last_interesting {
-                Some(idx) => idx + 1,
-                None => continue, // Entire visible row is default — skip it
-            };
-
-            for cell in &row[..render_end] {
                 // Set foreground color (only if changed)
                 if Some(cell.fg) != last_fg {
                     stdout.queue(SetForegroundColor(Color::Rgb {
@@ -152,14 +143,15 @@ impl TerminalDisplay {
                 stdout.queue(Print(cell.ch))?;
             }
 
-            // At the end of each row, reset the style so the next row starts clean.
-            // This avoids leaking background colors to the Clear(All)-blanked area.
-            if last_fg.is_some() || last_bg.is_some()
-                || last_bold || last_italic || last_underline
-                || last_blink || last_reverse || last_strikethrough
-            {
+            // Clear any remaining columns on this row if the terminal
+            // is wider than the VTTY buffer.  This ensures the area
+            // to the right of the VTTY content shows the VTTY's default
+            // bg color, not leftover content from the previous frame.
+            if (visible_len as u16) < phys_cols {
+                // Reset to default style and clear to end of line
                 stdout.queue(ResetColor)?;
                 stdout.queue(style::SetAttribute(Attribute::Reset))?;
+                stdout.queue(crossterm::terminal::Clear(ClearType::UntilNewLine))?;
                 last_fg = None;
                 last_bg = None;
                 last_bold = false;
@@ -168,6 +160,34 @@ impl TerminalDisplay {
                 last_blink = false;
                 last_reverse = false;
                 last_strikethrough = false;
+            } else {
+                // At the end of each row, reset the style so the next
+                // row starts clean.  This avoids leaking background
+                // colors across rows.
+                if last_fg.is_some() || last_bg.is_some()
+                    || last_bold || last_italic || last_underline
+                    || last_blink || last_reverse || last_strikethrough
+                {
+                    stdout.queue(ResetColor)?;
+                    stdout.queue(style::SetAttribute(Attribute::Reset))?;
+                    last_fg = None;
+                    last_bg = None;
+                    last_bold = false;
+                    last_italic = false;
+                    last_underline = false;
+                    last_blink = false;
+                    last_reverse = false;
+                    last_strikethrough = false;
+                }
+            }
+        }
+
+        // Clear any remaining rows below the VTTY buffer if the
+        // terminal is taller than the VTTY.
+        if (render_rows as u16) < phys_rows {
+            for row in render_rows..(phys_rows as usize) {
+                stdout.queue(MoveTo(0, row as u16))?;
+                stdout.queue(crossterm::terminal::Clear(ClearType::UntilNewLine))?;
             }
         }
 
@@ -178,7 +198,7 @@ impl TerminalDisplay {
     /// Clear the terminal screen.
     pub fn clear() -> io::Result<()> {
         let mut stdout = stdout();
-        stdout.execute(Clear(ClearType::All))?;
+        stdout.execute(crossterm::terminal::Clear(ClearType::All))?;
         stdout.execute(MoveTo(0, 0))?;
         Ok(())
     }

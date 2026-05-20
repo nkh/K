@@ -232,9 +232,10 @@ async fn async_main(cli: Cli) -> Result<()> {
 /// Run the interactive terminal display loop.
 ///
 /// This function blocks (in the async sense) until the user quits (Ctrl+\),
-/// the direct child exits, or a shutdown signal is received.  It renders
-/// the VTTY buffer to the local terminal using crossterm and forwards all
-/// keystrokes to the active child command.
+/// the direct child exits, all commands have exited, or a shutdown signal
+/// is received.  It renders the VTTY buffer to the local terminal using
+/// crossterm, forwards all keystrokes to the active child command, and
+/// handles SIGWINCH by resizing both the PTY master and the VTTY buffer.
 async fn run_display_loop(
     manager: &Arc<CommandManager>,
     direct_child_id: Option<&str>,
@@ -274,6 +275,27 @@ async fn run_display_loop(
         }
     });
 
+    // Set up SIGWINCH handler for terminal resize.
+    // When the user resizes their terminal emulator, the kernel delivers
+    // SIGWINCH to the foreground process group.  We catch it here and
+    // propagate the new size to both the PTY master (so the child gets
+    // its own SIGWINCH) and the in-memory VTTY buffer.
+    let mut winch_rx = {
+        use tokio::signal::unix::{signal, SignalKind};
+        match signal(SignalKind::window_change()) {
+            Ok(stream) => stream,
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to create SIGWINCH handler");
+                // Create a channel that never fires as fallback
+                let (_tx, rx) = tokio::sync::mpsc::channel::<()>(1);
+                // Convert to a stream-like by wrapping in a manual poll
+                // Actually, just return and skip WINCH handling entirely
+                drop(rx);
+                return;
+            }
+        }
+    };
+
     let mut shutdown_rx = shutdown_tx.subscribe();
     let interval = tokio::time::Duration::from_millis(refresh_ms);
     // Track which command we're displaying so we can forward keystrokes.
@@ -294,9 +316,13 @@ async fn run_display_loop(
                 if let Some(ref id) = target_id {
                     if let Some(handle) = manager.get(id) {
                         // Check if the child process is still alive.
-                        let pid = handle.pid as i32;
-                        let alive = unsafe { libc::kill(pid, 0) == 0 };
+                        // NOTE: is_alive() uses kill(pid, 0) which returns 0
+                        // even for zombie processes.  The zombie is reaped by
+                        // child.wait() in the spawner, after which the PID no
+                        // longer exists and kill returns -1.
+                        let alive = handle.is_alive();
                         if !alive {
+                            tracing::info!(id = %id, pid = handle.pid, "Active command exited, shutting down");
                             should_break = true;
                         } else {
                             // Render the VTTY buffer to the terminal.
@@ -306,11 +332,19 @@ async fn run_display_loop(
                         }
                     } else {
                         // Command was removed (killed via API).
+                        tracing::info!("Active command removed from manager");
                         should_break = true;
                     }
                 } else {
-                    // No commands — clear and show empty.
-                    let _ = TerminalDisplay::clear();
+                    // No commands at all — if this is a direct-child session,
+                    // exit.  If commands were spawned via API, keep running
+                    // (the user might spawn more).
+                    if direct_child_id.is_some() {
+                        tracing::info!("All commands exited, shutting down");
+                        should_break = true;
+                    } else {
+                        let _ = TerminalDisplay::clear();
+                    }
                 }
 
                 if should_break {
@@ -319,6 +353,32 @@ async fn run_display_loop(
                 }
 
                 active_id = target_id;
+            }
+
+            // ── SIGWINCH — terminal resize ──
+            _ = winch_rx.recv() => {
+                // Detect the new terminal size using the same multi-method
+                // approach as the initial size detection.
+                if let Some((rows, cols)) = detect_terminal_size() {
+                    tracing::debug!(rows, cols, "SIGWINCH: terminal resized");
+
+                    // Resize all active commands' VTTY + PTY.
+                    // This ensures that:
+                    //   1. The PTY master is resized → kernel sends SIGWINCH
+                    //      to the child process (e.g. htop, vim)
+                    //   2. The in-memory VTTY buffer matches the new size
+                    for entry in manager.list() {
+                        let id = &entry.0;
+                        if let Some(handle) = manager.get(id) {
+                            if let Err(e) = handle.resize_pty(rows, cols).await {
+                                tracing::warn!(
+                                    id = %id, rows, cols, error = %e,
+                                    "Failed to resize command on WINCH"
+                                );
+                            }
+                        }
+                    }
+                }
             }
 
             // ── Keystroke forwarding ──

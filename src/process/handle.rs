@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot, RwLock};
+use portable_pty::MasterPty;
 
 use crate::config::schema::ExitConfig;
 use crate::vtty::emulator::VttyEmulator;
@@ -21,6 +22,10 @@ pub struct CommandHandle {
     pub exit_config: ExitConfig,
     /// Wall-clock time when this command was spawned.
     pub spawn_time: std::time::Instant,
+    /// PTY master handle for resizing the child PTY (e.g. on SIGWINCH).
+    /// Wrapped in a Mutex because `MasterPty` is `Send` but not `Sync`,
+    /// which is required by `DashMap` (used in `CommandManager`).
+    pub pty_master: Arc<parking_lot::Mutex<Box<dyn MasterPty + Send>>>,
 }
 
 impl CommandHandle {
@@ -113,6 +118,30 @@ impl CommandHandle {
     pub async fn resize(&self, rows: u16, cols: u16) -> anyhow::Result<()> {
         let mut emu = self.emulator.write().await;
         emu.resize(rows as usize, cols as usize);
+        Ok(())
+    }
+
+    /// Resize both the VTTY emulator AND the underlying child PTY.
+    /// This is the correct way to handle terminal resize (SIGWINCH):
+    ///   1. Resize the PTY master → kernel sends SIGWINCH to the child
+    ///   2. Resize the in-memory VTTY buffer to match
+    pub async fn resize_pty(&self, rows: u16, cols: u16) -> anyhow::Result<()> {
+        // Resize the PTY master first — this sends SIGWINCH to the child.
+        // The Mutex lock is very short-lived (just an ioctl syscall).
+        {
+            let master = self.pty_master.lock();
+            master.resize(portable_pty::PtySize {
+                rows,
+                cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            }).map_err(|e| anyhow::anyhow!("PTY resize failed: {}", e))?;
+        }
+
+        // Then resize the in-memory VTTY buffer
+        let mut emu = self.emulator.write().await;
+        emu.resize(rows as usize, cols as usize);
+
         Ok(())
     }
 

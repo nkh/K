@@ -1,6 +1,6 @@
 use std::io::{Read as _, Write as _};
 use anyhow::Result;
-use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
 use tokio::sync::{mpsc, oneshot};
 use std::sync::Arc;
 
@@ -132,6 +132,11 @@ impl ProcessSpawner {
         // Get PTY master reader and writer (both are synchronous I/O from portable-pty)
         let reader = pair.master.try_clone_reader()?;
         let writer = pair.master.take_writer()?;
+        // Store the PTY master handle for later resize (e.g. WINCH handling).
+        // All MasterPty methods take &self, so it remains valid after
+        // extracting reader/writer.
+        let pty_master: Arc<parking_lot::Mutex<Box<dyn MasterPty + Send>>> =
+            Arc::new(parking_lot::Mutex::new(pair.master));
 
         // Spawn PTY reader task in a blocking thread.
         // portable-pty returns std::io::Read implementations, not async.
@@ -255,6 +260,7 @@ impl ProcessSpawner {
             certificate: None,
             exit_config,
             spawn_time: std::time::Instant::now(),
+            pty_master,
         })
     }
 }
