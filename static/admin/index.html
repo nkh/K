@@ -47,8 +47,8 @@
         .panel-container { flex: 1; display: flex; overflow: hidden; }
         .panel { flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--border); min-width: 200px; }
         .panel:last-child { border-right: none; }
-        .panel-header { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem; background: var(--bg-tertiary); border-bottom: 1px solid var(--border); flex-shrink: 0; }
-        .panel-header .title { flex: 1; font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .panel-header { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem; background: var(--bg-tertiary); border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; }
+        .panel-header .title { font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; }
         .panel-header .instance-url { font-size: 0.7rem; color: var(--text-muted); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
         /* VTTY */
@@ -319,7 +319,11 @@
 // ─── State ───
 const state = {
     panels: [],
-    selectedCommandId: null,
+    // Store instUrl and cmdId separately to avoid ':' conflicts in URLs.
+    // Previously selectedCommandId = instUrl + ':' + cmdId, but URLs contain
+    // ':' (e.g. http://localhost:8080) which corrupted split/join logic.
+    selectedInstUrl: null,
+    selectedCmdId: null,
     authToken: localStorage.getItem('vrunner_auth_token') || '',
     refreshInterval: null,
     fontSize: parseInt(localStorage.getItem('vrunner_font_size') || '13'),
@@ -446,7 +450,7 @@ async function loadCommands() {
             inst._lastError = null;
         } catch (e) {
             inst._commands = [];
-            inst._lastError = inst.label + ': connection lost (instance may have exited)';
+            inst._lastError = 'connection lost (instance may have exited)';
         }
     }
 
@@ -467,7 +471,7 @@ async function loadCommands() {
                 ? `<span class="cert-badge" title="Bound to: ${escHtml(cert)}">${escHtml(cert)}</span>`
                 : `<span class="cert-badge empty">--</span>`;
             const key = inst.url + ':' + cmd.id;
-            const selected = state.selectedCommandId === key ? ' selected' : '';
+            const selected = (state.selectedInstUrl === inst.url && state.selectedCmdId === cmd.id) ? ' selected' : '';
             html += `
                 <div class="cmd-item${selected}" onclick="selectCommand('${inst.url}','${cmd.id}','${escHtml(cmd.name || cmd.id)}')" title="${escHtml(inst.label)} / ${escHtml(cmd.name || cmd.id)}">
                     <div class="status-dot status-running"></div>
@@ -485,7 +489,7 @@ async function loadCommands() {
     updateInstanceDropdown();
 
     // Auto-select the first command if none is selected yet
-    if (!state.selectedCommandId) {
+    if (!state.selectedCmdId) {
         for (const inst of state.instanceUrls) {
             if (inst._commands && inst._commands.length > 0) {
                 const cmd = inst._commands[0];
@@ -496,21 +500,17 @@ async function loadCommands() {
     }
 
     // If a command is selected, refresh its VTTY
-    if (state.selectedCommandId) {
-        const parts = state.selectedCommandId.split(':');
-        if (parts.length >= 2) {
-            const instUrl = parts.slice(0, -1).join(':');
-            const cmdId = parts[parts.length - 1];
-            // Only poll via HTTP if WebSocket is not connected
-            if (!state.vttyWs || state.bufferView !== 'current') {
-                loadVttyHttp(instUrl, cmdId);
-            }
+    if (state.selectedInstUrl && state.selectedCmdId) {
+        // Only poll via HTTP if WebSocket is not connected
+        if (!state.vttyWs || state.bufferView !== 'current') {
+            loadVttyHttp(state.selectedInstUrl, state.selectedCmdId);
         }
     }
 }
 
 function selectCommand(instUrl, cmdId, name) {
-    state.selectedCommandId = instUrl + ':' + cmdId;
+    state.selectedInstUrl = instUrl;
+    state.selectedCmdId = cmdId;
     state.bufferView = 'current';
     document.getElementById('bufferSelect').value = 'current';
     // Reset diff protocol state
@@ -524,19 +524,15 @@ function selectCommand(instUrl, cmdId, name) {
 
 function getSelectedPanel() {
     // Find the panel for the selected command's instance
-    if (!state.selectedCommandId) return state.panels[0];
-    const parts = state.selectedCommandId.split(':');
-    if (parts.length < 2) return state.panels[0];
-    const instUrl = parts.slice(0, -1).join(':');
-    return state.panels.find(p => p.instUrl === instUrl) || state.panels[0];
+    if (!state.selectedInstUrl) return state.panels[0];
+    return state.panels.find(p => p.instUrl === state.selectedInstUrl) || state.panels[0];
 }
 
 // ─── Pause/Run Toggle ───
 async function togglePauseRun() {
-    if (!state.selectedCommandId) return;
-    const parts = state.selectedCommandId.split(':');
-    const cmdId = parts[parts.length - 1];
-    const instUrl = parts.slice(0, -1).join(':');
+    if (!state.selectedCmdId) return;
+    const cmdId = state.selectedCmdId;
+    const instUrl = state.selectedInstUrl;
 
     const btn = document.getElementById('pauseRunBtn');
     const isFrozen = btn.dataset.frozen === 'true';
@@ -670,11 +666,8 @@ function applyVttyDiff(data) {
     // optimization of only sending diffs when the buffer actually changes.
     if (!data.diff) return;
 
-    const parts = state.selectedCommandId.split(':');
-    if (parts.length < 2) return;
-    const cmdId = parts[parts.length - 1];
-    const instUrl = parts.slice(0, -1).join(':');
-    loadVttyHttp(instUrl, cmdId);
+    if (!state.selectedCmdId) return;
+    loadVttyHttp(state.selectedInstUrl, state.selectedCmdId);
 
     // Update cursor and dimensions from the diff message (immediate feedback)
     const cursor = data.cursor || {};
@@ -729,18 +722,15 @@ async function loadVttyHttp(instUrl, cmdId) {
 
 function switchBuffer(view) {
     state.bufferView = view;
-    if (!state.selectedCommandId) return;
-    const parts = state.selectedCommandId.split(':');
-    const cmdId = parts[parts.length - 1];
-    const instUrl = parts.slice(0, -1).join(':');
+    if (!state.selectedCmdId) return;
 
     if (view === 'current') {
         // Re-enable WebSocket for live updates
-        connectVttyWs(instUrl, cmdId);
+        connectVttyWs(state.selectedInstUrl, state.selectedCmdId);
     } else {
         // Disconnect WebSocket — we're viewing a static snapshot
         disconnectVttyWs();
-        loadVttyHttp(instUrl, cmdId);
+        loadVttyHttp(state.selectedInstUrl, state.selectedCmdId);
     }
 }
 
@@ -766,7 +756,8 @@ async function spawnCommand() {
             // Auto-select the newly spawned command so its terminal output appears
             const newId = json.data && json.data.id ? json.data.id : null;
             if (newId) {
-                state.selectedCommandId = instUrl + ':' + newId;
+                state.selectedInstUrl = instUrl;
+                state.selectedCmdId = newId;
             }
             loadCommands();
         } else {
@@ -784,17 +775,19 @@ async function killCommand(instUrl, cmdId) {
             headers: authHeadersForInstance({ url: instUrl }),
             body: JSON.stringify({}),
         });
-        if (state.selectedCommandId === instUrl + ':' + cmdId) state.selectedCommandId = null;
+        if (state.selectedInstUrl === instUrl && state.selectedCmdId === cmdId) {
+            state.selectedInstUrl = null;
+            state.selectedCmdId = null;
+        }
         loadCommands();
     } catch (e) { /* ignore */ }
 }
 
 async function sendKeys() {
     const input = document.getElementById('keyInput');
-    if (!state.selectedCommandId || !input.value) return;
-    const parts = state.selectedCommandId.split(':');
-    const cmdId = parts[parts.length - 1];
-    const instUrl = parts.slice(0, -1).join(':');
+    if (!state.selectedCmdId || !input.value) return;
+    const cmdId = state.selectedCmdId;
+    const instUrl = state.selectedInstUrl;
 
     try {
         await fetch(apiUrl(`/api/commands/${cmdId}/keys`, { url: instUrl }), {
@@ -804,15 +797,14 @@ async function sendKeys() {
         });
         input.value = '';
         // Immediately refresh VTTY
-        loadVttyHttp(instUrl, cmdId);
+        loadVttyHttp(state.selectedInstUrl, state.selectedCmdId);
     } catch (e) { /* ignore */ }
 }
 
 async function resizeTerminal() {
-    if (!state.selectedCommandId) return;
-    const parts = state.selectedCommandId.split(':');
-    const cmdId = parts[parts.length - 1];
-    const instUrl = parts.slice(0, -1).join(':');
+    if (!state.selectedCmdId) return;
+    const cmdId = state.selectedCmdId;
+    const instUrl = state.selectedInstUrl;
     const rows = parseInt(document.getElementById('resizeRows').value) || 24;
     const cols = parseInt(document.getElementById('resizeCols').value) || 80;
 
@@ -941,7 +933,7 @@ function renderPanels() {
                 <div class="panel-header">
                     <span class="title">${escHtml(panel.label)}</span>
                     <span class="instance-url">${escHtml(panel.instUrl.replace(/^https?:\/\//, ''))}</span>
-                    <div class="input-row" style="max-width:250px;">
+                    <div class="input-row" style="flex:1;min-width:120px;">
                         <input type="text" id="keyInput-${panel.id}" placeholder="Send keys..." style="font-size:0.7rem;" onkeydown="if(event.key==='Enter')sendKeysToPanel('${panel.id}')">
                         <button class="small" onclick="sendKeysToPanel('${panel.id}')">Send</button>
                     </div>
@@ -960,10 +952,9 @@ async function sendKeysToPanel(panelId) {
     const panel = state.panels.find(p => p.id === panelId);
     if (!panel) return;
     const input = document.getElementById('keyInput-' + panelId);
-    if (!input || !input.value || !state.selectedCommandId) return;
+    if (!input || !input.value || !state.selectedCmdId) return;
 
-    const parts = state.selectedCommandId.split(':');
-    const cmdId = parts[parts.length - 1];
+    const cmdId = state.selectedCmdId;
 
     try {
         await fetch(apiUrl(`/api/commands/${cmdId}/keys`, panel), {
@@ -1190,7 +1181,7 @@ function startRefresh() {
 // ─── Keyboard handling ───
 document.addEventListener('keydown', (e) => {
     // Focus key input when not in an input field and a command is selected
-    if (state.currentView === 'vtty' && state.selectedCommandId &&
+    if (state.currentView === 'vtty' && state.selectedCmdId &&
         !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
         const panel = getSelectedPanel();
         if (panel) {
