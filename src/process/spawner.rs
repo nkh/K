@@ -4,7 +4,7 @@ use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use tokio::sync::{mpsc, oneshot};
 use std::sync::Arc;
 
-use crate::config::schema::{VttyConfig, HandleConfig};
+use crate::config::schema::{VttyConfig, HandleConfig, ExitConfig};
 use crate::handles::{
     file_sink::FileSink,
     null_sink::NullSink,
@@ -13,6 +13,7 @@ use crate::handles::{
     vtty_sink::VttySink,
 };
 use crate::vtty::emulator::VttyEmulator;
+use crate::process::manager::CommandManager;
 use super::handle::CommandHandle;
 
 pub struct ProcessSpawner {
@@ -28,6 +29,25 @@ pub enum StdinMessage {
 /// Each message carries a chunk of bytes read from the PTY master fd.
 struct PtyOutput(Vec<u8>);
 
+/// Exit status reported when a child process terminates.
+#[derive(Debug, Clone)]
+pub struct ExitStatus {
+    /// Process exit code. None if the process was killed by a signal.
+    pub code: Option<i32>,
+    /// Signal number that killed the process, if applicable.
+    pub signal: Option<i32>,
+}
+
+impl ExitStatus {
+    pub fn success(&self) -> bool {
+        self.code == Some(0)
+    }
+
+    pub fn is_error(&self) -> bool {
+        !self.success()
+    }
+}
+
 impl ProcessSpawner {
     pub fn new(vtty_cfg: &VttyConfig) -> Self {
         Self {
@@ -41,6 +61,8 @@ impl ProcessSpawner {
         args: Vec<String>,
         handle_configs: Vec<HandleConfig>,
         command_id: &str,
+        exit_config: ExitConfig,
+        _manager: &CommandManager,
     ) -> Result<CommandHandle> {
         let pty_system = native_pty_system();
         let pair = pty_system.openpty(PtySize {
@@ -144,10 +166,64 @@ impl ProcessSpawner {
         });
 
         // Spawn process waiter (blocking — child.wait() is sync)
-        let (exit_tx, exit_rx) = oneshot::channel();
+        let (exit_tx, exit_rx) = oneshot::channel::<ExitStatus>();
+        let watch_id = command_id.to_string();
+        let on_exit = exit_config.on_exit.clone();
+        let on_error = exit_config.on_error.clone();
+
         tokio::task::spawn_blocking(move || {
-            let _ = child.wait();
-            let _ = exit_tx.send(());
+            let status = child.wait().ok().and_then(|s| Some(s.exit_code() as i32));
+            let exit_status = ExitStatus {
+                code: status,
+                signal: None,
+            };
+
+            // Log the exit
+            tracing::info!(
+                id = %watch_id,
+                code = ?exit_status.code,
+                "Command exited"
+            );
+
+            // Run on_exit or on_error command if configured
+            let on_cmd = if exit_status.success() {
+                on_exit.as_ref()
+            } else {
+                on_error.as_ref()
+            };
+
+            if let Some(ref on_cmd_str) = on_cmd {
+                // Parse command: split on whitespace
+                let parts: Vec<&str> = on_cmd_str.split_whitespace().collect();
+                if !parts.is_empty() {
+                    let binary = parts[0];
+                    let cmd_args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+                    tracing::info!(
+                        id = %watch_id,
+                        trigger = if exit_status.success() { "on_exit" } else { "on_error" },
+                        command = binary,
+                        args = ?cmd_args,
+                        "Running exit handler"
+                    );
+                    // Run the exit handler as a detached process (fire and forget)
+                    match std::process::Command::new(binary).args(&cmd_args).spawn() {
+                        Ok(mut child) => {
+                            // Don't wait for it — fire and forget
+                            let _ = child.try_wait();
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                id = %watch_id,
+                                error = %e,
+                                "Failed to run exit handler"
+                            );
+                        }
+                    }
+                }
+            }
+
+            // Also try to clean up via the manager if the command is still tracked
+            let _ = exit_tx.send(exit_status);
         });
 
         Ok(CommandHandle {
@@ -159,6 +235,7 @@ impl ProcessSpawner {
             _exit_rx: exit_rx,
             handle_registry,
             certificate: None,
+            exit_config,
         })
     }
 }

@@ -17,6 +17,11 @@ pub struct Config {
     pub daemon: DaemonConfig,
     #[serde(default)]
     pub handles: Vec<HandleConfig>,
+    #[serde(default)]
+    pub interactive: InteractiveConfig,
+    /// Default exit configuration applied to all commands unless overridden per-command.
+    #[serde(default)]
+    pub default_exit: DefaultExitConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -187,6 +192,66 @@ impl Default for DaemonConfig {
             stderr_file: "/tmp/vrunner.err".to_string(),
         }
     }
+}
+
+/// Configuration for interactive terminal display.
+/// Controls keyboard input, scrolling, and command switching in the CLI.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct InteractiveConfig {
+    /// Show a tab bar listing all commands at the top of the display.
+    /// When disabled, the active command name is shown in the status bar only.
+    #[serde(default)]
+    pub tabs: bool,
+}
+
+impl Default for InteractiveConfig {
+    fn default() -> Self {
+        Self { tabs: false }
+    }
+}
+
+/// Exit configuration for a command.
+/// Controls what happens when a command exits, including cleanup commands and timeouts.
+/// This can be set per-command via the spawn API or as defaults in the config.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ExitConfig {
+    /// Command to run when the child exits cleanly (exit code 0).
+    /// The string is split on whitespace into a binary and arguments.
+    /// Example: "notify-send Build OK"
+    /// Set to null to disable.
+    #[serde(default)]
+    pub on_exit: Option<String>,
+    /// Command to run when the child exits with a non-zero code.
+    /// Example: "notify-send Build FAILED"
+    /// Set to null to disable.
+    #[serde(default)]
+    pub on_error: Option<String>,
+    /// Maximum seconds to wait for the child to exit after SIGTERM
+    /// before sending SIGKILL. Default: 10 seconds.
+    /// Applies when kill is called or when the server shuts down.
+    #[serde(default = "default_exit_timeout")]
+    pub timeout_secs: u64,
+}
+
+fn default_exit_timeout() -> u64 {
+    10
+}
+
+impl Default for ExitConfig {
+    fn default() -> Self {
+        Self {
+            on_exit: None,
+            on_error: None,
+            timeout_secs: default_exit_timeout(),
+        }
+    }
+}
+
+/// Default exit configuration (used when none is specified per-command).
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct DefaultExitConfig {
+    #[serde(default)]
+    pub exit: ExitConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

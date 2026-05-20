@@ -15,6 +15,8 @@ Complete reference for all configuration entries, CLI flags, and their relations
    - [certificates](#certificates)
    - [vtty](#vtty)
    - [display](#display)
+   - [interactive](#interactive)
+   - [default_exit](#default_exit)
    - [command_log](#command_log)
    - [daemon](#daemon)
    - [handles](#handles)
@@ -204,6 +206,41 @@ daemon:
   stderr_file: "/tmp/vrunner.err"
 ```
 
+### `interactive`
+
+Controls the interactive terminal display behavior when `--display` is enabled.
+
+| Key | Type | Default | CLI Flag | Description |
+|-----|------|---------|----------|-------------|
+| `tabs` | `bool` | `false` | `--tabs` | When `true`, shows a tab bar listing all running commands at the top of the interactive display. When `false` (default), only the active command name is shown in the status bar. This is similar to `mprocs`-style display but the tab bar is optional. |
+
+**Example:**
+```yaml
+interactive:
+  tabs: false
+```
+
+### `default_exit`
+
+Default exit configuration applied to all commands unless overridden per-command via the spawn API. Controls what happens when a command exits and how long vrunner waits before force-killing.
+
+| Key | Type | Default | CLI Flag | Description |
+|-----|------|---------|----------|-------------|
+| `exit.on_exit` | `string?` | `null` | `--on-exit <CMD>` | Command to run when the child exits cleanly (exit code 0). The string is split on whitespace into a binary and arguments. Set to `null` to disable. |
+| `exit.on_error` | `string?` | `null` | `--on-error <CMD>` | Command to run when the child exits with a non-zero code. Same parsing rules as `on_exit`. Set to `null` to disable. |
+| `exit.timeout_secs` | `u64` | `10` | `--exit-timeout <SECS>` | Maximum seconds to wait for a child process to exit after SIGTERM before sending SIGKILL. Applies when kill is called or when the server shuts down. |
+
+**Example:**
+```yaml
+default_exit:
+  exit:
+    on_exit: "notify-send Done"
+    on_error: "notify-send Error"
+    timeout_secs: 15
+```
+
+Exit handler commands are spawned as detached (fire-and-forget) processes. vrunner does not wait for them to complete. When a command is spawned via `POST /api/commands` with `on_exit` or `on_error` fields, those per-command values override these defaults entirely.
+
 ### `handles`
 
 Defines additional output sinks attached to every spawned command. Each handle routes command output to a named destination.
@@ -303,6 +340,20 @@ vrunner [OPTIONS] [-- <COMMAND> [ARGS...]]
 | `--stdout-file` | `<FILE>` | `daemon.stdout_file` | Redirect daemon stdout to file. |
 | `--stderr-file` | `<FILE>` | `daemon.stderr_file` | Redirect daemon stderr to file. |
 
+### Exit Handler Options
+
+| Flag | Argument | Config Key | Description |
+|------|----------|------------|-------------|
+| `--on-exit` | `<CMD>` | `default_exit.exit.on_exit` | Run this command when a child exits cleanly (exit code 0) |
+| `--on-error` | `<CMD>` | `default_exit.exit.on_error` | Run this command when a child exits with an error (non-zero) |
+| `--exit-timeout` | `<SECS>` | `default_exit.exit.timeout_secs` | Seconds to wait for graceful exit before SIGKILL (default: 10) |
+
+### Interactive Options
+
+| Flag | Argument | Config Key | Description |
+|------|----------|------------|-------------|
+| `--tabs` | — | `interactive.tabs` → `true` | Show tab bar for command switching in interactive display |
+
 ### Subcommands
 
 | Command | Argument | Description |
@@ -341,6 +392,10 @@ Every configuration file entry has a corresponding CLI flag. This table summariz
 | `handles` | *(array)* | Config only — no CLI equivalent |
 | `certificates` | `directory` | Config only — no CLI equivalent |
 | `certificates` | `entries` | `--certificate NAME:CERT:KEY` |
+| `interactive` | `tabs` | `--tabs` |
+| `default_exit.exit` | `on_exit` | `--on-exit <CMD>` |
+| `default_exit.exit` | `on_error` | `--on-error <CMD>` |
+| `default_exit.exit` | `timeout_secs` | `--exit-timeout <SECS>` |
 
 **CLI-only flags** (no config key, by design):
 
@@ -489,4 +544,15 @@ handles: []
   # - name: "debug"       # sink identifier
   #   sink: "file"         # "file", "vtty", or "null"
   #   path: "./logs/{name}-{id}.log"  # with placeholder expansion
+
+# Interactive display options
+interactive:
+  tabs: false               # show tab bar when --display is active
+
+# Default exit configuration for all commands
+default_exit:
+  exit:
+    on_exit: null             # command to run on clean exit (exit code 0)
+    on_error: null            # command to run on error exit (non-zero)
+    timeout_secs: 10          # grace period before SIGKILL
 ```

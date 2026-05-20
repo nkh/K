@@ -17,24 +17,31 @@ A practical guide to using vrunner for common tasks. This document covers the we
    - [Local VTTY Display](#local-vtty-display)
    - [Web Admin VTTY Viewer](#web-admin-vtty-viewer)
    - [VTTY API Endpoints](#vtty-api-endpoints)
+   - [WebSocket Real-Time Streaming](#websocket-real-time-streaming)
 5. [Sending Keystrokes](#sending-keystrokes)
 6. [Managing Running Commands](#managing-running-commands)
    - [Listing Commands](#listing-commands)
    - [Killing Commands](#killing-commands)
    - [Resizing the Terminal](#resizing-the-terminal)
-7. [Viewing Logs](#viewing-logs)
-8. [Certificate-Based Access Control](#certificate-based-access-control)
-9. [Remote Access and TLS](#remote-access-and-tls)
-10. [Daemon Mode](#daemon-mode)
-11. [Multi-Instance Management](#multi-instance-management)
-12. [Configuration File Reference](#configuration-file-reference)
-13. [Common Use Cases](#common-use-cases)
+7. [Exit Handlers and Timeouts](#exit-handlers-and-timeouts)
+   - [Per-Command Exit Handlers via API](#per-command-exit-handlers-via-api)
+   - [Default Exit Handlers via Config and CLI](#default-exit-handlers-via-config-and-cli)
+   - [Graceful Shutdown with Timeout](#graceful-shutdown-with-timeout)
+8. [Viewing Logs](#viewing-logs)
+   - [Real-Time Log Streaming via WebSocket](#real-time-log-streaming-via-websocket)
+9. [Certificate-Based Access Control](#certificate-based-access-control)
+10. [Remote Access and TLS](#remote-access-and-tls)
+11. [Daemon Mode](#daemon-mode)
+12. [Interactive Display](#interactive-display)
+13. [Multi-Instance Management](#multi-instance-management)
+14. [Configuration File Reference](#configuration-file-reference)
+15. [Common Use Cases](#common-use-cases)
     - [Development Server Orchestration](#development-server-orchestration)
     - [CI/CD Pipeline Runner](#cicd-pipeline-runner)
     - [Remote Server Administration](#remote-server-administration)
     - [Pair Programming and Collaboration](#pair-programming-and-collaboration)
     - [Long-Running Background Tasks](#long-running-background-tasks)
-14. [Troubleshooting](#troubleshooting)
+16. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -44,12 +51,13 @@ vrunner is a process manager that runs commands inside virtual TTYs (VTTYs) and 
 
 The key architectural concept is the separation between **starting a command** and **interacting with it**. A command can be started from the CLI, the web UI, or the API. Once running, it can be monitored and controlled from any of those interfaces interchangeably. This makes vrunner suitable for scenarios where a command needs to be started from one place (like a CI script) and monitored from another (like a web dashboard).
 
-vrunner supports three controllers:
+vrunner supports three controllers plus a real-time streaming layer:
 - **CLI** — direct command-line invocation for starting, listing, and stopping instances
 - **Web Admin** — a browser-based dashboard at `/admin` for managing commands visually
 - **HTTP API** — a RESTful API for programmatic access from scripts, curl, or custom clients
+- **WebSocket API** — real-time bidirectional streaming for terminal output and log entries, eliminating the need for polling
 
-All three controllers communicate with the same vrunner instance. The CLI subcommands (`list`, `stop`, `cert`) connect to running instances over HTTP to perform management operations.
+All controllers communicate with the same vrunner instance. The CLI subcommands (`list`, `stop`, `cert`) connect to running instances over HTTP to perform management operations. WebSocket connections upgrade from HTTP and provide push-based updates for lower latency.
 
 ---
 
@@ -168,6 +176,17 @@ curl -X POST http://127.0.0.1:8080/api/commands \
 curl -X POST http://127.0.0.1:8080/api/commands \
   -H "Content-Type: application/json" \
   -d '{"cmd": "node", "args": ["server.js"], "certificate": "my-app"}'
+
+# Start a command with exit handlers and custom timeout
+curl -X POST http://127.0.0.1:8080/api/commands \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cmd": "cargo",
+    "args": ["test"],
+    "on_exit": "notify-send Tests Passed",
+    "on_error": "notify-send Tests Failed",
+    "exit_timeout": 30
+  }'
 ```
 
 Response:
@@ -302,6 +321,94 @@ Response:
 ```
 
 This is useful for implementing scrollback in a web viewer or for scripts that only need recent output without fetching the entire buffer.
+
+### WebSocket Real-Time Streaming
+
+vrunner provides two WebSocket endpoints that push updates in real time, eliminating the need for REST polling. WebSocket connections are upgraded from standard HTTP requests and use JSON text frames for all messages.
+
+#### VTTY WebSocket — `ws://host:port/api/commands/:id/ws`
+
+Connect to this endpoint to receive push-based VTTY updates for a specific command. The connection is bidirectional: the server sends terminal content updates and the client can send keystrokes and resize commands.
+
+**Connection example (JavaScript):**
+```javascript
+const ws = new WebSocket('ws://127.0.0.1:8080/api/commands/550e8400.../ws');
+
+ws.onmessage = (event) => {
+  const msg = JSON.parse(event.data);
+  switch (msg.type) {
+    case 'connected':
+      console.log('Connected to command', msg.id);
+      break;
+    case 'vtty_update':
+      // msg.data.html — rendered HTML of the terminal
+      // msg.data.cursor — {row, col}
+      // msg.data.dimensions — {rows, cols}
+      document.getElementById('terminal').innerHTML = msg.data.html;
+      break;
+    case 'command_ended':
+      console.log('Command', msg.id, 'has exited');
+      ws.close();
+      break;
+    case 'error':
+      console.error('Error:', msg.message);
+      break;
+  }
+};
+
+// Send keystrokes
+ws.send(JSON.stringify({ type: 'keys', keys: 'ls -la\r' }));
+
+// Resize terminal
+ws.send(JSON.stringify({ type: 'resize', rows: 40, cols: 120 }));
+
+// Ping/pong keepalive
+ws.send(JSON.stringify({ type: 'ping' }));
+```
+
+**Incoming server messages:**
+
+| Message Type | Fields | Description |
+|-------------|--------|-------------|
+| `connected` | `id` | Sent immediately after WebSocket upgrade confirms the connection |
+| `vtty_update` | `id`, `html`, `cursor`, `dimensions` | Sent whenever the terminal content changes (debounced at ~200ms) |
+| `command_ended` | `id` | Sent when the command exits and is removed from the manager |
+| `error` | `message` | Sent when an incoming client message fails to process |
+| `pong` | — | Response to a `ping` message from the client |
+
+**Outgoing client messages:**
+
+| Message Type | Fields | Description |
+|-------------|--------|-------------|
+| `keys` | `keys` (string) | Send keystrokes to the command. Supports escape sequences like `\x03` for Ctrl+C |
+| `resize` | `rows` (number), `cols` (number) | Resize the virtual terminal |
+| `ping` | — | Request a `pong` response for connection keepalive |
+
+#### Log WebSocket — `ws://host:port/api/ws/logs`
+
+Connect to this endpoint to receive real-time log entries as they are recorded. This is a read-only stream (no outgoing commands except pings).
+
+**Connection example (JavaScript):**
+```javascript
+const ws = new WebSocket('ws://127.0.0.1:8080/api/ws/logs');
+
+ws.onmessage = (event) => {
+  const msg = JSON.parse(event.data);
+  if (msg.type === 'log_entry') {
+    console.log('[LOG]', msg.data);
+  }
+};
+```
+
+**WebSocket with TLS:** When vrunner is running with `--tls`, use `wss://` instead of `ws://`:
+```javascript
+const ws = new WebSocket('wss://127.0.0.1:8080/api/commands/.../ws');
+```
+
+**WebSocket with auth:** When authentication is enabled, pass the bearer token as a query parameter or in the initial HTTP upgrade headers:
+```javascript
+const ws = new WebSocket('wss://host:8080/api/commands/.../ws?token=YOUR_TOKEN');
+```
 
 ---
 
@@ -456,6 +563,81 @@ Valid ranges: rows 1-200, cols 1-500. The child process receives a `SIGWINCH` si
 
 ---
 
+## Exit Handlers and Timeouts
+
+vrunner can automatically run external commands when a child process exits, and enforce graceful shutdown timeouts before force-killing stubborn processes.
+
+### Per-Command Exit Handlers via API
+
+When spawning a command via `POST /api/commands`, you can specify `on_exit`, `on_error`, and `exit_timeout` fields:
+
+```bash
+# Run tests with notifications on success or failure
+curl -s -X POST http://127.0.0.1:8080/api/commands \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cmd": "cargo",
+    "args": ["test", "--release"],
+    "on_exit": "notify-send Build OK",
+    "on_error": "notify-send Build FAILED",
+    "exit_timeout": 30
+  }'
+
+# Run a build script that triggers cleanup on any exit
+curl -s -X POST http://127.0.0.1:8080/api/commands \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cmd": "./build.sh",
+    "args": [],
+    "on_exit": "rm -rf /tmp/build-tmp",
+    "on_error": "rm -rf /tmp/build-tmp",
+    "exit_timeout": 15
+  }'
+
+# Run with only an error handler (no action on clean exit)
+curl -s -X POST http://127.0.0.1:8080/api/commands \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cmd": "./deploy.sh",
+    "args": ["--prod"],
+    "on_error": "./rollback.sh && notify-send Deploy FAILED"
+  }'
+```
+
+The exit handler command string is split on whitespace into a binary name and arguments. It runs as a detached (fire-and-forget) process — vrunner does not wait for it to complete. Exit handlers are useful for sending notifications, cleaning up temporary files, triggering rollbacks, or alerting monitoring systems.
+
+### Default Exit Handlers via Config and CLI
+
+You can set default exit handlers that apply to all commands unless overridden per-command via the API:
+
+**Via CLI flags:**
+```bash
+vrunner --on-exit "notify-send Done" --on-error "notify-send Error" --exit-timeout 20 -- cargo test
+```
+
+**Via config file:**
+```yaml
+default_exit:
+  exit:
+    on_exit: "notify-send Done"
+    on_error: "notify-send Error"
+    timeout_secs: 20
+```
+
+When a command is spawned via `POST /api/commands` without `on_exit`/`on_error` fields, the defaults from the config are used. When per-command values are provided in the API request, they override the defaults entirely.
+
+### Graceful Shutdown with Timeout
+
+When you kill a command via the API (`POST /api/commands/:id/kill`), vrunner performs a graceful shutdown sequence:
+
+1. **SIGINT (Ctrl+C)** is sent to the child process, giving it a chance to exit cleanly.
+2. vrunner waits up to `exit_timeout` seconds (default: 10) for the process to terminate.
+3. If the process has not exited within the timeout, **SIGKILL** is sent to force-terminate it.
+
+This two-phase approach prevents data corruption in processes that need to write state files, close database connections, or flush buffers before exiting. The timeout is configurable per-command or globally via `default_exit.exit.timeout_secs`.
+
+---
+
 ## Viewing Logs
 
 ### Command Log
@@ -518,6 +700,10 @@ command_log:
   enabled: true
   file: "/var/log/vrunner.log"
 ```
+
+### Real-Time Log Streaming via WebSocket
+
+For push-based log streaming instead of polling, connect to the log WebSocket endpoint. See [WebSocket Real-Time Streaming](#websocket-real-time-streaming) for the `ws://host:port/api/ws/logs` protocol details.
 
 ---
 
@@ -702,6 +888,25 @@ vrunner stop <pid>
 
 # Or send API commands (the HTTP server is still running)
 curl http://127.0.0.1:8080/api/commands
+```
+
+---
+
+## Interactive Display
+
+The `--tabs` flag enables a tab bar in the local VTTY display that shows all running commands and lets you switch between them:
+
+```bash
+# Start multiple commands and view them with tabs
+vrunner --tabs --display -- htop
+```
+
+When tabs are enabled and multiple commands are running, the display shows a navigation bar at the top listing all active commands. Use keyboard shortcuts to switch focus between commands. This is similar to tools like `mprocs` but the tab bar is optional — disable it with `--no-tabs` (the default) to show only the active command name in the status bar.
+
+**Via config file:**
+```yaml
+interactive:
+  tabs: true
 ```
 
 ---
@@ -1137,7 +1342,7 @@ The log endpoint checks several common paths. If your log file is in a custom lo
 
 ## Connection Types Supported
 
-vrunner supports **HTTP and HTTPS (TLS)** connections. **WebSocket is not currently supported** — terminal output is retrieved via REST polling. The following connection modes are available:
+vrunner supports **HTTP, HTTPS (TLS), WebSocket (ws://), and secure WebSocket (wss://)** connections. The WebSocket endpoints upgrade from HTTP and provide real-time bidirectional communication for terminal output and log streaming. The following connection modes are available:
 
 | Mode | CLI Flag | Description |
 |------|----------|-------------|
@@ -1146,5 +1351,5 @@ vrunner supports **HTTP and HTTPS (TLS)** connections. **WebSocket is not curren
 | HTTPS (localhost) | `--tls` | HTTPS on `127.0.0.1:8080`, auto-generated self-signed cert |
 | HTTPS (remote) | `--remote --tls` | HTTPS on `0.0.0.0:8080`, auth required, self-signed cert |
 | HTTPS (custom cert) | `--tls --cert-file X --key-file Y` | HTTPS with your own certificate and key |
-
-WebSocket support is a planned feature. To add it, the `ws` feature would need to be enabled in axum, and WebSocket upgrade handlers would need to be added to the router for streaming VTTY output in real time.
+| WebSocket | *(auto-upgrade)* | `ws://host:port/api/commands/:id/ws` for VTTY streaming |
+| Secure WebSocket | `--tls` + wss:// | `wss://host:port/api/commands/:id/ws` for encrypted streaming |

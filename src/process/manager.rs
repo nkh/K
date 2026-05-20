@@ -44,6 +44,8 @@ impl CommandManager {
             args,
             self.config.handles.clone(),
             &id,
+            self.config.default_exit.exit.clone(),
+            self,
         ).await?;
 
         // Bind certificate to this command for per-command access control
@@ -108,7 +110,50 @@ impl CommandManager {
     pub async fn kill(&self, id: &CommandId, _signal: Option<String>) -> anyhow::Result<()> {
         self.logger.log("kill", &format!("id={}", id));
         if let Some((_, handle)) = self.commands.remove(id) {
-            handle.kill().await?;
+            // Send Ctrl+C (SIGINT) for graceful shutdown
+            let _ = handle.send_bytes(vec![0x03]).await;
+
+            // Wait up to the configured timeout for the process to exit
+            let timeout_secs = handle.exit_config.timeout_secs;
+            let exit_rx = handle._exit_rx;
+
+            tokio::select! {
+                result = tokio::time::timeout(
+                    std::time::Duration::from_secs(timeout_secs),
+                    exit_rx
+                ) => {
+                    match result {
+                        Ok(Ok(_status)) => {
+                            tracing::info!(id = %id, "Command exited gracefully within timeout");
+                        }
+                        Ok(Err(_)) => {
+                            tracing::warn!(
+                                id = %id,
+                                timeout_secs = timeout_secs,
+                                "Command did not exit within timeout, sending SIGKILL"
+                            );
+                            // Force kill with SIGKILL
+                            #[cfg(unix)]
+                            {
+                                unsafe { libc::kill(handle.pid as i32, libc::SIGKILL); }
+                            }
+                            #[cfg(not(unix))]
+                            {
+                                let _ = std::process::Command::new("kill")
+                                    .arg("-9").arg(handle.pid.to_string())
+                                    .spawn();
+                            }
+                        }
+                        Err(_) => {
+                            tracing::warn!(id = %id, "Exit receiver dropped, sending SIGKILL");
+                            #[cfg(unix)]
+                            {
+                                unsafe { libc::kill(handle.pid as i32, libc::SIGKILL); }
+                            }
+                        }
+                    }
+                }
+            }
         }
         Ok(())
     }
@@ -137,6 +182,73 @@ impl CommandManager {
         } else {
             anyhow::bail!("Command {} not found", id)
         }
+    }
+
+    /// Spawn a command with per-command exit configuration.
+    /// This is used by the API handler to allow on_exit/on_error per-command.
+    pub async fn spawn_with_exit(
+        &self,
+        cmd: String,
+        args: Vec<String>,
+        certificate: Option<String>,
+        on_exit: Option<String>,
+        on_error: Option<String>,
+        exit_timeout: u64,
+    ) -> anyhow::Result<CommandId> {
+        let id = Uuid::new_v4().to_string();
+        self.logger.log("spawn", &format!("id={} cmd={} args={:?} cert={:?}", id, cmd, args, certificate));
+
+        // Override default exit config with per-command values
+        let exit_config = crate::config::schema::ExitConfig {
+            on_exit,
+            on_error,
+            timeout_secs: exit_timeout,
+        };
+
+        let spawner = ProcessSpawner::new(&self.config.vtty);
+        let mut handle = spawner.spawn(
+            cmd,
+            args,
+            self.config.handles.clone(),
+            &id,
+            exit_config,
+            self,
+        ).await?;
+
+        handle.certificate = certificate;
+
+        self.commands.insert(id.clone(), handle);
+
+        // Spawn a background watcher that detects VTTY changes and broadcasts them.
+        let watch_id = id.clone();
+        let watch_commands = self.commands.clone();
+        let watch_tx = self.vtty_change_tx.clone();
+        tokio::spawn(async move {
+            let mut last_hash: String = String::new();
+            loop {
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+                let entry = match watch_commands.get(&watch_id) {
+                    Some(e) => e,
+                    None => break,
+                };
+
+                let html = entry.vtty_html().await;
+                drop(entry);
+
+                use sha2::{Sha256, Digest};
+                let mut hasher = Sha256::new();
+                hasher.update(html.as_bytes());
+                let hash = hex::encode(hasher.finalize());
+
+                if hash != last_hash {
+                    last_hash = hash;
+                    let _ = watch_tx.send((watch_id.clone(), html));
+                }
+            }
+        });
+
+        Ok(id)
     }
 }
 

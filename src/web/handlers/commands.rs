@@ -12,12 +12,21 @@ pub async fn list_commands(
     let commands = state.manager.list();
     let data: Vec<Value> = commands.into_iter()
         .map(|(id, name, pid, certificate)| {
+            // Look up exit config for the command
+            let exit_info = state.manager.get(&id).map(|h| {
+                serde_json::json!({
+                    "on_exit": h.exit_config.on_exit.as_deref().unwrap_or(&String::new()),
+                    "on_error": h.exit_config.on_error.as_deref().unwrap_or(&String::new()),
+                    "exit_timeout": h.exit_config.timeout_secs,
+                })
+            }).unwrap_or(serde_json::json!(null));
             serde_json::json!({
                 "id": id,
                 "name": name,
                 "pid": pid,
                 "status": "running",
                 "certificate": certificate,
+                "exit": exit_info,
             })
         })
         .collect();
@@ -36,6 +45,18 @@ pub async fn start_command(
     let certificate: Option<String> = body.get("certificate")
         .and_then(|v| v.as_str())
         .map(String::from);
+
+    let on_exit: Option<String> = body.get("on_exit")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
+    let on_error: Option<String> = body.get("on_error")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
+    let exit_timeout: u64 = body.get("exit_timeout")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(10);
 
     if cmd.is_empty() {
         return Json(serde_json::json!({
@@ -56,7 +77,7 @@ pub async fn start_command(
         }
     }
 
-    match state.manager.spawn(cmd, args, certificate).await {
+    match state.manager.spawn_with_exit(cmd, args, certificate, on_exit, on_error, exit_timeout).await {
         Ok(id) => Json(serde_json::json!({
             "status": "ok",
             "data": { "id": id },

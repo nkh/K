@@ -254,6 +254,14 @@ curl -s -X POST http://localhost:8080/api/commands \e
   -H "Content-Type: application/json" \e
   -d '{"cmd": "node", "args": ["server.js"], "certificate": "my-app"}'
 
+\fB# Start with exit handlers and timeout\fR
+curl -s -X POST http://localhost:8080/api/commands \e
+  -H "Content-Type: application/json" \e
+  -d '{"cmd": "cargo", "args": ["test"], \e
+       "on_exit": "notify-send Tests Passed", \e
+       "on_error": "notify-send Tests Failed", \e
+       "exit_timeout": 30}'
+
 \fB# Save the command ID for later use\fR
 ID=$(curl -s -X POST http://localhost:8080/api/commands \e
   -H "Content-Type: application/json" \e
@@ -357,18 +365,15 @@ Valid ranges: rows 1-200, cols 1-500.
 
 .SS Killing a command
 
+When a kill request is received, vrunner performs a graceful shutdown: SIGINT is sent first, then vrunner waits up to the configured \fBexit_timeout\fR (default: 10 seconds) before sending SIGKILL. This prevents data corruption in processes that need to flush state.
+
 .RS
 .PP
 .nf
-\fB# Graceful kill (SIGTERM)\fR
+\fB# Graceful kill (SIGINT, then SIGKILL after timeout)\fR
 curl -s -X POST "http://localhost:8080/api/commands/$ID/kill" \e
   -H "Content-Type: application/json" \e
   -d '{}'
-
-\fB# Force kill (SIGKILL)\fR
-curl -s -X POST "http://localhost:8080/api/commands/$ID/kill" \e
-  -H "Content-Type: application/json" \e
-  -d '{"signal": "SIGKILL"}'
 .fi
 .RE
 

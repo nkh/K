@@ -21,6 +21,8 @@ A virtual terminal runner and process orchestrator with a web-first control plan
 - **Declarative Config** — Configure via YAML, TOML, or JSON, overridden by CLI flags.
 - **Extensible Handles** — Route extra file descriptors to the VTTY or to managed log files.
 - **Certificate Pool** — Manage named certificates for per-command access control. Each running application can be bound to a specific certificate.
+- **WebSocket Streaming** — Real-time VTTY output and log streaming via WebSocket, with bidirectional keyboard input support.
+- **Exit Handlers** — Run commands on child exit (clean or error), with configurable grace period before force-kill.
 
 ---
 
@@ -178,6 +180,20 @@ vrunner [OPTIONS] [-- <COMMAND> [ARGS...]]
 | `--stdout-file` | `<FILE>` | `/tmp/vrunner.out` | Daemon stdout redirect |
 | `--stderr-file` | `<FILE>` | `/tmp/vrunner.err` | Daemon stderr redirect |
 
+### Exit Handler Options
+
+| Flag | Argument | Default | Description |
+|------|----------|---------|-------------|
+| `--on-exit` | `<CMD>` | — | Run command on clean exit (exit code 0) |
+| `--on-error` | `<CMD>` | — | Run command on error exit (non-zero) |
+| `--exit-timeout` | `<SECS>` | `10` | Grace period before SIGKILL |
+
+### Interactive Options
+
+| Flag | Argument | Default | Description |
+|------|----------|---------|-------------|
+| `--tabs` | — | off | Show tab bar for command switching in display |
+
 ### Subcommands
 
 | Command | Argument | Description |
@@ -251,6 +267,15 @@ daemon:
   stderr_file: "/tmp/vrunner.err"
 
 handles: []
+
+interactive:
+  tabs: false
+
+default_exit:
+  exit:
+    on_exit: null
+    on_error: null
+    timeout_secs: 10
 ```
 
 For the complete configuration reference with all entries, types, defaults, and CLI flag mappings, see [docs/configuration.md](docs/configuration.md).
@@ -348,6 +373,8 @@ This sends an HTTP shutdown request to the instance. If the instance is unrespon
 | `GET /api/log` | GET | Get command log entries (search, pagination) |
 | `POST /api/shutdown` | POST | Shut down the vrunner instance |
 | `GET /api/certificates` | GET | List all certificates in the pool |
+| `GET /api/commands/:id/ws` | GET (WS) | WebSocket: real-time VTTY streaming |
+| `GET /api/ws/logs` | GET (WS) | WebSocket: real-time log streaming |
 
 ### Response Format
 
@@ -410,6 +437,7 @@ When TLS is enabled, use `https://localhost:8080/admin` instead.
 | [docs/architecture.md](docs/architecture.md) | Technical architecture details |
 | [docs/requirements.md](docs/requirements.md) | Formal requirements specification |
 | [man/vrunner.1](man/vrunner.1) | Unix manpage |
+| [man/vrunnerctrl.1](man/vrunnerctrl.1) | CLI controller and API reference manpage |
 
 Install the manpage:
 ```bash

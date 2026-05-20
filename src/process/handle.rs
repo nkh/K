@@ -1,9 +1,10 @@
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot, RwLock};
 
+use crate::config::schema::ExitConfig;
 use crate::vtty::emulator::VttyEmulator;
 use crate::handles::registry::HandleRegistry;
-use super::spawner::StdinMessage;
+use super::spawner::{StdinMessage, ExitStatus};
 
 pub struct CommandHandle {
     pub id: String,
@@ -11,12 +12,12 @@ pub struct CommandHandle {
     pub name: String,
     pub emulator: Arc<RwLock<VttyEmulator>>,
     pub stdin_tx: mpsc::Sender<StdinMessage>,
-    pub _exit_rx: oneshot::Receiver<()>,
+    pub _exit_rx: oneshot::Receiver<ExitStatus>,
     pub handle_registry: HandleRegistry,
     /// Optional certificate name bound to this command.
-    /// When set, only clients presenting this certificate (or its derived token)
-    /// can interact with the command's endpoints.
     pub certificate: Option<String>,
+    /// Exit configuration for this command (on_exit, on_error, timeout).
+    pub exit_config: ExitConfig,
 }
 
 impl CommandHandle {

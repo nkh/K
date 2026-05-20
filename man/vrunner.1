@@ -168,6 +168,26 @@ Redirect daemon stdout to this file (default: \fB/tmp/vrunner.out\fR).
 .B \-\-stderr\-file \fIFILE\fR
 Redirect daemon stderr to this file (default: \fB/tmp/vrunner.err\fR).
 
+.SS Exit Handler Options
+
+.TP
+.B \-\-on\-exit \fICMD\fR
+Run \fICMD\fR when a child process exits cleanly (exit code 0). The command string is split on whitespace into a binary and arguments. The handler runs as a detached (fire-and-forget) process.
+
+.TP
+.B \-\-on\-error \fICMD\fR
+Run \fICMD\fR when a child process exits with a non-zero exit code. Same parsing rules as \fB\-\-on\-exit\fR. Useful for sending failure notifications or triggering cleanup/rollback scripts.
+
+.TP
+.B \-\-exit\-timeout \fISECS\fR
+Maximum seconds to wait for a child process to exit after SIGINT before sending SIGKILL (default: \fB10\fR). Applies when \fBPOST /api/commands/:id/kill\fR is called or when the server shuts down. This two-phase approach prevents data corruption in processes that need to flush buffers or close connections.
+
+.SS Interactive Options
+
+.TP
+.B \-\-tabs
+Show a tab bar listing all running commands at the top of the interactive display (requires \fB\-\-display\fR). When disabled (default), only the active command name is shown in the status bar. This provides an \fBmprocs\fR-style multi-command view.
+
 .SS Command Specification
 
 .TP

@@ -112,6 +112,22 @@ pub struct Cli {
     #[arg(long)]
     pub no_mouse: bool,
 
+    /// Run a command when the child exits cleanly (exit code 0)
+    #[arg(long, value_name = "CMD")]
+    pub on_exit: Option<String>,
+
+    /// Run a command when the child exits with an error (non-zero exit code)
+    #[arg(long, value_name = "CMD")]
+    pub on_error: Option<String>,
+
+    /// Seconds to wait for graceful exit before force-killing (default: 10)
+    #[arg(long, value_name = "SECS")]
+    pub exit_timeout: Option<u64>,
+
+    /// Show tab bar for command switching in interactive display
+    #[arg(long)]
+    pub tabs: bool,
+
     /// Subcommand (list, stop, cert)
     #[command(subcommand)]
     pub command: Option<Commands>,
@@ -264,6 +280,22 @@ impl Cli {
         }
         if self.no_mouse {
             cfg.vtty.mouse = false;
+        }
+
+        // Exit configuration
+        if let Some(on_exit) = &self.on_exit {
+            cfg.default_exit.exit.on_exit = Some(on_exit.clone());
+        }
+        if let Some(on_error) = &self.on_error {
+            cfg.default_exit.exit.on_error = Some(on_error.clone());
+        }
+        if let Some(timeout) = self.exit_timeout {
+            cfg.default_exit.exit.timeout_secs = timeout;
+        }
+
+        // Interactive display
+        if self.tabs {
+            cfg.interactive.tabs = true;
         }
     }
 }
