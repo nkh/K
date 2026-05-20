@@ -55,6 +55,32 @@ impl CommandHandle {
         emu.partial(start_row, row_count)
     }
 
+    pub async fn vtty_html(&self) -> String {
+        let buf = self.vtty_snapshot().await;
+        crate::vtty::renderer::VttyRenderer::to_html(&buf)
+    }
+
+    pub async fn cursor_position(&self) -> (usize, usize) {
+        let emu = self.emulator.read().await;
+        emu.cursor()
+    }
+
+    pub async fn dimensions(&self) -> (usize, usize) {
+        let emu = self.emulator.read().await;
+        emu.dimensions()
+    }
+
+    pub async fn scrollback_count(&self) -> usize {
+        let emu = self.emulator.read().await;
+        emu.snapshot().scrollback.len()
+    }
+
+    pub async fn resize(&self, rows: u16, cols: u16) -> anyhow::Result<()> {
+        let mut emu = self.emulator.write().await;
+        emu.resize(rows as usize, cols as usize);
+        Ok(())
+    }
+
     pub fn list_handles(&self) -> Vec<String> {
         self.handle_registry.list()
     }

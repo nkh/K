@@ -13,6 +13,7 @@ fn test_config() -> Config {
         },
         security: SecurityConfig::default(),
         tls: TlsConfig::default(),
+        certificates: Default::default(),
         vtty: VttyConfig {
             rows: 10,
             cols: 40,
@@ -43,7 +44,7 @@ async fn test_spawn_and_list() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
 
-    let id = manager.spawn("echo".to_string(), vec!["hello".to_string()]).await.unwrap();
+    let id = manager.spawn("echo".to_string(), vec!["hello".to_string()], None).await.unwrap();
 
     let list = manager.list();
     assert_eq!(list.len(), 1);
@@ -58,7 +59,7 @@ async fn test_vtty_contents() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
 
-    let id = manager.spawn("echo".to_string(), vec!["test_output".to_string()]).await.unwrap();
+    let id = manager.spawn("echo".to_string(), vec!["test_output".to_string()], None).await.unwrap();
 
     // Give process time to write and exit
     sleep(Duration::from_millis(200)).await;
@@ -77,7 +78,7 @@ async fn test_send_keys() {
     let manager = Arc::new(CommandManager::new(cfg));
 
     // Spawn a shell that reads input (cat is good for testing)
-    let id = manager.spawn("cat".to_string(), vec![]).await.unwrap();
+    let id = manager.spawn("cat".to_string(), vec![], None).await.unwrap();
 
     // Send some text
     manager.send_keys(&id, "hello").await.unwrap();

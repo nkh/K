@@ -28,6 +28,36 @@ pub async fn get_vtty_full(
     }
 }
 
+pub async fn get_vtty_html(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Json<Value> {
+    match state.manager.get(&id) {
+        Some(handle) => {
+            let html = handle.vtty_html().await;
+            let (cursor_row, cursor_col) = handle.cursor_position().await;
+            let (rows, cols) = handle.dimensions().await;
+            let scrollback = handle.scrollback_count().await;
+            Json(serde_json::json!({
+                "status": "ok",
+                "data": {
+                    "id": id,
+                    "html": html,
+                    "cursor": { "row": cursor_row, "col": cursor_col },
+                    "dimensions": { "rows": rows, "cols": cols },
+                    "scrollback_lines": scrollback,
+                },
+                "error": null
+            }))
+        }
+        None => Json(serde_json::json!({
+            "status": "error",
+            "data": null,
+            "error": format!("Command {} not found", id)
+        })),
+    }
+}
+
 pub async fn get_vtty_partial(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -49,6 +79,48 @@ pub async fn get_vtty_partial(
                 },
                 "error": null
             }))
+        }
+        None => Json(serde_json::json!({
+            "status": "error",
+            "data": null,
+            "error": format!("Command {} not found", id)
+        })),
+    }
+}
+
+pub async fn resize_vtty(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<Value>,
+) -> Json<Value> {
+    let rows = body.get("rows").and_then(|v| v.as_u64()).unwrap_or(24) as u16;
+    let cols = body.get("cols").and_then(|v| v.as_u64()).unwrap_or(80) as u16;
+
+    if rows < 1 || cols < 1 || rows > 200 || cols > 500 {
+        return Json(serde_json::json!({
+            "status": "error",
+            "data": null,
+            "error": "Invalid dimensions: rows must be 1-200, cols must be 1-500"
+        }));
+    }
+
+    match state.manager.get(&id) {
+        Some(handle) => {
+            match handle.resize(rows, cols).await {
+                Ok(_) => {
+                    state.manager.logger().log("resize", &format!("id={} rows={} cols={}", id, rows, cols));
+                    Json(serde_json::json!({
+                        "status": "ok",
+                        "data": { "id": id, "rows": rows, "cols": cols },
+                        "error": null
+                    }))
+                }
+                Err(e) => Json(serde_json::json!({
+                    "status": "error",
+                    "data": null,
+                    "error": e.to_string()
+                })),
+            }
         }
         None => Json(serde_json::json!({
             "status": "error",

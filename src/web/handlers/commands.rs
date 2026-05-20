@@ -100,3 +100,22 @@ pub async fn shutdown(
         "error": null
     }))
 }
+
+pub async fn get_info(
+    State(state): State<AppState>,
+) -> Json<Value> {
+    let commands = state.manager.list();
+    let certs = state.cert_store.list();
+    let cert_names: Vec<&str> = certs.iter().map(|c| c.name.as_str()).collect();
+
+    Json(serde_json::json!({
+        "status": "ok",
+        "data": {
+            "command_count": commands.len(),
+            "certificate_count": certs.len(),
+            "certificates": cert_names,
+            "auth_enabled": state.auth_token.is_some(),
+        },
+        "error": null
+    }))
+}

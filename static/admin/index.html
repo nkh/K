@@ -5,196 +5,974 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>vrunner Admin</title>
     <style>
-        body { font-family: system-ui, sans-serif; margin: 2rem; background: #0d1117; color: #c9d1d9; }
-        h1 { color: #58a6ff; }
-        .command-list { border: 1px solid #30363d; border-radius: 6px; padding: 1rem; margin-top: 1rem; }
-        .command-item { padding: 0.5rem; border-bottom: 1px solid #21262d; display: flex; align-items: center; gap: 0.75rem; }
-        .command-item:last-child { border-bottom: none; }
-        .status-running { color: #3fb950; }
-        .status-exited { color: #f85149; }
-        .cert-badge { display: inline-block; background: #1f6feb22; color: #58a6ff; border: 1px solid #1f6feb44; border-radius: 4px; padding: 0.1rem 0.5rem; font-size: 0.75rem; font-family: monospace; }
-        .cert-badge.empty { background: #30363d; color: #484f58; border-color: #484f58; }
-        .cert-info { margin-top: 0.25rem; font-size: 0.8rem; color: #8b949e; }
-        .vtty-viewer { background: #161b22; border: 1px solid #30363d; padding: 1rem; font-family: monospace; white-space: pre; overflow: auto; height: 400px; margin-top: 1rem; }
-        .key-input { margin-top: 1rem; display: flex; gap: 0.5rem; }
-        .token-bar { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.75rem; font-size: 0.85rem; }
-        .token-bar label { color: #8b949e; }
-        .token-bar input { flex: 1; background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 4px; padding: 0.4rem 0.6rem; font-family: monospace; font-size: 0.85rem; }
-        .token-bar button { background: #238636; color: #fff; border: none; border-radius: 4px; padding: 0.4rem 0.8rem; cursor: pointer; font-size: 0.85rem; }
-        .token-bar button:hover { background: #2ea043; }
-        .cert-list { border: 1px solid #30363d; border-radius: 6px; padding: 1rem; margin-top: 1rem; }
-        .cert-list h3 { color: #58a6ff; margin-top: 0; margin-bottom: 0.75rem; font-size: 0.95rem; }
-        .cert-item { padding: 0.4rem 0; border-bottom: 1px solid #21262d; font-size: 0.85rem; font-family: monospace; }
-        .cert-item:last-child { border-bottom: none; }
-        .cert-item-name { color: #58a6ff; font-weight: 600; }
-        .cert-item-token { color: #8b949e; margin-left: 1rem; }
-        input, button { padding: 0.5rem; background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
-        button { cursor: pointer; }
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --border: #30363d;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+            --text-muted: #484f58;
+            --accent: #58a6ff;
+            --accent-dim: #1f6feb22;
+            --green: #3fb950;
+            --red: #f85149;
+            --yellow: #d29922;
+            --purple: #bc8cff;
+            --font-mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+            --font-sans: system-ui, -apple-system, sans-serif;
+            --font-size: 13px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: var(--font-sans); background: var(--bg-primary); color: var(--text-primary); font-size: var(--font-size); overflow: hidden; height: 100vh; }
+
+        /* Layout */
+        .app { display: flex; flex-direction: column; height: 100vh; }
+        .topbar { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 1rem; background: var(--bg-secondary); border-bottom: 1px solid var(--border); flex-shrink: 0; z-index: 10; }
+        .topbar h1 { font-size: 1rem; color: var(--accent); white-space: nowrap; }
+        .topbar .spacer { flex: 1; }
+        .topbar button, .topbar select, .topbar input { font-size: 0.8rem; }
+        .main { display: flex; flex: 1; overflow: hidden; }
+        .sidebar { width: 280px; background: var(--bg-secondary); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+        .sidebar.collapsed { width: 0; overflow: hidden; border-right: none; }
+        .sidebar-header { padding: 0.5rem; border-bottom: 1px solid var(--border); display: flex; gap: 0.5rem; align-items: center; }
+        .sidebar-tabs { display: flex; border-bottom: 1px solid var(--border); }
+        .sidebar-tab { flex: 1; padding: 0.4rem; text-align: center; cursor: pointer; color: var(--text-secondary); border-bottom: 2px solid transparent; font-size: 0.75rem; }
+        .sidebar-tab:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+        .sidebar-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .sidebar-content { flex: 1; overflow-y: auto; padding: 0.5rem; }
+        .content-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+        /* Panels */
+        .panel-container { flex: 1; display: flex; overflow: hidden; }
+        .panel { flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--border); min-width: 200px; }
+        .panel:last-child { border-right: none; }
+        .panel-header { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem; background: var(--bg-tertiary); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+        .panel-header .title { flex: 1; font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .panel-header .instance-url { font-size: 0.7rem; color: var(--text-muted); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* VTTY */
+        .vtty-container { flex: 1; overflow: auto; background: #000; position: relative; }
+        .vtty-container pre { margin: 0; padding: 0; font-family: var(--font-mono); font-size: var(--font-size); line-height: 1.2; min-width: 100%; min-height: 100%; }
+        .vtty-container .cursor-indicator { position: absolute; width: 8px; height: 14px; background: rgba(88, 166, 255, 0.6); border: 1px solid var(--accent); pointer-events: none; transition: top 0.05s, left 0.05s; z-index: 5; }
+
+        /* Command list items */
+        .cmd-item { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; }
+        .cmd-item:hover { background: var(--bg-tertiary); }
+        .cmd-item.selected { background: var(--bg-tertiary); border-left: 2px solid var(--accent); }
+        .cmd-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .cmd-item .pid { color: var(--text-muted); font-size: 0.7rem; font-family: var(--font-mono); }
+        .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+        .status-running { background: var(--green); }
+        .status-exited { background: var(--red); }
+
+        /* Buttons */
+        button { padding: 0.3rem 0.6rem; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-family: inherit; font-size: inherit; }
         button:hover { background: #30363d; }
-        .kill-btn { background: #da3633; color: #fff; border: none; border-radius: 4px; padding: 0.2rem 0.6rem; font-size: 0.8rem; }
-        .kill-btn:hover { background: #f85149; }
-        .command-detail { margin-top: 0.5rem; padding: 0.5rem; background: #161b22; border-radius: 4px; font-size: 0.85rem; }
-        .command-detail strong { color: #8b949e; }
+        button.primary { background: #238636; border-color: #2ea043; color: #fff; }
+        button.primary:hover { background: #2ea043; }
+        button.danger { background: #da3633; border-color: #f85149; color: #fff; }
+        button.danger:hover { background: #f85149; }
+        button.small { padding: 0.15rem 0.4rem; font-size: 0.7rem; }
+        button.icon-btn { padding: 0.2rem 0.4rem; font-size: 0.9rem; line-height: 1; }
+
+        /* Inputs */
+        input, select, textarea { padding: 0.3rem 0.5rem; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px; font-family: inherit; font-size: inherit; }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+        .input-row { display: flex; gap: 0.4rem; align-items: center; }
+        .input-row input, .input-row select { flex: 1; }
+        .input-row button { flex-shrink: 0; }
+
+        /* Token bar */
+        .token-bar { display: flex; align-items: center; gap: 0.5rem; }
+        .token-bar label { color: var(--text-secondary); font-size: 0.75rem; white-space: nowrap; }
+        .token-bar input { font-family: var(--font-mono); font-size: 0.75rem; width: 180px; }
+
+        /* Spawn form */
+        .spawn-form { padding: 0.5rem; }
+        .spawn-form .field { margin-bottom: 0.4rem; }
+        .spawn-form label { display: block; font-size: 0.7rem; color: var(--text-secondary); margin-bottom: 0.15rem; }
+        .spawn-form input, .spawn-form select { width: 100%; }
+
+        /* Log viewer */
+        .log-viewer { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .log-toolbar { display: flex; gap: 0.4rem; padding: 0.4rem 0.5rem; background: var(--bg-tertiary); border-bottom: 1px solid var(--border); align-items: center; }
+        .log-toolbar input { flex: 1; font-size: 0.75rem; }
+        .log-content { flex: 1; overflow-y: auto; padding: 0.5rem; font-family: var(--font-mono); font-size: 0.75rem; white-space: pre-wrap; word-break: break-all; }
+        .log-line { padding: 0.1rem 0; border-bottom: 1px solid #1a1f25; }
+        .log-line .timestamp { color: var(--text-muted); }
+        .log-line .cmd-type { color: var(--accent); }
+        .log-line .details { color: var(--text-primary); }
+        .log-line.highlight { background: rgba(88, 166, 255, 0.1); }
+
+        /* Docs page */
+        .docs-page { flex: 1; overflow-y: auto; padding: 1.5rem 2rem; max-width: 900px; margin: 0 auto; }
+        .docs-page h1 { color: var(--accent); font-size: 1.5rem; margin-bottom: 1rem; }
+        .docs-page h2 { color: var(--accent); font-size: 1.1rem; margin: 1.5rem 0 0.5rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--border); }
+        .docs-page h3 { color: var(--text-primary); font-size: 0.95rem; margin: 1rem 0 0.3rem; }
+        .docs-page p { color: var(--text-secondary); line-height: 1.6; margin-bottom: 0.75rem; }
+        .docs-page code { background: var(--bg-tertiary); padding: 0.15rem 0.4rem; border-radius: 3px; font-family: var(--font-mono); font-size: 0.85em; color: var(--accent); }
+        .docs-page pre { background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem 1rem; overflow-x: auto; margin: 0.5rem 0 1rem; font-size: 0.8rem; }
+        .docs-page pre code { background: none; padding: 0; color: var(--text-primary); }
+        .docs-page ul, .docs-page ol { color: var(--text-secondary); padding-left: 1.5rem; margin-bottom: 0.75rem; line-height: 1.6; }
+        .docs-page li { margin-bottom: 0.25rem; }
+        .docs-page table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; }
+        .docs-page th, .docs-page td { border: 1px solid var(--border); padding: 0.4rem 0.6rem; text-align: left; font-size: 0.8rem; }
+        .docs-page th { background: var(--bg-tertiary); color: var(--text-primary); }
+        .docs-page td { color: var(--text-secondary); }
+
+        /* Cert badges */
+        .cert-badge { display: inline-block; background: var(--accent-dim); color: var(--accent); border: 1px solid #1f6feb44; border-radius: 3px; padding: 0 0.4rem; font-size: 0.7rem; font-family: var(--font-mono); }
+        .cert-badge.empty { background: var(--bg-tertiary); color: var(--text-muted); border-color: var(--text-muted); }
+
+        /* Bottom bar */
+        .bottombar { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.75rem; background: var(--bg-secondary); border-top: 1px solid var(--border); flex-shrink: 0; }
+        .bottombar .cursor-pos { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); }
+        .bottombar .dims { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); }
+        .bottombar .spacer { flex: 1; }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-primary); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* Resize controls */
+        .resize-controls { display: flex; align-items: center; gap: 0.3rem; }
+        .resize-controls label { font-size: 0.7rem; color: var(--text-muted); }
+        .resize-controls input { width: 50px; font-size: 0.7rem; text-align: center; padding: 0.15rem; }
+
+        /* Multi-panel controls */
+        .panel-controls { display: flex; gap: 0.3rem; }
+
+        /* Font size */
+        .font-size-ctrl { display: flex; align-items: center; gap: 0.3rem; }
+        .font-size-ctrl span { font-size: 0.7rem; color: var(--text-muted); min-width: 32px; text-align: center; }
+
+        /* Tooltip */
+        [title] { position: relative; }
+
+        /* View tabs */
+        .view-tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--bg-secondary); }
+        .view-tab { padding: 0.4rem 0.75rem; cursor: pointer; color: var(--text-secondary); border-bottom: 2px solid transparent; font-size: 0.8rem; }
+        .view-tab:hover { color: var(--text-primary); }
+        .view-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+        /* Instance config modal */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 100; display: flex; align-items: center; justify-content: center; }
+        .modal { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; min-width: 400px; max-width: 90vw; }
+        .modal h2 { font-size: 1rem; color: var(--accent); margin-bottom: 1rem; }
+        .modal .field { margin-bottom: 0.75rem; }
+        .modal label { display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.2rem; }
+        .modal input { width: 100%; }
+        .modal .actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
     </style>
 </head>
 <body>
-    <h1>vrunner Admin</h1>
-
-    <!-- Auth token configuration -->
-    <div class="token-bar">
-        <label for="authToken">Auth Token:</label>
-        <input type="password" id="authToken" placeholder="Bearer token (leave empty if auth is disabled)">
-        <button onclick="saveToken()">Save</button>
+<div class="app">
+    <!-- Top bar -->
+    <div class="topbar">
+        <h1>vrunner</h1>
+        <div class="spacer"></div>
+        <div class="font-size-ctrl">
+            <button class="icon-btn small" onclick="changeFontSize(-1)" title="Decrease font size">A-</button>
+            <span id="fontSizeLabel">13px</span>
+            <button class="icon-btn small" onclick="changeFontSize(1)" title="Increase font size">A+</button>
+        </div>
+        <div class="resize-controls">
+            <label>R:</label>
+            <input type="number" id="resizeRows" value="24" min="1" max="200" title="Terminal rows">
+            <label>C:</label>
+            <input type="number" id="resizeCols" value="80" min="1" max="500" title="Terminal columns">
+            <button class="small" onclick="resizeTerminal()">Resize</button>
+        </div>
+        <button class="small" onclick="toggleSidebar()" title="Toggle sidebar">&#9776;</button>
+        <button class="small" onclick="addPanel()" title="Add panel (multi-view)">+ Panel</button>
+        <button class="small" onclick="showDocs()" title="Documentation">Docs</button>
+        <div class="token-bar">
+            <label for="authToken">Token:</label>
+            <input type="password" id="authToken" placeholder="Bearer token" title="Authorization token">
+            <button class="small" onclick="saveToken()">Save</button>
+        </div>
     </div>
 
-    <!-- Certificates section -->
-    <div id="certificates" class="cert-list">
-        <h3>Certificates</h3>
-        <p>Loading...</p>
-    </div>
-
-    <!-- Commands section -->
-    <div id="commands" class="command-list">
-        <p>Loading commands...</p>
-    </div>
-
-    <!-- Key input -->
-    <div class="key-input">
-        <input type="text" id="keyInput" placeholder="Type keys to send...">
-        <button onclick="sendKeys()">Send</button>
-    </div>
-
-    <!-- VTTY viewer -->
-    <div id="vtty" class="vtty-viewer"></div>
-
-    <script>
-        let selectedCommandId = null;
-        let authToken = localStorage.getItem('vrunner_auth_token') || '';
-
-        // Restore token from localStorage
-        document.getElementById('authToken').value = authToken;
-
-        function saveToken() {
-            authToken = document.getElementById('authToken').value.trim();
-            if (authToken) {
-                localStorage.setItem('vrunner_auth_token', authToken);
-            } else {
-                localStorage.removeItem('vrunner_auth_token');
-            }
-        }
-
-        function authHeaders() {
-            const headers = { 'Content-Type': 'application/json' };
-            if (authToken) {
-                headers['Authorization'] = 'Bearer ' + authToken;
-            }
-            return headers;
-        }
-
-        async function loadCertificates() {
-            try {
-                const res = await fetch('/api/certificates', { headers: authHeaders() });
-                const json = await res.json();
-                const container = document.getElementById('certificates');
-                if (json.status === 'ok' && json.data.length > 0) {
-                    container.innerHTML = '<h3>Certificates</h3>' + json.data.map(cert => `
-                        <div class="cert-item">
-                            <span class="cert-item-name">${escHtml(cert.name)}</span>
-                            <span class="cert-item-token">token: ${escHtml(cert.token_preview)}...</span>
+    <div class="main">
+        <!-- Sidebar -->
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-tabs">
+                <div class="sidebar-tab active" onclick="switchSidebarTab('commands', this)">Commands</div>
+                <div class="sidebar-tab" onclick="switchSidebarTab('spawn', this)">Spawn</div>
+                <div class="sidebar-tab" onclick="switchSidebarTab('certs', this)">Certs</div>
+            </div>
+            <div class="sidebar-content" id="sidebarContent">
+                <!-- Commands tab (default) -->
+                <div id="tab-commands">
+                    <div id="commandList"></div>
+                </div>
+                <!-- Spawn tab -->
+                <div id="tab-spawn" style="display:none;">
+                    <div class="spawn-form">
+                        <div class="field">
+                            <label>Command</label>
+                            <input type="text" id="spawnCmd" placeholder="/usr/bin/htop">
                         </div>
-                    `).join('');
-                } else {
-                    container.innerHTML = '<h3>Certificates</h3><p style="color:#484f58">No certificates configured.</p>';
-                }
-            } catch (e) {
-                document.getElementById('certificates').innerHTML = '<h3>Certificates</h3><p style="color:#f85149">Failed to load certificates.</p>';
-            }
+                        <div class="field">
+                            <label>Arguments (space-separated)</label>
+                            <input type="text" id="spawnArgs" placeholder="-- arg1 arg2">
+                        </div>
+                        <div class="field">
+                            <label>Certificate (optional)</label>
+                            <select id="spawnCert">
+                                <option value="">None</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label>Target Instance</label>
+                            <select id="spawnInstance"></select>
+                        </div>
+                        <button class="primary" onclick="spawnCommand()" style="width:100%;margin-top:0.5rem;">Spawn Command</button>
+                    </div>
+                </div>
+                <!-- Certs tab -->
+                <div id="tab-certs" style="display:none;">
+                    <div id="certList"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Content area -->
+        <div class="content-area" id="contentArea">
+            <!-- View tabs -->
+            <div class="view-tabs">
+                <div class="view-tab active" onclick="switchViewTab('vtty', this)">Terminal</div>
+                <div class="view-tab" onclick="switchViewTab('log', this)">Logs</div>
+                <div class="view-tab" onclick="switchViewTab('docs', this)" id="docsTab" style="display:none;">Documentation</div>
+            </div>
+
+            <!-- Terminal view -->
+            <div id="view-vtty" class="panel-container">
+                <!-- Panels are dynamically added here -->
+            </div>
+
+            <!-- Log view -->
+            <div id="view-log" class="log-viewer" style="display:none;">
+                <div class="log-toolbar">
+                    <input type="text" id="logSearch" placeholder="Search logs..." oninput="searchLogs()">
+                    <button class="small" onclick="clearLogSearch()">Clear</button>
+                    <button class="small" onclick="loadLog()">Refresh</button>
+                    <span id="logCount" style="font-size:0.7rem;color:var(--text-muted);"></span>
+                </div>
+                <div class="log-content" id="logContent"></div>
+            </div>
+
+            <!-- Docs view -->
+            <div id="view-docs" class="docs-page" style="display:none;"></div>
+        </div>
+    </div>
+
+    <!-- Bottom bar -->
+    <div class="bottombar">
+        <span class="cursor-pos" id="cursorPos">Cursor: --</span>
+        <span class="dims" id="termDims">--</span>
+        <span class="spacer"></span>
+        <span style="font-size:0.7rem;color:var(--text-muted);" id="connStatus">Connected</span>
+    </div>
+</div>
+
+<!-- Add panel modal -->
+<div class="modal-overlay" id="panelModal" style="display:none;" onclick="if(event.target===this)closePanelModal()">
+    <div class="modal">
+        <h2>Add Instance Panel</h2>
+        <div class="field">
+            <label>Instance URL</label>
+            <input type="text" id="panelUrl" placeholder="http://localhost:8080">
+        </div>
+        <div class="field">
+            <label>Label (optional)</label>
+            <input type="text" id="panelLabel" placeholder="Instance 2">
+        </div>
+        <div class="field">
+            <label>Auth Token (optional)</label>
+            <input type="text" id="panelToken" placeholder="Bearer token for this instance">
+        </div>
+        <div class="actions">
+            <button onclick="closePanelModal()">Cancel</button>
+            <button class="primary" onclick="confirmAddPanel()">Add Panel</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ─── State ───
+const state = {
+    panels: [],
+    selectedCommandId: null,
+    authToken: localStorage.getItem('vrunner_auth_token') || '',
+    refreshInterval: null,
+    fontSize: parseInt(localStorage.getItem('vrunner_font_size') || '13'),
+    instanceUrls: [],
+    currentView: 'vtty',
+};
+
+// ─── Initialization ───
+(function init() {
+    document.getElementById('authToken').value = state.authToken;
+    applyFontSize();
+
+    // Parse URL arguments for multi-instance
+    const params = new URLSearchParams(window.location.search);
+    const instances = params.getAll('instance');
+    if (instances.length > 0) {
+        // First instance is the primary (current origin), rest are additional panels
+        state.instanceUrls = instances.map((u, i) => ({
+            url: u,
+            label: params.getAll('label')[i] || `Instance ${i + 1}`,
+            token: params.getAll('token')[i] || '',
+        }));
+    } else {
+        // Default: current origin
+        state.instanceUrls = [{
+            url: window.location.origin,
+            label: 'Local',
+            token: '',
+        }];
+    }
+
+    // Create initial panels
+    state.instanceUrls.forEach(inst => addPanelDirect(inst.url, inst.label, inst.token));
+
+    // Start refresh
+    startRefresh();
+    loadCertificates();
+})();
+
+function getBaseUrl() {
+    return state.instanceUrls.length > 0 ? state.instanceUrls[0].url : window.location.origin;
+}
+
+function authHeaders(token) {
+    const t = token || state.authToken;
+    const headers = { 'Content-Type': 'application/json' };
+    if (t) headers['Authorization'] = 'Bearer ' + t;
+    return headers;
+}
+
+function authHeadersForInstance(inst) {
+    return authHeaders(inst.token || state.authToken);
+}
+
+function apiUrl(path, inst) {
+    const base = inst ? inst.url : getBaseUrl();
+    return base + path;
+}
+
+// ─── Token Management ───
+function saveToken() {
+    state.authToken = document.getElementById('authToken').value.trim();
+    if (state.authToken) {
+        localStorage.setItem('vrunner_auth_token', state.authToken);
+    } else {
+        localStorage.removeItem('vrunner_auth_token');
+    }
+}
+
+// ─── Font Size ───
+function changeFontSize(delta) {
+    state.fontSize = Math.max(8, Math.min(28, state.fontSize + delta));
+    applyFontSize();
+}
+
+function applyFontSize() {
+    document.documentElement.style.setProperty('--font-size', state.fontSize + 'px');
+    document.getElementById('fontSizeLabel').textContent = state.fontSize + 'px';
+    localStorage.setItem('vrunner_font_size', state.fontSize.toString());
+}
+
+// ─── Sidebar ───
+function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('collapsed');
+}
+
+function switchSidebarTab(tab, el) {
+    document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('tab-commands').style.display = tab === 'commands' ? '' : 'none';
+    document.getElementById('tab-spawn').style.display = tab === 'spawn' ? '' : 'none';
+    document.getElementById('tab-certs').style.display = tab === 'certs' ? '' : 'none';
+}
+
+// ─── View Tabs ───
+function switchViewTab(view, el) {
+    document.querySelectorAll('.view-tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    state.currentView = view;
+    document.getElementById('view-vtty').style.display = view === 'vtty' ? 'flex' : 'none';
+    document.getElementById('view-log').style.display = view === 'log' ? 'flex' : 'none';
+    document.getElementById('view-docs').style.display = view === 'docs' ? 'block' : 'none';
+    if (view === 'log') loadLog();
+}
+
+// ─── Commands ───
+async function loadCommands() {
+    // Load commands from all instances
+    for (const inst of state.instanceUrls) {
+        try {
+            const res = await fetch(apiUrl('/api/commands', inst), { headers: authHeadersForInstance(inst) });
+            const json = await res.json();
+            inst._commands = json.status === 'ok' ? json.data : [];
+            inst._lastError = null;
+        } catch (e) {
+            inst._commands = [];
+            inst._lastError = e.message;
+        }
+    }
+
+    // Render command list (merge all instances)
+    const container = document.getElementById('commandList');
+    let html = '';
+
+    for (const inst of state.instanceUrls) {
+        if (inst._lastError) {
+            html += `<div style="padding:0.5rem;color:var(--red);font-size:0.75rem;">${escHtml(inst.label)}: ${escHtml(inst._lastError)}</div>`;
+        } else if (inst._commands.length === 0) {
+            html += `<div style="padding:0.5rem;color:var(--text-muted);font-size:0.75rem;">${escHtml(inst.label)}: No commands</div>`;
         }
 
-        async function loadCommands() {
-            try {
-                const res = await fetch('/api/commands', { headers: authHeaders() });
-                const json = await res.json();
-                const container = document.getElementById('commands');
-                if (json.status === 'ok' && json.data.length > 0) {
-                    if (!selectedCommandId) selectedCommandId = json.data[0].id;
-                    container.innerHTML = json.data.map(cmd => {
-                        const cert = cmd.certificate || '';
-                        const certBadge = cert
-                            ? `<span class="cert-badge" title="Bound to certificate: ${escHtml(cert)}">${escHtml(cert)}</span>`
-                            : `<span class="cert-badge empty">no cert</span>`;
-                        const isSelected = cmd.id === selectedCommandId ? 'background:#21262d;border-radius:4px;' : '';
-                        return `
-                            <div class="command-item" onclick="selectCommand('${cmd.id}')" style="cursor:pointer;${isSelected}">
-                                <strong>${escHtml(cmd.name || cmd.id)}</strong>
-                                ${certBadge}
-                                <span class="status-${cmd.status}">${cmd.status}</span>
-                                <span style="color:#484f58;font-size:0.8rem;">PID ${cmd.pid}</span>
-                                <button class="kill-btn" onclick="event.stopPropagation(); killCommand('${cmd.id}')">Kill</button>
-                            </div>
-                        `;
-                    }).join('');
-                    loadVtty();
-                } else {
-                    container.innerHTML = '<p>No commands running.</p>';
-                    document.getElementById('vtty').textContent = '';
-                }
-            } catch (e) {
-                document.getElementById('commands').innerHTML = '<p style="color:#f85149">Failed to load commands.</p>';
+        for (const cmd of (inst._commands || [])) {
+            const cert = cmd.certificate || '';
+            const certBadge = cert
+                ? `<span class="cert-badge" title="Bound to: ${escHtml(cert)}">${escHtml(cert)}</span>`
+                : `<span class="cert-badge empty">--</span>`;
+            const key = inst.url + ':' + cmd.id;
+            const selected = state.selectedCommandId === key ? ' selected' : '';
+            html += `
+                <div class="cmd-item${selected}" onclick="selectCommand('${inst.url}','${cmd.id}','${escHtml(cmd.name || cmd.id)}')" title="${escHtml(inst.label)} / ${escHtml(cmd.name || cmd.id)}">
+                    <div class="status-dot status-running"></div>
+                    <span class="name">${escHtml(cmd.name || cmd.id)}</span>
+                    ${certBadge}
+                    <span class="pid">${cmd.pid}</span>
+                    <button class="small danger" onclick="event.stopPropagation();killCommand('${inst.url}','${cmd.id}')" title="Kill">&#x2715;</button>
+                </div>`;
+        }
+    }
+
+    container.innerHTML = html || '<div style="padding:1rem;color:var(--text-muted);text-align:center;">No running commands</div>';
+
+    // Update spawn instance dropdown
+    updateInstanceDropdown();
+
+    // If a command is selected, refresh its VTTY
+    if (state.selectedCommandId) {
+        const parts = state.selectedCommandId.split(':');
+        if (parts.length >= 2) {
+            const instUrl = parts.slice(0, -1).join(':');
+            const cmdId = parts[parts.length - 1];
+            loadVttyHtml(instUrl, cmdId);
+        }
+    }
+}
+
+function selectCommand(instUrl, cmdId, name) {
+    state.selectedCommandId = instUrl + ':' + cmdId;
+    loadCommands(); // Re-render to update selection
+}
+
+function getSelectedPanel() {
+    // Find the panel for the selected command's instance
+    if (!state.selectedCommandId) return state.panels[0];
+    const parts = state.selectedCommandId.split(':');
+    if (parts.length < 2) return state.panels[0];
+    const instUrl = parts.slice(0, -1).join(':');
+    return state.panels.find(p => p.instUrl === instUrl) || state.panels[0];
+}
+
+async function loadVttyHtml(instUrl, cmdId) {
+    const panel = getSelectedPanel();
+    if (!panel) return;
+
+    try {
+        const res = await fetch(apiUrl(`/api/commands/${cmdId}/vtty/html`, { url: instUrl }), { headers: authHeadersForInstance({ url: instUrl }) });
+        const json = await res.json();
+        if (json.status === 'ok' && json.data) {
+            const vttyEl = panel.querySelector('.vtty-container');
+            const pre = vttyEl.querySelector('pre');
+            if (pre) pre.innerHTML = json.data.html || '<span style="color:#484f58">(empty)</span>';
+
+            // Cursor position
+            const cursor = json.data.cursor || {};
+            const dims = json.data.dimensions || {};
+            document.getElementById('cursorPos').textContent = `Cursor: ${cursor.row + 1},${cursor.col + 1}`;
+            document.getElementById('termDims').textContent = `${dims.rows}x${dims.cols} | Scrollback: ${json.data.scrollback_lines || 0}`;
+            document.getElementById('resizeRows').value = dims.rows || 24;
+            document.getElementById('resizeCols').value = dims.cols || 80;
+
+            // Show cursor indicator
+            const cursorEl = vttyEl.querySelector('.cursor-indicator');
+            if (cursorEl && cursor.row !== undefined) {
+                const charW = state.fontSize * 0.6;
+                const charH = state.fontSize * 1.2;
+                cursorEl.style.top = (cursor.row * charH) + 'px';
+                cursorEl.style.left = (cursor.col * charW) + 'px';
+                cursorEl.style.width = charW + 'px';
+                cursorEl.style.height = charH + 'px';
+                cursorEl.style.display = '';
             }
         }
+    } catch (e) {
+        console.error('Failed to load VTTY:', e);
+    }
+}
 
-        function selectCommand(id) {
-            selectedCommandId = id;
-            loadVtty();
-            // Re-render command list to update selection highlight
+async function spawnCommand() {
+    const cmd = document.getElementById('spawnCmd').value.trim();
+    if (!cmd) return;
+    const argsStr = document.getElementById('spawnArgs').value.trim();
+    const args = argsStr ? argsStr.split(/\s+/) : [];
+    const cert = document.getElementById('spawnCert').value || null;
+    const instSelect = document.getElementById('spawnInstance');
+    const instUrl = instSelect.value;
+
+    try {
+        const res = await fetch(apiUrl('/api/commands', { url: instUrl }), {
+            method: 'POST',
+            headers: authHeadersForInstance({ url: instUrl }),
+            body: JSON.stringify({ cmd, args, certificate: cert }),
+        });
+        const json = await res.json();
+        if (json.status === 'ok') {
+            document.getElementById('spawnCmd').value = '';
+            document.getElementById('spawnArgs').value = '';
             loadCommands();
+        } else {
+            alert('Spawn failed: ' + (json.error || 'unknown'));
         }
+    } catch (e) {
+        alert('Spawn failed: ' + e.message);
+    }
+}
 
-        async function loadVtty() {
-            if (!selectedCommandId) return;
-            try {
-                const res = await fetch(`/api/commands/${selectedCommandId}/vtty`, { headers: authHeaders() });
-                const json = await res.json();
-                const viewer = document.getElementById('vtty');
-                if (json.status === 'ok') {
-                    viewer.textContent = json.data.content || '(empty)';
-                }
-            } catch (e) {
-                document.getElementById('vtty').textContent = 'Failed to load terminal output.';
-            }
-        }
-
-        async function sendKeys() {
-            const input = document.getElementById('keyInput');
-            if (!selectedCommandId || !input.value) return;
-            await fetch(`/api/commands/${selectedCommandId}/keys`, {
-                method: 'POST',
-                headers: authHeaders(),
-                body: JSON.stringify({ keys: input.value })
-            });
-            input.value = '';
-        }
-
-        async function killCommand(id) {
-            await fetch(`/api/commands/${id}/kill`, {
-                method: 'POST',
-                headers: authHeaders(),
-                body: JSON.stringify({})
-            });
-            if (selectedCommandId === id) selectedCommandId = null;
-            loadCommands();
-        }
-
-        function escHtml(str) {
-            const div = document.createElement('div');
-            div.textContent = str;
-            return div.innerHTML;
-        }
-
-        setInterval(loadCommands, 2000);
-        loadCertificates();
+async function killCommand(instUrl, cmdId) {
+    try {
+        await fetch(apiUrl(`/api/commands/${cmdId}/kill`, { url: instUrl }), {
+            method: 'POST',
+            headers: authHeadersForInstance({ url: instUrl }),
+            body: JSON.stringify({}),
+        });
+        if (state.selectedCommandId === instUrl + ':' + cmdId) state.selectedCommandId = null;
         loadCommands();
-    </script>
+    } catch (e) { /* ignore */ }
+}
+
+async function sendKeys() {
+    const input = document.getElementById('keyInput');
+    if (!state.selectedCommandId || !input.value) return;
+    const parts = state.selectedCommandId.split(':');
+    const cmdId = parts[parts.length - 1];
+    const instUrl = parts.slice(0, -1).join(':');
+
+    try {
+        await fetch(apiUrl(`/api/commands/${cmdId}/keys`, { url: instUrl }), {
+            method: 'POST',
+            headers: authHeadersForInstance({ url: instUrl }),
+            body: JSON.stringify({ keys: input.value }),
+        });
+        input.value = '';
+        // Immediately refresh VTTY
+        loadVttyHtml(instUrl, cmdId);
+    } catch (e) { /* ignore */ }
+}
+
+async function resizeTerminal() {
+    if (!state.selectedCommandId) return;
+    const parts = state.selectedCommandId.split(':');
+    const cmdId = parts[parts.length - 1];
+    const instUrl = parts.slice(0, -1).join(':');
+    const rows = parseInt(document.getElementById('resizeRows').value) || 24;
+    const cols = parseInt(document.getElementById('resizeCols').value) || 80;
+
+    try {
+        await fetch(apiUrl(`/api/commands/${cmdId}/resize`, { url: instUrl }), {
+            method: 'POST',
+            headers: authHeadersForInstance({ url: instUrl }),
+            body: JSON.stringify({ rows, cols }),
+        });
+    } catch (e) { /* ignore */ }
+}
+
+// ─── Certificates ───
+async function loadCertificates() {
+    for (const inst of state.instanceUrls) {
+        try {
+            const res = await fetch(apiUrl('/api/certificates', inst), { headers: authHeadersForInstance(inst) });
+            const json = await res.json();
+            inst._certs = json.status === 'ok' ? json.data : [];
+        } catch (e) {
+            inst._certs = [];
+        }
+    }
+
+    const container = document.getElementById('certList');
+    let html = '';
+    for (const inst of state.instanceUrls) {
+        html += `<div style="font-size:0.7rem;color:var(--text-muted);padding:0.3rem 0;margin-top:0.3rem;">${escHtml(inst.label)}</div>`;
+        const certs = inst._certs || [];
+        if (certs.length === 0) {
+            html += '<div style="padding:0.3rem;font-size:0.8rem;color:var(--text-muted);">No certificates</div>';
+        }
+        for (const cert of certs) {
+            html += `<div style="padding:0.3rem 0.5rem;border-bottom:1px solid var(--border);font-size:0.8rem;">
+                <span class="cert-badge">${escHtml(cert.name)}</span>
+                <span style="color:var(--text-muted);font-size:0.7rem;margin-left:0.5rem;font-family:var(--font-mono);">${escHtml(cert.token_preview || '')}...</span>
+            </div>`;
+        }
+    }
+    container.innerHTML = html;
+
+    // Update spawn cert dropdown
+    updateCertDropdown();
+}
+
+function updateCertDropdown() {
+    const select = document.getElementById('spawnCert');
+    let html = '<option value="">None</option>';
+    for (const inst of state.instanceUrls) {
+        for (const cert of (inst._certs || [])) {
+            html += `<option value="${escHtml(cert.name)}">${escHtml(inst.label)}: ${escHtml(cert.name)}</option>`;
+        }
+    }
+    select.innerHTML = html;
+}
+
+function updateInstanceDropdown() {
+    const select = document.getElementById('spawnInstance');
+    const current = select.value;
+    let html = '';
+    for (const inst of state.instanceUrls) {
+        html += `<option value="${escHtml(inst.url)}">${escHtml(inst.label)} (${escHtml(inst.url.replace(/^https?:\/\//, ''))})</option>`;
+    }
+    select.innerHTML = html;
+    if (current) select.value = current;
+}
+
+// ─── Panels (Multi-view) ───
+function addPanelDirect(instUrl, label, token) {
+    const id = 'panel-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+    const panel = { id, instUrl, label, token };
+    state.panels.push(panel);
+    renderPanels();
+    return panel;
+}
+
+function addPanel() {
+    document.getElementById('panelModal').style.display = '';
+    document.getElementById('panelUrl').value = 'http://localhost:8080';
+    document.getElementById('panelLabel').value = '';
+    document.getElementById('panelToken').value = '';
+    document.getElementById('panelUrl').focus();
+}
+
+function closePanelModal() {
+    document.getElementById('panelModal').style.display = 'none';
+}
+
+function confirmAddPanel() {
+    const url = document.getElementById('panelUrl').value.trim();
+    const label = document.getElementById('panelLabel').value.trim() || new URL(url).host;
+    const token = document.getElementById('panelToken').value.trim();
+
+    if (!url) return;
+
+    // Check if we already have this instance
+    if (state.instanceUrls.some(i => i.url === url)) {
+        alert('This instance is already connected.');
+        closePanelModal();
+        return;
+    }
+
+    const inst = { url, label, token };
+    state.instanceUrls.push(inst);
+    addPanelDirect(url, label, token);
+    closePanelModal();
+    loadCommands();
+    loadCertificates();
+}
+
+function removePanel(id) {
+    state.panels = state.panels.filter(p => p.id !== id);
+    // Remove from instanceUrls if no more panels for it
+    const remainingUrls = new Set(state.panels.map(p => p.instUrl));
+    state.instanceUrls = state.instanceUrls.filter(i => remainingUrls.has(i.url));
+    renderPanels();
+}
+
+function renderPanels() {
+    const container = document.getElementById('view-vtty');
+    let html = '';
+    for (const panel of state.panels) {
+        const inst = state.instanceUrls.find(i => i.url === panel.instUrl);
+        html += `
+            <div class="panel" id="${panel.id}">
+                <div class="panel-header">
+                    <span class="title">${escHtml(panel.label)}</span>
+                    <span class="instance-url">${escHtml(panel.instUrl.replace(/^https?:\/\//, ''))}</span>
+                    <div class="input-row" style="max-width:250px;">
+                        <input type="text" id="keyInput-${panel.id}" placeholder="Send keys..." style="font-size:0.7rem;" onkeydown="if(event.key==='Enter')sendKeysToPanel('${panel.id}')">
+                        <button class="small" onclick="sendKeysToPanel('${panel.id}')">Send</button>
+                    </div>
+                    ${state.panels.length > 1 ? `<button class="small danger" onclick="removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
+                </div>
+                <div class="vtty-container" id="vtty-${panel.id}">
+                    <pre style="color:#484f58;">Connecting to ${escHtml(panel.label)}...</pre>
+                    <div class="cursor-indicator" style="display:none;"></div>
+                </div>
+            </div>`;
+    }
+    container.innerHTML = html;
+}
+
+async function sendKeysToPanel(panelId) {
+    const panel = state.panels.find(p => p.id === panelId);
+    if (!panel) return;
+    const input = document.getElementById('keyInput-' + panelId);
+    if (!input || !input.value || !state.selectedCommandId) return;
+
+    const parts = state.selectedCommandId.split(':');
+    const cmdId = parts[parts.length - 1];
+
+    try {
+        await fetch(apiUrl(`/api/commands/${cmdId}/keys`, panel), {
+            method: 'POST',
+            headers: authHeadersForInstance(panel),
+            body: JSON.stringify({ keys: input.value }),
+        });
+        input.value = '';
+        loadVttyHtml(panel.instUrl, cmdId);
+    } catch (e) { /* ignore */ }
+}
+
+// ─── Logs ───
+async function loadLog() {
+    try {
+        const search = document.getElementById('logSearch').value;
+        const params = new URLSearchParams();
+        if (search) params.set('search', search);
+        params.set('limit', '500');
+
+        const res = await fetch(apiUrl('/api/log?' + params.toString()), { headers: authHeaders() });
+        const json = await res.json();
+
+        if (json.status === 'ok' && json.data) {
+            const container = document.getElementById('logContent');
+            const lines = json.data.lines || [];
+            document.getElementById('logCount').textContent = `${json.data.filtered_lines}/${json.data.total_lines} lines`;
+
+            if (lines.length === 0) {
+                container.innerHTML = '<div style="padding:1rem;color:var(--text-muted);text-align:center;">No log entries found.' + (json.data.message ? ' ' + json.data.message : '') + '</div>';
+                return;
+            }
+
+            container.innerHTML = lines.map(line => {
+                const parsed = parseLogLine(line);
+                if (search && line.toLowerCase().includes(search.toLowerCase())) {
+                    return `<div class="log-line highlight">${formatLogLine(parsed, line)}</div>`;
+                }
+                return `<div class="log-line">${formatLogLine(parsed, line)}</div>`;
+            }).join('');
+
+            // Auto-scroll to bottom
+            container.scrollTop = container.scrollHeight;
+        }
+    } catch (e) {
+        document.getElementById('logContent').innerHTML = `<div style="padding:1rem;color:var(--red);">Failed to load log: ${escHtml(e.message)}</div>`;
+    }
+}
+
+function parseLogLine(line) {
+    // Try to parse [timestamp] command: details
+    const match = line.match(/^\[([^\]]+)\]\s+(\w+):\s+(.*)$/);
+    if (match) {
+        return { timestamp: match[1], command: match[2], details: match[3], raw: line };
+    }
+    return { timestamp: '', command: '', details: line, raw: line };
+}
+
+function formatLogLine(parsed, raw) {
+    if (parsed.timestamp) {
+        return `<span class="timestamp">[${escHtml(parsed.timestamp)}]</span> <span class="cmd-type">${escHtml(parsed.command)}</span> <span class="details">${escHtml(parsed.details)}</span>`;
+    }
+    return escHtml(raw);
+}
+
+function searchLogs() { loadLog(); }
+function clearLogSearch() {
+    document.getElementById('logSearch').value = '';
+    loadLog();
+}
+
+// ─── Documentation ───
+function showDocs() {
+    switchViewTab('docs', document.getElementById('docsTab'));
+    loadDocs();
+}
+
+async function loadDocs() {
+    const container = document.getElementById('view-docs');
+    container.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--text-muted);">Loading documentation...</div>';
+
+    // Try fetching docs from the server, fall back to embedded docs
+    try {
+        const res = await fetch('/admin/docs.md', { headers: authHeaders() });
+        if (res.ok) {
+            const text = await res.text();
+            container.innerHTML = renderMarkdown(text);
+            return;
+        }
+    } catch (e) { /* fall through */ }
+
+    // Embedded documentation
+    container.innerHTML = renderEmbeddedDocs();
+}
+
+function renderMarkdown(md) {
+    // Simple markdown to HTML (no external lib)
+    let html = md
+        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+        .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+        .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank" style="color:var(--accent);">$1</a>')
+        .replace(/^\- (.+)$/gm, '<li>$1</li>')
+        .replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>')
+        .replace(/\n\n/g, '</p><p>')
+        .replace(/\n/g, '<br>');
+    return '<p>' + html + '</p>';
+}
+
+function renderEmbeddedDocs() {
+    return `
+<h1>vrunner Administration</h1>
+
+<h2>Overview</h2>
+<p>vrunner is a virtual terminal runner with a web control plane. It manages terminal applications, exposing their output through a web interface and REST API. This admin panel provides real-time monitoring and control of all running commands.</p>
+
+<h2>Getting Started</h2>
+<p>The admin panel connects to one or more vrunner instances. Each instance manages its own set of terminal commands. Use the <strong>+ Panel</strong> button in the top bar to add connections to additional vrunner instances.</p>
+
+<h3>Connecting to an Instance</h3>
+<p>By default, the admin panel connects to the vrunner instance serving it. To add more instances:</p>
+<ol>
+    <li>Click <strong>+ Panel</strong> in the top bar</li>
+    <li>Enter the instance URL (e.g., <code>http://localhost:9090</code>)</li>
+    <li>Optionally set a label and auth token</li>
+    <li>Click <strong>Add Panel</strong></li>
+</ol>
+<p>You can also use URL arguments: <code>?instance=http://host:8080&label=Prod&instance=http://host:9090&label=Dev</code></p>
+
+<h2>URL Arguments for Multi-Instance</h2>
+<p>The admin page accepts query parameters to pre-configure multi-panel views:</p>
+<table>
+    <tr><th>Parameter</th><th>Description</th><th>Example</th></tr>
+    <tr><td><code>instance</code></td><td>vrunner instance URL (repeatable)</td><td><code>?instance=http://host:8080</code></td></tr>
+    <tr><td><code>label</code></td><td>Panel label (matches instance order)</td><td><code>&label=Production</code></td></tr>
+    <tr><td><code>token</code></td><td>Auth token for instance (matches order)</td><td><code>&token=abc123</code></td></tr>
+</table>
+<p><strong>Full example:</strong> <code>/admin?instance=http://prod:8080&label=Production&instance=http://dev:9090&label=Development</code></p>
+
+<h2>Managing Commands</h2>
+
+<h3>Viewing Terminal Output</h3>
+<p>Click on a command in the sidebar to view its real-time ANSI-rendered terminal output. The terminal emulator supports:</p>
+<ul>
+    <li>Full ANSI color rendering (16, 256, and 24-bit truecolor)</li>
+    <li>Cursor position indicator (blue highlight)</li>
+    <li>Text attributes: bold, italic, underline, strikethrough</li>
+    <li>Scrollback buffer navigation via scrollbar</li>
+</ul>
+
+<h3>Spawning Commands</h3>
+<p>Switch to the <strong>Spawn</strong> tab in the sidebar to create new commands. Specify the command path, optional arguments, an optional certificate for access control, and the target vrunner instance.</p>
+
+<h3>Sending Keystrokes</h3>
+<p>Use the key input field in the panel header to send keystrokes to the selected command. Press <strong>Enter</strong> or click <strong>Send</strong> to transmit. Supports special keys using angle bracket notation:</p>
+<ul>
+    <li><code>&lt;Enter&gt;</code>, <code>&lt;Esc&gt;</code>, <code>&lt;Tab&gt;</code>, <code>&lt;Backspace&gt;</code></li>
+    <li><code>&lt;Up&gt;</code>, <code>&lt;Down&gt;</code>, <code>&lt;Left&gt;</code>, <code>&lt;Right&gt;</code></li>
+    <li><code>&lt;C-c&gt;</code> (Ctrl+C), <code>&lt;C-d&gt;</code> (Ctrl+D)</li>
+    <li><code>&lt;F1&gt;</code> through <code>&lt;F12&gt;</code></li>
+</ul>
+
+<h3>Resizing the Terminal</h3>
+<p>Use the <strong>R</strong> (rows) and <strong>C</strong> (columns) inputs in the top bar to resize the virtual terminal. Click <strong>Resize</strong> to apply. Valid ranges: rows 1-200, columns 1-500.</p>
+
+<h3>Killing Commands</h3>
+<p>Click the <strong>&#x2715;</strong> button next to a command in the sidebar to send SIGINT (Ctrl+C) to the process.</p>
+
+<h2>Certificates</h2>
+<p>The <strong>Certs</strong> tab in the sidebar shows all certificates configured in the connected instances' certificate pools. Certificates provide per-command access control — only clients presenting a certificate's derived token can interact with commands bound to that certificate.</p>
+<p>When spawning a command, you can select a certificate to bind it. The certificate badge next to each command in the sidebar shows its binding status.</p>
+
+<h2>Log Viewer</h2>
+<p>The <strong>Logs</strong> tab provides access to the vrunner command log. Use the search bar to filter log entries by content. Each entry shows a timestamp, the command type (spawn, kill, send_keys, etc.), and relevant details.</p>
+
+<h2>Font Size</h2>
+<p>Use the <strong>A-</strong> and <strong>A+</strong> buttons in the top bar to adjust the terminal font size (8px-28px). Your preference is saved in localStorage.</p>
+
+<h2>API Reference</h2>
+<table>
+    <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+    <tr><td>GET</td><td><code>/api/commands</code></td><td>List all running commands</td></tr>
+    <tr><td>POST</td><td><code>/api/commands</code></td><td>Spawn a new command</td></tr>
+    <tr><td>GET</td><td><code>/api/commands/:id/vtty</code></td><td>Get VTTY output as ANSI text</td></tr>
+    <tr><td>GET</td><td><code>/api/commands/:id/vtty/html</code></td><td>Get VTTY as rendered HTML + cursor</td></tr>
+    <tr><td>POST</td><td><code>/api/commands/:id/keys</code></td><td>Send keystrokes to a command</td></tr>
+    <tr><td>POST</td><td><code>/api/commands/:id/kill</code></td><td>Kill a running command</td></tr>
+    <tr><td>POST</td><td><code>/api/commands/:id/resize</code></td><td>Resize virtual terminal</td></tr>
+    <tr><td>GET</td><td><code>/api/commands/:id/handles</code></td><td>List handles for a command</td></tr>
+    <tr><td>GET</td><td><code>/api/certificates</code></td><td>List certificate pool</td></tr>
+    <tr><td>GET</td><td><code>/api/info</code></td><td>Instance info and stats</td></tr>
+    <tr><td>GET</td><td><code>/api/log</code></td><td>Command log with search</td></tr>
+    <tr><td>POST</td><td><code>/api/shutdown</code></td><td>Graceful shutdown</td></tr>
+</table>
+
+<h2>Keyboard Shortcuts</h2>
+<table>
+    <tr><th>Shortcut</th><th>Action</th></tr>
+    <tr><td><code>Enter</code> in key input</td><td>Send keystrokes</td></tr>
+</table>
+`;
+}
+
+// ─── Utilities ───
+function escHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+// ─── Refresh Loop ───
+function startRefresh() {
+    loadCommands();
+    if (state.refreshInterval) clearInterval(state.refreshInterval);
+    state.refreshInterval = setInterval(() => {
+        loadCommands();
+    }, 2000);
+}
+
+// ─── Keyboard handling ───
+document.addEventListener('keydown', (e) => {
+    // Focus key input when not in an input field and a command is selected
+    if (state.currentView === 'vtty' && state.selectedCommandId &&
+        !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
+        const panel = getSelectedPanel();
+        if (panel) {
+            const input = document.getElementById('keyInput-' + panel.id);
+            if (input) input.focus();
+        }
+    }
+});
+</script>
 </body>
 </html>
