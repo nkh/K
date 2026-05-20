@@ -409,7 +409,8 @@ fn detect_terminal_size() -> Option<(u16, u16)> {
 
     // Method 2: crossterm on stdout (uses ioctl on stdout fd).
     // This works when stdout is directly connected to a terminal.
-    if let Ok((rows, cols)) = crossterm::terminal::size() {
+    // NOTE: crossterm::terminal::size() returns (columns, rows), NOT (rows, columns).
+    if let Ok((cols, rows)) = crossterm::terminal::size() {
         if rows > 0 && cols > 0 {
             tracing::debug!(
                 rows, cols, method = "crossterm",
@@ -441,7 +442,8 @@ fn detect_terminal_size() -> Option<(u16, u16)> {
 
 #[cfg(not(unix))]
 fn detect_terminal_size() -> Option<(u16, u16)> {
-    crossterm::terminal::size().ok()
+    // crossterm returns (columns, rows); we need (rows, columns).
+    crossterm::terminal::size().ok().map(|(cols, rows)| (rows, cols))
 }
 
 fn main() -> Result<()> {

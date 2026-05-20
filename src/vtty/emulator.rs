@@ -344,34 +344,40 @@ impl VttyEmulator {
             b'L' => {
                 clear_wrap();
                 let n = param(0, 1) as usize;
+                let blank = self.attrs.make_cell(' ');
                 let mut buf = self.buffer.write();
-                for _ in 0..n { buf.insert_line(self.cursor_row, Some(self.scroll_bottom)); }
+                for _ in 0..n { buf.insert_line_with(self.cursor_row, Some(self.scroll_bottom), &blank); }
             }
             b'M' => {
                 clear_wrap();
                 let n = param(0, 1) as usize;
+                let blank = self.attrs.make_cell(' ');
                 let mut buf = self.buffer.write();
-                for _ in 0..n { buf.delete_line(self.cursor_row, Some(self.scroll_bottom)); }
+                for _ in 0..n { buf.delete_line_with(self.cursor_row, Some(self.scroll_bottom), &blank); }
             }
             b'P' => {
                 let n = param(0, 1) as usize;
+                let blank = self.attrs.make_cell(' ');
                 let mut buf = self.buffer.write();
-                buf.delete_cells(self.cursor_row, self.cursor_col, n);
+                buf.delete_cells_with(self.cursor_row, self.cursor_col, n, &blank);
             }
             b'@' => {
                 let n = param(0, 1) as usize;
+                let blank = self.attrs.make_cell(' ');
                 let mut buf = self.buffer.write();
-                buf.insert_cells(self.cursor_row, self.cursor_col, n);
+                buf.insert_cells_with(self.cursor_row, self.cursor_col, n, &blank);
             }
             b'S' => {
                 let n = param(0, 1) as usize;
+                let blank = self.attrs.make_cell(' ');
                 let mut buf = self.buffer.write();
-                for _ in 0..n { buf.scroll_region_up(self.scroll_top, self.scroll_bottom); }
+                for _ in 0..n { buf.scroll_region_up_with(self.scroll_top, self.scroll_bottom, &blank); }
             }
             b'T' => {
                 let n = param(0, 1) as usize;
+                let blank = self.attrs.make_cell(' ');
                 let mut buf = self.buffer.write();
-                for _ in 0..n { buf.scroll_region_down(self.scroll_top, self.scroll_bottom); }
+                for _ in 0..n { buf.scroll_region_down_with(self.scroll_top, self.scroll_bottom, &blank); }
             }
             b'm' => { self.process_sgr(&params); }
             b's' => {
@@ -525,7 +531,9 @@ impl VttyEmulator {
             }
             b'M' => {
                 if self.cursor_row == 0 {
-                    self.buffer.write().scroll_down();
+                    let blank = self.attrs.make_cell(' ');
+                    let mut buf = self.buffer.write();
+                    buf.scroll_region_down_with(self.scroll_top, self.scroll_bottom, &blank);
                 } else {
                     self.cursor_row -= 1;
                 }
@@ -537,9 +545,10 @@ impl VttyEmulator {
 
     fn check_scroll(&mut self) {
         if self.cursor_row > self.scroll_bottom {
+            let blank = self.attrs.make_cell(' ');
             let mut buf = self.buffer.write();
             while self.cursor_row > self.scroll_bottom {
-                buf.scroll_region_up(self.scroll_top, self.scroll_bottom);
+                buf.scroll_region_up_with(self.scroll_top, self.scroll_bottom, &blank);
                 self.cursor_row -= 1;
             }
         }

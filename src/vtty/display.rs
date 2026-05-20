@@ -45,7 +45,9 @@ impl TerminalDisplay {
         // or there might be a slight mismatch.  Rendering beyond the
         // physical screen causes unwanted scrolling which appears as
         // inverted/wrapped content.
-        let (phys_rows, phys_cols) = crossterm::terminal::size().unwrap_or((buffer.height as u16, buffer.width as u16));
+        // NOTE: crossterm::terminal::size() returns (columns, rows).
+        let (phys_cols, phys_rows) = crossterm::terminal::size()
+            .unwrap_or((buffer.width as u16, buffer.height as u16));
         let render_rows = (buffer.rows.len() as u16).min(phys_rows) as usize;
         let render_cols = (buffer.width as u16).min(phys_cols) as usize;
 

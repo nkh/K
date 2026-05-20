@@ -158,6 +158,12 @@ impl Buffer {
         self.scroll_region_up(0, self.height.saturating_sub(1));
     }
 
+    /// Scroll the entire buffer up by one line, using a template cell
+    /// for the new blank line (preserves current SGR background).
+    pub fn scroll_up_with(&mut self, template: &Cell) {
+        self.scroll_region_up_with(0, self.height.saturating_sub(1), template);
+    }
+
     /// Scroll the entire buffer down by one line.
     /// The bottom line is lost; a blank line appears at the top.
     pub fn scroll_down(&mut self) {
@@ -180,12 +186,38 @@ impl Buffer {
         }
     }
 
+    /// Scroll a region [top..=bottom] up by one line, using a template cell
+    /// for the new blank line (preserves current SGR background).
+    pub fn scroll_region_up_with(&mut self, top: usize, bottom: usize, template: &Cell) {
+        if !self.rows.is_empty() && top <= bottom && bottom < self.height {
+            let removed = self.rows.remove(top);
+            if top == 0 && self.scrollback.len() < self.max_scrollback {
+                self.scrollback.push(removed);
+            } else if top == 0 && !self.scrollback.is_empty() {
+                self.scrollback.remove(0);
+                self.scrollback.push(removed);
+            }
+            let blank = Cell { ch: ' ', ..*template };
+            self.rows.insert(bottom, vec![blank; self.width]);
+        }
+    }
+
     /// Scroll a region [top..=bottom] down by one line.
     /// The line at `bottom` is lost; a blank line appears at `top`.
     pub fn scroll_region_down(&mut self, top: usize, bottom: usize) {
         if !self.rows.is_empty() && top <= bottom && bottom < self.height {
             self.rows.remove(bottom);
             self.rows.insert(top, vec![Cell::default(); self.width]);
+        }
+    }
+
+    /// Scroll a region [top..=bottom] down by one line, using a template cell
+    /// for the new blank line (preserves current SGR background).
+    pub fn scroll_region_down_with(&mut self, top: usize, bottom: usize, template: &Cell) {
+        if !self.rows.is_empty() && top <= bottom && bottom < self.height {
+            self.rows.remove(bottom);
+            let blank = Cell { ch: ' ', ..*template };
+            self.rows.insert(top, vec![blank; self.width]);
         }
     }
 
@@ -196,6 +228,16 @@ impl Buffer {
         let bottom = bottom.unwrap_or(self.height.saturating_sub(1));
         if row < self.height && bottom < self.height && row <= bottom {
             self.rows.insert(row, vec![Cell::default(); self.width]);
+            self.rows.remove(bottom + 1);
+        }
+    }
+
+    /// Insert a blank line at `row`, using a template cell for the new line.
+    pub fn insert_line_with(&mut self, row: usize, bottom: Option<usize>, template: &Cell) {
+        let bottom = bottom.unwrap_or(self.height.saturating_sub(1));
+        if row < self.height && bottom < self.height && row <= bottom {
+            let blank = Cell { ch: ' ', ..*template };
+            self.rows.insert(row, vec![blank; self.width]);
             self.rows.remove(bottom + 1);
         }
     }
@@ -211,6 +253,16 @@ impl Buffer {
         }
     }
 
+    /// Delete the line at `row`, using a template cell for the new blank line.
+    pub fn delete_line_with(&mut self, row: usize, bottom: Option<usize>, template: &Cell) {
+        let bottom = bottom.unwrap_or(self.height.saturating_sub(1));
+        if row < self.height && bottom < self.height && row <= bottom {
+            self.rows.remove(row);
+            let blank = Cell { ch: ' ', ..*template };
+            self.rows.insert(bottom, vec![blank; self.width]);
+        }
+    }
+
     pub fn insert_cells(&mut self, row: usize, col: usize, count: usize) {
         if let Some(row_cells) = self.rows.get_mut(row) {
             let count = count.min(self.width - col);
@@ -223,6 +275,21 @@ impl Buffer {
         }
     }
 
+    /// Insert blank cells at (row, col), shifting existing cells right.
+    /// The new blank cells use the template's attributes.
+    pub fn insert_cells_with(&mut self, row: usize, col: usize, count: usize, template: &Cell) {
+        if let Some(row_cells) = self.rows.get_mut(row) {
+            let count = count.min(self.width - col);
+            for i in (col + count..self.width).rev() {
+                row_cells[i] = row_cells[i - count];
+            }
+            let blank = Cell { ch: ' ', ..*template };
+            for cell in row_cells.iter_mut().skip(col).take(count) {
+                *cell = blank;
+            }
+        }
+    }
+
     pub fn delete_cells(&mut self, row: usize, col: usize, count: usize) {
         if let Some(row_cells) = self.rows.get_mut(row) {
             let count = count.min(self.width - col);
@@ -231,6 +298,21 @@ impl Buffer {
             }
             for cell in row_cells.iter_mut().take(self.width).skip(self.width - count) {
                 cell.clear();
+            }
+        }
+    }
+
+    /// Delete cells at (row, col), shifting remaining cells left.
+    /// The new blank cells at the end use the template's attributes.
+    pub fn delete_cells_with(&mut self, row: usize, col: usize, count: usize, template: &Cell) {
+        if let Some(row_cells) = self.rows.get_mut(row) {
+            let count = count.min(self.width - col);
+            for i in col..(self.width - count) {
+                row_cells[i] = row_cells[i + count];
+            }
+            let blank = Cell { ch: ' ', ..*template };
+            for cell in row_cells.iter_mut().take(self.width).skip(self.width - count) {
+                *cell = blank;
             }
         }
     }
