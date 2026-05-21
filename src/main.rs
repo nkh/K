@@ -327,11 +327,21 @@ async fn run_display_loop(
                 if let Some(ref id) = target_id {
                     if let Some(handle) = manager.get(id) {
                         // Check if the child process is still alive.
-                        // NOTE: is_alive() uses kill(pid, 0) which returns 0
-                        // even for zombie processes.  The zombie is reaped by
-                        // child.wait() in the spawner, after which the PID no
-                        // longer exists and kill returns -1.
-                        let alive = handle.is_alive();
+                        // We use waitpid(WNOHANG) instead of kill(pid, 0)
+                        // because kill returns 0 even for zombie processes
+                        // (which exist in the process table until reaped).
+                        // waitpid(WNOHANG) reaps the zombie immediately
+                        // and returns the PID, so we can detect exit
+                        // without waiting for the spawner's child.wait().
+                        let alive = {
+                            let pid = handle.pid as i32;
+                            let mut status: libc::c_int = 0;
+                            let ret = unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) };
+                            // ret == 0: still running
+                            // ret > 0: exited (reaped)
+                            // ret == -1 + ECHILD: no such child (already reaped)
+                            ret == 0
+                        };
                         if !alive {
                             tracing::info!(id = %id, pid = handle.pid, "Active command exited, shutting down");
                             should_break = true;
