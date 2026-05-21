@@ -320,6 +320,8 @@ impl VttyEmulator {
                 }
             }
             b'J' => {
+                // CSI J (ED) clears pending wrap for the same reason as CSI K.
+                clear_wrap();
                 let mode = param(0, 0);
                 let blank = self.attrs.make_cell(' ');
                 let mut buf = self.buffer.write();
@@ -331,6 +333,12 @@ impl VttyEmulator {
                 }
             }
             b'K' => {
+                // CSI K (EL) clears the pending wrap flag because it
+                // explicitly operates on the current line, and the cursor
+                // logically stays at its current position (not past the
+                // right margin).  Without clearing wrap, a subsequent
+                // character would incorrectly wrap to the next line.
+                clear_wrap();
                 let mode = param(0, 0);
                 let blank = self.attrs.make_cell(' ');
                 let mut buf = self.buffer.write();
@@ -912,6 +920,7 @@ mod tests {
         // Programs commonly write to last column then use CSI K to clear
         // the rest of the line.  With deferred wrap, the cursor should
         // still be on the same row so CSI K clears the right line.
+        // CSI K should also clear the wrap_pending flag.
         let mut emu = VttyEmulator::new(5, 5, 100);
         emu.feed_str("ABCDE"); // Fill cols 0-4, wrap_pending
         assert_eq!(emu.cursor(), (0, 4));
@@ -923,6 +932,15 @@ mod tests {
         let buf = emu.buffer();
         assert_eq!(buf.rows[0][3].ch, 'D'); // Not cleared
         assert_eq!(buf.rows[0][4].ch, ' '); // Cleared by CSI K
+        // CSI K must clear wrap_pending so subsequent chars stay on this line
+        assert!(!emu.wrap_pending, "CSI K should clear wrap_pending");
+
+        // Verify: writing after CSI K does NOT wrap to next line
+        emu.feed_str("X");
+        assert_eq!(emu.cursor(), (0, 4)); // Still on row 0, col 4 (overwrite)
+        let buf2 = emu.buffer();
+        assert_eq!(buf2.rows[0][4].ch, 'X'); // Overwritten, not wrapped
+        assert_eq!(buf2.rows[1][0].ch, ' '); // Row 1 unchanged
     }
 
     #[test]
