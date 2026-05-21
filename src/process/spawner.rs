@@ -65,7 +65,7 @@ impl ProcessSpawner {
         command_id: &str,
         exit_config: ExitConfig,
         env_vars: HashMap<String, String>,
-        _manager: &CommandManager,
+        manager: &CommandManager,
     ) -> Result<CommandHandle> {
         let pty_system = native_pty_system();
         let pair = pty_system.openpty(PtySize {
@@ -188,10 +188,20 @@ impl ProcessSpawner {
         });
 
         // Spawn process waiter (blocking — child.wait() is sync)
+        //
+        // After the child exits, this task:
+        //   1. Runs on_exit/on_error handler if configured
+        //   2. Removes the command from the CommandManager's DashMap
+        //   3. Sends the exit status via the oneshot channel
+        //
+        // Removing the command from the DashMap is critical for the
+        // display loop to detect that the command has exited (via
+        // manager.get(id) returning None).
         let (exit_tx, exit_rx) = oneshot::channel::<ExitStatus>();
         let watch_id = command_id.to_string();
         let on_exit = exit_config.on_exit.clone();
         let on_error = exit_config.on_error.clone();
+        let manager_cmds = manager.commands_arc();
 
         tokio::task::spawn_blocking(move || {
             let status = child.wait().ok().and_then(|s| Some(s.exit_code() as i32));
@@ -244,7 +254,13 @@ impl ProcessSpawner {
                 }
             }
 
-            // Also try to clean up via the manager if the command is still tracked
+            // Remove the command from the manager's DashMap.
+            // This signals to the display loop (and diff watcher)
+            // that the command has exited.
+            manager_cmds.remove(&watch_id);
+            tracing::info!(id = %watch_id, "Command removed from manager after exit");
+
+            // Send exit status to anyone listening
             let _ = exit_tx.send(exit_status);
         });
 

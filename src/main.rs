@@ -236,6 +236,16 @@ async fn async_main(cli: Cli) -> Result<()> {
 /// is received.  It renders the VTTY buffer to the local terminal using
 /// crossterm, forwards all keystrokes to the active child command, and
 /// handles SIGWINCH by resizing both the PTY master and the VTTY buffer.
+///
+/// Exit detection: when a direct child was spawned, the loop monitors two
+/// signals:
+///   1. `is_alive()` — uses kill(pid, 0), returns false after the child is
+///      reaped by the spawner's child.wait().
+///   2. Manager removal — if the command is removed from the DashMap (e.g.
+///      via kill API), we break immediately.
+///
+/// Additionally, the spawner now removes the command from the manager after
+/// the child exits, so the manager.get() check is the most reliable signal.
 async fn run_display_loop(
     manager: &Arc<CommandManager>,
     direct_child_id: Option<&str>,

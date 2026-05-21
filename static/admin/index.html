@@ -518,6 +518,9 @@ function selectCommand(instUrl, cmdId, name) {
     state._termCols = null;
     state._lastFullHtml = null;
     loadCommands(); // Re-render to update selection
+    // Immediately load VTTY content via HTTP (don't wait for WebSocket)
+    // WebSocket will take over once connected for live updates.
+    loadVttyHttp(instUrl, cmdId);
     // Connect WebSocket for real-time VTTY streaming
     connectVttyWs(instUrl, cmdId);
 }
@@ -594,19 +597,31 @@ function connectVttyWs(instUrl, cmdId) {
                     disconnectVttyWs();
                     state._lastFullHtml = null;
                 } else if (msg.type === 'connected') {
-                    // Server sends initial full snapshot — no need for separate HTTP load
+                    // Server confirms connection — request a fresh HTTP snapshot
+                    // to ensure we have the latest content immediately
+                    if (state.bufferView === 'current' && state.selectedInstUrl && state.selectedCmdId) {
+                        loadVttyHttp(state.selectedInstUrl, state.selectedCmdId);
+                    }
                 }
-            } catch (e) { /* ignore parse errors */ }
+            } catch (e) {
+                console.error('WS message parse error:', e);
+            }
         };
 
         ws.onclose = () => {
             if (state.vttyWs === ws) {
                 state.vttyWs = null;
                 document.getElementById('connStatus').textContent = 'WS Disconnected';
+                // When WebSocket disconnects, immediately try HTTP fallback
+                // to ensure the display is not left blank
+                if (state.selectedInstUrl && state.selectedCmdId) {
+                    loadVttyHttp(state.selectedInstUrl, state.selectedCmdId);
+                }
             }
         };
 
-        ws.onerror = () => {
+        ws.onerror = (err) => {
+            console.error('WebSocket error:', err);
             document.getElementById('connStatus').textContent = 'WS Error';
         };
     } catch (e) {
@@ -629,11 +644,14 @@ function disconnectVttyWs() {
 
 function updateVttyDisplay(data) {
     const panel = getSelectedPanel();
-    if (!panel || !data.html) return;
-
+    if (!panel) return;
     const vttyEl = panel.querySelector('.vtty-container');
     const pre = vttyEl ? vttyEl.querySelector('pre') : null;
-    if (pre) pre.innerHTML = data.html || '<span style="color:#484f58">(empty)</span>';
+    if (!pre) return;
+
+    if (data.html !== undefined && data.html !== null) {
+        pre.innerHTML = data.html;
+    }
 
     // Cursor position
     const cursor = data.cursor || {};
@@ -700,11 +718,17 @@ async function loadVttyHttp(instUrl, cmdId) {
 
     try {
         const res = await fetch(apiUrl(endpoint, { url: instUrl }), { headers: authHeadersForInstance({ url: instUrl }) });
+        if (!res.ok) {
+            console.warn('VTTY HTTP fetch failed:', res.status, res.statusText);
+            return;
+        }
         const json = await res.json();
         if (json.status === 'ok' && json.data) {
             const vttyEl = panel.querySelector('.vtty-container');
-            const pre = vttyEl.querySelector('pre');
-            if (pre) pre.innerHTML = json.data.html || '<span style="color:#484f58">(empty)</span>';
+            const pre = vttyEl ? vttyEl.querySelector('pre') : null;
+            if (pre && json.data.html !== undefined) {
+                pre.innerHTML = json.data.html;
+            }
 
             const cursor = json.data.cursor || {};
             const dims = json.data.dimensions || {};

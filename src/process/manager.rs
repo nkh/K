@@ -383,6 +383,12 @@ impl CommandManager {
         &self.config
     }
 
+    /// Get a clone of the commands Arc<DashMap> for use in spawned tasks
+    /// that need to remove commands after exit (e.g. the process waiter).
+    pub fn commands_arc(&self) -> Arc<DashMap<CommandId, CommandHandle>> {
+        self.commands.clone()
+    }
+
     pub async fn send_keys(&self, id: &CommandId, keys: &str) -> anyhow::Result<()> {
         self.logger.log("send_keys", &format!("id={} keys={}", id, keys));
         if let Some(handle) = self.commands.get(id) {
