@@ -127,6 +127,15 @@ impl VttyEmulator {
         self.feed(s.as_bytes());
     }
 
+    /// Flush any remaining buffered text from the parser.
+    /// Call this when the input stream ends (e.g., PTY closed).
+    pub fn finish(&mut self) {
+        let tokens = self.parser.finish();
+        for token in tokens {
+            self.process_token(token);
+        }
+    }
+
     fn process_token(&mut self, token: AnsiToken) {
         match token {
             AnsiToken::Text(text) => self.write_text(&text),
@@ -136,6 +145,11 @@ impl VttyEmulator {
             }
             AnsiToken::Osc(_content) => {}
             AnsiToken::Escape(byte) => self.process_escape(byte),
+            AnsiToken::EscSequence { .. } => {
+                // Charset designation (ESC ( B, ESC ) 0, etc.), DECDHL
+                // (ESC # 3/4/5/6/8), and other escape-with-intermediate
+                // sequences.  Not yet implemented in the emulator.
+            }
             AnsiToken::Dcs { .. } => {}
         }
     }
