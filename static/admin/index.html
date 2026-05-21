@@ -529,9 +529,19 @@ function selectCommand(instUrl, cmdId, name) {
 }
 
 function getSelectedPanel() {
-    // Find the panel for the selected command's instance
-    if (!state.selectedInstUrl) return state.panels[0];
-    return state.panels.find(p => p.instUrl === state.selectedInstUrl) || state.panels[0];
+    // Find the panel STATE for the selected command's instance, then return
+    // the actual DOM element (not the plain JS object).  Previously this
+    // returned the object from state.panels, causing .querySelector() to
+    // throw TypeError since plain objects lack that method — silently
+    // preventing ALL VTTY content from ever being displayed.
+    if (state.panels.length === 0) return null;
+    let panelObj;
+    if (!state.selectedInstUrl) {
+        panelObj = state.panels[0];
+    } else {
+        panelObj = state.panels.find(p => p.instUrl === state.selectedInstUrl) || state.panels[0];
+    }
+    return document.getElementById(panelObj.id);
 }
 
 // ─── Pause/Run Toggle ───
