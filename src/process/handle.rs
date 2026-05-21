@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot, RwLock};
 use portable_pty::MasterPty;
+use tokio::sync::Notify;
 
 use crate::config::schema::ExitConfig;
 use crate::vtty::emulator::VttyEmulator;
@@ -26,6 +27,10 @@ pub struct CommandHandle {
     /// Wrapped in a Mutex because `MasterPty` is `Send` but not `Sync`,
     /// which is required by `DashMap` (used in `CommandManager`).
     pub pty_master: Arc<parking_lot::Mutex<Box<dyn MasterPty + Send>>>,
+    /// Notification that fires immediately when the child process exits.
+    /// The display loop awaits this in select! for instant exit detection
+    /// instead of polling with waitpid or periodic ticks.
+    pub exit_notify: Arc<Notify>,
 }
 
 impl CommandHandle {

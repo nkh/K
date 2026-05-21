@@ -311,13 +311,31 @@ async fn run_display_loop(
     // Track which command we're displaying so we can forward keystrokes.
     let active_id: Option<String> = direct_child_id.map(String::from);
 
-    // ── Periodic tick channel ──
-    // The timer runs in a SEPARATE spawned task so that keystrokes
-    // never cancel it.  Previously tokio::time::sleep was inside
-    // select! and got cancelled every time stdin_rx or winch_rx
-    // fired, which meant that after pressing 'q' in htop the exit
-    // check was indefinitely delayed by terminal escape-sequence
-    // noise arriving on stdin.
+    // ── Event-driven exit detection ──
+    // Instead of polling with waitpid or periodic ticks, we use a
+    // tokio::sync::Notify that the process waiter fires immediately
+    // when child.wait() returns.  This makes exit detection instant —
+    // zero delay, zero polling, zero race conditions.
+    let exit_notify: Option<Arc<tokio::sync::Notify>> = {
+        if let Some(ref id) = active_id {
+            manager.get(id).map(|h| h.exit_notify.clone())
+        } else {
+            None
+        }
+    };
+
+    // Helper future: await the exit notify, or hang forever if None.
+    async fn await_exit(notify: Option<&Arc<tokio::sync::Notify>>) {
+        if let Some(n) = notify {
+            n.notified().await;
+        } else {
+            // No direct child — wait forever (API-spawned commands
+            // are tracked via the periodic tick below).
+            std::future::pending::<()>().await;
+        }
+    }
+
+    // ── Periodic tick channel (render only, no exit check) ──
     let (tick_tx, mut tick_rx) = mpsc::channel::<()>(4);
     tokio::spawn(async move {
         loop {
@@ -327,41 +345,6 @@ async fn run_display_loop(
             }
         }
     });
-
-    /// Check whether the active command is still alive.  Returns true
-    /// if the command is still running, false if it exited or was removed.
-    async fn check_alive(
-        manager: &Arc<CommandManager>,
-        active_id: &Option<String>,
-        direct_child_id: Option<&str>,
-    ) -> bool {
-        let commands = manager.list();
-        let target_id = active_id.as_ref()
-            .or_else(|| commands.first().map(|(id, _, _, _, _)| id))
-            .cloned();
-
-        if let Some(ref id) = target_id {
-            if let Some(handle) = manager.get(id) {
-                // Use waitpid(WNOHANG) which reaps zombies immediately,
-                // unlike kill(pid, 0) which returns 0 for zombies.
-                let pid = handle.pid as i32;
-                let mut status: libc::c_int = 0;
-                let ret = unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) };
-                if ret == 0 {
-                    true // still running
-                } else {
-                    tracing::info!(id = %id, pid = handle.pid,
-                        ret = ret, "Process exited (waitpid)");
-                    false
-                }
-            } else {
-                tracing::info!("Command removed from manager");
-                false
-            }
-        } else {
-            direct_child_id.is_none() // true = keep running (API-spawned)
-        }
-    }
 
     /// Render the VTTY buffer for the active command, or clear if none.
     async fn render_vtty(
@@ -385,10 +368,20 @@ async fn run_display_loop(
 
     loop {
         tokio::select! {
-            // ── Periodic VTTY render + exit check ──
+            // ── Immediate exit notification ──
+            // Fires the instant child.wait() returns in the process waiter.
+            _ = await_exit(exit_notify.as_ref()) => {
+                tracing::info!("Child process exited (notify), shutting down");
+                let _ = TerminalDisplay::clear();
+                break;
+            }
+
+            // ── Periodic VTTY render ──
             _ = tick_rx.recv() => {
-                if !check_alive(&manager, &active_id, direct_child_id).await {
-                    let _ = TerminalDisplay::clear();
+                // No exit check here — exit is handled by the notify above.
+                // For API-spawned commands (no direct child), check if all
+                // commands have been removed.
+                if exit_notify.is_none() && manager.list().is_empty() {
                     break;
                 }
                 render_vtty(&manager, &active_id).await;
@@ -423,18 +416,6 @@ async fn run_display_loop(
                             if let Some(handle) = manager.get(id) {
                                 let _ = handle.send_bytes(vec![b]).await;
                             }
-                        }
-                        // After forwarding, briefly wait then check liveness.
-                        // The keystroke may have caused the child to exit
-                        // (e.g. 'q' in htop, ':q' in vim).  Without this
-                        // check we'd have to wait for the next tick (up to
-                        // refresh_ms) before detecting the exit.
-                        tokio::time::sleep(
-                            tokio::time::Duration::from_millis(15)
-                        ).await;
-                        if !check_alive(&manager, &active_id, direct_child_id).await {
-                            let _ = TerminalDisplay::clear();
-                            break;
                         }
                     }
                     None => {

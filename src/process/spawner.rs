@@ -202,8 +202,11 @@ impl ProcessSpawner {
         let on_exit = exit_config.on_exit.clone();
         let on_error = exit_config.on_error.clone();
         let manager_cmds = manager.commands_arc();
+        let exit_notify = Arc::new(tokio::sync::Notify::new());
 
-        tokio::task::spawn_blocking(move || {
+        tokio::task::spawn_blocking({
+            let exit_notify = exit_notify.clone();
+            move || {
             let status = child.wait().ok().and_then(|s| Some(s.exit_code() as i32));
             let exit_status = ExitStatus {
                 code: status,
@@ -254,6 +257,11 @@ impl ProcessSpawner {
                 }
             }
 
+            // Notify the display loop IMMEDIATELY that the child exited.
+            // This wakes up the select! without polling or waiting for a
+            // periodic tick — the loop exits the instant the child dies.
+            exit_notify.notify_waiters();
+
             // Remove the command from the manager's DashMap.
             // This signals to the display loop (and diff watcher)
             // that the command has exited.
@@ -262,6 +270,7 @@ impl ProcessSpawner {
 
             // Send exit status to anyone listening
             let _ = exit_tx.send(exit_status);
+        }
         });
 
         Ok(CommandHandle {
@@ -277,6 +286,7 @@ impl ProcessSpawner {
             exit_config,
             spawn_time: std::time::Instant::now(),
             pty_master,
+            exit_notify,
         })
     }
 }
