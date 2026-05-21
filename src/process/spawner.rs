@@ -170,6 +170,10 @@ impl ProcessSpawner {
                 let mut emu = emu_writer.write().await;
                 emu.feed(&data);
             }
+            // PTY closed (child exited / EOF). Flush any trailing bytes
+            // that the parser may still be holding (e.g. incomplete UTF-8
+            // or a partially-received escape sequence).
+            emu_writer.write().await.finish();
         });
 
         // Spawn stdin writer task in a blocking thread.

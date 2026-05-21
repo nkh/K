@@ -339,6 +339,9 @@ const state = {
     _termRows: null,
     _termCols: null,
     _lastFullHtml: null,
+    // Debounce timer for throttled HTTP VTTY fetches.
+    // Multiple rapid calls to scheduleVttyHttp() coalesce into a single fetch.
+    _vttyHttpTimer: null,
 };
 
 // ─── Initialization ───
@@ -503,7 +506,7 @@ async function loadCommands() {
     if (state.selectedInstUrl && state.selectedCmdId) {
         // Only poll via HTTP if WebSocket is not connected
         if (!state.vttyWs || state.bufferView !== 'current') {
-            loadVttyHttp(state.selectedInstUrl, state.selectedCmdId);
+            scheduleVttyHttp(state.selectedInstUrl, state.selectedCmdId, 500);
         }
     }
 }
@@ -560,8 +563,9 @@ function connectVttyWs(instUrl, cmdId) {
     disconnectVttyWs();
 
     const wsUrl = instUrl.replace(/^http/, 'ws');
-    const token = state.authToken;
-    const url = `${wsUrl}/api/commands/${cmdId}/ws`;
+    const token = state.authToken || (state.instanceUrls.find(i => i.url === instUrl) || {}).token || '';
+    const sep = token ? '?' : '';
+    const url = `${wsUrl}/api/commands/${cmdId}/ws${sep}${token ? 'token=' + encodeURIComponent(token) : ''}`;
 
     try {
         const ws = new WebSocket(url);
@@ -597,11 +601,11 @@ function connectVttyWs(instUrl, cmdId) {
                     disconnectVttyWs();
                     state._lastFullHtml = null;
                 } else if (msg.type === 'connected') {
-                    // Server confirms connection — request a fresh HTTP snapshot
-                    // to ensure we have the latest content immediately
-                    if (state.bufferView === 'current' && state.selectedInstUrl && state.selectedCmdId) {
-                        loadVttyHttp(state.selectedInstUrl, state.selectedCmdId);
-                    }
+                    // Server confirms connection. The server will immediately
+                    // follow this with a vtty_full snapshot, so we do NOT
+                    // trigger an HTTP fetch here — that would race with the
+                    // incoming vtty_full and potentially overwrite it with
+                    // stale data.
                 }
             } catch (e) {
                 console.error('WS message parse error:', e);
@@ -612,10 +616,10 @@ function connectVttyWs(instUrl, cmdId) {
             if (state.vttyWs === ws) {
                 state.vttyWs = null;
                 document.getElementById('connStatus').textContent = 'WS Disconnected';
-                // When WebSocket disconnects, immediately try HTTP fallback
-                // to ensure the display is not left blank
+                // When WebSocket disconnects, schedule a debounced HTTP fetch
+                // to ensure the display is not left blank.
                 if (state.selectedInstUrl && state.selectedCmdId) {
-                    loadVttyHttp(state.selectedInstUrl, state.selectedCmdId);
+                    scheduleVttyHttp(state.selectedInstUrl, state.selectedCmdId, 0);
                 }
             }
         };
@@ -678,14 +682,13 @@ function updateVttyDisplay(data) {
 }
 
 function applyVttyDiff(data) {
-    // The backend sends incremental diffs over WebSocket to save bandwidth.
-    // On the frontend, we refresh the full HTML via HTTP to keep the display correct.
-    // This avoids complex DOM diffing while still benefiting from the server-side
-    // optimization of only sending diffs when the buffer actually changes.
     if (!data.diff) return;
 
     if (!state.selectedCmdId) return;
-    loadVttyHttp(state.selectedInstUrl, state.selectedCmdId);
+    // Schedule a debounced HTTP fetch instead of calling loadVttyHttp()
+    // directly.  Diffs arrive at 200ms intervals; without throttling this
+    // would flood the server with full-HTML requests.
+    scheduleVttyHttp(state.selectedInstUrl, state.selectedCmdId, 300);
 
     // Update cursor and dimensions from the diff message (immediate feedback)
     const cursor = data.cursor || {};
@@ -704,6 +707,18 @@ function applyVttyDiff(data) {
     // Update alt screen badge
     const badge = document.getElementById('altScreenBadge');
     if (badge) badge.style.display = data.alternate_screen ? '' : 'none';
+}
+
+// ─── Debounced VTTY HTTP Fetch ───
+// Prevents request flooding when multiple code paths (diffs, onclose,
+// periodic refresh, sendKeys) all want to refresh the VTTY display.
+// Only the last call within the debounce window actually fires.
+function scheduleVttyHttp(instUrl, cmdId, delayMs) {
+    if (state._vttyHttpTimer) clearTimeout(state._vttyHttpTimer);
+    state._vttyHttpTimer = setTimeout(() => {
+        state._vttyHttpTimer = null;
+        loadVttyHttp(instUrl, cmdId);
+    }, delayMs);
 }
 
 async function loadVttyHttp(instUrl, cmdId) {
@@ -820,8 +835,8 @@ async function sendKeys() {
             body: JSON.stringify({ keys: input.value }),
         });
         input.value = '';
-        // Immediately refresh VTTY
-        loadVttyHttp(state.selectedInstUrl, state.selectedCmdId);
+        // Schedule a debounced VTTY refresh (no need to fire immediately)
+        scheduleVttyHttp(instUrl, cmdId, 100);
     } catch (e) { /* ignore */ }
 }
 

@@ -1,5 +1,19 @@
 use super::buffer::Buffer;
 
+/// HTML-escape the five XML/HTML metacharacters so that VTTY cell content
+/// never corrupts the DOM.  Programs that output `<`, `>`, `&`, `'`, or
+/// `"` (e.g. `cat` on an HTML file, ANSI art with `<`/`>`) are common.
+fn html_escape(s: char) -> String {
+    match s {
+        '&' => "&amp;".to_string(),
+        '<' => "&lt;".to_string(),
+        '>' => "&gt;".to_string(),
+        '\'' => "&#39;".to_string(),
+        '"' => "&quot;".to_string(),
+        c => c.to_string(),
+    }
+}
+
 /// Renders a VTTY buffer to various output formats.
 pub struct VttyRenderer;
 
@@ -65,8 +79,14 @@ impl VttyRenderer {
     /// Serialize buffer to HTML with inline styles.
     /// Returns the inner content only (no outer <pre> wrapper) so that
     /// callers can control their own container element.
+    ///
+    /// Cell characters are HTML-escaped (`<`, `>`, `&`, `'`, `"`) to
+    /// prevent DOM corruption when programs output HTML-like content or
+    /// ANSI art containing these metacharacters.
     pub fn to_html(buffer: &Buffer) -> String {
         let mut html = String::new();
+        // Rough capacity estimate: 80 chars × 24 rows × ~20 chars per cell.
+        html.reserve(buffer.rows.len() * buffer.width * 20);
 
         for row in &buffer.rows {
             for cell in row {
@@ -83,11 +103,13 @@ impl VttyRenderer {
                 if cell.italic { style.push_str("font-style:italic;"); }
                 if cell.underline { style.push_str("text-decoration:underline;"); }
                 if cell.strikethrough { style.push_str("text-decoration:line-through;"); }
+                if cell.blink { style.push_str("text-decoration:blink;"); }
 
                 if style.is_empty() {
-                    html.push(cell.ch);
+                    // No styling needed — but still escape for safety.
+                    html.push_str(&html_escape(cell.ch));
                 } else {
-                    html.push_str(&format!("<span style='{}'>{}</span>", style, cell.ch));
+                    html.push_str(&format!("<span style='{}'>{}</span>", style, html_escape(cell.ch)));
                 }
             }
             html.push('\n');
@@ -158,6 +180,28 @@ mod tests {
         let html = VttyRenderer::to_html(&buf);
         assert!(html.contains("rgb(0,255,0)"));
         assert!(html.contains("X"));
+    }
+
+    #[test]
+    fn test_html_escape_metacharacters() {
+        let mut buf = Buffer::new(10, 1, 100);
+        buf.rows[0][0].ch = '<';
+        buf.rows[0][1].ch = '>';
+        buf.rows[0][2].ch = '&';
+        buf.rows[0][3].ch = '\'';
+        buf.rows[0][4].ch = '"';
+        let html = VttyRenderer::to_html(&buf);
+        // Each metachar must be properly escaped in the output
+        assert!(html.contains("&lt;"), "expected escaped <");
+        assert!(html.contains("&gt;"), "expected escaped >");
+        assert!(html.contains("&amp;"), "expected escaped &");
+        assert!(html.contains("&#39;"), "expected escaped '");
+        assert!(html.contains("&quot;"), "expected escaped \"");
+        // The raw & should appear exactly as part of the five escaped entities
+        // (5 cells each starting with &).  If any cell were not escaped, we'd
+        // see extra bare & characters.
+        let amp_count = html.matches('&').count();
+        assert_eq!(amp_count, 5, "expected exactly 5 & chars (one per escaped entity), got {}", amp_count);
     }
 
     #[test]

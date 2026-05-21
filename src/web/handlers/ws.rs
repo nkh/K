@@ -1,5 +1,5 @@
 use axum::{
-    extract::{ws::{Message, WebSocket}, Path, State, WebSocketUpgrade},
+    extract::{ws::{Message, WebSocket}, Path, Query, State, WebSocketUpgrade},
     response::{IntoResponse, Response},
 };
 use futures::{SinkExt, StreamExt};
@@ -26,8 +26,30 @@ use crate::web::state::AppState;
 pub async fn ws_vtty_stream(
     State(state): State<AppState>,
     Path(id): Path<String>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
     ws: WebSocketUpgrade,
 ) -> Response {
+    // WebSocket cannot set custom headers, so the client may pass the
+    // auth token as a query parameter (?token=...).  Validate it here
+    // before allowing the upgrade.
+    if let Some(ref expected) = state.auth_token {
+        let provided = params.get("token").map(|s| s.as_str());
+        match provided {
+            Some(t) if t == expected => { /* ok */ }
+            _ => {
+                return (
+                    axum::http::StatusCode::UNAUTHORIZED,
+                    axum::Json(json!({
+                        "status": "error",
+                        "data": null,
+                        "error": "Unauthorized — provide a valid token via ?token=... query parameter"
+                    }))
+                )
+                    .into_response();
+            }
+        }
+    }
+
     // Verify the command exists before upgrading.
     if state.manager.get(&id).is_none() {
         return (
