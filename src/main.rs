@@ -347,6 +347,8 @@ async fn run_display_loop(
     });
 
     /// Render the VTTY buffer for the active command, or clear if none.
+    /// Also positions a steady (non-blinking) cursor at the VTTY's
+    /// logical cursor position.
     async fn render_vtty(
         manager: &Arc<CommandManager>,
         active_id: &Option<String>,
@@ -358,8 +360,10 @@ async fn run_display_loop(
         if let Some(ref id) = target_id {
             if let Some(handle) = manager.get(id) {
                 let buf = handle.vtty_snapshot().await;
+                let (cur_row, cur_col) = handle.cursor_position().await;
                 drop(handle);
                 let _ = TerminalDisplay::render(&buf);
+                let _ = TerminalDisplay::show_cursor_at(cur_row, cur_col);
             }
         } else {
             let _ = TerminalDisplay::clear();

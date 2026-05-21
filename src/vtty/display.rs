@@ -1,6 +1,6 @@
 use crossterm::{
     cursor::{self, MoveTo},
-    style::{self, Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor, Attribute},
+    style::{self, Attribute, Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
     terminal::ClearType,
     ExecutableCommand, QueueableCommand,
 };
@@ -8,6 +8,12 @@ use std::io::{self, stdout, Write};
 
 use super::buffer::Buffer;
 use super::cell::Cell;
+
+/// VTTY default foreground: light grey.
+const DEFAULT_FG: [u8; 3] = [204, 204, 204];
+
+/// VTTY default background: black.
+const DEFAULT_BG: [u8; 3] = [0, 0, 0];
 
 /// A fully-default cell used to detect cells that don't need rendering.
 const DEFAULT_CELL: Cell = Cell {
@@ -29,11 +35,12 @@ pub struct TerminalDisplay;
 impl TerminalDisplay {
     /// Render the buffer to stdout with full color support.
     ///
-    /// Every cell in the visible area is rendered explicitly to guarantee
-    /// that background colors are always correct, regardless of the
-    /// terminal's own default background color.  This avoids a class of
-    /// bugs where `Clear(All)` fills with the terminal's theme color
-    /// (e.g. solarized, transparent) while the VTTY expects [0,0,0].
+    /// Cells whose fg/bg match the VTTY defaults (fg=[204,204,204],
+    /// bg=[0,0,0]) are treated as "terminal default" colours — the
+    /// display emits `ESC[39m` / `ESC[49m` so that the user's own
+    /// terminal colour scheme (solarized, transparent, custom palette)
+    /// passes through.  Only explicitly-set colours are rendered as
+    /// RGB values.
     ///
     /// Each row is explicitly positioned with MoveTo(0, row) to avoid
     /// cursor drift in raw mode, where \n moves down without returning
@@ -49,6 +56,7 @@ impl TerminalDisplay {
         let render_cols = (buffer.width as u16).min(phys_cols) as usize;
 
         // Track the last rendered style to avoid redundant SGR sequences.
+        // `None` means "terminal default" (ESC[39m / ESC[49m).
         let mut last_fg: Option<[u8; 3]> = None;
         let mut last_bg: Option<[u8; 3]> = None;
         let mut last_bold = false;
@@ -66,54 +74,48 @@ impl TerminalDisplay {
             // Clamp the visible portion to the physical terminal width.
             let visible_len = render_cols.min(row.len());
 
-            // Render EVERY cell in the visible range.
-            // We cannot skip "default" cells because:
-            //   - The terminal's default background may not match
-            //     the VTTY's default [0,0,0] (e.g. solarized terminals).
-            //   - ESC[K fills cells with the current SGR background,
-            //     which may be non-default, and those must be rendered.
-            //   - Programs like htop rely on background colors being
-            //     correct for every cell, including trailing spaces.
-            //
-            // The cost is ~2000 SGR-set + Print calls per 80x24 frame,
-            // which is negligible at 100ms refresh intervals.
             for cell in &row[..visible_len] {
-                // Optimization: if this cell IS the default, AND the
-                // terminal's bg is [0,0,0] (which we assume for now),
-                // we could skip it.  But since we can't reliably know
-                // the terminal's bg, we always emit.  To keep performance
-                // acceptable, we at least skip SGR emission when the
-                // style hasn't changed.
+                // Fast path: cell is fully default AND we are already in
+                // the default terminal state — no SGR needed at all.
                 if cell == &DEFAULT_CELL && last_fg.is_none() && last_bg.is_none()
                     && !last_bold && !last_italic && !last_underline
                     && !last_blink && !last_reverse && !last_strikethrough
                 {
-                    // Already in default state, just print the space
-                    stdout.queue(Print(' '))?;
+                    stdout.queue(Print(cell.ch))?;
                     continue;
                 }
 
-                // Set foreground color (only if changed)
-                if Some(cell.fg) != last_fg {
-                    stdout.queue(SetForegroundColor(Color::Rgb {
-                        r: cell.fg[0],
-                        g: cell.fg[1],
-                        b: cell.fg[2],
-                    }))?;
-                    last_fg = Some(cell.fg);
+                // ── Foreground ──
+                // When the cell fg matches the VTTY default we emit
+                // ESC[39m ("default fg") so the terminal uses its own
+                // palette instead of forcing RGB [204,204,204].
+                let cell_fg = if cell.fg == DEFAULT_FG { None } else { Some(cell.fg) };
+                if cell_fg != last_fg {
+                    if let Some(rgb) = cell_fg {
+                        stdout.queue(SetForegroundColor(Color::Rgb {
+                            r: rgb[0], g: rgb[1], b: rgb[2],
+                        }))?;
+                    } else {
+                        stdout.queue(Print("\x1b[39m"))?;
+                    }
+                    last_fg = cell_fg;
                 }
 
-                // Set background color (only if changed)
-                if Some(cell.bg) != last_bg {
-                    stdout.queue(SetBackgroundColor(Color::Rgb {
-                        r: cell.bg[0],
-                        g: cell.bg[1],
-                        b: cell.bg[2],
-                    }))?;
-                    last_bg = Some(cell.bg);
+                // ── Background ──
+                // Same strategy as foreground: default bg → ESC[49m.
+                let cell_bg = if cell.bg == DEFAULT_BG { None } else { Some(cell.bg) };
+                if cell_bg != last_bg {
+                    if let Some(rgb) = cell_bg {
+                        stdout.queue(SetBackgroundColor(Color::Rgb {
+                            r: rgb[0], g: rgb[1], b: rgb[2],
+                        }))?;
+                    } else {
+                        stdout.queue(Print("\x1b[49m"))?;
+                    }
+                    last_bg = cell_bg;
                 }
 
-                // Apply attributes (only if changed)
+                // ── Text attributes ──
                 if cell.bold != last_bold {
                     stdout.queue(style::SetAttribute(if cell.bold { Attribute::Bold } else { Attribute::NoBold }))?;
                     last_bold = cell.bold;
@@ -144,11 +146,9 @@ impl TerminalDisplay {
             }
 
             // Clear any remaining columns on this row if the terminal
-            // is wider than the VTTY buffer.  This ensures the area
-            // to the right of the VTTY content shows the VTTY's default
-            // bg color, not leftover content from the previous frame.
+            // is wider than the VTTY buffer.  Reset to terminal defaults
+            // so the cleared area uses the user's own bg colour.
             if (visible_len as u16) < phys_cols {
-                // Reset to default style and clear to end of line
                 stdout.queue(ResetColor)?;
                 stdout.queue(style::SetAttribute(Attribute::Reset))?;
                 stdout.queue(crossterm::terminal::Clear(ClearType::UntilNewLine))?;
@@ -209,7 +209,19 @@ impl TerminalDisplay {
         Ok(())
     }
 
-    /// Show the cursor.
+    /// Show a steady (non-blinking) block cursor at the given position.
+    pub fn show_cursor_at(row: usize, col: usize) -> io::Result<()> {
+        let mut stdout = stdout();
+        // DEC private mode 12: disable blinking cursor
+        stdout.queue(Print("\x1b[?12l"))?;
+        // DEC private mode 25: show cursor
+        stdout.queue(cursor::Show)?;
+        stdout.queue(MoveTo(col as u16, row as u16))?;
+        stdout.flush()?;
+        Ok(())
+    }
+
+    /// Show the cursor (uses terminal default style).
     pub fn show_cursor() -> io::Result<()> {
         stdout().execute(cursor::Show)?;
         Ok(())
