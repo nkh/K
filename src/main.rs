@@ -308,86 +308,96 @@ async fn run_display_loop(
     };
 
     let mut shutdown_rx = shutdown_tx.subscribe();
-    let interval = tokio::time::Duration::from_millis(refresh_ms);
     // Track which command we're displaying so we can forward keystrokes.
-    let mut active_id: Option<String> = direct_child_id.map(String::from);
+    let active_id: Option<String> = direct_child_id.map(String::from);
+
+    // ── Periodic tick channel ──
+    // The timer runs in a SEPARATE spawned task so that keystrokes
+    // never cancel it.  Previously tokio::time::sleep was inside
+    // select! and got cancelled every time stdin_rx or winch_rx
+    // fired, which meant that after pressing 'q' in htop the exit
+    // check was indefinitely delayed by terminal escape-sequence
+    // noise arriving on stdin.
+    let (tick_tx, mut tick_rx) = mpsc::channel::<()>(4);
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_millis(refresh_ms)).await;
+            if tick_tx.send(()).await.is_err() {
+                break; // receiver dropped — display loop exited
+            }
+        }
+    });
+
+    /// Check whether the active command is still alive.  Returns true
+    /// if the command is still running, false if it exited or was removed.
+    async fn check_alive(
+        manager: &Arc<CommandManager>,
+        active_id: &Option<String>,
+        direct_child_id: Option<&str>,
+    ) -> bool {
+        let commands = manager.list();
+        let target_id = active_id.as_ref()
+            .or_else(|| commands.first().map(|(id, _, _, _, _)| id))
+            .cloned();
+
+        if let Some(ref id) = target_id {
+            if let Some(handle) = manager.get(id) {
+                // Use waitpid(WNOHANG) which reaps zombies immediately,
+                // unlike kill(pid, 0) which returns 0 for zombies.
+                let pid = handle.pid as i32;
+                let mut status: libc::c_int = 0;
+                let ret = unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) };
+                if ret == 0 {
+                    true // still running
+                } else {
+                    tracing::info!(id = %id, pid = handle.pid,
+                        ret = ret, "Process exited (waitpid)");
+                    false
+                }
+            } else {
+                tracing::info!("Command removed from manager");
+                false
+            }
+        } else {
+            direct_child_id.is_none() // true = keep running (API-spawned)
+        }
+    }
+
+    /// Render the VTTY buffer for the active command, or clear if none.
+    async fn render_vtty(
+        manager: &Arc<CommandManager>,
+        active_id: &Option<String>,
+    ) {
+        let commands = manager.list();
+        let target_id = active_id.as_ref()
+            .or_else(|| commands.first().map(|(id, _, _, _, _)| id));
+
+        if let Some(ref id) = target_id {
+            if let Some(handle) = manager.get(id) {
+                let buf = handle.vtty_snapshot().await;
+                drop(handle);
+                let _ = TerminalDisplay::render(&buf);
+            }
+        } else {
+            let _ = TerminalDisplay::clear();
+        }
+    }
 
     loop {
         tokio::select! {
-            // ── Periodic VTTY render ──
-            _ = tokio::time::sleep(interval) => {
-                // Find the command to display (prefer the direct child)
-                let commands = manager.list();
-                let target_id = active_id.as_ref()
-                    .or_else(|| commands.first().map(|(id, _, _, _, _)| id))
-                    .cloned();
-
-                let mut should_break = false;
-
-                if let Some(ref id) = target_id {
-                    if let Some(handle) = manager.get(id) {
-                        // Check if the child process is still alive.
-                        // We use waitpid(WNOHANG) instead of kill(pid, 0)
-                        // because kill returns 0 even for zombie processes
-                        // (which exist in the process table until reaped).
-                        // waitpid(WNOHANG) reaps the zombie immediately
-                        // and returns the PID, so we can detect exit
-                        // without waiting for the spawner's child.wait().
-                        let alive = {
-                            let pid = handle.pid as i32;
-                            let mut status: libc::c_int = 0;
-                            let ret = unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) };
-                            // ret == 0: still running
-                            // ret > 0: exited (reaped)
-                            // ret == -1 + ECHILD: no such child (already reaped)
-                            ret == 0
-                        };
-                        if !alive {
-                            tracing::info!(id = %id, pid = handle.pid, "Active command exited, shutting down");
-                            should_break = true;
-                        } else {
-                            // Render the VTTY buffer to the terminal.
-                            let buf = handle.vtty_snapshot().await;
-                            drop(handle);
-                            let _ = TerminalDisplay::render(&buf);
-                        }
-                    } else {
-                        // Command was removed (killed via API).
-                        tracing::info!("Active command removed from manager");
-                        should_break = true;
-                    }
-                } else {
-                    // No commands at all — if this is a direct-child session,
-                    // exit.  If commands were spawned via API, keep running
-                    // (the user might spawn more).
-                    if direct_child_id.is_some() {
-                        tracing::info!("All commands exited, shutting down");
-                        should_break = true;
-                    } else {
-                        let _ = TerminalDisplay::clear();
-                    }
-                }
-
-                if should_break {
+            // ── Periodic VTTY render + exit check ──
+            _ = tick_rx.recv() => {
+                if !check_alive(&manager, &active_id, direct_child_id).await {
                     let _ = TerminalDisplay::clear();
                     break;
                 }
-
-                active_id = target_id;
+                render_vtty(&manager, &active_id).await;
             }
 
             // ── SIGWINCH — terminal resize ──
             _ = winch_rx.recv() => {
-                // Detect the new terminal size using the same multi-method
-                // approach as the initial size detection.
                 if let Some((rows, cols)) = detect_terminal_size() {
                     tracing::debug!(rows, cols, "SIGWINCH: terminal resized");
-
-                    // Resize all active commands' VTTY + PTY.
-                    // This ensures that:
-                    //   1. The PTY master is resized → kernel sends SIGWINCH
-                    //      to the child process (e.g. htop, vim)
-                    //   2. The in-memory VTTY buffer matches the new size
                     for entry in manager.list() {
                         let id = &entry.0;
                         if let Some(handle) = manager.get(id) {
@@ -406,19 +416,28 @@ async fn run_display_loop(
             byte = stdin_rx.recv() => {
                 match byte {
                     Some(b) if b == 0x1c => {
-                        // Ctrl+\ (SIGQUIT) — quit display mode
                         break;
                     }
                     Some(b) => {
-                        // Forward the byte to the active command.
                         if let Some(ref id) = active_id {
                             if let Some(handle) = manager.get(id) {
                                 let _ = handle.send_bytes(vec![b]).await;
                             }
                         }
+                        // After forwarding, briefly wait then check liveness.
+                        // The keystroke may have caused the child to exit
+                        // (e.g. 'q' in htop, ':q' in vim).  Without this
+                        // check we'd have to wait for the next tick (up to
+                        // refresh_ms) before detecting the exit.
+                        tokio::time::sleep(
+                            tokio::time::Duration::from_millis(15)
+                        ).await;
+                        if !check_alive(&manager, &active_id, direct_child_id).await {
+                            let _ = TerminalDisplay::clear();
+                            break;
+                        }
                     }
                     None => {
-                        // Stdin channel closed (EOF).
                         break;
                     }
                 }
