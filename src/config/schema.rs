@@ -50,6 +50,12 @@ pub struct Config {
     /// Ignored when --no-env is passed on the command line.
     #[serde(default)]
     pub environment: EnvironmentConfig,
+    /// Web admin panel and VTTY streaming configuration.
+    /// Controls how the web UI discovers buffer changes (push vs poll),
+    /// the dirty-check interval on the server, and the default polling
+    /// interval for clients that use poll mode.
+    #[serde(default)]
+    pub web: WebConfig,
     /// Named configuration presets.
     /// Each named config is a partial Config that can be referenced by name
     /// via --profile NAME (CLI) or "profile": "NAME" (API).
@@ -369,6 +375,65 @@ pub struct ProfilesConfig {
     pub entries: std::collections::HashMap<String, PartialConfig>,
 }
 
+/// Web admin panel and VTTY streaming configuration.
+///
+/// Controls how the web UI discovers that a terminal buffer has changed.
+/// Two update modes are supported:
+///
+/// - **push** (default): The server detects buffer changes via a periodic
+///   dirty-check loop and sends lightweight "dirty" signals over the
+///   existing WebSocket connection.  The client then fetches fresh HTML
+///   at its own pace (debounced).  This is the most efficient mode
+///   because no polling is required — the server only sends when
+///   something actually changed.
+///
+/// - **poll**: The web client periodically calls the
+///   `GET /api/commands/:id/vtty/changed` endpoint to ask "has the
+///   buffer changed since last time?".  If yes, the client fetches
+///   the full HTML.  This mode is useful when WebSocket connections
+///   are unreliable (e.g. reverse proxies that buffer frames) or
+///   when the client wants full control over refresh timing.
+///
+/// The dirty-check interval (`dirty_check_ms`) only affects server-side
+/// behaviour in push mode — it controls how often the server compares
+/// the current buffer against the last-sent snapshot.
+///
+/// Example YAML:
+/// ```yaml
+/// web:
+///   update_mode: push       # or "poll"
+///   dirty_check_ms: 200     # server check interval (push mode)
+///   default_poll_ms: 500    # client poll interval (poll mode)
+/// ```
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct WebConfig {
+    /// How the web UI discovers buffer changes: "push" or "poll".
+    /// Default: "push".
+    pub update_mode: String,
+    /// Server-side dirty-check interval in milliseconds.
+    /// Only relevant in push mode. The server compares the VTTY buffer
+    /// against the last-sent snapshot at this interval and sends a
+    /// "vtty_dirty" WebSocket message when changes are detected.
+    /// Default: 200 ms.
+    pub dirty_check_ms: u64,
+    /// Default client-side polling interval in milliseconds.
+    /// Only relevant in poll mode. The web UI will poll
+    /// `GET /api/commands/:id/vtty/changed` at this interval.
+    /// The user can override this via the web UI controls.
+    /// Default: 500 ms.
+    pub default_poll_ms: u64,
+}
+
+impl Default for WebConfig {
+    fn default() -> Self {
+        Self {
+            update_mode: "push".to_string(),
+            dirty_check_ms: 200,
+            default_poll_ms: 500,
+        }
+    }
+}
+
 /// A partial configuration used in profiles.
 ///
 /// All fields are optional. When a profile is applied, only the fields
@@ -395,4 +460,6 @@ pub struct PartialConfig {
     pub default_exit: Option<DefaultExitConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub environment: Option<EnvironmentConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub web: Option<WebConfig>,
 }

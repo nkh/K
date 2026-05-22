@@ -288,6 +288,15 @@
         <span class="cursor-pos" id="cursorPos">Cursor: --</span>
         <span class="dims" id="termDims">--</span>
         <span class="spacer"></span>
+        <label for="updateMode" style="font-size:0.7rem;color:var(--text-muted);">Update:</label>
+        <select id="updateMode" onchange="switchUpdateMode(this.value)" title="How the web UI detects VTTY buffer changes" style="font-size:0.65rem;padding:0.1rem 0.2rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:3px;">
+            <option value="push">Push (WS)</option>
+            <option value="poll">Poll</option>
+        </select>
+        <span id="pollIntervalWrap" style="display:none;">
+            <input type="number" id="pollInterval" value="500" min="50" max="5000" step="50" style="width:50px;font-size:0.65rem;text-align:center;padding:0.1rem 0.15rem;" title="Poll interval in milliseconds" onchange="applyPollInterval()">
+            <span style="font-size:0.65rem;color:var(--text-muted);">ms</span>
+        </span>
         <span style="font-size:0.7rem;color:var(--text-muted);" id="connStatus">Connected</span>
     </div>
 </div>
@@ -320,8 +329,6 @@
 const state = {
     panels: [],
     // Store instUrl and cmdId separately to avoid ':' conflicts in URLs.
-    // Previously selectedCommandId = instUrl + ':' + cmdId, but URLs contain
-    // ':' (e.g. http://localhost:8080) which corrupted split/join logic.
     selectedInstUrl: null,
     selectedCmdId: null,
     authToken: localStorage.getItem('vrunner_auth_token') || '',
@@ -335,13 +342,17 @@ const state = {
     vttyWsCmdId: null,
     // Buffer view: 'current', 'main', 'alt'
     bufferView: 'current',
-    // Incremental diff protocol state
-    _termRows: null,
-    _termCols: null,
-    _lastFullHtml: null,
     // Debounce timer for throttled HTTP VTTY fetches.
-    // Multiple rapid calls to scheduleVttyHttp() coalesce into a single fetch.
     _vttyHttpTimer: null,
+    // VTTY update mode: 'push' (server sends dirty signals via WS)
+    // or 'poll' (client polls /api/commands/:id/vtty/changed)
+    updateMode: localStorage.getItem('vrunner_update_mode') || 'push',
+    pollInterval: parseInt(localStorage.getItem('vrunner_poll_interval') || '500'),
+    _pollTimer: null,
+    // Server-configured defaults (fetched from /api/info)
+    serverUpdateMode: null,
+    serverPollMs: null,
+    serverDirtyMs: null,
 };
 
 // ─── Initialization ───
@@ -374,6 +385,9 @@ const state = {
     // Start refresh
     startRefresh();
     loadCertificates();
+    // Fetch server config and apply update mode defaults
+    fetchServerConfig();
+    applyUpdateModeUI();
 })();
 
 function getBaseUrl() {
@@ -504,8 +518,8 @@ async function loadCommands() {
 
     // If a command is selected, refresh its VTTY
     if (state.selectedInstUrl && state.selectedCmdId) {
-        // Only poll via HTTP if WebSocket is not connected
-        if (!state.vttyWs || state.bufferView !== 'current') {
+        // Only poll via HTTP if using poll mode or viewing a non-current buffer
+        if (state.updateMode === 'poll' || state.bufferView !== 'current') {
             scheduleVttyHttp(state.selectedInstUrl, state.selectedCmdId, 500);
         }
     }
@@ -516,16 +530,11 @@ function selectCommand(instUrl, cmdId, name) {
     state.selectedCmdId = cmdId;
     state.bufferView = 'current';
     document.getElementById('bufferSelect').value = 'current';
-    // Reset diff protocol state
-    state._termRows = null;
-    state._termCols = null;
-    state._lastFullHtml = null;
     loadCommands(); // Re-render to update selection
-    // Immediately load VTTY content via HTTP (don't wait for WebSocket)
-    // WebSocket will take over once connected for live updates.
+    // Immediately load VTTY content via HTTP
     loadVttyHttp(instUrl, cmdId);
-    // Connect WebSocket for real-time VTTY streaming
-    connectVttyWs(instUrl, cmdId);
+    // Start the active update mode (push or poll)
+    startUpdateMode();
 }
 
 function getSelectedPanel() {
@@ -567,7 +576,88 @@ async function togglePauseRun() {
     } catch (e) { /* ignore */ }
 }
 
-// ─── WebSocket VTTY Streaming ───
+// ─── VTTY Update Modes (Push / Poll) ───
+// The web UI supports two modes for detecting VTTY buffer changes:
+//
+// PUSH MODE (default): The server monitors the buffer and sends lightweight
+//   "vtty_dirty" signals over the WebSocket whenever the buffer changes.
+//   On receiving a dirty signal, the client does a debounced HTTP fetch to
+//   get the latest HTML.  This is the most efficient mode.
+//
+// POLL MODE: The client periodically calls GET /api/commands/:id/vtty/changed
+//   to ask "has the buffer changed?".  If yes, it fetches the full HTML.
+//   This mode is useful when WebSocket connections are unreliable.
+
+/// Fetch server-side web config (update_mode, poll defaults) from /api/info.
+async function fetchServerConfig() {
+    try {
+        const res = await fetch(apiUrl('/api/info'), { headers: authHeaders() });
+        const json = await res.json();
+        if (json.status === 'ok' && json.data && json.data.web) {
+            state.serverUpdateMode = json.data.web.update_mode;
+            state.serverPollMs = json.data.web.default_poll_ms;
+            state.serverDirtyMs = json.data.web.dirty_check_ms;
+            // If no user preference is set, use the server default
+            if (!localStorage.getItem('vrunner_update_mode')) {
+                state.updateMode = state.serverUpdateMode || 'push';
+            }
+            if (!localStorage.getItem('vrunner_poll_interval')) {
+                state.pollInterval = state.serverPollMs || 500;
+            }
+        }
+    } catch (e) { /* ignore — use client defaults */ }
+}
+
+/// Apply the current updateMode to the UI controls.
+function applyUpdateModeUI() {
+    document.getElementById('updateMode').value = state.updateMode;
+    document.getElementById('pollInterval').value = state.pollInterval;
+    document.getElementById('pollIntervalWrap').style.display = state.updateMode === 'poll' ? '' : 'none';
+}
+
+/// Switch update mode (called from the dropdown).
+function switchUpdateMode(mode) {
+    state.updateMode = mode;
+    localStorage.setItem('vrunner_update_mode', mode);
+    applyUpdateModeUI();
+    // Stop existing update mechanism and restart with new mode
+    stopUpdateMode();
+    if (state.selectedInstUrl && state.selectedCmdId) {
+        startUpdateMode();
+    }
+}
+
+/// Apply the poll interval from the input.
+function applyPollInterval() {
+    const val = parseInt(document.getElementById('pollInterval').value) || 500;
+    state.pollInterval = Math.max(50, Math.min(5000, val));
+    localStorage.setItem('vrunner_poll_interval', state.pollInterval.toString());
+    document.getElementById('pollInterval').value = state.pollInterval;
+    // If currently polling, restart the timer with new interval
+    if (state.updateMode === 'poll' && state._pollTimer) {
+        stopPoll();
+        startPoll();
+    }
+}
+
+/// Start the active update mode (push or poll).
+function startUpdateMode() {
+    stopUpdateMode();
+    if (state.bufferView !== 'current') return;
+    if (state.updateMode === 'push') {
+        connectVttyWs(state.selectedInstUrl, state.selectedCmdId);
+    } else {
+        startPoll();
+    }
+}
+
+/// Stop the active update mode.
+function stopUpdateMode() {
+    disconnectVttyWs();
+    stopPoll();
+}
+
+// ─── Push Mode: WebSocket ───
 function connectVttyWs(instUrl, cmdId) {
     // Close existing connection if any
     disconnectVttyWs();
@@ -597,25 +687,17 @@ function connectVttyWs(instUrl, cmdId) {
                     }
                     const badge = document.getElementById('altScreenBadge');
                     if (badge) badge.style.display = msg.data.alternate_screen ? '' : 'none';
-                    // Mark this as the initial state for diff protocol
-                    state._lastFullHtml = msg.data.html || '';
-                } else if (msg.type === 'vtty_diff' && msg.data) {
-                    // Incremental diff — apply only changed cells
+                } else if (msg.type === 'vtty_dirty' && msg.data) {
+                    // Buffer has changed — schedule a debounced HTTP fetch.
+                    // The server doesn't send any cell data, just a notification.
                     if (state.bufferView === 'current') {
-                        applyVttyDiff(msg.data);
+                        scheduleVttyHttp(state.selectedInstUrl, state.selectedCmdId, 50);
                     }
-                    const badge = document.getElementById('altScreenBadge');
-                    if (badge) badge.style.display = msg.data.alternate_screen ? '' : 'none';
                 } else if (msg.type === 'command_ended') {
                     document.getElementById('connStatus').textContent = 'Command ended';
                     disconnectVttyWs();
-                    state._lastFullHtml = null;
                 } else if (msg.type === 'connected') {
-                    // Server confirms connection. The server will immediately
-                    // follow this with a vtty_full snapshot, so we do NOT
-                    // trigger an HTTP fetch here — that would race with the
-                    // incoming vtty_full and potentially overwrite it with
-                    // stale data.
+                    // Server confirms connection. A vtty_full follows immediately.
                 }
             } catch (e) {
                 console.error('WS message parse error:', e);
@@ -626,8 +708,7 @@ function connectVttyWs(instUrl, cmdId) {
             if (state.vttyWs === ws) {
                 state.vttyWs = null;
                 document.getElementById('connStatus').textContent = 'WS Disconnected';
-                // When WebSocket disconnects, schedule a debounced HTTP fetch
-                // to ensure the display is not left blank.
+                // When WebSocket disconnects, schedule an HTTP fetch to keep display alive
                 if (state.selectedInstUrl && state.selectedCmdId) {
                     scheduleVttyHttp(state.selectedInstUrl, state.selectedCmdId, 0);
                 }
@@ -651,9 +732,37 @@ function disconnectVttyWs() {
         state.vttyWsUrl = null;
         state.vttyWsCmdId = null;
     }
-    state._termRows = null;
-    state._termCols = null;
-    state._lastFullHtml = null;
+}
+
+// ─── Poll Mode ───
+function startPoll() {
+    stopPoll();
+    if (!state.selectedInstUrl || !state.selectedCmdId) return;
+    state._pollTimer = setInterval(() => pollOnce(), state.pollInterval);
+    // Also poll immediately
+    pollOnce();
+}
+
+function stopPoll() {
+    if (state._pollTimer) {
+        clearInterval(state._pollTimer);
+        state._pollTimer = null;
+    }
+}
+
+async function pollOnce() {
+    if (!state.selectedInstUrl || !state.selectedCmdId) return;
+    const cmdId = state.selectedCmdId;
+    const instUrl = state.selectedInstUrl;
+    try {
+        const res = await fetch(apiUrl(`/api/commands/${cmdId}/vtty/changed`, { url: instUrl }), { headers: authHeadersForInstance({ url: instUrl }) });
+        const json = await res.json();
+        if (json.status === 'ok' && json.data && json.data.changed) {
+            loadVttyHttp(instUrl, cmdId);
+        }
+    } catch (e) {
+        // Silently ignore — next poll will retry
+    }
 }
 
 function updateVttyDisplay(data) {
@@ -691,36 +800,8 @@ function updateVttyDisplay(data) {
     state._termCols = dims.cols;
 }
 
-function applyVttyDiff(data) {
-    if (!data.diff) return;
-
-    if (!state.selectedCmdId) return;
-    // Schedule a debounced HTTP fetch instead of calling loadVttyHttp()
-    // directly.  Diffs arrive at 200ms intervals; without throttling this
-    // would flood the server with full-HTML requests.
-    scheduleVttyHttp(state.selectedInstUrl, state.selectedCmdId, 300);
-
-    // Update cursor and dimensions from the diff message (immediate feedback)
-    const cursor = data.cursor || {};
-    const dims = data.dimensions || {};
-    if (cursor.row !== undefined) {
-        document.getElementById('cursorPos').textContent = `Cursor: ${(cursor.row + 1)},${(cursor.col + 1)}`;
-    }
-    if (dims.rows && dims.cols) {
-        document.getElementById('termDims').textContent = `${dims.rows}x${dims.cols}`;
-        document.getElementById('resizeRows').value = dims.rows;
-        document.getElementById('resizeCols').value = dims.cols;
-        state._termRows = dims.rows;
-        state._termCols = dims.cols;
-    }
-
-    // Update alt screen badge
-    const badge = document.getElementById('altScreenBadge');
-    if (badge) badge.style.display = data.alternate_screen ? '' : 'none';
-}
-
 // ─── Debounced VTTY HTTP Fetch ───
-// Prevents request flooding when multiple code paths (diffs, onclose,
+// Prevents request flooding when multiple code paths (dirty signals, onclose,
 // periodic refresh, sendKeys) all want to refresh the VTTY display.
 // Only the last call within the debounce window actually fires.
 function scheduleVttyHttp(instUrl, cmdId, delayMs) {
@@ -774,11 +855,11 @@ function switchBuffer(view) {
     if (!state.selectedCmdId) return;
 
     if (view === 'current') {
-        // Re-enable WebSocket for live updates
-        connectVttyWs(state.selectedInstUrl, state.selectedCmdId);
+        // Re-enable the active update mode for live updates
+        startUpdateMode();
     } else {
-        // Disconnect WebSocket — we're viewing a static snapshot
-        disconnectVttyWs();
+        // Disconnect WS / stop poll — we're viewing a static snapshot
+        stopUpdateMode();
         loadVttyHttp(state.selectedInstUrl, state.selectedCmdId);
     }
 }
@@ -1174,6 +1255,26 @@ function renderEmbeddedDocs() {
 <h2>Font Size</h2>
 <p>Use the <strong>A-</strong> and <strong>A+</strong> buttons in the top bar to adjust the terminal font size (8px-28px). Your preference is saved in localStorage.</p>
 
+<h2>VTTY Update Modes</h2>
+<p>The web UI supports two modes for detecting when a terminal buffer has changed. You can switch between them using the <strong>Update</strong> dropdown in the bottom status bar. Your choice is saved in localStorage and will be restored on the next visit.</p>
+
+<h3>Push Mode (default)</h3>
+<p>In push mode, the server monitors each command's VTTY buffer at a configurable interval (default 200ms). When changes are detected, the server sends a lightweight <code>vtty_dirty</code> signal over the existing WebSocket connection. The signal contains only the command ID — no cell data, no HTML. The web UI then fetches the full HTML via <code>GET /api/commands/:id/vtty/html</code> at its own pace (debounced at 50ms). This is the most efficient mode because no polling is required; the server only sends when something actually changed.</p>
+<p>Push mode is the default and is recommended for most use cases. It provides the lowest latency and lowest bandwidth overhead.</p>
+
+<h3>Poll Mode</h3>
+<p>In poll mode, the web client periodically calls <code>GET /api/commands/:id/vtty/changed</code> to ask "has the buffer changed since the last check?". The response is a simple <code>{ "changed": true/false }</code> with no HTML or diff data. If changed, the client then fetches the full HTML via the standard endpoint. The poll interval is configurable via the input next to the mode dropdown (50ms–5000ms, default 500ms).</p>
+<p>Poll mode is useful when WebSocket connections are unreliable — for example, when a reverse proxy buffers WebSocket frames, when network conditions cause frequent WS reconnections, or when the client wants full control over refresh timing. The bandwidth overhead is slightly higher than push mode because the changed-check runs continuously even when nothing is changing.</p>
+
+<h3>Server Configuration</h3>
+<p>The server-side update settings can be configured in the vrunner config file under the <code>web</code> section:</p>
+<pre><code>web:
+  update_mode: push       # "push" (default) or "poll"
+  dirty_check_ms: 200     # server dirty-check interval (push mode)
+  default_poll_ms: 500    # suggested client poll interval (poll mode)
+</code></pre>
+<p>The <code>dirty_check_ms</code> controls how often the server compares the VTTY buffer against the last-known snapshot in push mode. Lower values provide faster updates but increase CPU usage slightly. The <code>default_poll_ms</code> is the suggested interval that the web UI will use when in poll mode, but the user can override it via the UI controls at any time.</p>
+
 <h2>API Reference</h2>
 <table>
     <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
@@ -1181,6 +1282,7 @@ function renderEmbeddedDocs() {
     <tr><td>POST</td><td><code>/api/commands</code></td><td>Spawn a new command</td></tr>
     <tr><td>GET</td><td><code>/api/commands/:id/vtty</code></td><td>Get VTTY output as ANSI text</td></tr>
     <tr><td>GET</td><td><code>/api/commands/:id/vtty/html</code></td><td>Get VTTY as rendered HTML + cursor</td></tr>
+    <tr><td>GET</td><td><code>/api/commands/:id/vtty/changed</code></td><td>Check if VTTY buffer changed (poll mode)</td></tr>
     <tr><td>POST</td><td><code>/api/commands/:id/keys</code></td><td>Send keystrokes to a command</td></tr>
     <tr><td>POST</td><td><code>/api/commands/:id/kill</code></td><td>Kill a running command</td></tr>
     <tr><td>POST</td><td><code>/api/commands/:id/resize</code></td><td>Resize virtual terminal</td></tr>

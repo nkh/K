@@ -173,3 +173,28 @@ pub async fn resize_vtty(
         })),
     }
 }
+
+/// GET /api/commands/:id/vtty/changed
+///
+/// Check whether a command's VTTY buffer has changed since the last poll.
+/// This is the lightweight endpoint used by the client in **poll mode**.
+/// Returns `{ "changed": true/false }` — no HTML, no diff data.
+/// The client should call `GET /api/commands/:id/vtty/html` when this
+/// returns `true` to get the updated buffer content.
+pub async fn vtty_changed(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Json<Value> {
+    match state.manager.has_changed(&id) {
+        Ok(changed) => Json(serde_json::json!({
+            "status": "ok",
+            "data": { "id": id, "changed": changed },
+            "error": null
+        })),
+        Err(e) => Json(serde_json::json!({
+            "status": "error",
+            "data": null,
+            "error": e.to_string()
+        })),
+    }
+}

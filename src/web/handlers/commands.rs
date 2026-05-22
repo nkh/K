@@ -210,6 +210,7 @@ pub async fn get_info(
     let commands = state.manager.list();
     let certs = state.cert_store.list();
     let cert_names: Vec<&str> = certs.iter().map(|c| c.name.as_str()).collect();
+    let web_config = &state.manager.config().web;
 
     Json(serde_json::json!({
         "status": "ok",
@@ -218,6 +219,11 @@ pub async fn get_info(
             "certificate_count": certs.len(),
             "certificates": cert_names,
             "auth_enabled": state.auth_token.is_some(),
+            "web": {
+                "update_mode": web_config.update_mode,
+                "dirty_check_ms": web_config.dirty_check_ms,
+                "default_poll_ms": web_config.default_poll_ms,
+            },
         },
         "error": null
     }))

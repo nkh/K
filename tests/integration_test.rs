@@ -39,6 +39,7 @@ fn test_config() -> Config {
         interactive: Default::default(),
         default_exit: Default::default(),
         environment: Default::default(),
+        web: Default::default(),
         profiles: Default::default(),
     }
 }

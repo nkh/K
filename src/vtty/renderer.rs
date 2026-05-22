@@ -85,32 +85,31 @@ impl VttyRenderer {
     /// ANSI art containing these metacharacters.
     pub fn to_html(buffer: &Buffer) -> String {
         let mut html = String::new();
-        // Rough capacity estimate: 80 chars × 24 rows × ~20 chars per cell.
-        html.reserve(buffer.rows.len() * buffer.width * 20);
+        // Rough capacity estimate: 80 chars × 24 rows × ~60 chars per cell (with span markup).
+        html.reserve(buffer.rows.len() * buffer.width * 60);
 
         for row in &buffer.rows {
             for cell in row {
-                if cell.is_empty() {
-                    html.push(' ');
-                    continue;
-                }
-
-                let mut style = String::new();
+                // Every cell is wrapped in a <span> with display:inline-block;width:1ch
+                // so the client-side cell grid (buildCellGrid) can index each cell by
+                // position.  Empty cells get a zero-width space to keep the span alive.
+                let mut style = String::from("display:inline-block;width:1ch;");
                 style.push_str(&format!("color:rgb({},{},{});", cell.fg[0], cell.fg[1], cell.fg[2]));
                 style.push_str(&format!("background:rgb({},{},{});", cell.bg[0], cell.bg[1], cell.bg[2]));
 
+                if cell.reverse {
+                    style.push_str(&format!("color:rgb({},{},{});background:rgb({},{},{});",
+                        cell.bg[0], cell.bg[1], cell.bg[2],
+                        cell.fg[0], cell.fg[1], cell.fg[2]));
+                }
                 if cell.bold { style.push_str("font-weight:bold;"); }
                 if cell.italic { style.push_str("font-style:italic;"); }
                 if cell.underline { style.push_str("text-decoration:underline;"); }
                 if cell.strikethrough { style.push_str("text-decoration:line-through;"); }
-                if cell.blink { style.push_str("text-decoration:blink;"); }
+                if cell.blink { style.push_str("animation:blink 1s step-end infinite;"); }
 
-                if style.is_empty() {
-                    // No styling needed — but still escape for safety.
-                    html.push_str(&html_escape(cell.ch));
-                } else {
-                    html.push_str(&format!("<span style='{}'>{}</span>", style, html_escape(cell.ch)));
-                }
+                let ch = if cell.is_empty() { '\u{200b}' } else { cell.ch };
+                html.push_str(&format!("<span style='{}'>{}</span>", style, html_escape(ch)));
             }
             html.push('\n');
         }

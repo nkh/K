@@ -34,7 +34,7 @@ pub struct CommandManager {
     config: Config,
     logger: Arc<CommandLogger>,
     /// Broadcast channel for VTTY change notifications.
-    /// Each message is a `(command_id, html_content)` pair.
+    /// Each message is a `(command_id, message_json)` pair.
     vtty_change_tx: broadcast::Sender<(String, String)>,
     /// Named snapshots: (command_id, snapshot_name) -> StoredSnapshot
     snapshots: Arc<DashMap<(CommandId, String), StoredSnapshot>>,
@@ -87,38 +87,50 @@ impl CommandManager {
         Ok(id)
     }
 
-    /// Spawn a background watcher that computes incremental diffs and broadcasts them.
+    /// Spawn a background watcher that detects buffer changes and broadcasts
+    /// lightweight "vtty_dirty" signals.  The watcher does NOT compute diffs
+    /// or include any cell data — it simply tells the client "something changed,
+    /// go fetch the latest HTML yourself".  The actual HTML is always obtained
+    /// via the existing `GET /api/commands/:id/vtty/html` endpoint.
     fn spawn_diff_watcher(&self, watch_id: String) {
         let watch_commands = self.commands.clone();
         let watch_tx = self.vtty_change_tx.clone();
-        let last_buf_map = self.last_buffer.clone();
+        let check_interval_ms = self.config.web.dirty_check_ms;
 
         tokio::spawn(async move {
-            loop {
-                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            // The watcher maintains its OWN local baseline for change detection.
+            // We intentionally do NOT touch last_buffer (the shared DashMap)
+            // — that belongs exclusively to has_changed() / poll mode.
+            // If the watcher also wrote to it, poll mode would always see
+            // "no change" because the watcher consumes changes first.
+            let mut prev_buffer: Option<crate::vtty::buffer::Buffer> = None;
 
-                let entry = match watch_commands.get(&watch_id) {
-                    Some(e) => e,
+            loop {
+                tokio::time::sleep(std::time::Duration::from_millis(check_interval_ms)).await;
+
+                // Clone the emulator Arc and drop the DashMap entry BEFORE
+                // awaiting the snapshot.  Holding the DashMap shard read lock
+                // across the .await blocks kill() (which needs a write lock
+                // to commands.remove()), making the server appear to hang
+                // when stopping a command from the web UI.
+                let emulator = match watch_commands.get(&watch_id) {
+                    Some(e) => e.emulator.clone(),
                     None => {
-                        // Command removed — clean up last_buffer and stop watching
-                        last_buf_map.remove(&watch_id);
+                        // Command removed — stop watching
                         break;
                     }
                 };
+                // DashMap shard lock is now released.
 
-                // Clone the current buffer
-                let current_buffer = entry.vtty_snapshot().await;
-                let cursor_row = entry.cursor_position().await.0;
-                let cursor_col = entry.cursor_position().await.1;
-                let (rows, cols) = entry.dimensions().await;
-                let alt_screen = entry.is_alternate_screen().await;
-                drop(entry); // Release the DashMap lock
+                // Clone the current buffer for comparison (no DashMap lock held)
+                let current_buffer = {
+                    let emu = emulator.read().await;
+                    emu.snapshot()
+                };
 
-                // Check if anything changed by comparing to the last sent buffer
-                let prev = last_buf_map.get(&watch_id);
-                let has_changed = match &prev {
+                // Check if anything changed by comparing to the watcher's own baseline
+                let has_changed = match &prev_buffer {
                     Some(p) => {
-                        let p = p.value();
                         p.width != current_buffer.width
                             || p.height != current_buffer.height
                             || p.rows != current_buffer.rows
@@ -130,31 +142,19 @@ impl CommandManager {
                     continue;
                 }
 
-                // Compute the cell-level diff
-                let diff = match prev {
-                    Some(p) => current_buffer.diff(&p),
-                    None => Buffer::diff(&current_buffer, &Buffer::new(0, 0, 0)),
-                };
+                // Update the watcher's local baseline (NOT the shared last_buffer)
+                prev_buffer = Some(current_buffer);
 
-                // Only send if there are actual changes
-                if diff.changed_count > 0 {
-                    // Store as last sent buffer
-                    last_buf_map.insert(watch_id.clone(), current_buffer);
+                // Send a lightweight dirty signal — no diff data, no HTML.
+                // The client decides when and how to fetch the updated content.
+                let msg = serde_json::json!({
+                    "type": "vtty_dirty",
+                    "data": {
+                        "id": &watch_id,
+                    }
+                }).to_string();
 
-                    // Build a JSON message containing the diff
-                    let msg = serde_json::json!({
-                        "type": "vtty_diff",
-                        "data": {
-                            "id": &watch_id,
-                            "diff": diff,
-                            "cursor": { "row": cursor_row, "col": cursor_col },
-                            "dimensions": { "rows": rows, "cols": cols },
-                            "alternate_screen": alt_screen,
-                        }
-                    }).to_string();
-
-                    let _ = watch_tx.send((watch_id.clone(), msg));
-                }
+                let _ = watch_tx.send((watch_id.clone(), msg));
             }
         });
     }
@@ -234,6 +234,12 @@ impl CommandManager {
         }
     }
 
+    /// Kill a command: remove it from the manager, send Ctrl+C, then
+    /// SIGKILL after the configured grace period.  The kill sequence
+    /// runs in a background task so this method returns immediately —
+    /// the caller (API handler) is not blocked waiting for the child
+    /// process to exit, which previously prevented the server from
+    /// shutting down gracefully.
     pub async fn kill(&self, id: &CommandId, _signal: Option<String>) -> anyhow::Result<()> {
         self.logger.log("kill", &format!("id={}", id));
         if let Some((_, handle)) = self.commands.remove(id) {
@@ -242,50 +248,40 @@ impl CommandManager {
             // Remove all snapshots for this command
             self.snapshots.retain(|k, _| k.0 != *id);
 
-            // Send Ctrl+C (SIGINT) for graceful shutdown
+            let pid = handle.pid;
+            let timeout_secs = handle.exit_config.timeout_secs;
+            let watch_id = id.to_string();
+
+            // Step 1: send Ctrl+C (SIGINT) for graceful shutdown
             let _ = handle.send_bytes(vec![0x03]).await;
 
-            // Wait up to the configured timeout for the process to exit
-            let timeout_secs = handle.exit_config.timeout_secs;
-            let exit_rx = handle._exit_rx;
-
-            tokio::select! {
-                result = tokio::time::timeout(
-                    std::time::Duration::from_secs(timeout_secs),
-                    exit_rx
-                ) => {
-                    match result {
-                        Ok(Ok(_status)) => {
-                            tracing::info!(id = %id, "Command exited gracefully within timeout");
-                        }
-                        Ok(Err(_)) => {
-                            tracing::warn!(
-                                id = %id,
-                                timeout_secs = timeout_secs,
-                                "Command did not exit within timeout, sending SIGKILL"
-                            );
-                            // Force kill with SIGKILL
-                            #[cfg(unix)]
-                            {
-                                unsafe { libc::kill(handle.pid as i32, libc::SIGKILL); }
-                            }
-                            #[cfg(not(unix))]
-                            {
-                                let _ = std::process::Command::new("kill")
-                                    .arg("-9").arg(handle.pid.to_string())
-                                    .spawn();
-                            }
-                        }
-                        Err(_) => {
-                            tracing::warn!(id = %id, "Exit receiver dropped, sending SIGKILL");
-                            #[cfg(unix)]
-                            {
-                                unsafe { libc::kill(handle.pid as i32, libc::SIGKILL); }
-                            }
-                        }
+            // Step 2: spawn a background task that sends SIGKILL after
+            // the grace period if the process hasn't exited yet.
+            // The process waiter in spawner.rs will reap the child;
+            // we just need to make sure it actually dies.
+            tokio::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_secs(timeout_secs)).await;
+                // Check if the process is still alive before sending SIGKILL.
+                #[cfg(unix)]
+                {
+                    let ret = unsafe { libc::kill(pid as i32, 0) };
+                    if ret == 0 {
+                        tracing::info!(
+                            id = %watch_id,
+                            pid = pid,
+                            timeout_secs = timeout_secs,
+                            "Grace period expired, sending SIGKILL"
+                        );
+                        unsafe { libc::kill(pid as i32, libc::SIGKILL); }
                     }
                 }
-            }
+                #[cfg(not(unix))]
+                {
+                    let _ = std::process::Command::new("kill")
+                        .arg("-9").arg(pid.to_string())
+                        .spawn();
+                }
+            });
         }
         Ok(())
     }
@@ -367,6 +363,47 @@ impl CommandManager {
     /// Returns a receiver that yields `(command_id, message_json)` pairs.
     pub fn subscribe_vtty(&self) -> broadcast::Receiver<(String, String)> {
         self.vtty_change_tx.subscribe()
+    }
+
+    /// Check whether a command's VTTY buffer has changed since the last
+    /// snapshot.  Used by the `GET /api/commands/:id/vtty/changed` endpoint
+    /// in poll mode.
+    ///
+    /// Returns `true` if the command exists and the buffer differs from the
+    /// last-known state (or if this is the first check).  Returns `false` if
+    /// the buffer is unchanged.  Returns an error if the command does not exist.
+    pub fn has_changed(&self, id: &CommandId) -> anyhow::Result<bool> {
+        // Clone the emulator Arc and drop the DashMap entry BEFORE
+        // the blocking snapshot read, to avoid holding the shard lock
+        // across the blocking_read() call.
+        let emulator = match self.commands.get(id) {
+            Some(e) => e.emulator.clone(),
+            None => return Err(anyhow::anyhow!("Command {} not found", id)),
+        };
+        // DashMap shard lock is now released.
+
+        let current = {
+            let emu = emulator.blocking_read();
+            emu.snapshot()
+        };
+
+        let changed = match self.last_buffer.get(id) {
+            Some(prev) => {
+                let p = prev.value();
+                p.width != current.width
+                    || p.height != current.height
+                    || p.rows != current.rows
+            }
+            None => true,
+        };
+
+        if changed {
+            // Update the last-known buffer so the next check won't report
+            // changed unless the buffer actually changes again.
+            self.last_buffer.insert(id.to_string(), current);
+        }
+
+        Ok(changed)
     }
 
     /// Get a clone of the VTTY change broadcast sender.

@@ -17,8 +17,9 @@ use crate::web::state::AppState;
 /// After upgrade, the server:
 /// 1. Sends a `{"type":"connected","id":"..."}` welcome message.
 /// 2. Sends an initial full HTML snapshot via `{"type":"vtty_full",...}`.
-/// 3. Subscribes to VTTY diff notifications and forwards
-///    `{"type":"vtty_diff","data":{...}}` messages with only changed cells.
+/// 3. Subscribes to VTTY change notifications and forwards
+///    `{"type":"vtty_dirty","data":{"id":"..."}}` messages when the buffer changes.
+///    The client then fetches fresh HTML via HTTP at its own pace.
 /// 4. Listens for incoming client messages:
 ///    - `{"type":"keys","keys":"..."}` — send keystrokes to the command.
 ///    - `{"type":"resize","rows":N,"cols":N}` — resize the VTTY.
@@ -77,11 +78,20 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
     }
 
     // Send the initial full HTML snapshot so the client has a complete picture.
+    // Clone the emulator Arc to avoid holding the DashMap lock across .await calls.
     if let Some(handle) = state.manager.get(&id) {
-        let html = handle.vtty_html().await;
-        let (cursor_row, cursor_col) = handle.cursor_position().await;
-        let (rows, cols) = handle.dimensions().await;
-        let alt_screen = handle.is_alternate_screen().await;
+        let emulator = handle.emulator.clone();
+        drop(handle); // Release DashMap lock immediately
+
+        let (html, cursor_row, cursor_col, rows, cols, alt_screen) = {
+            let emu = emulator.read().await;
+            let buf = emu.snapshot();
+            let html = crate::vtty::renderer::VttyRenderer::to_html(&buf);
+            let (cr, cc) = emu.cursor();
+            let (r, c) = emu.dimensions();
+            let alt = emu.is_alternate_screen();
+            (html, cr, cc, r, c, alt)
+        };
         let full_msg = json!({
             "type": "vtty_full",
             "data": {
@@ -122,8 +132,8 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
                             break;
                         }
 
-                        // Forward the diff message directly to the client.
-                        // The diff protocol messages are pre-serialized JSON.
+                        // Forward the dirty signal directly to the client.
+                        // The message is pre-serialized JSON from the diff watcher.
                         if ws_tx.send(Message::Text(msg_json.into())).await.is_err() {
                             tracing::debug!(?watch_id, "ws_vtty: client disconnected");
                             break;
@@ -133,10 +143,18 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
                         tracing::warn!(?watch_id, lagged = n, "ws_vtty: broadcast lagged, catching up");
                         // Re-send a full snapshot to resync
                         if let Some(handle) = manager.get(&watch_id) {
-                            let html = handle.vtty_html().await;
-                            let (cursor_row, cursor_col) = handle.cursor_position().await;
-                            let (rows, cols) = handle.dimensions().await;
-                            let alt_screen = handle.is_alternate_screen().await;
+                            let emulator = handle.emulator.clone();
+                            drop(handle); // Release DashMap lock before .await
+
+                            let (html, cursor_row, cursor_col, rows, cols, alt_screen) = {
+                                let emu = emulator.read().await;
+                                let buf = emu.snapshot();
+                                let html = crate::vtty::renderer::VttyRenderer::to_html(&buf);
+                                let (cr, cc) = emu.cursor();
+                                let (r, c) = emu.dimensions();
+                                let alt = emu.is_alternate_screen();
+                                (html, cr, cc, r, c, alt)
+                            };
                             let resync_msg = json!({
                                 "type": "vtty_full",
                                 "data": {
