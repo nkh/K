@@ -9,7 +9,7 @@
 # "0.0.0.0" = listen on all interfaces (use with --auth).
 bind = "127.0.0.1"
 # TCP port to listen on.
-port = 8080
+port = 9090
 
 [security]
 # Require bearer token authentication for all API requests.

@@ -21,7 +21,7 @@
             --purple: #bc8cff;
             --font-mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
             --font-sans: system-ui, -apple-system, sans-serif;
-            --font-size: 13px;
+            --font-size: 10px;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: var(--font-sans); background: var(--bg-primary); color: var(--text-primary); font-size: var(--font-size); overflow: hidden; height: 100vh; }
@@ -182,7 +182,7 @@
         <div class="spacer"></div>
         <div class="font-size-ctrl">
             <button class="icon-btn small" onclick="changeFontSize(-1)" title="Decrease font size">A-</button>
-            <span id="fontSizeLabel">13px</span>
+            <span id="fontSizeLabel">10px</span>
             <button class="icon-btn small" onclick="changeFontSize(1)" title="Increase font size">A+</button>
         </div>
         <div class="resize-controls">
@@ -298,7 +298,7 @@
         <h2>Add Instance Panel</h2>
         <div class="field">
             <label>Instance URL</label>
-            <input type="text" id="panelUrl" placeholder="http://localhost:8080">
+            <input type="text" id="panelUrl" placeholder="http://localhost:9090">
         </div>
         <div class="field">
             <label>Label (optional)</label>
@@ -326,7 +326,7 @@ const state = {
     selectedCmdId: null,
     authToken: localStorage.getItem('vrunner_auth_token') || '',
     refreshInterval: null,
-    fontSize: parseInt(localStorage.getItem('vrunner_font_size') || '13'),
+    fontSize: parseInt(localStorage.getItem('vrunner_font_size') || '10'),
     instanceUrls: [],
     currentView: 'vtty',
     // WebSocket for real-time VTTY streaming
@@ -833,21 +833,10 @@ async function killCommand(instUrl, cmdId) {
 }
 
 async function sendKeys() {
-    const input = document.getElementById('keyInput');
-    if (!state.selectedCmdId || !input.value) return;
-    const cmdId = state.selectedCmdId;
-    const instUrl = state.selectedInstUrl;
-
-    try {
-        await fetch(apiUrl(`/api/commands/${cmdId}/keys`, { url: instUrl }), {
-            method: 'POST',
-            headers: authHeadersForInstance({ url: instUrl }),
-            body: JSON.stringify({ keys: input.value }),
-        });
-        input.value = '';
-        // Schedule a debounced VTTY refresh (no need to fire immediately)
-        scheduleVttyHttp(instUrl, cmdId, 100);
-    } catch (e) { /* ignore */ }
+    // Delegate to the per-panel sendKeysToPanel using the selected panel
+    const panel = getSelectedPanel();
+    if (!panel) return;
+    await sendKeysToPanel(panel.id);
 }
 
 async function resizeTerminal() {
@@ -932,7 +921,7 @@ function addPanelDirect(instUrl, label, token) {
 
 function addPanel() {
     document.getElementById('panelModal').style.display = '';
-    document.getElementById('panelUrl').value = 'http://localhost:8080';
+    document.getElementById('panelUrl').value = 'http://localhost:9090';
     document.getElementById('panelLabel').value = '';
     document.getElementById('panelToken').value = '';
     document.getElementById('panelUrl').focus();

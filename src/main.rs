@@ -256,6 +256,7 @@ async fn run_display_loop(
     use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
     use crossterm::{cursor, ExecutableCommand};
     use std::io::Write;
+    use tokio::io::AsyncReadExt;
 
     // Set up the alternate screen and raw mode.
     let mut stdout = std::io::stdout();
@@ -266,25 +267,14 @@ async fn run_display_loop(
     let _ = stdout.execute(EnterAlternateScreen);
     let _ = stdout.execute(cursor::Hide);
 
-    // Spawn a blocking stdin reader that sends individual bytes through a
-    // channel.  In raw mode each keystroke is available immediately.
-    let (stdin_tx, mut stdin_rx) = mpsc::channel::<u8>(128);
-    tokio::task::spawn_blocking(move || {
-        use std::io::Read;
-        let mut stdin = std::io::stdin();
-        let mut buf = [0u8; 1];
-        loop {
-            match stdin.read(&mut buf) {
-                Ok(1) => {
-                    if stdin_tx.blocking_send(buf[0]).is_err() {
-                        break; // receiver dropped
-                    }
-                }
-                Ok(_) => break, // EOF or unexpected read size
-                Err(_) => break, // read error
-            }
-        }
-    });
+    // Use tokio's async stdin instead of a blocking spawn_blocking thread.
+    // This is critical: when the child exits and the select! loop breaks,
+    // the async read future is immediately cancelled — no thread is left
+    // behind blocked on stdin.read().  The previous spawn_blocking approach
+    // left a thread blocked on stdin.read() that only unblocked when the
+    // user pressed a key (Enter in cooked mode), preventing clean exit.
+    let mut stdin = tokio::io::stdin();
+    let mut stdin_buf = [0u8; 1];
 
     // Set up SIGWINCH handler for terminal resize.
     // When the user resizes their terminal emulator, the kernel delivers
@@ -409,22 +399,22 @@ async fn run_display_loop(
                 }
             }
 
-            // ── Keystroke forwarding ──
-            byte = stdin_rx.recv() => {
-                match byte {
-                    Some(b) if b == 0x1c => {
-                        break;
-                    }
-                    Some(b) => {
+            // ── Keystroke forwarding (async — cancellable by select!) ──
+            result = stdin.read(&mut stdin_buf) => {
+                match result {
+                    Ok(1) => {
+                        let b = stdin_buf[0];
+                        if b == 0x1c {
+                            break;  // Ctrl+\
+                        }
                         if let Some(ref id) = active_id {
                             if let Some(handle) = manager.get(id) {
                                 let _ = handle.send_bytes(vec![b]).await;
                             }
                         }
                     }
-                    None => {
-                        break;
-                    }
+                    Ok(_) => break,  // EOF
+                    Err(_) => break,  // Read error
                 }
             }
 

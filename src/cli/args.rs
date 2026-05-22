@@ -14,7 +14,7 @@ pub struct Cli {
     #[arg(long, value_name = "ADDR")]
     pub bind: Option<String>,
 
-    /// Server port (default: 8080)
+    /// Server port (default: 9090)
     #[arg(long, value_name = "PORT")]
     pub port: Option<u16>,
 

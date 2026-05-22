@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// All fields have sensible defaults, so a config file is entirely optional.
 /// When no config file is present, vrunner runs with localhost-only HTTP on
-/// port 8080, no authentication, and no TLS.
+/// port 9090, no authentication, and no TLS.
 ///
 /// Config files are searched in this order (later files override earlier):
 /// 1. ~/.config/vrunner/config.yaml (or .toml)
@@ -73,7 +73,7 @@ impl Default for ServerConfig {
     fn default() -> Self {
         Self {
             bind: "127.0.0.1".to_string(),
-            port: 8080,
+            port: 9090,
         }
     }
 }
