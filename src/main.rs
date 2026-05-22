@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
+use crossterm::style::Color;
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc};
 
@@ -12,6 +13,17 @@ use vrunner::process::manager::CommandManager;
 use vrunner::web::auth::AuthManager;
 use vrunner::web::certs::CertificateStore;
 use vrunner::web::server::start_server;
+
+/// Colorize text using crossterm when stdout is a TTY, plain text otherwise.
+fn c(text: &str, color: Color, bold: bool) -> String {
+    use crossterm::style::Stylize;
+    use std::io::IsTerminal;
+    if !std::io::stdout().is_terminal() {
+        return text.to_string();
+    }
+    let styled = text.with(color);
+    if bold { styled.bold().to_string() } else { styled.to_string() }
+}
 
 /// Synchronous pre-runtime phase: parse CLI, handle subcommands, load config,
 /// and daemonize. Daemonization MUST happen before the tokio runtime starts,
@@ -42,6 +54,15 @@ fn pre_runtime() -> Result<Option<Cli>> {
             // Cert subcommands are synchronous — handle them here
             handle_cert_command(action)?;
             return Ok(None);
+        }
+        Some(Commands::ListVrunner) => {
+            // list-vrunner is async (needs HTTP), fall through to async phase
+        }
+        Some(Commands::ListCommands) => {
+            // list-commands is async (needs HTTP), fall through to async phase
+        }
+        Some(Commands::StopCommand { .. }) => {
+            // stop-command is async (needs HTTP), fall through to async phase
         }
         None => {}
     }
@@ -87,6 +108,24 @@ async fn async_main(cli: Cli) -> Result<()> {
     // Handle thaw subcommand
     if let Some(Commands::Thaw { ref id }) = cli.command {
         handle_thaw_command(&cli, &id).await?;
+        return Ok(());
+    }
+
+    // Handle list-vrunner subcommand
+    if let Some(Commands::ListVrunner) = cli.command {
+        handle_list_vrunner_command(&cli).await?;
+        return Ok(());
+    }
+
+    // Handle list-commands subcommand
+    if let Some(Commands::ListCommands) = cli.command {
+        handle_list_commands_command(&cli).await?;
+        return Ok(());
+    }
+
+    // Handle stop-command subcommand
+    if let Some(Commands::StopCommand { ref id }) = cli.command {
+        handle_stop_command(&cli, &id).await?;
         return Ok(());
     }
 
@@ -908,7 +947,7 @@ async fn handle_list_command(cli: &Cli) -> Result<()> {
                         if json["status"] == "ok" {
                             if let Some(cmds) = json["data"].as_array() {
                                 if cmds.is_empty() {
-                                    println!("  (no commands)");
+                                    println!("  {}", c("(no commands)", Color::Yellow, false));
                                 } else {
                                     for cmd in cmds {
                                         if let Some(line) = format_command(cmd) {
@@ -917,20 +956,20 @@ async fn handle_list_command(cli: &Cli) -> Result<()> {
                                     }
                                 }
                             } else {
-                                println!("  [ERROR]  Invalid API response: expected array");
+                                println!("  {}  Invalid API response: expected array", c("[ERROR]", Color::Red, true));
                             }
                         } else {
                             let err = json["error"].as_str().unwrap_or("unknown error");
-                            println!("  [ERROR]  API returned error: {}", err);
+                            println!("  {}  API returned error: {}", c("[ERROR]", Color::Red, true), err);
                         }
                     }
                     Err(e) => {
-                        println!("  [ERROR]  Invalid API response: {}", e);
+                        println!("  {}  Invalid API response: {}", c("[ERROR]", Color::Red, true), e);
                     }
                 }
             }
             Err(e) => {
-                println!("  [ERROR]  Instance unreachable: {}", e);
+                println!("  {}  Instance unreachable: {}", c("[ERROR]", Color::Red, true), e);
             }
         }
 
@@ -947,10 +986,14 @@ async fn handle_list_command(cli: &Cli) -> Result<()> {
 fn format_instance_header(info: &vrunner::instance::info::InstanceInfo) -> String {
     let daemon = if info.daemon { "yes" } else { "no" };
     let display = if info.display { "yes" } else { "no" };
-    let cmd = info.command.as_deref().unwrap_or("(idle)");
     format!(
-        "INSTANCE  PID: {}  PORT: {}  BIND: {}  DAEMON: {}  DISPLAY: {}  CMD: {}",
-        info.pid, info.port, info.bind, daemon, display, cmd
+        "{}  {} {}  {} {}  {} {}  {} {}  {} {}",
+        c("INSTANCE", Color::Blue, true),
+        c("PID:", Color::DarkGrey, false), info.pid,
+        c("PORT:", Color::DarkGrey, false), info.port,
+        c("BIND:", Color::DarkGrey, false), info.bind,
+        c("DAEMON:", Color::DarkGrey, false), daemon,
+        c("DISPLAY:", Color::DarkGrey, false), display,
     )
 }
 
@@ -977,8 +1020,10 @@ fn format_command(cmd: &serde_json::Value) -> Option<String> {
     let cert = cmd.get("certificate").and_then(|v| v.as_str()).unwrap_or("-");
 
     Some(format!(
-        "  COMMAND  {:<42} PID: {:<6} ID: {:<8} CERT: {}",
-        truncated, pid, id_short, cert
+        "  {} {}  {}",
+        c(&format!("{:<10}", pid), Color::Cyan, false),
+        c(&format!("{:<20}", truncated), Color::Reset, false),
+        c(&format!("{:<8} CERT: {}", id_short, cert), Color::DarkGrey, false),
     ))
 }
 
@@ -1010,6 +1055,120 @@ async fn handle_stop_command_by_pid(_cli: &Cli, pid: u32) -> Result<bool> {
     }
 
     Ok(false)
+}
+
+/// Filter instances by --target, returning all if no target specified.
+fn resolve_targeted_instances(
+    cli: &Cli,
+    all_instances: &[vrunner::instance::info::InstanceInfo],
+) -> Result<Vec<vrunner::instance::info::InstanceInfo>> {
+    if let Some(target_pid) = cli.target {
+        match all_instances.iter().find(|i| i.pid == target_pid) {
+            Some(info) => Ok(vec![info.clone()]),
+            None => {
+                if all_instances.is_empty() {
+                    anyhow::bail!("No running vrunner instances found.");
+                }
+                anyhow::bail!(
+                    "No vrunner instance found with PID {}. Running instances:\n{}",
+                    target_pid,
+                    all_instances.iter().map(|i| format!("  PID: {}", i.pid)).collect::<Vec<_>>().join("\n")
+                );
+            }
+        }
+    } else {
+        Ok(all_instances.to_vec())
+    }
+}
+
+/// Handle the `vrunner list-vrunner` subcommand.
+///
+/// Lists vrunner instances in tab-separated (TSV) format for machine parsing.
+async fn handle_list_vrunner_command(cli: &Cli) -> Result<()> {
+    let registry = InstanceRegistry::new()?;
+    let all_instances = registry.list_instances();
+    let instances = resolve_targeted_instances(cli, &all_instances)?;
+
+    // Print TSV header
+    println!("PID\tPORT\tBIND\tDAEMON\tDISPLAY\tSTARTUP_CMD");
+    for info in &instances {
+        let startup = info.command.as_deref().unwrap_or("(idle)");
+        let daemon = if info.daemon { "yes" } else { "no" };
+        let display = if info.display { "yes" } else { "no" };
+        println!("{}\t{}\t{}\t{}\t{}\t{}",
+            info.pid, info.port, info.bind, daemon, display, startup);
+    }
+    Ok(())
+}
+
+/// Handle the `vrunner list-commands` subcommand.
+///
+/// Lists all running commands across instances in tab-separated (TSV) format.
+async fn handle_list_commands_command(cli: &Cli) -> Result<()> {
+    let registry = InstanceRegistry::new()?;
+    let all_instances = registry.list_instances();
+    let instances = resolve_targeted_instances(cli, &all_instances)?;
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()?;
+
+    // Print TSV header
+    println!("VRUNNER_PID\tCMD_PID\tNAME\tARGS\tID\tCERT");
+
+    for info in &instances {
+        let url = instance_url(info, &None);
+        match client.get(format!("{}/api/commands", url)).send().await {
+            Ok(resp) => {
+                if let Ok(json) = resp.json::<serde_json::Value>().await {
+                    if let Some(cmds) = json["data"].as_array() {
+                        for cmd in cmds {
+                            let cmd_pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0);
+                            let name = cmd.get("name").and_then(|v| v.as_str()).unwrap_or("?");
+                            let args = serde_json::to_string(cmd.get("args").unwrap_or(&serde_json::json!([]))).unwrap_or_else(|_| "[]".to_string());
+                            let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("?");
+                            let id_short = &id[..id.len().min(8)];
+                            let cert = cmd.get("certificate").and_then(|v| v.as_str()).unwrap_or("-");
+                            println!("{}\t{}\t{}\t{}\t{}\t{}",
+                                info.pid, cmd_pid, name, args, id_short, cert);
+                        }
+                    }
+                }
+            }
+            Err(_) => {
+                // Skip unreachable instances silently in TSV mode
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Handle the `vrunner stop-command` subcommand.
+///
+/// Stops a specific command by its ID (not the whole instance).
+async fn handle_stop_command(cli: &Cli, id: &str) -> Result<()> {
+    let registry = InstanceRegistry::new()?;
+    let info = resolve_instance(cli, &registry)?;
+    let url = instance_url(&info, &None);
+    let client = reqwest::Client::new();
+
+    let resp = client
+        .post(format!("{}/api/commands/{}/kill", url, id))
+        .json(&serde_json::json!({}))
+        .send()
+        .await?;
+
+    let status = resp.status();
+    let result: serde_json::Value = resp.json().await?;
+
+    if status.is_success() {
+        println!("Command {} stopped on instance {} (PID {})", id, info.pid, info.pid);
+    } else {
+        let error = result["error"].as_str().unwrap_or("Unknown error");
+        eprintln!("Failed to stop command {}: {}", id, error);
+        std::process::exit(1);
+    }
+
+    Ok(())
 }
 
 /// Handle the `vrunner cert` subcommands (generate, list, show, remove).

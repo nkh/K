@@ -196,6 +196,15 @@ pub enum Commands {
         #[command(subcommand)]
         action: CertAction,
     },
+    /// List vrunner instances only (tab-separated, machine-readable)
+    ListVrunner,
+    /// List running commands only (tab-separated, machine-readable)
+    ListCommands,
+    /// Stop a specific command by ID (not the whole instance)
+    StopCommand {
+        /// ID of the command to stop
+        id: String,
+    },
 }
 
 #[derive(Subcommand, Debug)]
