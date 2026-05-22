@@ -765,90 +765,133 @@ async fn handle_thaw_command(cli: &Cli, id: &str) -> Result<()> {
 }
 
 /// Handle the `vrunner list` subcommand.
-/// Queries all running instances and shows their commands with arguments.
-async fn handle_list_command(_cli: &Cli) -> Result<()> {
+///
+/// Queries running vrunner instances and shows their commands in a
+/// two-level indented hierarchy:
+///
+///   INSTANCE  PID: 12345  PORT: 9090  BIND: 127.0.0.1  DAEMON: no  DISPLAY: yes
+///     COMMAND  htop                              PID: 5678  ID: abc12345  CERT: -
+///     COMMAND  vim file.txt                      PID: 5679  ID: def67890  CERT: my-app
+///
+/// When `--target <PID>` is provided, only that instance is listed.
+/// Unreachable instances show an `[ERROR]` line under their header.
+/// Instances with no commands show `(no commands)`.
+async fn handle_list_command(cli: &Cli) -> Result<()> {
     let registry = InstanceRegistry::new()?;
-    let instances = registry.list_instances();
+    let all_instances = registry.list_instances();
+
+    // Resolve target: filter to a single instance if --target is given.
+    let instances: Vec<vrunner::instance::info::InstanceInfo> = if let Some(target_pid) = cli.target {
+        match all_instances.iter().find(|i| i.pid == target_pid) {
+            Some(info) => vec![info.clone()],
+            None => {
+                if all_instances.is_empty() {
+                    anyhow::bail!("No running vrunner instances found.");
+                }
+                anyhow::bail!(
+                    "No vrunner instance found with PID {}. Running instances:\n{}",
+                    target_pid,
+                    all_instances.iter().map(|i| format!("  PID: {}", i.pid)).collect::<Vec<_>>().join("\n")
+                );
+            }
+        }
+    } else {
+        all_instances
+    };
 
     if instances.is_empty() {
         println!("No running vrunner instances.");
         return Ok(());
     }
 
-    let client = reqwest::Client::new();
-
-    println!("{:<10} {:<8} {:<20} {:<10} {:<10} COMMAND",
-        "PID", "PORT", "BIND", "DAEMON", "DISPLAY");
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()?;
 
     for info in &instances {
+        println!("{}", format_instance_header(info));
+
         let url = instance_url(info, &None);
-        let label = if info.display { "yes" } else { "no" };
-        let daemon = if info.daemon { "yes" } else { "no" };
 
-        // Query the instance's command list
-        let cmd_str = info.command.as_deref().unwrap_or("(idle)");
-        let mut printed_instance = false;
-
-        // Try to fetch commands from the instance API
         match client.get(format!("{}/api/commands", url)).send().await {
             Ok(resp) => {
-                if let Ok(json) = resp.json::<serde_json::Value>().await {
-                    if json["status"] == "ok" {
-                        if let Some(cmds) = json["data"].as_array() {
-                            if cmds.is_empty() {
-                                println!("{:<10} {:<8} {:<20} {:<10} {:<10} {} (no commands)",
-                                    info.pid, info.port, info.bind, daemon, label, cmd_str);
-                            } else {
-                                for (i, cmd) in cmds.iter().enumerate() {
-                                    let name = cmd["name"].as_str().unwrap_or("?");
-                                    let args = cmd["args"].as_array()
-                                        .map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
-                                        .unwrap_or_default();
-                                    let args_str = if args.is_empty() {
-                                        String::new()
-                                    } else {
-                                        format!(" {:?}", args)
-                                    };
-                                    let _pid = cmd["pid"].as_u64().unwrap_or(0);
-                                    let _id_short = cmd["id"].as_str()
-                                        .map(|id| &id[..8])
-                                        .unwrap_or("?");
-                                    let cert = cmd["certificate"].as_str();
-
-                                    let line = if i == 0 {
-                                        format!("{:<10} {:<8} {:<20} {:<10} {:<10} {} -> {}{} [{}]",
-                                            info.pid, info.port, info.bind, daemon, label,
-                                            cmd_str, name, args_str,
-                                            cert.unwrap_or("-"))
-                                    } else {
-                                        format!("{:<10} {:<8} {:<20} {:<10} {:<10}     {}{}{} [{}]",
-                                            "", "", "", "", "",
-                                            cmd_str, name, args_str,
-                                            cert.unwrap_or("-"))
-                                    };
-                                    println!("{}", line);
+                match resp.json::<serde_json::Value>().await {
+                    Ok(json) => {
+                        if json["status"] == "ok" {
+                            if let Some(cmds) = json["data"].as_array() {
+                                if cmds.is_empty() {
+                                    println!("  (no commands)");
+                                } else {
+                                    for cmd in cmds {
+                                        if let Some(line) = format_command(cmd) {
+                                            println!("{}", line);
+                                        }
+                                    }
                                 }
+                            } else {
+                                println!("  [ERROR]  Invalid API response: expected array");
                             }
-                            printed_instance = true;
+                        } else {
+                            let err = json["error"].as_str().unwrap_or("unknown error");
+                            println!("  [ERROR]  API returned error: {}", err);
                         }
+                    }
+                    Err(e) => {
+                        println!("  [ERROR]  Invalid API response: {}", e);
                     }
                 }
             }
             Err(e) => {
-                // Instance not reachable — show basic info
-                println!("{:<10} {:<8} {:<20} {:<10} {:<10} {} (unreachable: {})",
-                    info.pid, info.port, info.bind, daemon, label, cmd_str, e);
-                printed_instance = true;
+                println!("  [ERROR]  Instance unreachable: {}", e);
             }
         }
 
-        if !printed_instance {
-            println!("{:<10} {:<8} {:<20} {:<10} {:<10} {}",
-                info.pid, info.port, info.bind, daemon, label, cmd_str);
+        // Blank line between instances for readability
+        if instances.len() > 1 {
+            println!();
         }
     }
 
     Ok(())
+}
+
+/// Format an instance header line for `vrunner list` output.
+fn format_instance_header(info: &vrunner::instance::info::InstanceInfo) -> String {
+    let daemon = if info.daemon { "yes" } else { "no" };
+    let display = if info.display { "yes" } else { "no" };
+    let cmd = info.command.as_deref().unwrap_or("(idle)");
+    format!(
+        "INSTANCE  PID: {}  PORT: {}  BIND: {}  DAEMON: {}  DISPLAY: {}  CMD: {}",
+        info.pid, info.port, info.bind, daemon, display, cmd
+    )
+}
+
+/// Format a single command line for `vrunner list` output.
+/// Returns None if the JSON value lacks required fields.
+fn format_command(cmd: &serde_json::Value) -> Option<String> {
+    let name = cmd.get("name")?.as_str()?;
+    let args = cmd.get("args")?.as_array()?;
+    let args_vec: Vec<&str> = args.iter().filter_map(|v| v.as_str()).collect();
+    let display_name = if args_vec.is_empty() {
+        name.to_string()
+    } else {
+        format!("{} {}", name, args_vec.join(" "))
+    };
+    // Truncate long command names for readability
+    let truncated = if display_name.len() > 40 {
+        format!("{}...", &display_name[..37])
+    } else {
+        display_name
+    };
+    let pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0);
+    let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("?");
+    let id_short = &id[..id.len().min(8)];
+    let cert = cmd.get("certificate").and_then(|v| v.as_str()).unwrap_or("-");
+
+    Some(format!(
+        "  COMMAND  {:<42} PID: {:<6} ID: {:<8} CERT: {}",
+        truncated, pid, id_short, cert
+    ))
 }
 
 /// Try to stop a specific command by PID on any running instance.
