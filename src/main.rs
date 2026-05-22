@@ -256,7 +256,6 @@ async fn run_display_loop(
     use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
     use crossterm::{cursor, ExecutableCommand};
     use std::io::Write;
-    use tokio::io::AsyncReadExt;
 
     // Set up the alternate screen and raw mode.
     let mut stdout = std::io::stdout();
@@ -267,14 +266,48 @@ async fn run_display_loop(
     let _ = stdout.execute(EnterAlternateScreen);
     let _ = stdout.execute(cursor::Hide);
 
-    // Use tokio's async stdin instead of a blocking spawn_blocking thread.
-    // This is critical: when the child exits and the select! loop breaks,
-    // the async read future is immediately cancelled — no thread is left
-    // behind blocked on stdin.read().  The previous spawn_blocking approach
-    // left a thread blocked on stdin.read() that only unblocked when the
-    // user pressed a key (Enter in cooked mode), preventing clean exit.
-    let mut stdin = tokio::io::stdin();
-    let mut stdin_buf = [0u8; 1];
+    // ── Truly async keystroke reading via /dev/tty ──
+    //
+    // We do NOT use tokio::io::stdin().  Despite its name, tokio's Stdin
+    // wraps the synchronous std::io::Stdin in a spawn_blocking thread.
+    // That thread calls the real stdin.read(), which is impossible to cancel.
+    // When the display loop breaks on child exit, the future is dropped but
+    // the blocking thread stays stuck on stdin.read().  During Runtime::drop,
+    // tokio waits for all blocking threads to complete → the process hangs
+    // until the user presses Enter (which unblocks the read).
+    //
+    // Instead, we open /dev/tty and wrap it in tokio::io::unix::AsyncFd.
+    // AsyncFd uses mio (edge-triggered, level-aware) to register the fd with
+    // the I/O reactor.  When the future is dropped (select! picks another
+    // branch), the registration is removed — no thread, no hang.
+    //
+    // We use /dev/tty (not stdin fd 0) because:
+    //   1. /dev/tty always refers to the controlling terminal, even if
+    //      stdin has been redirected (e.g. piped input).
+    //   2. It is the only way to reliably get keystrokes in raw mode
+    //      after crossterm::terminal::enable_raw_mode() has been called.
+    let tty_async: tokio::io::unix::AsyncFd<std::fs::File> = {
+        let tty = match std::fs::File::open("/dev/tty") {
+            Ok(f) => f,
+            Err(e) => {
+                tracing::error!(error = %e, "Failed to open /dev/tty");
+                let _ = terminal::disable_raw_mode();
+                let _ = stdout.execute(cursor::Show);
+                let _ = stdout.execute(LeaveAlternateScreen);
+                return;
+            }
+        };
+        match tokio::io::unix::AsyncFd::new(tty) {
+            Ok(a) => a,
+            Err(e) => {
+                tracing::error!(error = %e, "Failed to create AsyncFd for /dev/tty");
+                let _ = terminal::disable_raw_mode();
+                let _ = stdout.execute(cursor::Show);
+                let _ = stdout.execute(LeaveAlternateScreen);
+                return;
+            }
+        }
+    };
 
     // Set up SIGWINCH handler for terminal resize.
     // When the user resizes their terminal emulator, the kernel delivers
@@ -360,7 +393,9 @@ async fn run_display_loop(
         }
     }
 
+    let mut should_break;
     loop {
+        should_break = false;
         tokio::select! {
             // Use biased mode so the exit-notify branch is preferred when
             // multiple branches are ready simultaneously.  This minimises
@@ -428,22 +463,43 @@ async fn run_display_loop(
                 }
             }
 
-            // ── Keystroke forwarding (async — cancellable by select!) ──
-            result = stdin.read(&mut stdin_buf) => {
+            // ── Keystroke forwarding via AsyncFd (truly async, no blocking thread) ──
+            result = tty_async.readable() => {
                 match result {
-                    Ok(1) => {
-                        let b = stdin_buf[0];
-                        if b == 0x1c {
-                            break;  // Ctrl+\
-                        }
-                        if let Some(ref id) = active_id {
-                            if let Some(handle) = manager.get(id) {
-                                let _ = handle.send_bytes(vec![b]).await;
+                    Ok(mut guard) => {
+                        // Drain all available bytes from /dev/tty.
+                        // In raw mode each syscall returns one byte,
+                        // but we loop until EAGAIN to handle bursts.
+                        let mut key_buf = [0u8; 1];
+                        loop {
+                            match guard.try_io(|inner| {
+                                use std::io::Read;
+                                inner.get_ref().read(&mut key_buf)
+                            }) {
+                                Ok(Ok(1)) => {
+                                    let b = key_buf[0];
+                                    if b == 0x1c {
+                                        should_break = true;  // Ctrl+\
+                                        break;
+                                    }
+                                    if let Some(ref id) = active_id {
+                                        if let Some(handle) = manager.get(id) {
+                                            let _ = handle.send_bytes(vec![b]).await;
+                                        }
+                                    }
+                                }
+                                Ok(Ok(_)) => { should_break = true; break; }  // EOF
+                                Ok(Err(_)) => { should_break = true; break; }  // Read error
+                                Err(_would_block) => {
+                                    // No more data — clear readiness and
+                                    // wait for the next keystroke.
+                                    guard.clear_ready();
+                                    break;
+                                }
                             }
                         }
                     }
-                    Ok(_) => break,  // EOF
-                    Err(_) => break,  // Read error
+                    Err(_) => { should_break = true; }
                 }
             }
 
@@ -451,6 +507,9 @@ async fn run_display_loop(
             _ = shutdown_rx.recv() => {
                 break;
             }
+        }
+        if should_break {
+            break;
         }
     }
 
