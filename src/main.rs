@@ -362,6 +362,12 @@ async fn run_display_loop(
 
     loop {
         tokio::select! {
+            // Use biased mode so the exit-notify branch is preferred when
+            // multiple branches are ready simultaneously.  This minimises
+            // the window where a Notify permit can be lost (see comment
+            // in the tick handler below).
+            biased;
+
             // ── Immediate exit notification ──
             // Fires the instant child.wait() returns in the process waiter.
             _ = await_exit(exit_notify.as_ref()) => {
@@ -372,7 +378,30 @@ async fn run_display_loop(
 
             // ── Periodic VTTY render ──
             _ = tick_rx.recv() => {
-                // No exit check here — exit is handled by the notify above.
+                // Fallback exit detection for the direct child.
+                //
+                // Rationale: tokio::sync::Notify::notify_waiters() wakes
+                // all *current* waiters but does NOT store a permit for
+                // future ones.  If the select! picks a different branch
+                // (tick / stdin) while the notified() future was ready,
+                // the future is dropped and the notification is lost —
+                // the next notified() call will hang forever.
+                //
+                // The biased; keyword above makes this unlikely, but
+                // not impossible (e.g. both branches become ready in
+                // the same poll cycle).  This fallback catches the edge
+                // case within one refresh cycle.
+                if let Some(ref id) = active_id {
+                    let gone = match manager.get(id) {
+                        Some(h) => !h.is_alive(),
+                        None => true,
+                    };
+                    if gone {
+                        tracing::info!("Child process exited (tick fallback), shutting down");
+                        let _ = TerminalDisplay::clear();
+                        break;
+                    }
+                }
                 // For API-spawned commands (no direct child), check if all
                 // commands have been removed.
                 if exit_notify.is_none() && manager.list().is_empty() {
