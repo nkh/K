@@ -201,9 +201,16 @@ impl Default for VttyConfig {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DisplayConfig {
     /// Show VTTY output on the local terminal.
+    /// When the CLI command exits, the display is removed unless
+    /// display_all is also enabled.
     pub enabled: bool,
     /// Refresh interval in milliseconds when display is enabled.
     pub refresh_ms: u64,
+    /// When enabled, the display stays active after the initial CLI
+    /// command exits — it switches to the next available command.
+    /// When disabled (default), the display is dismissed and a status
+    /// message is printed, but the server keeps running.
+    pub display_all: bool,
 }
 
 impl Default for DisplayConfig {
@@ -211,6 +218,7 @@ impl Default for DisplayConfig {
         Self {
             enabled: false,
             refresh_ms: 100,
+            display_all: false,
         }
     }
 }

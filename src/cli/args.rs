@@ -64,6 +64,13 @@ pub struct Cli {
     #[arg(long)]
     pub display: bool,
 
+    /// Keep displaying VTTY output after the initial CLI command exits,
+    /// switching to the next available command. Without this flag, the
+    /// display is dismissed when the CLI command finishes but the
+    /// server continues running.
+    #[arg(long)]
+    pub display_all: bool,
+
     /// Disable local terminal display
     #[arg(long)]
     pub no_display: bool,
@@ -306,6 +313,9 @@ impl Cli {
         // Display
         if self.display {
             cfg.display.enabled = true;
+        }
+        if self.display_all {
+            cfg.display.display_all = true;
         }
         if self.no_display {
             cfg.display.enabled = false;

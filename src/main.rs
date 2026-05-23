@@ -243,12 +243,20 @@ async fn async_main(cli: Cli) -> Result<()> {
         // active command's VTTY buffer directly to the local terminal,
         // forwards keystrokes to the child, and exits on Ctrl+\ or child
         // death (when a direct child was spawned).
-        run_display_loop(
+        let display_shutdown = run_display_loop(
             &manager,
             spawned_id.as_deref(),
             cfg.display.refresh_ms,
+            cfg.display.display_all,
             shutdown_tx.clone(),
         ).await;
+        // If the display loop sent shutdown (all commands gone, Ctrl+\, or
+        // explicit shutdown signal), we're done.  Otherwise the display was
+        // dismissed (display_all=false) and we fall through to idle-wait.
+        if !display_shutdown {
+            let mut rx = shutdown_tx.subscribe();
+            let _ = rx.recv().await;
+        }
     } else if let Some(ref id) = spawned_id {
         // ── Headless mode with direct child ──
         // No display, but a child was spawned directly via CLI.  Wait for
@@ -282,13 +290,21 @@ async fn async_main(cli: Cli) -> Result<()> {
 /// Run the interactive terminal display loop.
 ///
 /// This function blocks (in the async sense) until the user quits (Ctrl+\),
-/// all commands have exited, or a shutdown signal is received.
+/// all commands have exited, a shutdown signal is received, or (when
+/// `display_all` is false) the direct CLI command exits while other commands
+/// remain.
 ///
-/// When the initial CLI command exits but API-spawned commands remain,
-/// the loop transitions to "monitor mode": `active_id` and `exit_rx`
-/// are cleared, and the display falls back to the first available command.
-/// The loop only breaks (and sends shutdown) when the command manager is
-/// empty.
+/// ## Display modes after direct child exits
+///
+/// - `display_all == true`: the loop transitions to "monitor mode" —
+///   `active_id` is cleared, and the display falls back to the first available
+///   command.  Keystrokes are forwarded to that command.  The loop only breaks
+///   (and sends shutdown) when the command manager is empty.
+///
+/// - `display_all == false` (default): the display is dismissed — the
+///   alternate screen is torn down and a status message is printed.  The
+///   function returns *without* sending shutdown, allowing the caller to
+///   idle-wait for the remaining commands or an explicit shutdown signal.
 ///
 /// It renders the VTTY buffer to the local terminal using crossterm,
 /// forwards all keystrokes to the active child command, and handles
@@ -307,8 +323,9 @@ async fn run_display_loop(
     manager: &Arc<CommandManager>,
     direct_child_id: Option<&str>,
     refresh_ms: u64,
+    display_all: bool,
     shutdown_tx: broadcast::Sender<()>,
-) {
+) -> bool {
     use vrunner::vtty::display::TerminalDisplay;
     use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
     use crossterm::{cursor, ExecutableCommand};
@@ -318,7 +335,7 @@ async fn run_display_loop(
     let mut stdout = std::io::stdout();
     if let Err(e) = terminal::enable_raw_mode() {
         tracing::warn!(error = %e, "Failed to enable raw mode");
-        return;
+        return true;  // fatal setup error — shut down
     }
     let _ = stdout.execute(EnterAlternateScreen);
     let _ = stdout.execute(cursor::Hide);
@@ -345,7 +362,7 @@ async fn run_display_loop(
                 let _ = terminal::disable_raw_mode();
                 let _ = stdout.execute(cursor::Show);
                 let _ = stdout.execute(LeaveAlternateScreen);
-                return;
+                return true;  // fatal — shut down
             }
         };
         // Ensure non-blocking mode — AsyncFd relies on EAGAIN/EWOULDBLOCK
@@ -362,7 +379,7 @@ async fn run_display_loop(
                 let _ = terminal::disable_raw_mode();
                 let _ = stdout.execute(cursor::Show);
                 let _ = stdout.execute(LeaveAlternateScreen);
-                return;
+                return true;  // fatal — shut down
             }
         }
     };
@@ -408,6 +425,11 @@ async fn run_display_loop(
     // (when the direct child exits but other commands remain).
     let mut active_id: Option<String> = direct_child_id.map(String::from);
 
+    // Whether the loop should send shutdown after cleanup.  Set to false
+    // when the display is dismissed (display_all=false, direct child exited
+    // but commands remain) — the caller will idle-wait instead.
+    let mut should_shutdown = true;
+
     // ── Event-driven exit detection ──
     // We use a tokio::sync::watch channel instead of Notify.
     // Notify loses notifications when no waiter is present — if the child
@@ -430,9 +452,24 @@ async fn run_display_loop(
                             let _ = stdout.execute(cursor::Show);
                             let _ = stdout.execute(LeaveAlternateScreen);
                             let _ = shutdown_tx.send(());
-                            return;
+                            return true;
                         }
-                        // Other commands remain — enter loop without a direct child.
+                        if !display_all {
+                            // Dismiss display immediately.
+                            let _ = terminal::disable_raw_mode();
+                            let _ = stdout.execute(cursor::Show);
+                            let _ = stdout.execute(LeaveAlternateScreen);
+                            let remaining = manager.list();
+                            eprintln!();
+                            eprintln!("vrunner: primary command exited. {} command(s) still running.", remaining.len());
+                            for (cid, name, _args, pid, _cert) in &remaining {
+                                eprintln!("  PID {} — {} ({})", pid, name, &cid[..cid.len().min(8)]);
+                            }
+                            eprintln!("The server continues running. Press Ctrl+C or use `vrunner stop` to shut down.");
+                            eprintln!();
+                            return false;
+                        }
+                        // Other commands remain — enter loop in monitor mode.
                         active_id = None;
                         None
                     } else {
@@ -447,9 +484,23 @@ async fn run_display_loop(
                                 let _ = stdout.execute(cursor::Show);
                                 let _ = stdout.execute(LeaveAlternateScreen);
                                 let _ = shutdown_tx.send(());
-                                return;
+                                return true;
                             }
-                            // Other commands remain — enter loop without a direct child.
+                            if !display_all {
+                                let _ = terminal::disable_raw_mode();
+                                let _ = stdout.execute(cursor::Show);
+                                let _ = stdout.execute(LeaveAlternateScreen);
+                                let remaining = manager.list();
+                                eprintln!();
+                                eprintln!("vrunner: primary command exited. {} command(s) still running.", remaining.len());
+                                for (cid, name, _args, pid, _cert) in &remaining {
+                                    eprintln!("  PID {} — {} ({})", pid, name, &cid[..cid.len().min(8)]);
+                                }
+                                eprintln!("The server continues running. Press Ctrl+C or use `vrunner stop` to shut down.");
+                                eprintln!();
+                                return false;
+                            }
+                            // Other commands remain — enter loop in monitor mode.
                             active_id = None;
                             None
                         } else {
@@ -465,9 +516,23 @@ async fn run_display_loop(
                         let _ = stdout.execute(cursor::Show);
                         let _ = stdout.execute(LeaveAlternateScreen);
                         let _ = shutdown_tx.send(());
-                        return;
+                        return true;
                     }
-                    // Other commands remain — enter loop without a direct child.
+                    if !display_all {
+                        let _ = terminal::disable_raw_mode();
+                        let _ = stdout.execute(cursor::Show);
+                        let _ = stdout.execute(LeaveAlternateScreen);
+                        let remaining = manager.list();
+                        eprintln!();
+                        eprintln!("vrunner: primary command exited. {} command(s) still running.", remaining.len());
+                        for (cid, name, _args, pid, _cert) in &remaining {
+                            eprintln!("  PID {} — {} ({})", pid, name, &cid[..cid.len().min(8)]);
+                        }
+                        eprintln!("The server continues running. Press Ctrl+C or use `vrunner stop` to shut down.");
+                        eprintln!();
+                        return false;
+                    }
+                    // Other commands remain — enter loop in monitor mode.
                     active_id = None;
                     None
                 }
@@ -529,11 +594,16 @@ async fn run_display_loop(
                 if manager.list().is_empty() {
                     let _ = TerminalDisplay::clear();
                     break;
-                } else {
+                } else if display_all {
+                    // Stay in display, show first available command.
                     tracing::info!("Other commands remain; switching to monitor mode");
                     active_id = None;
                     exit_rx = None;
-                    // Continue loop — next tick will render the first available command.
+                } else {
+                    // Display was only for the CLI command — dismiss it.
+                    tracing::info!("Direct CLI command exited; dismissing display (commands remain)");
+                    should_shutdown = false;
+                    break;  // exits loop WITHOUT sending shutdown
                 }
             }
 
@@ -550,10 +620,14 @@ async fn run_display_loop(
                         if manager.list().is_empty() {
                             let _ = TerminalDisplay::clear();
                             break;
-                        } else {
+                        } else if display_all {
                             tracing::info!("Other commands remain; switching to monitor mode");
                             active_id = None;
                             exit_rx = None;
+                        } else {
+                            tracing::info!("Direct CLI command exited; dismissing display (commands remain)");
+                            should_shutdown = false;
+                            break;  // exits loop WITHOUT sending shutdown
                         }
                     }
                 }
@@ -601,11 +675,15 @@ async fn run_display_loop(
                                     if b == 0x1c {
                                         break;  // Ctrl+\ — quit display
                                     }
-                                    // Forward directly via the proven
-                                    // send_bytes path — .await in the
-                                    // select! branch, no tokio::spawn.
-                                    if let Some(ref id) = active_id {
-                                        if let Some(handle) = manager.get(id) {
+                                    // Forward to the active command, or fall back
+                                    // to the first available command in monitor mode.
+                                    let target_id = if let Some(ref id) = active_id {
+                                        Some(id.clone())
+                                    } else {
+                                        manager.list().first().map(|(id, _, _, _, _)| id.clone())
+                                    };
+                                    if let Some(ref tid) = target_id {
+                                        if let Some(handle) = manager.get(tid) {
                                             let _ = handle.send_bytes(vec![b]).await;
                                         }
                                     }
@@ -636,8 +714,22 @@ async fn run_display_loop(
     let _ = terminal::disable_raw_mode();
     let _ = stdout.flush();
 
-    // Trigger server shutdown so async_main can unwind.
-    let _ = shutdown_tx.send(());
+    if should_shutdown {
+        // All commands gone — trigger server shutdown.
+        let _ = shutdown_tx.send(());
+    } else {
+        // Display dismissed but commands remain — print a status message.
+        // The caller (async_main) will idle-wait for shutdown.
+        let remaining = manager.list();
+        eprintln!();
+        eprintln!("vrunner: primary command exited. {} command(s) still running.", remaining.len());
+        for (id, name, _args, pid, _cert) in &remaining {
+            eprintln!("  PID {} — {} ({})", pid, name, &id[..id.len().min(8)]);
+        }
+        eprintln!("The server continues running. Press Ctrl+C or use `vrunner stop` to shut down.");
+        eprintln!();
+    }
+    should_shutdown
 }
 
 /// Wait for a direct child command to exit (headless, non-display mode).
