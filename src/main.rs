@@ -466,7 +466,7 @@ async fn run_display_loop(
                             for (cid, name, _args, pid, _cert) in &remaining {
                                 eprintln!("  PID {} — {} ({})", pid, name, &cid[..cid.len().min(8)]);
                             }
-                            eprintln!("The server continues running. Press 'q' to shut down.");
+                            eprintln!("The server continues running. Press 'q' or Ctrl+C to shut down.");
                             eprintln!();
                             return false;
                         }
@@ -497,7 +497,7 @@ async fn run_display_loop(
                                 for (cid, name, _args, pid, _cert) in &remaining {
                                     eprintln!("  PID {} — {} ({})", pid, name, &cid[..cid.len().min(8)]);
                                 }
-                                eprintln!("The server continues running. Press 'q' to shut down.");
+                                eprintln!("The server continues running. Press 'q' or Ctrl+C to shut down.");
                                 eprintln!();
                                 return false;
                             }
@@ -529,7 +529,7 @@ async fn run_display_loop(
                         for (cid, name, _args, pid, _cert) in &remaining {
                             eprintln!("  PID {} — {} ({})", pid, name, &cid[..cid.len().min(8)]);
                         }
-                        eprintln!("The server continues running. Press 'q' to shut down.");
+                        eprintln!("The server continues running. Press 'q' or Ctrl+C to shut down.");
                         eprintln!();
                         return false;
                     }
@@ -727,7 +727,7 @@ async fn run_display_loop(
         for (id, name, _args, pid, _cert) in &remaining {
             eprintln!("  PID {} — {} ({})", pid, name, &id[..id.len().min(8)]);
         }
-        eprintln!("The server continues running. Press 'q' to shut down.");
+        eprintln!("The server continues running. Press 'q' or Ctrl+C to shut down.");
         eprintln!();
     }
     should_shutdown
@@ -735,15 +735,18 @@ async fn run_display_loop(
 
 /// Wait for the user to shut down after the display is dismissed.
 ///
-/// Re-enables raw mode on the terminal so that `q` triggers immediately
-/// (no Enter required).  A RAII guard guarantees raw mode is restored to
-/// canonical mode even if the function panics or the future is cancelled.
+/// Re-enables raw mode on the terminal so that keypresses trigger
+/// immediately (no Enter required).  A RAII guard guarantees raw mode
+/// is restored to canonical mode even if the function panics.
 ///
-/// We also listen on the shutdown broadcast for external shutdown requests
-/// (e.g. `vrunner stop` or the server's own SIGINT handler).
+/// In raw mode ISIG is cleared, so Ctrl+C (0x03) does NOT generate
+/// SIGINT — it arrives as a plain byte.  We detect it alongside 'q'
+/// and shut down.  This sidesteps the spawn_signal_handler in server.rs
+/// which captures SIGINT via tokio's signal driver and whose broadcast
+/// delivery is unreliable in the idle-wait context.
 ///
-/// Why not Ctrl+C?  See commit a6a4d2d — tokio's signal driver hijacks
-/// SIGINT delivery.  The `q` key sidesteps all signal machinery.
+/// We also listen on the shutdown broadcast for external shutdown
+/// requests (e.g. `vrunner stop`).
 async fn idle_wait(shutdown_tx: &broadcast::Sender<()>) {
     use std::os::fd::AsRawFd;
     use crossterm::terminal;
@@ -809,7 +812,7 @@ async fn idle_wait(shutdown_tx: &broadcast::Sender<()>) {
                                         inner.get_ref().read(&mut buf)
                                     }) {
                                         Ok(Ok(0)) => break 'read false,   // EOF
-                                        Ok(Ok(1)) => break 'read buf[0] == b'q',
+                                        Ok(Ok(1)) => break 'read buf[0] == b'q' || buf[0] == 0x03,
                                         _ => {
                                             guard.clear_ready();
                                             break 'read false;
@@ -821,7 +824,7 @@ async fn idle_wait(shutdown_tx: &broadcast::Sender<()>) {
                             }
                         };
                         if should_quit {
-                            tracing::info!("User pressed 'q' to shut down");
+                            tracing::info!(key = if buf[0] == 0x03 { "Ctrl+C" } else { "q" }, "User shut down");
                             break;
                         }
                     }
