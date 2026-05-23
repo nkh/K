@@ -251,10 +251,9 @@ async fn async_main(cli: Cli) -> Result<()> {
         ).await;
     } else if let Some(ref id) = spawned_id {
         // ── Headless mode with direct child ──
-        // No display, but a child was spawned directly via CLI.  Forward
-        // the parent's stdin to the child's PTY so keyboard input reaches
-        // the command, and wait for the child to exit before shutting down.
-        run_headless(&manager, id).await;
+        // No display, but a child was spawned directly via CLI.  Wait for
+        // the child process to exit, then shut down the server.
+        wait_for_child(&manager, id).await;
         let _ = shutdown_tx.send(());
     } else {
         // ── Idle server mode ──
@@ -300,6 +299,7 @@ async fn run_display_loop(
     use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
     use crossterm::{cursor, ExecutableCommand};
     use std::io::Write;
+    use tokio::io::AsyncReadExt;
 
     // Set up the alternate screen and raw mode.
     let mut stdout = std::io::stdout();
@@ -310,48 +310,13 @@ async fn run_display_loop(
     let _ = stdout.execute(EnterAlternateScreen);
     let _ = stdout.execute(cursor::Hide);
 
-    // ── Truly async keystroke reading via /dev/tty ──
-    //
-    // We do NOT use tokio::io::stdin().  Despite its name, tokio's Stdin
-    // wraps the synchronous std::io::Stdin in a spawn_blocking thread.
-    // That thread calls the real stdin.read(), which is impossible to cancel.
-    // When the display loop breaks on child exit, the future is dropped but
-    // the blocking thread stays stuck on stdin.read().  During Runtime::drop,
-    // tokio waits for all blocking threads to complete → the process hangs
-    // until the user presses Enter (which unblocks the read).
-    //
-    // Instead, we open /dev/tty and wrap it in tokio::io::unix::AsyncFd.
-    // AsyncFd uses mio (edge-triggered, level-aware) to register the fd with
-    // the I/O reactor.  When the future is dropped (select! picks another
-    // branch), the registration is removed — no thread, no hang.
-    //
-    // We use /dev/tty (not stdin fd 0) because:
-    //   1. /dev/tty always refers to the controlling terminal, even if
-    //      stdin has been redirected (e.g. piped input).
-    //   2. It is the only way to reliably get keystrokes in raw mode
-    //      after crossterm::terminal::enable_raw_mode() has been called.
-    let tty_async: tokio::io::unix::AsyncFd<std::fs::File> = {
-        let tty = match std::fs::File::open("/dev/tty") {
-            Ok(f) => f,
-            Err(e) => {
-                tracing::error!(error = %e, "Failed to open /dev/tty");
-                let _ = terminal::disable_raw_mode();
-                let _ = stdout.execute(cursor::Show);
-                let _ = stdout.execute(LeaveAlternateScreen);
-                return;
-            }
-        };
-        match tokio::io::unix::AsyncFd::new(tty) {
-            Ok(a) => a,
-            Err(e) => {
-                tracing::error!(error = %e, "Failed to create AsyncFd for /dev/tty");
-                let _ = terminal::disable_raw_mode();
-                let _ = stdout.execute(cursor::Show);
-                let _ = stdout.execute(LeaveAlternateScreen);
-                return;
-            }
-        }
-    };
+    // Read keystrokes from stdin using tokio's async reader.
+    // When the display loop breaks (child exit / Ctrl+\), the select!
+    // drops this future and the read is cancelled — no blocking thread
+    // is left behind.  Any brief hang during Runtime::drop is acceptable
+    // because the process is exiting anyway.
+    let mut stdin = tokio::io::stdin();
+    let mut stdin_buf = [0u8; 1];
 
     // Set up SIGWINCH handler for terminal resize.
     // When the user resizes their terminal emulator, the kernel delivers
@@ -390,18 +355,6 @@ async fn run_display_loop(
     let mut shutdown_rx = shutdown_tx.subscribe();
     // Track which command we're displaying so we can forward keystrokes.
     let active_id: Option<String> = direct_child_id.map(String::from);
-
-    // Helper: resolve the command ID that should receive keystrokes.
-    // Uses the same fallback as render_vtty: prefer the direct child,
-    // otherwise fall back to the first available command.
-    fn resolve_input_target(
-        manager: &Arc<CommandManager>,
-        active_id: &Option<String>,
-    ) -> Option<String> {
-        active_id.clone().or_else(|| {
-            manager.list().first().map(|(id, _, _, _, _)| id.clone())
-        })
-    }
 
     // ── Event-driven exit detection ──
     // We use a tokio::sync::watch channel instead of Notify.
@@ -490,20 +443,11 @@ async fn run_display_loop(
         }
     }
 
-    let mut should_break;
     loop {
-        should_break = false;
         tokio::select! {
-            // Use biased mode so the exit-notify branch is preferred when
-            // multiple branches are ready simultaneously.  This minimises
-            // the window where a Notify permit can be lost (see comment
-            // in the tick handler below).
             biased;
 
             // ── Immediate exit notification ──
-            // Fires the instant child.wait() returns in the process waiter.
-            // Uses watch channel — never loses notifications.  changed()
-            // resolves immediately if the value was already set to true.
             _ = async {
                 if let Some(rx) = exit_rx.as_mut() {
                     let _ = rx.changed().await;
@@ -519,18 +463,6 @@ async fn run_display_loop(
             // ── Periodic VTTY render ──
             _ = tick_rx.recv() => {
                 // Fallback exit detection for the direct child.
-                //
-                // Rationale: tokio::sync::Notify::notify_waiters() wakes
-                // all *current* waiters but does NOT store a permit for
-                // future ones.  If the select! picks a different branch
-                // (tick / stdin) while the notified() future was ready,
-                // the future is dropped and the notification is lost —
-                // the next notified() call will hang forever.
-                //
-                // The biased; keyword above makes this unlikely, but
-                // not impossible (e.g. both branches become ready in
-                // the same poll cycle).  This fallback catches the edge
-                // case within one refresh cycle.
                 if let Some(ref id) = active_id {
                     let gone = match manager.get(id) {
                         Some(h) => !h.is_alive(),
@@ -568,91 +500,25 @@ async fn run_display_loop(
                 }
             }
 
-            // ── Keystroke forwarding via AsyncFd (truly async, no blocking thread) ──
-            result = tty_async.readable() => {
+            // ── Keystroke forwarding ──
+            // Read one byte at a time from stdin and forward it directly
+            // to the child process via send_bytes().  We .await the send
+            // inside the select! branch — this is the proven working pattern.
+            result = stdin.read(&mut stdin_buf) => {
                 match result {
-                    Ok(mut guard) => {
-                        // Drain all available bytes from /dev/tty.
-                        // We use a 64-byte buffer so multi-byte escape
-                        // sequences (arrow keys, function keys, etc.)
-                        // are read atomically and forwarded as a single
-                        // batch — programs receive the complete sequence
-                        // instead of fragmented bytes.
-                        //
-                        // We forward keystrokes via tokio::spawn + send_bytes().
-                        // This uses the exact same code path as the API's
-                        // POST /api/commands/:id/keys endpoint, which is
-                        // proven to work correctly.  The spawn ensures
-                        // the select! loop is never blocked — even if
-                        // the stdin channel is full, only the spawned
-                        // task waits, while tick/exit/WINCH branches
-                        // remain fully responsive.
-                        let mut key_buf = [0u8; 64];
-                        loop {
-                            match guard.try_io(|inner| {
-                                use std::io::Read;
-                                inner.get_ref().read(&mut key_buf)
-                            }) {
-                                Ok(Ok(0)) => { should_break = true; break; }  // EOF
-                                Ok(Ok(n)) => {
-                                    let data = &key_buf[..n];
-                                    tracing::debug!(bytes = n, raw = ?data, "tty: read keystroke");
-                                    // Check for Ctrl+\ (0x1c) — quit display
-                                    if let Some(pos) = data.iter().position(|&b| b == 0x1c) {
-                                        // Forward everything before Ctrl+\
-                                        if pos > 0 {
-                                            if let Some(ref target) = resolve_input_target(&manager, &active_id) {
-                                                if let Some(handle) = manager.get(target) {
-                                                    let stdin_tx = handle.stdin_tx.clone();
-                                                    let fwd = data[..pos].to_vec();
-                                                    tokio::spawn(async move {
-                                                        if let Err(e) = stdin_tx.send(vrunner::process::spawner::StdinMessage::Bytes(fwd)).await {
-                                                            tracing::warn!(error = %e, "tty: failed to forward pre-ctrl-\\");
-                                                        }
-                                                    });
-                                                }
-                                            }
-                                        }
-                                        should_break = true;
-                                        break;
-                                    }
-                                    // Forward the full batch to the child via the
-                                    // same send_bytes() path used by the REST API.
-                                    if let Some(ref target) = resolve_input_target(&manager, &active_id) {
-                                        if let Some(handle) = manager.get(target) {
-                                            let stdin_tx = handle.stdin_tx.clone();
-                                            let fwd = data.to_vec();
-                                            tokio::spawn(async move {
-                                                if let Err(e) = stdin_tx.send(vrunner::process::spawner::StdinMessage::Bytes(fwd)).await {
-                                                    tracing::warn!(error = %e, "tty: failed to forward keystroke");
-                                                }
-                                            });
-                                        } else {
-                                            tracing::warn!("tty: keystroke read but command already gone");
-                                        }
-                                    }
-                                }
-                                Ok(Err(e)) => {
-                                    // Transient read error — log but don't break.
-                                    // Breaking here caused the display to exit
-                                    // on any I/O hiccup (e.g. EINTR from signal).
-                                    tracing::warn!(error = %e, "tty: transient read error");
-                                    guard.clear_ready();
-                                    break;
-                                }
-                                Err(_would_block) => {
-                                    // No more data — clear readiness and
-                                    // wait for the next keystroke.
-                                    guard.clear_ready();
-                                    break;
-                                }
+                    Ok(1) => {
+                        let b = stdin_buf[0];
+                        if b == 0x1c {
+                            break;  // Ctrl+\ — quit display
+                        }
+                        if let Some(ref id) = active_id {
+                            if let Some(handle) = manager.get(id) {
+                                let _ = handle.send_bytes(vec![b]).await;
                             }
                         }
                     }
-                    Err(e) => {
-                        tracing::warn!(error = %e, "tty: AsyncFd readable() error");
-                        should_break = true;
-                    }
+                    Ok(_) => break,  // EOF
+                    Err(_) => break,  // Read error
                 }
             }
 
@@ -660,9 +526,6 @@ async fn run_display_loop(
             _ = shutdown_rx.recv() => {
                 break;
             }
-        }
-        if should_break {
-            break;
         }
     }
 
@@ -677,219 +540,6 @@ async fn run_display_loop(
 
     // Trigger server shutdown so async_main can unwind.
     let _ = shutdown_tx.send(());
-}
-
-/// Run in headless mode: forward the parent's stdin to the child's PTY and
-/// wait for the child process to exit.
-///
-/// This is the headless counterpart of `run_display_loop`.  It puts the
-/// parent terminal in raw mode, opens /dev/tty for keystroke reading, and
-/// forwards every byte to the child via `handle.send_bytes()`.  It also
-/// propagates SIGWINCH to the child's PTY so terminal-resize-aware programs
-/// (vim, htop, etc.) adjust their layout.
-///
-/// Exit triggers:
-///   1. Child process exits (via mpsc channel or periodic poll fallback).
-///   2. stdin reaches EOF (e.g. redirected input is exhausted).
-///   3. An I/O error on /dev/tty.
-async fn run_headless(
-    manager: &Arc<CommandManager>,
-    child_id: &str,
-) {
-    use crossterm::terminal;
-
-    // Put the parent terminal in raw mode so keystrokes are delivered
-    // immediately (no line buffering).  This is essential for interactive
-    // programs like vim, htop, less, etc.
-    if let Err(e) = terminal::enable_raw_mode() {
-        tracing::warn!(error = %e, "Failed to enable raw mode for headless stdin forwarding");
-        // Fall back to the old polling-only behaviour (no stdin forwarding).
-        wait_for_child(manager, child_id).await;
-        return;
-    }
-
-    // Open /dev/tty for reading — same rationale as in run_display_loop:
-    // always refers to the controlling terminal even if stdin is redirected.
-    let tty = match std::fs::File::open("/dev/tty") {
-        Ok(f) => f,
-        Err(e) => {
-            tracing::error!(error = %e, "Failed to open /dev/tty for headless mode");
-            let _ = terminal::disable_raw_mode();
-            return;
-        }
-    };
-
-    let tty_async = match tokio::io::unix::AsyncFd::new(tty) {
-        Ok(a) => a,
-        Err(e) => {
-            tracing::error!(error = %e, "Failed to create AsyncFd for /dev/tty");
-            let _ = terminal::disable_raw_mode();
-            return;
-        }
-    };
-
-    // Set up SIGWINCH handler for terminal resize propagation.
-    // SIGWINCH is optional — if signal() fails we must NOT return
-    // because raw mode is already enabled.  Instead we let the
-    // mpsc bridge channel never fire so the select! branch is inert.
-    let mut winch_rx = {
-        use tokio::signal::unix::{signal, SignalKind};
-        let (winch_tx, winch_bridge) = tokio::sync::mpsc::channel::<()>(4);
-        match signal(SignalKind::window_change()) {
-            Ok(mut stream) => {
-                tokio::spawn(async move {
-                    while stream.recv().await.is_some() {
-                        if winch_tx.send(()).await.is_err() {
-                            break;
-                        }
-                    }
-                });
-            }
-            Err(_) => {
-                // winch_bridge never fires — WINCH silently ignored.
-            }
-        }
-        winch_bridge
-    };
-
-    // Event-driven exit detection via watch channel (same pattern as display loop).
-    // Unlike Notify, the watch channel never loses notifications.
-    // Receiver is Clone so we can copy it from the DashMap.
-    let child_id_owned = child_id.to_string();
-    let mut exit_rx: Option<tokio::sync::watch::Receiver<bool>> = {
-        match manager.get(&child_id_owned) {
-            Some(h) => {
-                // Pre-check: if the child already exited, bail immediately.
-                if !h.is_alive() {
-                    tracing::info!("Child process already exited before headless loop started");
-                    let _ = terminal::disable_raw_mode();
-                    return;
-                }
-                // Fast path: check the watch value.
-                let rx = h.exit_rx.clone();
-                if *rx.borrow() {
-                    tracing::info!("Child process already exited (watch flag set, headless)");
-                    let _ = terminal::disable_raw_mode();
-                    return;
-                }
-                Some(rx)
-            }
-            None => {
-                // Command already removed — child is gone.
-                tracing::info!("Child process already removed before headless loop started");
-                let _ = terminal::disable_raw_mode();
-                return;
-            }
-        }
-    };
-
-    // Periodic tick for fallback exit detection (same reason as display loop:
-    // Notify permits can be lost if select! picks a different branch).
-    let (tick_tx, mut tick_rx) = tokio::sync::mpsc::channel::<()>(4);
-    tokio::spawn(async move {
-        loop {
-            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-            if tick_tx.send(()).await.is_err() {
-                break;
-            }
-        }
-    });
-
-    loop {
-        let mut should_break = false;
-        tokio::select! {
-            biased;
-
-            // ── Immediate exit notification ──
-            // Uses watch channel — never loses notifications.
-            // changed() resolves immediately if value already true.
-            _ = async {
-                if let Some(rx) = exit_rx.as_mut() {
-                    let _ = rx.changed().await;
-                } else {
-                    std::future::pending::<()>().await;
-                }
-            } => {
-                tracing::info!("Child process exited (channel)");
-                break;
-            }
-
-            // ── Periodic fallback exit check ──
-            _ = tick_rx.recv() => {
-                let gone = match manager.get(&child_id_owned) {
-                    Some(h) => !h.is_alive(),
-                    None => true,
-                };
-                if gone {
-                    tracing::info!("Child process exited (tick fallback)");
-                    break;
-                }
-            }
-
-            // ── SIGWINCH — propagate resize to child PTY ──
-            _ = winch_rx.recv() => {
-                if let Some((rows, cols)) = detect_terminal_size() {
-                    if let Some(handle) = manager.get(&child_id_owned) {
-                        if let Err(e) = handle.resize_pty(rows, cols).await {
-                            tracing::warn!(error = %e, "Failed to resize child PTY on WINCH");
-                        }
-                    }
-                }
-            }
-
-            // ── Keystroke forwarding ──
-            // Uses tokio::spawn + send_bytes() (same proven path as
-            // the REST API) so the select! loop is never blocked.
-            result = tty_async.readable() => {
-                match result {
-                    Ok(mut guard) => {
-                        let mut key_buf = [0u8; 64];
-                        loop {
-                            match guard.try_io(|inner| {
-                                use std::io::Read;
-                                inner.get_ref().read(&mut key_buf)
-                            }) {
-                                Ok(Ok(0)) => { should_break = true; break; } // EOF
-                                Ok(Ok(n)) => {
-                                    if let Some(handle) = manager.get(&child_id_owned) {
-                                        let stdin_tx = handle.stdin_tx.clone();
-                                        let fwd = key_buf[..n].to_vec();
-                                        tokio::spawn(async move {
-                                            if let Err(e) = stdin_tx.send(vrunner::process::spawner::StdinMessage::Bytes(fwd)).await {
-                                                tracing::warn!(error = %e, "headless: failed to forward keystroke");
-                                            }
-                                        });
-                                    } else {
-                                        should_break = true;
-                                        break;
-                                    }
-                                }
-                                Ok(Err(e)) => {
-                                    tracing::warn!(error = %e, "headless: transient read error");
-                                    guard.clear_ready();
-                                    break;
-                                }
-                                Err(_would_block) => {
-                                    guard.clear_ready();
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!(error = %e, "headless: AsyncFd readable() error");
-                        should_break = true;
-                    }
-                }
-            }
-        }
-        if should_break {
-            break;
-        }
-    }
-
-    // Restore the terminal to its original cooked mode.
-    let _ = terminal::disable_raw_mode();
 }
 
 /// Wait for a direct child command to exit (headless, non-display mode).
