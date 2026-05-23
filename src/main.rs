@@ -404,28 +404,56 @@ async fn run_display_loop(
     }
 
     // ── Event-driven exit detection ──
-    // Instead of polling with waitpid or periodic ticks, we use a
-    // tokio::sync::Notify that the process waiter fires immediately
-    // when child.wait() returns.  This makes exit detection instant —
-    // zero delay, zero polling, zero race conditions.
-    let exit_notify: Option<Arc<tokio::sync::Notify>> = {
+    // We use a tokio::sync::watch channel instead of Notify.
+    // Notify loses notifications when no waiter is present — if the child
+    // exits during the 100ms server startup delay, the notification is
+    // permanently lost and the display loop hangs forever.
+    //
+    // A watch channel always stores the latest value.  `changed()`
+    // resolves immediately if the value was already updated (i.e.
+    // the child already exited).  The Receiver is Clone, so we can
+    // copy it from the immutable DashMap reference.
+    let mut exit_rx: Option<tokio::sync::watch::Receiver<bool>> = {
         if let Some(ref id) = active_id {
-            manager.get(id).map(|h| h.exit_notify.clone())
+            match manager.get(id) {
+                Some(h) => {
+                    // Command still in manager — check if it's already dead.
+                    if !h.is_alive() {
+                        tracing::info!("Child process already exited before display loop started");
+                        let _ = terminal::disable_raw_mode();
+                        let _ = stdout.execute(cursor::Show);
+                        let _ = stdout.execute(LeaveAlternateScreen);
+                        let _ = shutdown_tx.send(());
+                        return;
+                    }
+                    // Clone the receiver — watch::Receiver is Clone.
+                    let rx = h.exit_rx.clone();
+                    // If the child already exited, changed() will resolve
+                    // immediately.  But check *value* first as a fast path.
+                    if *rx.borrow() {
+                        tracing::info!("Child process already exited (watch flag set)");
+                        let _ = terminal::disable_raw_mode();
+                        let _ = stdout.execute(cursor::Show);
+                        let _ = stdout.execute(LeaveAlternateScreen);
+                        let _ = shutdown_tx.send(());
+                        return;
+                    }
+                    Some(rx)
+                }
+                None => {
+                    // Command already removed — child is gone.
+                    tracing::info!("Child process already removed before display loop started");
+                    let _ = terminal::disable_raw_mode();
+                    let _ = stdout.execute(cursor::Show);
+                    let _ = stdout.execute(LeaveAlternateScreen);
+                    let _ = shutdown_tx.send(());
+                    return;
+                }
+            }
         } else {
             None
         }
     };
-
-    // Helper future: await the exit notify, or hang forever if None.
-    async fn await_exit(notify: Option<&Arc<tokio::sync::Notify>>) {
-        if let Some(n) = notify {
-            n.notified().await;
-        } else {
-            // No direct child — wait forever (API-spawned commands
-            // are tracked via the periodic tick below).
-            std::future::pending::<()>().await;
-        }
-    }
 
     // ── Periodic tick channel (render only, no exit check) ──
     let (tick_tx, mut tick_rx) = mpsc::channel::<()>(4);
@@ -474,8 +502,16 @@ async fn run_display_loop(
 
             // ── Immediate exit notification ──
             // Fires the instant child.wait() returns in the process waiter.
-            _ = await_exit(exit_notify.as_ref()) => {
-                tracing::info!("Child process exited (notify), shutting down");
+            // Uses watch channel — never loses notifications.  changed()
+            // resolves immediately if the value was already set to true.
+            _ = async {
+                if let Some(rx) = exit_rx.as_mut() {
+                    let _ = rx.changed().await;
+                } else {
+                    std::future::pending::<()>().await;
+                }
+            } => {
+                tracing::info!("Child process exited (channel), shutting down");
                 let _ = TerminalDisplay::clear();
                 break;
             }
@@ -508,7 +544,7 @@ async fn run_display_loop(
                 }
                 // For API-spawned commands (no direct child), check if all
                 // commands have been removed.
-                if exit_notify.is_none() && manager.list().is_empty() {
+                if exit_rx.is_none() && manager.list().is_empty() {
                     break;
                 }
                 render_vtty(&manager, &active_id).await;
@@ -653,7 +689,7 @@ async fn run_display_loop(
 /// (vim, htop, etc.) adjust their layout.
 ///
 /// Exit triggers:
-///   1. Child process exits (via exit_notify or periodic poll fallback).
+///   1. Child process exits (via mpsc channel or periodic poll fallback).
 ///   2. stdin reaches EOF (e.g. redirected input is exhausted).
 ///   3. An I/O error on /dev/tty.
 async fn run_headless(
@@ -716,10 +752,35 @@ async fn run_headless(
         winch_bridge
     };
 
-    // Event-driven exit detection via Notify (same pattern as display loop).
+    // Event-driven exit detection via watch channel (same pattern as display loop).
+    // Unlike Notify, the watch channel never loses notifications.
+    // Receiver is Clone so we can copy it from the DashMap.
     let child_id_owned = child_id.to_string();
-    let exit_notify: Option<Arc<tokio::sync::Notify>> = {
-        manager.get(&child_id_owned).map(|h| h.exit_notify.clone())
+    let mut exit_rx: Option<tokio::sync::watch::Receiver<bool>> = {
+        match manager.get(&child_id_owned) {
+            Some(h) => {
+                // Pre-check: if the child already exited, bail immediately.
+                if !h.is_alive() {
+                    tracing::info!("Child process already exited before headless loop started");
+                    let _ = terminal::disable_raw_mode();
+                    return;
+                }
+                // Fast path: check the watch value.
+                let rx = h.exit_rx.clone();
+                if *rx.borrow() {
+                    tracing::info!("Child process already exited (watch flag set, headless)");
+                    let _ = terminal::disable_raw_mode();
+                    return;
+                }
+                Some(rx)
+            }
+            None => {
+                // Command already removed — child is gone.
+                tracing::info!("Child process already removed before headless loop started");
+                let _ = terminal::disable_raw_mode();
+                return;
+            }
+        }
     };
 
     // Periodic tick for fallback exit detection (same reason as display loop:
@@ -740,14 +801,16 @@ async fn run_headless(
             biased;
 
             // ── Immediate exit notification ──
+            // Uses watch channel — never loses notifications.
+            // changed() resolves immediately if value already true.
             _ = async {
-                if let Some(n) = exit_notify.as_ref() {
-                    n.notified().await;
+                if let Some(rx) = exit_rx.as_mut() {
+                    let _ = rx.changed().await;
                 } else {
                     std::future::pending::<()>().await;
                 }
             } => {
-                tracing::info!("Child process exited (notify)");
+                tracing::info!("Child process exited (channel)");
                 break;
             }
 

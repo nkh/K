@@ -206,10 +206,17 @@ impl ProcessSpawner {
         let on_exit = exit_config.on_exit.clone();
         let on_error = exit_config.on_error.clone();
         let manager_cmds = manager.commands_arc();
-        let exit_notify = Arc::new(tokio::sync::Notify::new());
+        // Buffered exit channel (capacity 1): unlike tokio::sync::Notify,
+        // this NEVER loses a notification.  If the child exits before the
+        // display loop starts awaiting, the message sits in the channel
+        // and the loop picks it up on the first changed() call.
+        //
+        // We use watch (not mpsc) because watch::Receiver is Clone —
+        // we can copy it from the DashMap without mutable access.
+        let (child_exit_tx, child_exit_rx) = tokio::sync::watch::channel(false);
 
         tokio::task::spawn_blocking({
-            let exit_notify = exit_notify.clone();
+            let child_exit_tx = child_exit_tx.clone();
             move || {
             let status = child.wait().ok().and_then(|s| Some(s.exit_code() as i32));
             let exit_status = ExitStatus {
@@ -261,10 +268,10 @@ impl ProcessSpawner {
                 }
             }
 
-            // Notify the display loop IMMEDIATELY that the child exited.
-            // This wakes up the select! without polling or waiting for a
-            // periodic tick — the loop exits the instant the child dies.
-            exit_notify.notify_waiters();
+            // Signal the display/headless loop that the child exited.
+            // Unlike Notify, the watch channel stores this value so
+            // it is NEVER lost — even if the loop hasn't started yet.
+            let _ = child_exit_tx.send(true);
 
             // Remove the command from the manager's DashMap.
             // This signals to the display loop (and diff watcher)
@@ -290,7 +297,7 @@ impl ProcessSpawner {
             exit_config,
             spawn_time: std::time::Instant::now(),
             pty_master,
-            exit_notify,
+            exit_rx: child_exit_rx,
         })
     }
 }
