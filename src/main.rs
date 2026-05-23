@@ -358,20 +358,33 @@ async fn run_display_loop(
     // SIGWINCH to the foreground process group.  We catch it here and
     // propagate the new size to both the PTY master (so the child gets
     // its own SIGWINCH) and the in-memory VTTY buffer.
+    //
+    // SIGWINCH handling is optional — if signal() fails we bridge through
+    // an mpsc channel that never fires so the select! branch is simply
+    // never taken.  We must NOT return here because raw mode is already
+    // enabled and the alternate screen is active — returning without
+    // cleanup would leave the terminal in a broken state.
     let mut winch_rx = {
         use tokio::signal::unix::{signal, SignalKind};
+        let (winch_tx, winch_bridge) = tokio::sync::mpsc::channel::<()>(4);
         match signal(SignalKind::window_change()) {
-            Ok(stream) => stream,
+            Ok(mut stream) => {
+                // Spawn a forwarding task so the select! branch type
+                // is always mpsc::Receiver, never SignalStream.
+                tokio::spawn(async move {
+                    while stream.recv().await.is_some() {
+                        if winch_tx.send(()).await.is_err() {
+                            break;
+                        }
+                    }
+                });
+            }
             Err(e) => {
-                tracing::warn!(error = %e, "Failed to create SIGWINCH handler");
-                // Create a channel that never fires as fallback
-                let (_tx, rx) = tokio::sync::mpsc::channel::<()>(1);
-                // Convert to a stream-like by wrapping in a manual poll
-                // Actually, just return and skip WINCH handling entirely
-                drop(rx);
-                return;
+                tracing::warn!(error = %e, "SIGWINCH unavailable — terminal resize not propagated");
+                // winch_bridge never fires — the select! branch is inert.
             }
         }
+        winch_bridge
     };
 
     let mut shutdown_rx = shutdown_tx.subscribe();
@@ -524,27 +537,56 @@ async fn run_display_loop(
                 match result {
                     Ok(mut guard) => {
                         // Drain all available bytes from /dev/tty.
-                        // In raw mode each syscall returns one byte,
-                        // but we loop until EAGAIN to handle bursts.
-                        let mut key_buf = [0u8; 1];
+                        // We use a 64-byte buffer so multi-byte escape
+                        // sequences (arrow keys, function keys, etc.)
+                        // are read atomically and forwarded as a single
+                        // batch — programs receive the complete sequence
+                        // instead of fragmented bytes.
+                        //
+                        // Critically, we use `try_send` (not `send().await`)
+                        // to inject keystrokes into the stdin channel.
+                        // `send().await` would suspend the select! branch
+                        // when the channel is full, preventing the
+                        // exit-notify and tick branches from firing —
+                        // which caused vrunner to block when the child
+                        // exited while keystrokes were pending.
+                        let mut key_buf = [0u8; 64];
                         loop {
                             match guard.try_io(|inner| {
                                 use std::io::Read;
                                 inner.get_ref().read(&mut key_buf)
                             }) {
-                                Ok(Ok(1)) => {
-                                    let b = key_buf[0];
-                                    if b == 0x1c {
-                                        should_break = true;  // Ctrl+\
+                                Ok(Ok(0)) => { should_break = true; break; }  // EOF
+                                Ok(Ok(n)) => {
+                                    let data = &key_buf[..n];
+                                    // Check for Ctrl+\ (0x1c) — quit display
+                                    if let Some(pos) = data.iter().position(|&b| b == 0x1c) {
+                                        // Forward everything before Ctrl+\
+                                        if pos > 0 {
+                                            if let Some(ref target) = resolve_input_target(&manager, &active_id) {
+                                                if let Some(handle) = manager.get(target) {
+                                                    let _ = handle.stdin_tx.try_send(
+                                                        vrunner::process::spawner::StdinMessage::Bytes(
+                                                            data[..pos].to_vec()
+                                                        )
+                                                    );
+                                                }
+                                            }
+                                        }
+                                        should_break = true;
                                         break;
                                     }
+                                    // Forward the full batch to the child
                                     if let Some(ref target) = resolve_input_target(&manager, &active_id) {
                                         if let Some(handle) = manager.get(target) {
-                                            let _ = handle.send_bytes(vec![b]).await;
+                                            let _ = handle.stdin_tx.try_send(
+                                                vrunner::process::spawner::StdinMessage::Bytes(
+                                                    data.to_vec()
+                                                )
+                                            );
                                         }
                                     }
                                 }
-                                Ok(Ok(_)) => { should_break = true; break; }  // EOF
                                 Ok(Err(_)) => { should_break = true; break; }  // Read error
                                 Err(_would_block) => {
                                     // No more data — clear readiness and
@@ -632,17 +674,27 @@ async fn run_headless(
     };
 
     // Set up SIGWINCH handler for terminal resize propagation.
+    // SIGWINCH is optional — if signal() fails we must NOT return
+    // because raw mode is already enabled.  Instead we let the
+    // mpsc bridge channel never fire so the select! branch is inert.
     let mut winch_rx = {
         use tokio::signal::unix::{signal, SignalKind};
+        let (winch_tx, winch_bridge) = tokio::sync::mpsc::channel::<()>(4);
         match signal(SignalKind::window_change()) {
-            Ok(stream) => stream,
+            Ok(mut stream) => {
+                tokio::spawn(async move {
+                    while stream.recv().await.is_some() {
+                        if winch_tx.send(()).await.is_err() {
+                            break;
+                        }
+                    }
+                });
+            }
             Err(_) => {
-                // No WINCH handling — not critical in headless mode.
-                let (_tx, rx) = tokio::sync::mpsc::channel::<()>(1);
-                drop(rx);
-                return;
+                // winch_bridge never fires — WINCH silently ignored.
             }
         }
+        winch_bridge
     };
 
     // Event-driven exit detection via Notify (same pattern as display loop).
@@ -704,25 +756,30 @@ async fn run_headless(
             }
 
             // ── Keystroke forwarding ──
+            // Same batch-reading + try_send strategy as the display loop.
+            // See the display loop comment for the full rationale.
             result = tty_async.readable() => {
                 match result {
                     Ok(mut guard) => {
-                        let mut key_buf = [0u8; 1];
+                        let mut key_buf = [0u8; 64];
                         loop {
                             match guard.try_io(|inner| {
                                 use std::io::Read;
                                 inner.get_ref().read(&mut key_buf)
                             }) {
-                                Ok(Ok(1)) => {
+                                Ok(Ok(0)) => { should_break = true; break; } // EOF
+                                Ok(Ok(n)) => {
                                     if let Some(handle) = manager.get(&child_id_owned) {
-                                        let _ = handle.send_bytes(vec![key_buf[0]]).await;
+                                        let _ = handle.stdin_tx.try_send(
+                                            vrunner::process::spawner::StdinMessage::Bytes(
+                                                key_buf[..n].to_vec()
+                                            )
+                                        );
                                     } else {
-                                        // Command removed — child gone
                                         should_break = true;
                                         break;
                                     }
                                 }
-                                Ok(Ok(_)) => { should_break = true; break; } // EOF
                                 Ok(Err(_)) => { should_break = true; break; } // Read error
                                 Err(_would_block) => {
                                     guard.clear_ready();
