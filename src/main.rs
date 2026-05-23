@@ -543,13 +543,14 @@ async fn run_display_loop(
                         // batch — programs receive the complete sequence
                         // instead of fragmented bytes.
                         //
-                        // Critically, we use `try_send` (not `send().await`)
-                        // to inject keystrokes into the stdin channel.
-                        // `send().await` would suspend the select! branch
-                        // when the channel is full, preventing the
-                        // exit-notify and tick branches from firing —
-                        // which caused vrunner to block when the child
-                        // exited while keystrokes were pending.
+                        // We forward keystrokes via tokio::spawn + send_bytes().
+                        // This uses the exact same code path as the API's
+                        // POST /api/commands/:id/keys endpoint, which is
+                        // proven to work correctly.  The spawn ensures
+                        // the select! loop is never blocked — even if
+                        // the stdin channel is full, only the spawned
+                        // task waits, while tick/exit/WINCH branches
+                        // remain fully responsive.
                         let mut key_buf = [0u8; 64];
                         loop {
                             match guard.try_io(|inner| {
@@ -559,35 +560,50 @@ async fn run_display_loop(
                                 Ok(Ok(0)) => { should_break = true; break; }  // EOF
                                 Ok(Ok(n)) => {
                                     let data = &key_buf[..n];
+                                    tracing::debug!(bytes = n, raw = ?data, "tty: read keystroke");
                                     // Check for Ctrl+\ (0x1c) — quit display
                                     if let Some(pos) = data.iter().position(|&b| b == 0x1c) {
                                         // Forward everything before Ctrl+\
                                         if pos > 0 {
                                             if let Some(ref target) = resolve_input_target(&manager, &active_id) {
                                                 if let Some(handle) = manager.get(target) {
-                                                    let _ = handle.stdin_tx.try_send(
-                                                        vrunner::process::spawner::StdinMessage::Bytes(
-                                                            data[..pos].to_vec()
-                                                        )
-                                                    );
+                                                    let stdin_tx = handle.stdin_tx.clone();
+                                                    let fwd = data[..pos].to_vec();
+                                                    tokio::spawn(async move {
+                                                        if let Err(e) = stdin_tx.send(vrunner::process::spawner::StdinMessage::Bytes(fwd)).await {
+                                                            tracing::warn!(error = %e, "tty: failed to forward pre-ctrl-\\");
+                                                        }
+                                                    });
                                                 }
                                             }
                                         }
                                         should_break = true;
                                         break;
                                     }
-                                    // Forward the full batch to the child
+                                    // Forward the full batch to the child via the
+                                    // same send_bytes() path used by the REST API.
                                     if let Some(ref target) = resolve_input_target(&manager, &active_id) {
                                         if let Some(handle) = manager.get(target) {
-                                            let _ = handle.stdin_tx.try_send(
-                                                vrunner::process::spawner::StdinMessage::Bytes(
-                                                    data.to_vec()
-                                                )
-                                            );
+                                            let stdin_tx = handle.stdin_tx.clone();
+                                            let fwd = data.to_vec();
+                                            tokio::spawn(async move {
+                                                if let Err(e) = stdin_tx.send(vrunner::process::spawner::StdinMessage::Bytes(fwd)).await {
+                                                    tracing::warn!(error = %e, "tty: failed to forward keystroke");
+                                                }
+                                            });
+                                        } else {
+                                            tracing::warn!("tty: keystroke read but command already gone");
                                         }
                                     }
                                 }
-                                Ok(Err(_)) => { should_break = true; break; }  // Read error
+                                Ok(Err(e)) => {
+                                    // Transient read error — log but don't break.
+                                    // Breaking here caused the display to exit
+                                    // on any I/O hiccup (e.g. EINTR from signal).
+                                    tracing::warn!(error = %e, "tty: transient read error");
+                                    guard.clear_ready();
+                                    break;
+                                }
                                 Err(_would_block) => {
                                     // No more data — clear readiness and
                                     // wait for the next keystroke.
@@ -597,7 +613,10 @@ async fn run_display_loop(
                             }
                         }
                     }
-                    Err(_) => { should_break = true; }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "tty: AsyncFd readable() error");
+                        should_break = true;
+                    }
                 }
             }
 
@@ -756,8 +775,8 @@ async fn run_headless(
             }
 
             // ── Keystroke forwarding ──
-            // Same batch-reading + try_send strategy as the display loop.
-            // See the display loop comment for the full rationale.
+            // Uses tokio::spawn + send_bytes() (same proven path as
+            // the REST API) so the select! loop is never blocked.
             result = tty_async.readable() => {
                 match result {
                     Ok(mut guard) => {
@@ -770,17 +789,23 @@ async fn run_headless(
                                 Ok(Ok(0)) => { should_break = true; break; } // EOF
                                 Ok(Ok(n)) => {
                                     if let Some(handle) = manager.get(&child_id_owned) {
-                                        let _ = handle.stdin_tx.try_send(
-                                            vrunner::process::spawner::StdinMessage::Bytes(
-                                                key_buf[..n].to_vec()
-                                            )
-                                        );
+                                        let stdin_tx = handle.stdin_tx.clone();
+                                        let fwd = key_buf[..n].to_vec();
+                                        tokio::spawn(async move {
+                                            if let Err(e) = stdin_tx.send(vrunner::process::spawner::StdinMessage::Bytes(fwd)).await {
+                                                tracing::warn!(error = %e, "headless: failed to forward keystroke");
+                                            }
+                                        });
                                     } else {
                                         should_break = true;
                                         break;
                                     }
                                 }
-                                Ok(Err(_)) => { should_break = true; break; } // Read error
+                                Ok(Err(e)) => {
+                                    tracing::warn!(error = %e, "headless: transient read error");
+                                    guard.clear_ready();
+                                    break;
+                                }
                                 Err(_would_block) => {
                                     guard.clear_ready();
                                     break;
@@ -788,7 +813,10 @@ async fn run_headless(
                             }
                         }
                     }
-                    Err(_) => { should_break = true; }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "headless: AsyncFd readable() error");
+                        should_break = true;
+                    }
                 }
             }
         }
