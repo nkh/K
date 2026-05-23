@@ -540,7 +540,7 @@ async fn run_display_loop(
         }
     }
 
-    loop {
+    'outer: loop {
         tokio::select! {
             biased;
 
@@ -556,7 +556,7 @@ async fn run_display_loop(
                 // Check if other commands remain before deciding to shut down.
                 if manager.list().is_empty() {
                     let _ = TerminalDisplay::clear();
-                    break;
+                    break 'outer;
                 } else if display_all {
                     // Stay in display, show first available command.
                     tracing::info!("Other commands remain; switching to monitor mode");
@@ -588,7 +588,7 @@ async fn run_display_loop(
                     }
                     // Still check if all commands disappeared via external stop.
                     if manager.list().is_empty() {
-                        break;
+                        break 'outer;
                     }
                     continue;
                 }
@@ -602,7 +602,7 @@ async fn run_display_loop(
                         tracing::info!("Direct child process exited (tick fallback)");
                         if manager.list().is_empty() {
                             let _ = TerminalDisplay::clear();
-                            break;
+                            break 'outer;
                         } else if display_all {
                             tracing::info!("Other commands remain; switching to monitor mode");
                             active_id = None;
@@ -657,11 +657,11 @@ async fn run_display_loop(
                                 Ok(Ok(1)) => {
                                     let b = stdin_buf[0];
                                     if b == 0x1c {
-                                        break;  // Ctrl+\ — quit display
+                                        break 'outer;  // Ctrl+\ — quit display
                                     }
                                     if dismissed {
                                         if b == b'q' || b == 0x03 {
-                                            break;  // q or Ctrl+C — shut down
+                                            break 'outer;  // q or Ctrl+C — shut down
                                         }
                                         continue;  // ignore other keys when dismissed
                                     }
@@ -690,7 +690,7 @@ async fn run_display_loop(
 
             // ── External shutdown ──
             _ = shutdown_rx.recv() => {
-                break;
+                break 'outer;
             }
         }
     }
