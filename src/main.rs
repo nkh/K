@@ -61,7 +61,7 @@ fn pre_runtime() -> Result<Option<Cli>> {
         Some(Commands::ListCommands) => {
             // list-commands is async (needs HTTP), fall through to async phase
         }
-        Some(Commands::StopCommand { pid: _ }) => {
+        Some(Commands::StopCommand { target: _ }) => {
             // stop-command is async (needs HTTP), fall through to async phase
         }
         None => {}
@@ -84,10 +84,12 @@ async fn async_main(cli: Cli) -> Result<()> {
     // Handle stop subcommand (needs async for HTTP request)
     if let Some(Commands::Stop { pid }) = cli.command {
         // First try to stop a specific command by PID on any instance
-        let stopped = handle_stop_command_by_pid(&cli, pid).await?;
+        let registry = InstanceRegistry::new()?;
+        let instances = registry.list_instances();
+        let client = reqwest::Client::new();
+        let stopped = handle_stop_command_by_pid_on_instances(&client, &instances, pid).await?;
         if !stopped {
             // Fall back to stopping the whole instance
-            let registry = InstanceRegistry::new()?;
             registry.stop_instance(pid).await?;
         }
         return Ok(());
@@ -124,10 +126,10 @@ async fn async_main(cli: Cli) -> Result<()> {
     }
 
     // Handle stop-command subcommand
-    if let Some(Commands::StopCommand { pid }) = cli.command {
-        let stopped = handle_stop_command_by_pid(&cli, pid).await?;
+    if let Some(Commands::StopCommand { ref target }) = cli.command {
+        let stopped = handle_stop_command(&cli, target).await?;
         if !stopped {
-            eprintln!("No command found with PID {}. Use `vrunner list` to see running commands.", pid);
+            eprintln!("No matching command found for '{}'. Use `vrunner list` to see running commands.", target);
             std::process::exit(1);
         }
         return Ok(());
@@ -254,8 +256,46 @@ async fn async_main(cli: Cli) -> Result<()> {
         // explicit shutdown signal), we're done.  Otherwise the display was
         // dismissed (display_all=false) and we fall through to idle-wait.
         if !display_shutdown {
-            let mut rx = shutdown_tx.subscribe();
-            let _ = rx.recv().await;
+            // Wait for SIGINT, SIGTERM, or external shutdown.
+            // We cannot rely solely on shutdown_tx here because the signal
+            // handler in server.rs may have already exited (if the server
+            // task errored), so we listen for signals directly.
+            #[cfg(unix)]
+            {
+                use tokio::signal::unix::{signal, SignalKind};
+                let mut sigint = match signal(SignalKind::interrupt()) {
+                    Ok(s) => Some(s),
+                    Err(_) => None,
+                };
+                let mut sigterm = match signal(SignalKind::terminate()) {
+                    Ok(s) => Some(s),
+                    Err(_) => None,
+                };
+                let mut rx = shutdown_tx.subscribe();
+                tokio::select! {
+                    _ = async {
+                        match sigint.as_mut() {
+                            Some(s) => s.recv().await,
+                            None => std::future::pending().await,
+                        }
+                    } => {
+                        tracing::info!("Received SIGINT during idle-wait");
+                    }
+                    _ = async {
+                        match sigterm.as_mut() {
+                            Some(s) => s.recv().await,
+                            None => std::future::pending().await,
+                        }
+                    } => {
+                        tracing::info!("Received SIGTERM during idle-wait");
+                    }
+                    _ = rx.recv() => {}
+                }
+            }
+            #[cfg(not(unix))]
+            {
+                let _ = tokio::signal::ctrl_c().await;
+            }
         }
     } else if let Some(ref id) = spawned_id {
         // ── Headless mode with direct child ──
@@ -1228,9 +1268,18 @@ fn format_command(cmd: &serde_json::Value) -> Option<String> {
     ))
 }
 
-/// Try to stop a specific command by PID on any running instance.
-/// Returns true if the command was found and stopped, false otherwise.
-async fn handle_stop_command_by_pid(_cli: &Cli, pid: u32) -> Result<bool> {
+/// Stop a specific command by PID or name on any running instance.
+///
+/// If `target` parses as a u32, it is treated as a PID and resolved
+/// via `resolve_pid_to_id` (same as freeze/thaw).
+///
+/// If `target` is a name (or "name args..."), it is matched against
+/// the commands on each instance.  The full target string is compared
+/// against `name` alone, then against `name arg1 arg2 ...`.  If
+/// multiple commands match, an error is printed and false is returned.
+///
+/// Returns true if exactly one command was found and stopped.
+async fn handle_stop_command(_cli: &Cli, target: &str) -> Result<bool> {
     let registry = InstanceRegistry::new()?;
     let instances = registry.list_instances();
 
@@ -1240,12 +1289,111 @@ async fn handle_stop_command_by_pid(_cli: &Cli, pid: u32) -> Result<bool> {
 
     let client = reqwest::Client::new();
 
+    // Fast path: if target is a pure number, treat as PID.
+    if let Ok(pid) = target.parse::<u32>() {
+        return handle_stop_command_by_pid_on_instances(&client, &instances, pid).await;
+    }
+
+    // Slow path: match by name (+ optional args).
+    let mut matches: Vec<(u32, String, u32)> = Vec::new(); // (instance_pid, cmd_id, cmd_pid)
     for info in &instances {
         let url = instance_url(info, &None);
-        // Resolve PID to internal UUID via the instance's command list,
-        // then use the existing /api/commands/:id/kill endpoint
-        // (same pattern as freeze/thaw).
-        let cmd_id = match resolve_pid_to_id(&client, &url, pid).await {
+        let resp = client
+            .get(format!("{}/api/commands", url))
+            .send()
+            .await;
+
+        if let Ok(resp) = resp {
+            if let Ok(json) = resp.json::<serde_json::Value>().await {
+                if let Some(cmds) = json["data"].as_array() {
+                    for cmd in cmds {
+                        let name = cmd.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                        let args = cmd.get("args").and_then(|v| v.as_array());
+                        let cmd_pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+
+                        // Build display string: "name arg1 arg2 ..."
+                        let full = match args {
+                            Some(arr) => {
+                                let arg_strs: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
+                                if arg_strs.is_empty() {
+                                    name.to_string()
+                                } else {
+                                    format!("{} {}", name, arg_strs.join(" "))
+                                }
+                            }
+                            None => name.to_string(),
+                        };
+
+                        // Match: either name alone or full "name args" string.
+                        let name_only_match = name == target;
+                        let full_match = full == target;
+                        if name_only_match || full_match {
+                            if let Some(id) = cmd.get("id").and_then(|v| v.as_str()) {
+                                matches.push((info.pid, id.to_string(), cmd_pid));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if matches.is_empty() {
+        return Ok(false);
+    }
+
+    if matches.len() > 1 {
+        eprintln!("Multiple commands match '{}':", target);
+        for (inst_pid, _cmd_id, cmd_pid) in &matches {
+            eprintln!("  PID {} (on instance {})", cmd_pid, inst_pid);
+        }
+        eprintln!("Use a PID to disambiguate.");
+        return Ok(false);
+    }
+
+    // Exactly one match — stop it.
+    let (inst_pid, cmd_id, cmd_pid) = &matches[0];
+    let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
+    let url = instance_url(info, &None);
+
+    let resp = client
+        .post(format!("{}/api/commands/{}/kill", url, cmd_id))
+        .json(&serde_json::json!({}))
+        .send()
+        .await;
+
+    match resp {
+        Ok(resp) => {
+            let status = resp.status();
+            let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::json!({"status": "unknown"}));
+            if status.is_success() && body.get("status").and_then(|s| s.as_str()) == Some("ok") {
+                println!("Command with PID {} stopped on instance {} (PID {})", cmd_pid, inst_pid, inst_pid);
+                Ok(true)
+            } else {
+                let err_msg = body.get("error").and_then(|e| e.as_str())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| format!("HTTP {}", status));
+                eprintln!("Failed to stop command with PID {}: {}", cmd_pid, err_msg);
+                Ok(false)
+            }
+        }
+        Err(e) => {
+            eprintln!("Failed to stop command with PID {}: {}", cmd_pid, e);
+            Ok(false)
+        }
+    }
+}
+
+/// Internal: stop a command by PID on a list of instances.
+/// Used by handle_stop_command when target parses as a number.
+async fn handle_stop_command_by_pid_on_instances(
+    client: &reqwest::Client,
+    instances: &[vrunner::instance::info::InstanceInfo],
+    pid: u32,
+) -> Result<bool> {
+    for info in instances {
+        let url = instance_url(info, &None);
+        let cmd_id = match resolve_pid_to_id(client, &url, pid).await {
             Ok(id) => id,
             Err(_) => continue,
         };

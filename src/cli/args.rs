@@ -207,10 +207,13 @@ pub enum Commands {
     ListVrunner,
     /// List running commands only (tab-separated, machine-readable)
     ListCommands,
-    /// Stop a specific command by PID (not the whole instance)
+    /// Stop a specific command by PID or name (not the whole instance).
+    /// If the target is numeric, it is treated as a PID.
+    /// Otherwise it is matched against command names (and optionally args).
+    /// To match name+args, quote the full string: "vim file.txt"
     StopCommand {
-        /// PID of the command to stop
-        pid: u32,
+        /// PID or name (and optional args, quoted) of the command to stop
+        target: String,
     },
 }
 
