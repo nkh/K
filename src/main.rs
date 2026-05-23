@@ -275,28 +275,45 @@ async fn async_main(cli: Cli) -> Result<()> {
         let _ = rx.recv().await;
     }
 
-    // Wait for server to finish — but with a timeout.
+    // Wait for server to finish — but with a timeout + force exit.
     //
-    // The server's spawn_signal_handler installs tokio's signal driver for
-    // SIGINT/SIGTERM.  During Runtime::drop the runtime tries to clean up
-    // signal drivers, which can deadlock against the signal handler's own
-    // sigaction.  To avoid hanging forever, we wait up to 5 seconds then
-    // force-exit.  The OS reaps child processes and closes file descriptors.
-    tokio::select! {
+    // CRITICAL: the 5-second timeout does NOT solve the real hang.  The
+    // timeout causes async_main to return, which causes block_on() to
+    // return, which drops the Runtime.  During Runtime::drop, tokio:
+    //   1. Shuts down all tasks
+    //   2. Joins ALL spawn_blocking threads (PTY reader, stdin writer,
+    //      process waiter — these can block on I/O / child.wait())
+    //   3. Cleans up signal drivers — this DEADLOCKS because
+    //      spawn_signal_handler installed tokio's signal driver which
+    //      holds an internal lock that conflicts with Runtime::drop's
+    //      cleanup (documented at server.rs:103).
+    //
+    // The fix: use std::process::exit() to bypass Runtime::drop entirely.
+    // The OS reaps child processes, closes file descriptors, and releases
+    // all resources.  No destructors run — which is fine, there's nothing
+    // that needs cleanup.
+    let server_done = tokio::select! {
         result = server_handle => {
             if let Err(e) = result {
                 tracing::warn!(error = %e, "Server task error");
             }
+            true
         }
-        _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {
-            tracing::warn!("Server did not shut down within 5s, forcing exit");
+        _ = tokio::time::sleep(std::time::Duration::from_secs(3)) => {
+            tracing::warn!("Server did not shut down within 3s");
+            false
         }
+    };
+
+    if server_done {
+        // Clean exit — server shut down gracefully.
+        let _ = registry.unregister_current();
+        Ok(())
+    } else {
+        // Force exit — skip Runtime::drop to avoid signal driver deadlock.
+        // The OS handles all cleanup.
+        std::process::exit(0);
     }
-
-    // Cleanup on exit
-    let _ = registry.unregister_current();
-
-    Ok(())
 }
 
 /// Run the interactive terminal display loop.
