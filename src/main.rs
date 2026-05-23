@@ -466,7 +466,7 @@ async fn run_display_loop(
                             for (cid, name, _args, pid, _cert) in &remaining {
                                 eprintln!("  PID {} — {} ({})", pid, name, &cid[..cid.len().min(8)]);
                             }
-                            eprintln!("The server continues running. Type 'q' + Enter to shut down.");
+                            eprintln!("The server continues running. Press 'q' to shut down.");
                             eprintln!();
                             return false;
                         }
@@ -497,7 +497,7 @@ async fn run_display_loop(
                                 for (cid, name, _args, pid, _cert) in &remaining {
                                     eprintln!("  PID {} — {} ({})", pid, name, &cid[..cid.len().min(8)]);
                                 }
-                                eprintln!("The server continues running. Type 'q' + Enter to shut down.");
+                                eprintln!("The server continues running. Press 'q' to shut down.");
                                 eprintln!();
                                 return false;
                             }
@@ -529,7 +529,7 @@ async fn run_display_loop(
                         for (cid, name, _args, pid, _cert) in &remaining {
                             eprintln!("  PID {} — {} ({})", pid, name, &cid[..cid.len().min(8)]);
                         }
-                        eprintln!("The server continues running. Type 'q' + Enter to shut down.");
+                        eprintln!("The server continues running. Press 'q' to shut down.");
                         eprintln!();
                         return false;
                     }
@@ -727,7 +727,7 @@ async fn run_display_loop(
         for (id, name, _args, pid, _cert) in &remaining {
             eprintln!("  PID {} — {} ({})", pid, name, &id[..id.len().min(8)]);
         }
-        eprintln!("The server continues running. Type 'q' + Enter to shut down.");
+        eprintln!("The server continues running. Press 'q' to shut down.");
         eprintln!();
     }
     should_shutdown
@@ -735,27 +735,41 @@ async fn run_display_loop(
 
 /// Wait for the user to shut down after the display is dismissed.
 ///
-/// The terminal is in normal (canonical) mode — raw mode has been restored
-/// by `run_display_loop`.  We poll `/dev/tty` via `AsyncFd` (same proven
-/// pattern as the display loop) and shut down when the user types `q` and
-/// presses Enter.  We also listen on the shutdown broadcast for external
-/// shutdown requests (e.g. `vrunner stop` or the server's own SIGINT handler).
+/// Re-enables raw mode on the terminal so that `q` triggers immediately
+/// (no Enter required).  A RAII guard guarantees raw mode is restored to
+/// canonical mode even if the function panics or the future is cancelled.
 ///
-/// Why not Ctrl+C?  The server's `spawn_signal_handler` installs tokio's
-/// signal driver which blocks SIGINT on its internal thread and replaces the
-/// process-wide sigaction handler.  Installing a competing sigaction in the
-/// idle-wait path doesn't reliably deliver to our pipe because tokio's
-/// signal infrastructure silently re-arms its own handler.  The `q` + Enter
-/// approach sidesteps all of this — it's just a regular read on a canonical-
-/// mode terminal, no signal machinery involved.
+/// We also listen on the shutdown broadcast for external shutdown requests
+/// (e.g. `vrunner stop` or the server's own SIGINT handler).
+///
+/// Why not Ctrl+C?  See commit a6a4d2d — tokio's signal driver hijacks
+/// SIGINT delivery.  The `q` key sidesteps all signal machinery.
 async fn idle_wait(shutdown_tx: &broadcast::Sender<()>) {
     use std::os::fd::AsRawFd;
+    use crossterm::terminal;
+
+    struct RawGuard;
+    impl Drop for RawGuard {
+        fn drop(&mut self) {
+            let _ = terminal::disable_raw_mode();
+        }
+    }
 
     let mut rx = shutdown_tx.subscribe();
 
+    // Enable raw mode so `q` is delivered immediately without Enter.
+    // The RawGuard RAII ensures we restore canonical mode on exit.
+    let _guard = match terminal::enable_raw_mode() {
+        Ok(()) => Some(RawGuard),
+        Err(e) => {
+            tracing::warn!(error = %e, "Cannot enable raw mode for idle-wait");
+            None
+        }
+    };
+
     // Open /dev/tty in non-blocking mode for keyboard input.
-    // Same pattern as run_display_loop — AsyncFd avoids the blocking-thread
-    // hang that tokio::io::stdin() causes during Runtime::drop.
+    // AsyncFd avoids the blocking-thread hang that tokio::io::stdin()
+    // causes during Runtime::drop.
     let idle_tty: Option<tokio::io::unix::AsyncFd<std::fs::File>> = {
         let tty = match std::fs::File::open("/dev/tty") {
             Ok(f) => Some(f),
@@ -774,7 +788,7 @@ async fn idle_wait(shutdown_tx: &broadcast::Sender<()>) {
         })
     };
 
-    let mut buf = [0u8; 64];
+    let mut buf = [0u8; 1];
 
     match idle_tty {
         Some(tty) => {
@@ -786,8 +800,6 @@ async fn idle_wait(shutdown_tx: &broadcast::Sender<()>) {
                         break;
                     }
                     // ── Keyboard input ──
-                    // In canonical mode the terminal driver buffers by line.
-                    // readable() fires when the user presses Enter (complete line).
                     r = tty.readable() => {
                         let should_quit = 'read: {
                             if let Ok(mut guard) = r {
@@ -797,13 +809,7 @@ async fn idle_wait(shutdown_tx: &broadcast::Sender<()>) {
                                         inner.get_ref().read(&mut buf)
                                     }) {
                                         Ok(Ok(0)) => break 'read false,   // EOF
-                                        Ok(Ok(n)) => {
-                                            if std::str::from_utf8(&buf[..n])
-                                                .map_or(false, |s| s.trim() == "q")
-                                            {
-                                                break 'read true;
-                                            }
-                                        }
+                                        Ok(Ok(1)) => break 'read buf[0] == b'q',
                                         _ => {
                                             guard.clear_ready();
                                             break 'read false;
@@ -815,7 +821,7 @@ async fn idle_wait(shutdown_tx: &broadcast::Sender<()>) {
                             }
                         };
                         if should_quit {
-                            tracing::info!("User typed 'q' to shut down");
+                            tracing::info!("User pressed 'q' to shut down");
                             break;
                         }
                     }
@@ -824,11 +830,10 @@ async fn idle_wait(shutdown_tx: &broadcast::Sender<()>) {
         }
         None => {
             // /dev/tty unavailable — fall back to broadcast-only wait.
-            // The server's spawn_signal_handler handles SIGINT/SIGTERM
-            // and sends on the broadcast channel.
             let _ = rx.recv().await;
         }
     }
+    // _guard dropped here → raw mode disabled → terminal back to canonical mode
 }
 
 /// Wait for a direct child command to exit (headless, non-display mode).
