@@ -44,10 +44,10 @@ fn pre_runtime() -> Result<Option<Cli>> {
         Some(Commands::Spawn { .. }) => {
             // spawn is async (uses reqwest), fall through to async phase
         }
-        Some(Commands::Freeze { .. }) => {
+        Some(Commands::Freeze { pid: _ }) => {
             // freeze is async (uses reqwest), fall through to async phase
         }
-        Some(Commands::Thaw { .. }) => {
+        Some(Commands::Thaw { pid: _ }) => {
             // thaw is async (uses reqwest), fall through to async phase
         }
         Some(Commands::Cert { action }) => {
@@ -61,7 +61,7 @@ fn pre_runtime() -> Result<Option<Cli>> {
         Some(Commands::ListCommands) => {
             // list-commands is async (needs HTTP), fall through to async phase
         }
-        Some(Commands::StopCommand { .. }) => {
+        Some(Commands::StopCommand { pid: _ }) => {
             // stop-command is async (needs HTTP), fall through to async phase
         }
         None => {}
@@ -100,14 +100,14 @@ async fn async_main(cli: Cli) -> Result<()> {
     }
 
     // Handle freeze subcommand
-    if let Some(Commands::Freeze { ref id }) = cli.command {
-        handle_freeze_command(&cli, &id).await?;
+    if let Some(Commands::Freeze { pid }) = cli.command {
+        handle_freeze_command(&cli, pid).await?;
         return Ok(());
     }
 
     // Handle thaw subcommand
-    if let Some(Commands::Thaw { ref id }) = cli.command {
-        handle_thaw_command(&cli, &id).await?;
+    if let Some(Commands::Thaw { pid }) = cli.command {
+        handle_thaw_command(&cli, pid).await?;
         return Ok(());
     }
 
@@ -124,8 +124,12 @@ async fn async_main(cli: Cli) -> Result<()> {
     }
 
     // Handle stop-command subcommand
-    if let Some(Commands::StopCommand { ref id }) = cli.command {
-        handle_stop_command(&cli, &id).await?;
+    if let Some(Commands::StopCommand { pid }) = cli.command {
+        let stopped = handle_stop_command_by_pid(&cli, pid).await?;
+        if !stopped {
+            eprintln!("No command found with PID {}. Use `vrunner list` to see running commands.", pid);
+            std::process::exit(1);
+        }
         return Ok(());
     }
 
@@ -373,6 +377,18 @@ async fn run_display_loop(
     // Track which command we're displaying so we can forward keystrokes.
     let active_id: Option<String> = direct_child_id.map(String::from);
 
+    // Helper: resolve the command ID that should receive keystrokes.
+    // Uses the same fallback as render_vtty: prefer the direct child,
+    // otherwise fall back to the first available command.
+    fn resolve_input_target(
+        manager: &Arc<CommandManager>,
+        active_id: &Option<String>,
+    ) -> Option<String> {
+        active_id.clone().or_else(|| {
+            manager.list().first().map(|(id, _, _, _, _)| id.clone())
+        })
+    }
+
     // ── Event-driven exit detection ──
     // Instead of polling with waitpid or periodic ticks, we use a
     // tokio::sync::Notify that the process waiter fires immediately
@@ -521,8 +537,8 @@ async fn run_display_loop(
                                         should_break = true;  // Ctrl+\
                                         break;
                                     }
-                                    if let Some(ref id) = active_id {
-                                        if let Some(handle) = manager.get(id) {
+                                    if let Some(ref target) = resolve_input_target(&manager, &active_id) {
+                                        if let Some(handle) = manager.get(target) {
                                             let _ = handle.send_bytes(vec![b]).await;
                                         }
                                     }
@@ -826,10 +842,14 @@ async fn handle_spawn_command(cli: &Cli, cmd: &str, args: &[String]) -> Result<(
     let result: serde_json::Value = resp.json().await?;
 
     if status.is_success() {
-        let id = result["data"]["id"].as_str().unwrap_or("?");
+        let cmd_pid = result["data"].as_array()
+            .and_then(|arr| arr.first())
+            .and_then(|cmd| cmd.get("pid"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
         println!("Command spawned successfully on instance {} (PID {})", info.pid, info.pid);
-        println!("  Command ID: {}", id);
-        println!("  VTTY:      {}/api/commands/{}/vtty/html", url, id);
+        println!("  PID:       {}", cmd_pid);
+        println!("  VTTY:      {}/api/commands/{}/vtty/html", url, result["data"]["id"].as_str().unwrap_or("?"));
     } else {
         let error = result["error"].as_str().unwrap_or("Unknown error");
         eprintln!("Failed to spawn command: {}", error);
@@ -840,14 +860,17 @@ async fn handle_spawn_command(cli: &Cli, cmd: &str, args: &[String]) -> Result<(
 }
 
 /// Handle the `vrunner freeze` subcommand.
-async fn handle_freeze_command(cli: &Cli, id: &str) -> Result<()> {
+async fn handle_freeze_command(cli: &Cli, pid: u32) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let info = resolve_instance(cli, &registry)?;
     let url = instance_url(&info, &None);
     let client = reqwest::Client::new();
 
+    // Look up the command ID by PID via the instance's API
+    let cmd_id = resolve_pid_to_id(&client, &url, pid).await?;
+
     let resp = client
-        .post(format!("{}/api/commands/{}/freeze", url, id))
+        .post(format!("{}/api/commands/{}/freeze", url, cmd_id))
         .send()
         .await?;
 
@@ -855,7 +878,7 @@ async fn handle_freeze_command(cli: &Cli, id: &str) -> Result<()> {
     let result: serde_json::Value = resp.json().await?;
 
     if status.is_success() {
-        println!("Command {} frozen (SIGSTOP) on instance {}", id, info.pid);
+        println!("Command with PID {} frozen (SIGSTOP) on instance {}", pid, info.pid);
     } else {
         let error = result["error"].as_str().unwrap_or("Unknown error");
         eprintln!("Failed to freeze command: {}", error);
@@ -866,14 +889,17 @@ async fn handle_freeze_command(cli: &Cli, id: &str) -> Result<()> {
 }
 
 /// Handle the `vrunner thaw` subcommand.
-async fn handle_thaw_command(cli: &Cli, id: &str) -> Result<()> {
+async fn handle_thaw_command(cli: &Cli, pid: u32) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let info = resolve_instance(cli, &registry)?;
     let url = instance_url(&info, &None);
     let client = reqwest::Client::new();
 
+    // Look up the command ID by PID via the instance's API
+    let cmd_id = resolve_pid_to_id(&client, &url, pid).await?;
+
     let resp = client
-        .post(format!("{}/api/commands/{}/thaw", url, id))
+        .post(format!("{}/api/commands/{}/thaw", url, cmd_id))
         .send()
         .await?;
 
@@ -881,7 +907,7 @@ async fn handle_thaw_command(cli: &Cli, id: &str) -> Result<()> {
     let result: serde_json::Value = resp.json().await?;
 
     if status.is_success() {
-        println!("Command {} thawed (SIGCONT) on instance {}", id, info.pid);
+        println!("Command with PID {} thawed (SIGCONT) on instance {}", pid, info.pid);
     } else {
         let error = result["error"].as_str().unwrap_or("Unknown error");
         eprintln!("Failed to thaw command: {}", error);
@@ -891,14 +917,43 @@ async fn handle_thaw_command(cli: &Cli, id: &str) -> Result<()> {
     Ok(())
 }
 
+/// Resolve a PID to a command UUID by querying the instance's command list.
+async fn resolve_pid_to_id(
+    client: &reqwest::Client,
+    url: &str,
+    pid: u32,
+) -> Result<String> {
+    let resp = client
+        .get(format!("{}/api/commands", url))
+        .send()
+        .await?;
+
+    let json: serde_json::Value = resp.json().await?;
+    if json["status"] != "ok" {
+        anyhow::bail!("Failed to query commands from instance");
+    }
+
+    if let Some(cmds) = json["data"].as_array() {
+        for cmd in cmds {
+            if cmd.get("pid").and_then(|v| v.as_u64()) == Some(pid as u64) {
+                if let Some(id) = cmd.get("id").and_then(|v| v.as_str()) {
+                    return Ok(id.to_string());
+                }
+            }
+        }
+    }
+
+    anyhow::bail!("No command found with PID {}", pid)
+}
+
 /// Handle the `vrunner list` subcommand.
 ///
 /// Queries running vrunner instances and shows their commands in a
 /// two-level indented hierarchy:
 ///
 ///   INSTANCE  PID: 12345  PORT: 9090  BIND: 127.0.0.1  DAEMON: no  DISPLAY: yes
-///     COMMAND  htop                              PID: 5678  ID: abc12345  CERT: -
-///     COMMAND  vim file.txt                      PID: 5679  ID: def67890  CERT: my-app
+///     COMMAND  htop                              PID: 5678  CERT: -
+///     COMMAND  vim file.txt                      PID: 5679  CERT: my-app
 ///
 /// When `--target <PID>` is provided, only that instance is listed.
 /// Unreachable instances show an `[ERROR]` line under their header.
@@ -1015,15 +1070,13 @@ fn format_command(cmd: &serde_json::Value) -> Option<String> {
         display_name
     };
     let pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0);
-    let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("?");
-    let id_short = &id[..id.len().min(8)];
     let cert = cmd.get("certificate").and_then(|v| v.as_str()).unwrap_or("-");
 
     Some(format!(
         "  {} {}  {}",
         c(&format!("{:<10}", pid), Color::Cyan, false),
         c(&format!("{:<20}", truncated), Color::Reset, false),
-        c(&format!("{:<8} CERT: {}", id_short, cert), Color::DarkGrey, false),
+        c(&format!("CERT: {}", cert), Color::DarkGrey, false),
     ))
 }
 
@@ -1113,7 +1166,7 @@ async fn handle_list_commands_command(cli: &Cli) -> Result<()> {
         .build()?;
 
     // Print TSV header
-    println!("VRUNNER_PID\tCMD_PID\tNAME\tARGS\tID\tCERT");
+    println!("VRUNNER_PID\tCMD_PID\tNAME\tARGS\tCERT");
 
     for info in &instances {
         let url = instance_url(info, &None);
@@ -1125,11 +1178,9 @@ async fn handle_list_commands_command(cli: &Cli) -> Result<()> {
                             let cmd_pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0);
                             let name = cmd.get("name").and_then(|v| v.as_str()).unwrap_or("?");
                             let args = serde_json::to_string(cmd.get("args").unwrap_or(&serde_json::json!([]))).unwrap_or_else(|_| "[]".to_string());
-                            let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("?");
-                            let id_short = &id[..id.len().min(8)];
                             let cert = cmd.get("certificate").and_then(|v| v.as_str()).unwrap_or("-");
-                            println!("{}\t{}\t{}\t{}\t{}\t{}",
-                                info.pid, cmd_pid, name, args, id_short, cert);
+                            println!("{}\t{}\t{}\t{}\t{}",
+                                info.pid, cmd_pid, name, args, cert);
                         }
                     }
                 }
@@ -1139,35 +1190,6 @@ async fn handle_list_commands_command(cli: &Cli) -> Result<()> {
             }
         }
     }
-    Ok(())
-}
-
-/// Handle the `vrunner stop-command` subcommand.
-///
-/// Stops a specific command by its ID (not the whole instance).
-async fn handle_stop_command(cli: &Cli, id: &str) -> Result<()> {
-    let registry = InstanceRegistry::new()?;
-    let info = resolve_instance(cli, &registry)?;
-    let url = instance_url(&info, &None);
-    let client = reqwest::Client::new();
-
-    let resp = client
-        .post(format!("{}/api/commands/{}/kill", url, id))
-        .json(&serde_json::json!({}))
-        .send()
-        .await?;
-
-    let status = resp.status();
-    let result: serde_json::Value = resp.json().await?;
-
-    if status.is_success() {
-        println!("Command {} stopped on instance {} (PID {})", id, info.pid, info.pid);
-    } else {
-        let error = result["error"].as_str().unwrap_or("Unknown error");
-        eprintln!("Failed to stop command {}: {}", id, error);
-        std::process::exit(1);
-    }
-
     Ok(())
 }
 

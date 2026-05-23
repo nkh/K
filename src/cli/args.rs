@@ -183,13 +183,13 @@ pub enum Commands {
     /// Freeze (suspend) a running command via SIGSTOP.
     /// The command is paused but not terminated.
     Freeze {
-        /// ID of the command to freeze
-        id: String,
+        /// PID of the command to freeze
+        pid: u32,
     },
     /// Thaw (resume) a frozen command via SIGCONT.
     Thaw {
-        /// ID of the command to thaw
-        id: String,
+        /// PID of the command to thaw
+        pid: u32,
     },
     /// Manage named certificates for per-command access control
     Cert {
@@ -200,10 +200,10 @@ pub enum Commands {
     ListVrunner,
     /// List running commands only (tab-separated, machine-readable)
     ListCommands,
-    /// Stop a specific command by ID (not the whole instance)
+    /// Stop a specific command by PID (not the whole instance)
     StopCommand {
-        /// ID of the command to stop
-        id: String,
+        /// PID of the command to stop
+        pid: u32,
     },
 }
 
