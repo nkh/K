@@ -245,19 +245,15 @@ async fn async_main(cli: Cli) -> Result<()> {
         // active command's VTTY buffer directly to the local terminal,
         // forwards keystrokes to the child, and exits on Ctrl+\ or child
         // death (when a direct child was spawned).
-        let display_shutdown = run_display_loop(
+        run_display_loop(
             &manager,
             spawned_id.as_deref(),
             cfg.display.refresh_ms,
             cfg.display.display_all,
             shutdown_tx.clone(),
         ).await;
-        // If the display loop sent shutdown (all commands gone, Ctrl+\, or
-        // explicit shutdown signal), we're done.  Otherwise the display was
-        // dismissed (display_all=false) and we fall through to idle-wait.
-        if !display_shutdown {
-            idle_wait(&shutdown_tx).await;
-        }
+        // run_display_loop always returns true (shutdown triggered).
+        // The dismissed path now waits for q/Ctrl+C inside the loop.
     } else if let Some(ref id) = spawned_id {
         // ── Headless mode with direct child ──
         // No display, but a child was spawned directly via CLI.  Wait for
@@ -426,10 +422,13 @@ async fn run_display_loop(
     // (when the direct child exits but other commands remain).
     let mut active_id: Option<String> = direct_child_id.map(String::from);
 
-    // Whether the loop should send shutdown after cleanup.  Set to false
-    // when the display is dismissed (display_all=false, direct child exited
-    // but commands remain) — the caller will idle-wait instead.
-    let mut should_shutdown = true;
+    // When `display_all == false` and the direct child exits, the display
+    // enters "dismissed" state: the alternate screen stays active, a status
+    // message is rendered, and the loop waits for 'q' / Ctrl+C to shut down.
+    // We stay in the same raw-mode / AsyncFd loop that was already working —
+    // no need to tear down and re-create the terminal setup.
+    let mut dismissed = false;
+    let mut dismiss_rendered = false;
 
     // ── Event-driven exit detection ──
     // We use a tokio::sync::watch channel instead of Notify.
@@ -456,21 +455,8 @@ async fn run_display_loop(
                             return true;
                         }
                         if !display_all {
-                            // Dismiss display immediately.
-                            let _ = terminal::disable_raw_mode();
-                            let _ = stdout.execute(cursor::Show);
-                            let _ = stdout.execute(LeaveAlternateScreen);
-                            let remaining = manager.list();
-                            eprintln!();
-                            eprintln!("vrunner: primary command exited. {} command(s) still running.", remaining.len());
-                            for (cid, name, _args, pid, _cert) in &remaining {
-                                eprintln!("  PID {} — {} ({})", pid, name, &cid[..cid.len().min(8)]);
-                            }
-                            eprintln!("The server continues running. Press 'q' or Ctrl+C to shut down.");
-                            eprintln!();
-                            return false;
+                            dismissed = true;
                         }
-                        // Other commands remain — enter loop in monitor mode.
                         active_id = None;
                         None
                     } else {
@@ -488,20 +474,8 @@ async fn run_display_loop(
                                 return true;
                             }
                             if !display_all {
-                                let _ = terminal::disable_raw_mode();
-                                let _ = stdout.execute(cursor::Show);
-                                let _ = stdout.execute(LeaveAlternateScreen);
-                                let remaining = manager.list();
-                                eprintln!();
-                                eprintln!("vrunner: primary command exited. {} command(s) still running.", remaining.len());
-                                for (cid, name, _args, pid, _cert) in &remaining {
-                                    eprintln!("  PID {} — {} ({})", pid, name, &cid[..cid.len().min(8)]);
-                                }
-                                eprintln!("The server continues running. Press 'q' or Ctrl+C to shut down.");
-                                eprintln!();
-                                return false;
+                                dismissed = true;
                             }
-                            // Other commands remain — enter loop in monitor mode.
                             active_id = None;
                             None
                         } else {
@@ -520,20 +494,8 @@ async fn run_display_loop(
                         return true;
                     }
                     if !display_all {
-                        let _ = terminal::disable_raw_mode();
-                        let _ = stdout.execute(cursor::Show);
-                        let _ = stdout.execute(LeaveAlternateScreen);
-                        let remaining = manager.list();
-                        eprintln!();
-                        eprintln!("vrunner: primary command exited. {} command(s) still running.", remaining.len());
-                        for (cid, name, _args, pid, _cert) in &remaining {
-                            eprintln!("  PID {} — {} ({})", pid, name, &cid[..cid.len().min(8)]);
-                        }
-                        eprintln!("The server continues running. Press 'q' or Ctrl+C to shut down.");
-                        eprintln!();
-                        return false;
+                        dismissed = true;
                     }
-                    // Other commands remain — enter loop in monitor mode.
                     active_id = None;
                     None
                 }
@@ -603,13 +565,33 @@ async fn run_display_loop(
                 } else {
                     // Display was only for the CLI command — dismiss it.
                     tracing::info!("Direct CLI command exited; dismissing display (commands remain)");
-                    should_shutdown = false;
-                    break;  // exits loop WITHOUT sending shutdown
+                    dismissed = true;
+                    active_id = None;
+                    exit_rx = None;
                 }
             }
 
             // ── Periodic VTTY render ──
             _ = tick_rx.recv() => {
+                // ── Dismissed state: show status message, skip VTTY ──
+                if dismissed {
+                    if !dismiss_rendered {
+                        dismiss_rendered = true;
+                        let remaining = manager.list();
+                        let _ = TerminalDisplay::clear();
+                        let _ = write!(stdout, "\r\n\r\n  vrunner: primary command exited. {} command(s) still running.\r\n", remaining.len());
+                        for (id, name, _args, pid, _cert) in &remaining {
+                            let _ = write!(stdout, "    PID {} — {} ({})\r\n", pid, name, &id[..id.len().min(8)]);
+                        }
+                        let _ = write!(stdout, "\r\n  Press 'q' or Ctrl+C to shut down.\r\n");
+                        let _ = stdout.flush();
+                    }
+                    // Still check if all commands disappeared via external stop.
+                    if manager.list().is_empty() {
+                        break;
+                    }
+                    continue;
+                }
                 // Fallback exit detection for the direct child.
                 if let Some(ref id) = active_id {
                     let gone = match manager.get(id) {
@@ -627,8 +609,9 @@ async fn run_display_loop(
                             exit_rx = None;
                         } else {
                             tracing::info!("Direct CLI command exited; dismissing display (commands remain)");
-                            should_shutdown = false;
-                            break;  // exits loop WITHOUT sending shutdown
+                            dismissed = true;
+                            active_id = None;
+                            exit_rx = None;
                         }
                     }
                 }
@@ -676,6 +659,12 @@ async fn run_display_loop(
                                     if b == 0x1c {
                                         break;  // Ctrl+\ — quit display
                                     }
+                                    if dismissed {
+                                        if b == b'q' || b == 0x03 {
+                                            break;  // q or Ctrl+C — shut down
+                                        }
+                                        continue;  // ignore other keys when dismissed
+                                    }
                                     // Forward to the active command, or fall back
                                     // to the first available command in monitor mode.
                                     let target_id = if let Some(ref id) = active_id {
@@ -715,128 +704,10 @@ async fn run_display_loop(
     let _ = terminal::disable_raw_mode();
     let _ = stdout.flush();
 
-    if should_shutdown {
-        // All commands gone — trigger server shutdown.
-        let _ = shutdown_tx.send(());
-    } else {
-        // Display dismissed but commands remain — print a status message.
-        // The caller (async_main) will idle-wait for shutdown.
-        let remaining = manager.list();
-        eprintln!();
-        eprintln!("vrunner: primary command exited. {} command(s) still running.", remaining.len());
-        for (id, name, _args, pid, _cert) in &remaining {
-            eprintln!("  PID {} — {} ({})", pid, name, &id[..id.len().min(8)]);
-        }
-        eprintln!("The server continues running. Press 'q' or Ctrl+C to shut down.");
-        eprintln!();
-    }
-    should_shutdown
-}
-
-/// Wait for the user to shut down after the display is dismissed.
-///
-/// Re-enables raw mode on the terminal so that keypresses trigger
-/// immediately (no Enter required).  A RAII guard guarantees raw mode
-/// is restored to canonical mode even if the function panics.
-///
-/// In raw mode ISIG is cleared, so Ctrl+C (0x03) does NOT generate
-/// SIGINT — it arrives as a plain byte.  We detect it alongside 'q'
-/// and shut down.  This sidesteps the spawn_signal_handler in server.rs
-/// which captures SIGINT via tokio's signal driver and whose broadcast
-/// delivery is unreliable in the idle-wait context.
-///
-/// We also listen on the shutdown broadcast for external shutdown
-/// requests (e.g. `vrunner stop`).
-async fn idle_wait(shutdown_tx: &broadcast::Sender<()>) {
-    use std::os::fd::AsRawFd;
-    use crossterm::terminal;
-
-    struct RawGuard;
-    impl Drop for RawGuard {
-        fn drop(&mut self) {
-            let _ = terminal::disable_raw_mode();
-        }
-    }
-
-    let mut rx = shutdown_tx.subscribe();
-
-    // Enable raw mode so `q` is delivered immediately without Enter.
-    // The RawGuard RAII ensures we restore canonical mode on exit.
-    let _guard = match terminal::enable_raw_mode() {
-        Ok(()) => Some(RawGuard),
-        Err(e) => {
-            tracing::warn!(error = %e, "Cannot enable raw mode for idle-wait");
-            None
-        }
-    };
-
-    // Open /dev/tty in non-blocking mode for keyboard input.
-    // AsyncFd avoids the blocking-thread hang that tokio::io::stdin()
-    // causes during Runtime::drop.
-    let idle_tty: Option<tokio::io::unix::AsyncFd<std::fs::File>> = {
-        let tty = match std::fs::File::open("/dev/tty") {
-            Ok(f) => Some(f),
-            Err(e) => {
-                tracing::warn!(error = %e, "Cannot open /dev/tty for idle-wait — using broadcast only");
-                None
-            }
-        };
-
-        tty.and_then(|tty| {
-            unsafe {
-                let flags = libc::fcntl(tty.as_raw_fd(), libc::F_GETFL);
-                libc::fcntl(tty.as_raw_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK);
-            }
-            tokio::io::unix::AsyncFd::new(tty).ok()
-        })
-    };
-
-    let mut buf = [0u8; 1];
-
-    match idle_tty {
-        Some(tty) => {
-            loop {
-                tokio::select! {
-                    // ── External shutdown (vrunner stop, SIGINT via kill, etc.) ──
-                    _ = rx.recv() => {
-                        tracing::info!("Shutdown signal received during idle-wait");
-                        break;
-                    }
-                    // ── Keyboard input ──
-                    r = tty.readable() => {
-                        let should_quit = 'read: {
-                            if let Ok(mut guard) = r {
-                                loop {
-                                    match guard.try_io(|inner| {
-                                        use std::io::Read;
-                                        inner.get_ref().read(&mut buf)
-                                    }) {
-                                        Ok(Ok(0)) => break 'read false,   // EOF
-                                        Ok(Ok(1)) => break 'read buf[0] == b'q' || buf[0] == 0x03,
-                                        _ => {
-                                            guard.clear_ready();
-                                            break 'read false;
-                                        }
-                                    }
-                                }
-                            } else {
-                                false
-                            }
-                        };
-                        if should_quit {
-                            tracing::info!(key = if buf[0] == 0x03 { "Ctrl+C" } else { "q" }, "User shut down");
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        None => {
-            // /dev/tty unavailable — fall back to broadcast-only wait.
-            let _ = rx.recv().await;
-        }
-    }
-    // _guard dropped here → raw mode disabled → terminal back to canonical mode
+    // If we broke out of the loop, always trigger shutdown.
+    // (The dismissed path now waits for q/Ctrl+C inside the loop.)
+    let _ = shutdown_tx.send(());
+    true
 }
 
 /// Wait for a direct child command to exit (headless, non-display mode).
