@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::Parser;
 use crossterm::style::Color;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicI32, Ordering};
 use tokio::sync::{broadcast, mpsc};
 
 use vrunner::cli::args::{Cli, Commands, CertAction};
@@ -13,6 +14,40 @@ use vrunner::process::manager::CommandManager;
 use vrunner::web::auth::AuthManager;
 use vrunner::web::certs::CertificateStore;
 use vrunner::web::server::start_server;
+
+// ── Signal handler for idle-wait after display dismiss ──
+//
+// tokio::signal::unix::signal() only blocks the signal on the calling
+// worker thread via pthread_sigmask.  On a multi-threaded runtime,
+// other worker threads keep the signal unblocked.  When SIGINT arrives
+// the kernel delivers it to any unblocked thread, where tokio's
+// sigaction handler fires but the signalfd dispatch to our recv()
+// call may never arrive — Ctrl+C is echoed but nothing happens.
+//
+// Fix: bypass tokio's signal infrastructure entirely.  Install our own
+// sigaction handler that writes a byte to a pipe (async-signal-safe),
+// and poll the pipe with AsyncFd in the idle-wait select!.
+
+/// Global write-end of the signal-notification pipe.  Written by the
+/// signal handler, read by the idle-wait loop.
+static SIG_PIPE_WRITE: AtomicI32 = AtomicI32::new(-1);
+
+/// Signal handler for SIGINT and SIGTERM.  Writes a single byte to the
+/// pipe — async-signal-safe because libc::write is async-signal-safe.
+extern "C" fn idle_signal_handler(
+    _sig: libc::c_int,
+    _info: *mut libc::siginfo_t,
+    _ctx: *mut std::ffi::c_void,
+) {
+    let fd = SIG_PIPE_WRITE.load(Ordering::Relaxed);
+    if fd >= 0 {
+        let byte: u8 = 1;
+        unsafe {
+            // write() is async-signal-safe per POSIX.
+            let _ = libc::write(fd, &byte as *const u8 as *const libc::c_void, 1);
+        }
+    }
+}
 
 /// Colorize text using crossterm when stdout is a TTY, plain text otherwise.
 fn c(text: &str, color: Color, bold: bool) -> String {
@@ -257,39 +292,68 @@ async fn async_main(cli: Cli) -> Result<()> {
         // dismissed (display_all=false) and we fall through to idle-wait.
         if !display_shutdown {
             // Wait for SIGINT, SIGTERM, or external shutdown.
-            // We cannot rely solely on shutdown_tx here because the signal
-            // handler in server.rs may have already exited (if the server
-            // task errored), so we listen for signals directly.
+            //
+            // We do NOT use tokio::signal::unix::signal() here.  That API
+            // only blocks the signal on the calling worker thread via
+            // pthread_sigmask.  On tokio's multi-threaded runtime, other
+            // worker threads keep the signal unblocked.  When SIGINT arrives
+            // the kernel may deliver it to an unblocked thread, where
+            // tokio's sigaction handler fires but the signalfd dispatch to
+            // our recv() never arrives — Ctrl+C is echoed but nothing happens.
+            //
+            // Instead, we install our own sigaction handler (process-wide)
+            // that writes a byte to a pipe, and poll the pipe with AsyncFd.
+            // This is async-signal-safe and works regardless of which thread
+            // receives the signal.
             #[cfg(unix)]
             {
-                use tokio::signal::unix::{signal, SignalKind};
-                let mut sigint = match signal(SignalKind::interrupt()) {
-                    Ok(s) => Some(s),
-                    Err(_) => None,
-                };
-                let mut sigterm = match signal(SignalKind::terminate()) {
-                    Ok(s) => Some(s),
-                    Err(_) => None,
-                };
-                let mut rx = shutdown_tx.subscribe();
-                tokio::select! {
-                    _ = async {
-                        match sigint.as_mut() {
-                            Some(s) => s.recv().await,
-                            None => std::future::pending().await,
-                        }
-                    } => {
-                        tracing::info!("Received SIGINT during idle-wait");
+                use std::os::fd::FromRawFd;
+
+                let mut pipe_fds: [libc::c_int; 2] = [-1, -1];
+                if unsafe { libc::pipe(pipe_fds.as_mut_ptr()) } == 0 {
+                    let pipe_read = pipe_fds[0];
+                    let pipe_write = pipe_fds[1];
+                    SIG_PIPE_WRITE.store(pipe_write, Ordering::Relaxed);
+
+                    unsafe {
+                        let mut sa: libc::sigaction = std::mem::zeroed();
+                        sa.sa_sigaction = idle_signal_handler as *const () as usize;
+                        sa.sa_flags = libc::SA_SIGINFO | libc::SA_RESTART;
+                        libc::sigemptyset(&mut sa.sa_mask);
+                        libc::sigaddset(&mut sa.sa_mask, libc::SIGINT);
+                        libc::sigaddset(&mut sa.sa_mask, libc::SIGTERM);
+
+                        libc::sigaction(libc::SIGINT, &sa, std::ptr::null_mut());
+                        libc::sigaction(libc::SIGTERM, &sa, std::ptr::null_mut());
                     }
-                    _ = async {
-                        match sigterm.as_mut() {
-                            Some(s) => s.recv().await,
-                            None => std::future::pending().await,
+
+                    let file = unsafe { std::fs::File::from_raw_fd(pipe_read) };
+                    match tokio::io::unix::AsyncFd::new(file) {
+                        Ok(async_fd) => {
+                            let mut rx = shutdown_tx.subscribe();
+                            tokio::select! {
+                                _ = async_fd.readable() => {
+                                    tracing::info!("Received signal during idle-wait");
+                                    let mut buf = [0u8; 1];
+                                    unsafe {
+                                        libc::read(pipe_read, buf.as_mut_ptr() as *mut libc::c_void, 1);
+                                    }
+                                }
+                                _ = rx.recv() => {}
+                            }
                         }
-                    } => {
-                        tracing::info!("Received SIGTERM during idle-wait");
+                        Err(_) => {
+                            let _ = tokio::signal::ctrl_c().await;
+                        }
                     }
-                    _ = rx.recv() => {}
+
+                    unsafe {
+                        libc::close(pipe_read);
+                        libc::close(pipe_write);
+                    }
+                    SIG_PIPE_WRITE.store(-1, Ordering::Relaxed);
+                } else {
+                    let _ = tokio::signal::ctrl_c().await;
                 }
             }
             #[cfg(not(unix))]
