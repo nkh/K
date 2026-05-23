@@ -275,45 +275,29 @@ async fn async_main(cli: Cli) -> Result<()> {
         let _ = rx.recv().await;
     }
 
-    // Wait for server to finish — but with a timeout + force exit.
+    // Wait for the server to finish (up to 3 seconds) then exit.
     //
-    // CRITICAL: the 5-second timeout does NOT solve the real hang.  The
-    // timeout causes async_main to return, which causes block_on() to
-    // return, which drops the Runtime.  During Runtime::drop, tokio:
-    //   1. Shuts down all tasks
-    //   2. Joins ALL spawn_blocking threads (PTY reader, stdin writer,
-    //      process waiter — these can block on I/O / child.wait())
-    //   3. Cleans up signal drivers — this DEADLOCKS because
-    //      spawn_signal_handler installed tokio's signal driver which
-    //      holds an internal lock that conflicts with Runtime::drop's
-    //      cleanup (documented at server.rs:103).
+    // IMPORTANT: we always use std::process::exit(0) instead of returning
+    // Ok(()).  Returning causes block_on() to return, which drops the
+    // tokio Runtime.  During Runtime::drop, tokio cleans up its signal
+    // drivers — this DEADLOCKS because spawn_signal_handler installed
+    // tokio's signal driver for SIGINT/SIGTERM, and the cleanup conflicts
+    // with the driver's internal lock (documented at server.rs:103).
     //
-    // The fix: use std::process::exit() to bypass Runtime::drop entirely.
-    // The OS reaps child processes, closes file descriptors, and releases
-    // all resources.  No destructors run — which is fine, there's nothing
-    // that needs cleanup.
-    let server_done = tokio::select! {
-        result = server_handle => {
-            if let Err(e) = result {
-                tracing::warn!(error = %e, "Server task error");
-            }
-            true
+    // process::exit(0) calls _exit() which terminates the process
+    // immediately, skipping all destructors including Runtime::drop.
+    // The OS reaps child processes, closes file descriptors, and
+    // releases all resources — no cleanup is needed.
+    tokio::select! {
+        _ = server_handle => {
+            tracing::info!("Server shut down");
         }
         _ = tokio::time::sleep(std::time::Duration::from_secs(3)) => {
-            tracing::warn!("Server did not shut down within 3s");
-            false
+            tracing::warn!("Server did not shut down within 3s, forcing exit");
         }
-    };
-
-    if server_done {
-        // Clean exit — server shut down gracefully.
-        let _ = registry.unregister_current();
-        Ok(())
-    } else {
-        // Force exit — skip Runtime::drop to avoid signal driver deadlock.
-        // The OS handles all cleanup.
-        std::process::exit(0);
     }
+
+    std::process::exit(0);
 }
 
 /// Run the interactive terminal display loop.
