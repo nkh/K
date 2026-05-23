@@ -299,7 +299,6 @@ async fn run_display_loop(
     use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
     use crossterm::{cursor, ExecutableCommand};
     use std::io::Write;
-    use tokio::io::AsyncReadExt;
 
     // Set up the alternate screen and raw mode.
     let mut stdout = std::io::stdout();
@@ -310,12 +309,49 @@ async fn run_display_loop(
     let _ = stdout.execute(EnterAlternateScreen);
     let _ = stdout.execute(cursor::Hide);
 
-    // Read keystrokes from stdin using tokio's async reader.
-    // When the display loop breaks (child exit / Ctrl+\), the select!
-    // drops this future and the read is cancelled — no blocking thread
-    // is left behind.  Any brief hang during Runtime::drop is acceptable
-    // because the process is exiting anyway.
-    let mut stdin = tokio::io::stdin();
+    // ── Keystroke reading via /dev/tty + AsyncFd ──
+    //
+    // We read from /dev/tty (not tokio::io::stdin()) because tokio's Stdin
+    // wraps a synchronous read in a spawn_blocking thread.  When the display
+    // loop breaks on child exit, the future is dropped but the blocking
+    // thread stays stuck on read().  During Runtime::drop, tokio waits for
+    // all blocking threads to complete → the process hangs until the user
+    // presses Enter.
+    //
+    // AsyncFd registers the fd with the tokio reactor.  When the future is
+    // dropped (select! picks another branch), the registration is removed
+    // — no thread, no hang.  We explicitly set O_NONBLOCK so that read()
+    // never blocks even if the kernel delivers a spurious readiness event.
+    use std::os::fd::AsRawFd;
+    let tty_async: tokio::io::unix::AsyncFd<std::fs::File> = {
+        let tty = match std::fs::File::open("/dev/tty") {
+            Ok(f) => f,
+            Err(e) => {
+                tracing::error!(error = %e, "Failed to open /dev/tty");
+                let _ = terminal::disable_raw_mode();
+                let _ = stdout.execute(cursor::Show);
+                let _ = stdout.execute(LeaveAlternateScreen);
+                return;
+            }
+        };
+        // Ensure non-blocking mode — AsyncFd relies on EAGAIN/EWOULDBLOCK
+        // to detect "no more data".  On Linux, opening /dev/tty inherits
+        // the terminal's blocking mode, so we must set O_NONBLOCK explicitly.
+        unsafe {
+            let flags = libc::fcntl(tty.as_raw_fd(), libc::F_GETFL);
+            libc::fcntl(tty.as_raw_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK);
+        }
+        match tokio::io::unix::AsyncFd::new(tty) {
+            Ok(a) => a,
+            Err(e) => {
+                tracing::error!(error = %e, "Failed to create AsyncFd for /dev/tty");
+                let _ = terminal::disable_raw_mode();
+                let _ = stdout.execute(cursor::Show);
+                let _ = stdout.execute(LeaveAlternateScreen);
+                return;
+            }
+        }
+    };
     let mut stdin_buf = [0u8; 1];
 
     // Set up SIGWINCH handler for terminal resize.
@@ -501,24 +537,39 @@ async fn run_display_loop(
             }
 
             // ── Keystroke forwarding ──
-            // Read one byte at a time from stdin and forward it directly
-            // to the child process via send_bytes().  We .await the send
-            // inside the select! branch — this is the proven working pattern.
-            result = stdin.read(&mut stdin_buf) => {
+            // Read from /dev/tty via AsyncFd (no blocking thread — clean
+            // exit) and forward directly via handle.send_bytes().await
+            // (proven working path — NOT tokio::spawn).
+            result = tty_async.readable() => {
                 match result {
-                    Ok(1) => {
-                        let b = stdin_buf[0];
-                        if b == 0x1c {
-                            break;  // Ctrl+\ — quit display
-                        }
-                        if let Some(ref id) = active_id {
-                            if let Some(handle) = manager.get(id) {
-                                let _ = handle.send_bytes(vec![b]).await;
+                    Ok(mut guard) => {
+                        loop {
+                            match guard.try_io(|inner| {
+                                use std::io::Read;
+                                inner.get_ref().read(&mut stdin_buf)
+                            }) {
+                                Ok(Ok(0)) => break,  // EOF
+                                Ok(Ok(1)) => {
+                                    let b = stdin_buf[0];
+                                    if b == 0x1c {
+                                        break;  // Ctrl+\ — quit display
+                                    }
+                                    // Forward directly via the proven
+                                    // send_bytes path — .await in the
+                                    // select! branch, no tokio::spawn.
+                                    if let Some(ref id) = active_id {
+                                        if let Some(handle) = manager.get(id) {
+                                            let _ = handle.send_bytes(vec![b]).await;
+                                        }
+                                    }
+                                }
+                                Ok(Ok(_)) => {}  // ignore >1 byte (shouldn't happen with 1-byte buf)
+                                Ok(Err(_)) => { guard.clear_ready(); break; }
+                                Err(_would_block) => { guard.clear_ready(); break; }
                             }
                         }
                     }
-                    Ok(_) => break,  // EOF
-                    Err(_) => break,  // Read error
+                    Err(_) => break,
                 }
             }
 
