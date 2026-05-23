@@ -1239,19 +1239,26 @@ async fn handle_stop_command_by_pid(_cli: &Cli, pid: u32) -> Result<bool> {
     }
 
     let client = reqwest::Client::new();
-    let mut last_error: Option<String> = None;
 
     for info in &instances {
         let url = instance_url(info, &None);
+        // Resolve PID to internal UUID via the instance's command list,
+        // then use the existing /api/commands/:id/kill endpoint
+        // (same pattern as freeze/thaw).
+        let cmd_id = match resolve_pid_to_id(&client, &url, pid).await {
+            Ok(id) => id,
+            Err(_) => continue,
+        };
+
         let resp = client
-            .post(format!("{}/api/commands/kill-pid/{}", url, pid))
+            .post(format!("{}/api/commands/{}/kill", url, cmd_id))
+            .json(&serde_json::json!({}))
             .send()
             .await;
 
         match resp {
             Ok(resp) => {
                 let status = resp.status();
-                // Always consume the body so the connection is reusable.
                 let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::json!({"status": "unknown"}));
                 if status.is_success() && body.get("status").and_then(|s| s.as_str()) == Some("ok") {
                     println!("Command with PID {} stopped on instance {} (PID {})", pid, info.pid, info.pid);
@@ -1260,18 +1267,17 @@ async fn handle_stop_command_by_pid(_cli: &Cli, pid: u32) -> Result<bool> {
                     let err_msg = body.get("error").and_then(|e| e.as_str())
                         .map(|s| s.to_string())
                         .unwrap_or_else(|| format!("HTTP {}", status));
-                    last_error = Some(err_msg.to_string());
+                    eprintln!("Failed to stop command with PID {}: {}", pid, err_msg);
+                    return Ok(false);
                 }
             }
             Err(e) => {
-                last_error = Some(e.to_string());
+                eprintln!("Failed to stop command with PID {}: {}", pid, e);
+                return Ok(false);
             }
         }
     }
 
-    if let Some(err) = last_error {
-        eprintln!("Failed to stop command with PID {}: {}", pid, err);
-    }
     Ok(false)
 }
 
