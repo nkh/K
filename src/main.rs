@@ -1239,6 +1239,7 @@ async fn handle_stop_command_by_pid(_cli: &Cli, pid: u32) -> Result<bool> {
     }
 
     let client = reqwest::Client::new();
+    let mut last_error: Option<String> = None;
 
     for info in &instances {
         let url = instance_url(info, &None);
@@ -1247,14 +1248,30 @@ async fn handle_stop_command_by_pid(_cli: &Cli, pid: u32) -> Result<bool> {
             .send()
             .await;
 
-        if let Ok(resp) = resp {
-            if resp.status().is_success() {
-                println!("Command with PID {} stopped on instance {} (PID {})", pid, info.pid, info.pid);
-                return Ok(true);
+        match resp {
+            Ok(resp) => {
+                let status = resp.status();
+                // Always consume the body so the connection is reusable.
+                let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::json!({"status": "unknown"}));
+                if status.is_success() && body.get("status").and_then(|s| s.as_str()) == Some("ok") {
+                    println!("Command with PID {} stopped on instance {} (PID {})", pid, info.pid, info.pid);
+                    return Ok(true);
+                } else {
+                    let err_msg = body.get("error").and_then(|e| e.as_str())
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| format!("HTTP {}", status));
+                    last_error = Some(err_msg.to_string());
+                }
+            }
+            Err(e) => {
+                last_error = Some(e.to_string());
             }
         }
     }
 
+    if let Some(err) = last_error {
+        eprintln!("Failed to stop command with PID {}: {}", pid, err);
+    }
     Ok(false)
 }
 
