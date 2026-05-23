@@ -251,9 +251,10 @@ async fn async_main(cli: Cli) -> Result<()> {
         ).await;
     } else if let Some(ref id) = spawned_id {
         // ── Headless mode with direct child ──
-        // No display, but a child was spawned directly via CLI.  Wait for
-        // the child process to exit, then shut down the server.
-        wait_for_child(&manager, id).await;
+        // No display, but a child was spawned directly via CLI.  Forward
+        // the parent's stdin to the child's PTY so keyboard input reaches
+        // the command, and wait for the child to exit before shutting down.
+        run_headless(&manager, id).await;
         let _ = shutdown_tx.send(());
     } else {
         // ── Idle server mode ──
@@ -581,6 +582,168 @@ async fn run_display_loop(
     let _ = shutdown_tx.send(());
 }
 
+/// Run in headless mode: forward the parent's stdin to the child's PTY and
+/// wait for the child process to exit.
+///
+/// This is the headless counterpart of `run_display_loop`.  It puts the
+/// parent terminal in raw mode, opens /dev/tty for keystroke reading, and
+/// forwards every byte to the child via `handle.send_bytes()`.  It also
+/// propagates SIGWINCH to the child's PTY so terminal-resize-aware programs
+/// (vim, htop, etc.) adjust their layout.
+///
+/// Exit triggers:
+///   1. Child process exits (via exit_notify or periodic poll fallback).
+///   2. stdin reaches EOF (e.g. redirected input is exhausted).
+///   3. An I/O error on /dev/tty.
+async fn run_headless(
+    manager: &Arc<CommandManager>,
+    child_id: &str,
+) {
+    use crossterm::terminal;
+
+    // Put the parent terminal in raw mode so keystrokes are delivered
+    // immediately (no line buffering).  This is essential for interactive
+    // programs like vim, htop, less, etc.
+    if let Err(e) = terminal::enable_raw_mode() {
+        tracing::warn!(error = %e, "Failed to enable raw mode for headless stdin forwarding");
+        // Fall back to the old polling-only behaviour (no stdin forwarding).
+        wait_for_child(manager, child_id).await;
+        return;
+    }
+
+    // Open /dev/tty for reading — same rationale as in run_display_loop:
+    // always refers to the controlling terminal even if stdin is redirected.
+    let tty = match std::fs::File::open("/dev/tty") {
+        Ok(f) => f,
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to open /dev/tty for headless mode");
+            let _ = terminal::disable_raw_mode();
+            return;
+        }
+    };
+
+    let tty_async = match tokio::io::unix::AsyncFd::new(tty) {
+        Ok(a) => a,
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to create AsyncFd for /dev/tty");
+            let _ = terminal::disable_raw_mode();
+            return;
+        }
+    };
+
+    // Set up SIGWINCH handler for terminal resize propagation.
+    let mut winch_rx = {
+        use tokio::signal::unix::{signal, SignalKind};
+        match signal(SignalKind::window_change()) {
+            Ok(stream) => stream,
+            Err(_) => {
+                // No WINCH handling — not critical in headless mode.
+                let (_tx, rx) = tokio::sync::mpsc::channel::<()>(1);
+                drop(rx);
+                return;
+            }
+        }
+    };
+
+    // Event-driven exit detection via Notify (same pattern as display loop).
+    let child_id_owned = child_id.to_string();
+    let exit_notify: Option<Arc<tokio::sync::Notify>> = {
+        manager.get(&child_id_owned).map(|h| h.exit_notify.clone())
+    };
+
+    // Periodic tick for fallback exit detection (same reason as display loop:
+    // Notify permits can be lost if select! picks a different branch).
+    let (tick_tx, mut tick_rx) = tokio::sync::mpsc::channel::<()>(4);
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+            if tick_tx.send(()).await.is_err() {
+                break;
+            }
+        }
+    });
+
+    loop {
+        let mut should_break = false;
+        tokio::select! {
+            biased;
+
+            // ── Immediate exit notification ──
+            _ = async {
+                if let Some(n) = exit_notify.as_ref() {
+                    n.notified().await;
+                } else {
+                    std::future::pending::<()>().await;
+                }
+            } => {
+                tracing::info!("Child process exited (notify)");
+                break;
+            }
+
+            // ── Periodic fallback exit check ──
+            _ = tick_rx.recv() => {
+                let gone = match manager.get(&child_id_owned) {
+                    Some(h) => !h.is_alive(),
+                    None => true,
+                };
+                if gone {
+                    tracing::info!("Child process exited (tick fallback)");
+                    break;
+                }
+            }
+
+            // ── SIGWINCH — propagate resize to child PTY ──
+            _ = winch_rx.recv() => {
+                if let Some((rows, cols)) = detect_terminal_size() {
+                    if let Some(handle) = manager.get(&child_id_owned) {
+                        if let Err(e) = handle.resize_pty(rows, cols).await {
+                            tracing::warn!(error = %e, "Failed to resize child PTY on WINCH");
+                        }
+                    }
+                }
+            }
+
+            // ── Keystroke forwarding ──
+            result = tty_async.readable() => {
+                match result {
+                    Ok(mut guard) => {
+                        let mut key_buf = [0u8; 1];
+                        loop {
+                            match guard.try_io(|inner| {
+                                use std::io::Read;
+                                inner.get_ref().read(&mut key_buf)
+                            }) {
+                                Ok(Ok(1)) => {
+                                    if let Some(handle) = manager.get(&child_id_owned) {
+                                        let _ = handle.send_bytes(vec![key_buf[0]]).await;
+                                    } else {
+                                        // Command removed — child gone
+                                        should_break = true;
+                                        break;
+                                    }
+                                }
+                                Ok(Ok(_)) => { should_break = true; break; } // EOF
+                                Ok(Err(_)) => { should_break = true; break; } // Read error
+                                Err(_would_block) => {
+                                    guard.clear_ready();
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    Err(_) => { should_break = true; }
+                }
+            }
+        }
+        if should_break {
+            break;
+        }
+    }
+
+    // Restore the terminal to its original cooked mode.
+    let _ = terminal::disable_raw_mode();
+}
+
 /// Wait for a direct child command to exit (headless, non-display mode).
 ///
 /// Polls `kill(pid, 0)` at 500 ms intervals.  When the child is no longer
@@ -842,14 +1005,11 @@ async fn handle_spawn_command(cli: &Cli, cmd: &str, args: &[String]) -> Result<(
     let result: serde_json::Value = resp.json().await?;
 
     if status.is_success() {
-        let cmd_pid = result["data"].as_array()
-            .and_then(|arr| arr.first())
-            .and_then(|cmd| cmd.get("pid"))
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
+        let cmd_pid = result["data"]["pid"].as_u64().unwrap_or(0);
+        let cmd_id = result["data"]["id"].as_str().unwrap_or("?");
         println!("Command spawned successfully on instance {} (PID {})", info.pid, info.pid);
         println!("  PID:       {}", cmd_pid);
-        println!("  VTTY:      {}/api/commands/{}/vtty/html", url, result["data"]["id"].as_str().unwrap_or("?"));
+        println!("  VTTY:      {}/api/commands/{}/vtty/html", url, cmd_id);
     } else {
         let error = result["error"].as_str().unwrap_or("Unknown error");
         eprintln!("Failed to spawn command: {}", error);

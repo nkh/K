@@ -102,11 +102,15 @@ pub async fn start_command(
     let merged_env = merge_command_env(&config_env, command_env);
 
     match state.manager.spawn_with_exit(cmd, args, certificate, on_exit, on_error, exit_timeout, merged_env).await {
-        Ok(id) => Json(serde_json::json!({
-            "status": "ok",
-            "data": { "id": id },
-            "error": null
-        })),
+        Ok(id) => {
+            // Look up the child's OS PID for the response.
+            let pid = state.manager.get(&id).map(|h| h.pid).unwrap_or(0);
+            Json(serde_json::json!({
+                "status": "ok",
+                "data": { "id": id, "pid": pid },
+                "error": null
+            }))
+        }
         Err(e) => Json(serde_json::json!({
             "status": "error",
             "data": null,
