@@ -1273,10 +1273,14 @@ fn format_command(cmd: &serde_json::Value) -> Option<String> {
 /// If `target` parses as a u32, it is treated as a PID and resolved
 /// via `resolve_pid_to_id` (same as freeze/thaw).
 ///
-/// If `target` is a name (or "name args..."), it is matched against
-/// the commands on each instance.  The full target string is compared
-/// against `name` alone, then against `name arg1 arg2 ...`.  If
-/// multiple commands match, an error is printed and false is returned.
+/// If `target` is a name (or "name args..."), matching proceeds in three
+/// rounds with increasing looseness.  A match from an earlier round wins:
+///   1. Exact: `name == target` or `name arg1 arg2 ... == target`
+///   2. Prefix on full: `name arg1 arg2 ...` starts with `target`
+///   3. Prefix on name: `name` starts with `target`
+/// If after all rounds exactly one command matches, it is stopped.
+/// If multiple commands match, an error lists them and suggests using a
+/// PID to disambiguate.
 ///
 /// Returns true if exactly one command was found and stopped.
 async fn handle_stop_command(_cli: &Cli, target: &str) -> Result<bool> {
@@ -1294,8 +1298,9 @@ async fn handle_stop_command(_cli: &Cli, target: &str) -> Result<bool> {
         return handle_stop_command_by_pid_on_instances(&client, &instances, pid).await;
     }
 
-    // Slow path: match by name (+ optional args).
-    let mut matches: Vec<(u32, String, u32)> = Vec::new(); // (instance_pid, cmd_id, cmd_pid)
+    // Collect all commands from all instances.
+    // Each entry: (instance_pid, cmd_id, cmd_pid, name, full_display)
+    let mut all_commands: Vec<(u32, String, u32, String, String)> = Vec::new();
     for info in &instances {
         let url = instance_url(info, &None);
         let resp = client
@@ -1307,30 +1312,24 @@ async fn handle_stop_command(_cli: &Cli, target: &str) -> Result<bool> {
             if let Ok(json) = resp.json::<serde_json::Value>().await {
                 if let Some(cmds) = json["data"].as_array() {
                     for cmd in cmds {
-                        let name = cmd.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                        let name = cmd.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
                         let args = cmd.get("args").and_then(|v| v.as_array());
                         let cmd_pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
 
-                        // Build display string: "name arg1 arg2 ..."
                         let full = match args {
                             Some(arr) => {
                                 let arg_strs: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
                                 if arg_strs.is_empty() {
-                                    name.to_string()
+                                    name.clone()
                                 } else {
                                     format!("{} {}", name, arg_strs.join(" "))
                                 }
                             }
-                            None => name.to_string(),
+                            None => name.clone(),
                         };
 
-                        // Match: either name alone or full "name args" string.
-                        let name_only_match = name == target;
-                        let full_match = full == target;
-                        if name_only_match || full_match {
-                            if let Some(id) = cmd.get("id").and_then(|v| v.as_str()) {
-                                matches.push((info.pid, id.to_string(), cmd_pid));
-                            }
+                        if let Some(id) = cmd.get("id").and_then(|v| v.as_str()) {
+                            all_commands.push((info.pid, id.to_string(), cmd_pid, name, full));
                         }
                     }
                 }
@@ -1338,24 +1337,82 @@ async fn handle_stop_command(_cli: &Cli, target: &str) -> Result<bool> {
         }
     }
 
-    if matches.is_empty() {
+    if all_commands.is_empty() {
         return Ok(false);
     }
 
-    if matches.len() > 1 {
+    // Round 1: exact match on name alone or full "name args" string.
+    let exact: Vec<_> = all_commands.iter()
+        .filter(|(_, _, _, name, full)| name == target || full == target)
+        .collect();
+
+    if exact.len() == 1 {
+        let (inst_pid, ref cmd_id, cmd_pid, _, _) = exact[0];
+        let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
+        let url = instance_url(info, &None);
+        return stop_command_by_id(&client, &url, cmd_id, *cmd_pid, *inst_pid).await;
+    }
+    if exact.len() > 1 {
         eprintln!("Multiple commands match '{}':", target);
-        for (inst_pid, _cmd_id, cmd_pid) in &matches {
-            eprintln!("  PID {} (on instance {})", cmd_pid, inst_pid);
+        for (inst_pid, _, cmd_pid, _, full) in &exact {
+            eprintln!("  PID {} — {} (on instance {})", cmd_pid, full, inst_pid);
         }
         eprintln!("Use a PID to disambiguate.");
         return Ok(false);
     }
 
-    // Exactly one match — stop it.
-    let (inst_pid, cmd_id, cmd_pid) = &matches[0];
-    let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
-    let url = instance_url(info, &None);
+    // Round 2: prefix match on full "name args" string.
+    let prefix_full: Vec<_> = all_commands.iter()
+        .filter(|(_, _, _, _, full)| full.starts_with(target))
+        .collect();
 
+    if prefix_full.len() == 1 {
+        let (inst_pid, ref cmd_id, cmd_pid, _, _) = prefix_full[0];
+        let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
+        let url = instance_url(info, &None);
+        return stop_command_by_id(&client, &url, cmd_id, *cmd_pid, *inst_pid).await;
+    }
+    if prefix_full.len() > 1 {
+        eprintln!("Multiple commands match '{}':", target);
+        for (inst_pid, _, cmd_pid, _, full) in &prefix_full {
+            eprintln!("  PID {} — {} (on instance {})", cmd_pid, full, inst_pid);
+        }
+        eprintln!("Use a longer prefix or a PID to disambiguate.");
+        return Ok(false);
+    }
+
+    // Round 3: prefix match on name alone.
+    let prefix_name: Vec<_> = all_commands.iter()
+        .filter(|(_, _, _, name, _)| name.starts_with(target))
+        .collect();
+
+    if prefix_name.len() == 1 {
+        let (inst_pid, ref cmd_id, cmd_pid, _, _) = prefix_name[0];
+        let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
+        let url = instance_url(info, &None);
+        return stop_command_by_id(&client, &url, cmd_id, *cmd_pid, *inst_pid).await;
+    }
+    if prefix_name.len() > 1 {
+        eprintln!("Multiple commands match '{}':", target);
+        for (inst_pid, _, cmd_pid, _, full) in &prefix_name {
+            eprintln!("  PID {} — {} (on instance {})", cmd_pid, full, inst_pid);
+        }
+        eprintln!("Use a longer prefix or a PID to disambiguate.");
+        return Ok(false);
+    }
+
+    // No match at all.
+    Ok(false)
+}
+
+/// Internal: send the kill request for a resolved command ID.
+async fn stop_command_by_id(
+    client: &reqwest::Client,
+    url: &str,
+    cmd_id: &str,
+    cmd_pid: u32,
+    inst_pid: u32,
+) -> Result<bool> {
     let resp = client
         .post(format!("{}/api/commands/{}/kill", url, cmd_id))
         .json(&serde_json::json!({}))
