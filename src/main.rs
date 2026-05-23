@@ -275,11 +275,26 @@ async fn async_main(cli: Cli) -> Result<()> {
         let _ = rx.recv().await;
     }
 
-    // Wait for server to finish — propagate both JoinError and server errors
-    server_handle.await??;
+    // Wait for server to finish — but with a timeout.
+    //
+    // The server's spawn_signal_handler installs tokio's signal driver for
+    // SIGINT/SIGTERM.  During Runtime::drop the runtime tries to clean up
+    // signal drivers, which can deadlock against the signal handler's own
+    // sigaction.  To avoid hanging forever, we wait up to 5 seconds then
+    // force-exit.  The OS reaps child processes and closes file descriptors.
+    tokio::select! {
+        result = server_handle => {
+            if let Err(e) = result {
+                tracing::warn!(error = %e, "Server task error");
+            }
+        }
+        _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {
+            tracing::warn!("Server did not shut down within 5s, forcing exit");
+        }
+    }
 
     // Cleanup on exit
-    registry.unregister_current()?;
+    let _ = registry.unregister_current();
 
     Ok(())
 }
