@@ -252,9 +252,16 @@ async fn async_main(cli: Cli) -> Result<()> {
     } else if let Some(ref id) = spawned_id {
         // ── Headless mode with direct child ──
         // No display, but a child was spawned directly via CLI.  Wait for
-        // the child process to exit, then shut down the server.
+        // the child process to exit, then decide whether to shut down.
         wait_for_child(&manager, id).await;
-        let _ = shutdown_tx.send(());
+        // Policy: only shut down if this was the last running command.
+        if manager.list().is_empty() {
+            let _ = shutdown_tx.send(());
+        } else {
+            // Other commands remain; transition to idle server mode.
+            let mut rx = shutdown_tx.subscribe();
+            let _ = rx.recv().await;
+        }
     } else {
         // ── Idle server mode ──
         // No display, no direct child.  Wait for an external shutdown
@@ -275,10 +282,17 @@ async fn async_main(cli: Cli) -> Result<()> {
 /// Run the interactive terminal display loop.
 ///
 /// This function blocks (in the async sense) until the user quits (Ctrl+\),
-/// the direct child exits, all commands have exited, or a shutdown signal
-/// is received.  It renders the VTTY buffer to the local terminal using
-/// crossterm, forwards all keystrokes to the active child command, and
-/// handles SIGWINCH by resizing both the PTY master and the VTTY buffer.
+/// all commands have exited, or a shutdown signal is received.
+///
+/// When the initial CLI command exits but API-spawned commands remain,
+/// the loop transitions to "monitor mode": `active_id` and `exit_rx`
+/// are cleared, and the display falls back to the first available command.
+/// The loop only breaks (and sends shutdown) when the command manager is
+/// empty.
+///
+/// It renders the VTTY buffer to the local terminal using crossterm,
+/// forwards all keystrokes to the active child command, and handles
+/// SIGWINCH by resizing both the PTY master and the VTTY buffer.
 ///
 /// Exit detection: when a direct child was spawned, the loop monitors two
 /// signals:
@@ -390,7 +404,9 @@ async fn run_display_loop(
 
     let mut shutdown_rx = shutdown_tx.subscribe();
     // Track which command we're displaying so we can forward keystrokes.
-    let active_id: Option<String> = direct_child_id.map(String::from);
+    // Must be `mut` so we can clear it when transitioning to monitor mode
+    // (when the direct child exits but other commands remain).
+    let mut active_id: Option<String> = direct_child_id.map(String::from);
 
     // ── Event-driven exit detection ──
     // We use a tokio::sync::watch channel instead of Notify.
@@ -408,35 +424,52 @@ async fn run_display_loop(
                 Some(h) => {
                     // Command still in manager — check if it's already dead.
                     if !h.is_alive() {
-                        tracing::info!("Child process already exited before display loop started");
-                        let _ = terminal::disable_raw_mode();
-                        let _ = stdout.execute(cursor::Show);
-                        let _ = stdout.execute(LeaveAlternateScreen);
-                        let _ = shutdown_tx.send(());
-                        return;
+                        tracing::info!("Direct child already exited before display loop started");
+                        if manager.list().is_empty() {
+                            let _ = terminal::disable_raw_mode();
+                            let _ = stdout.execute(cursor::Show);
+                            let _ = stdout.execute(LeaveAlternateScreen);
+                            let _ = shutdown_tx.send(());
+                            return;
+                        }
+                        // Other commands remain — enter loop without a direct child.
+                        active_id = None;
+                        None
+                    } else {
+                        // Clone the receiver — watch::Receiver is Clone.
+                        let rx = h.exit_rx.clone();
+                        // If the child already exited, changed() will resolve
+                        // immediately.  But check *value* first as a fast path.
+                        if *rx.borrow() {
+                            tracing::info!("Direct child already exited (watch flag set)");
+                            if manager.list().is_empty() {
+                                let _ = terminal::disable_raw_mode();
+                                let _ = stdout.execute(cursor::Show);
+                                let _ = stdout.execute(LeaveAlternateScreen);
+                                let _ = shutdown_tx.send(());
+                                return;
+                            }
+                            // Other commands remain — enter loop without a direct child.
+                            active_id = None;
+                            None
+                        } else {
+                            Some(rx)
+                        }
                     }
-                    // Clone the receiver — watch::Receiver is Clone.
-                    let rx = h.exit_rx.clone();
-                    // If the child already exited, changed() will resolve
-                    // immediately.  But check *value* first as a fast path.
-                    if *rx.borrow() {
-                        tracing::info!("Child process already exited (watch flag set)");
-                        let _ = terminal::disable_raw_mode();
-                        let _ = stdout.execute(cursor::Show);
-                        let _ = stdout.execute(LeaveAlternateScreen);
-                        let _ = shutdown_tx.send(());
-                        return;
-                    }
-                    Some(rx)
                 }
                 None => {
                     // Command already removed — child is gone.
-                    tracing::info!("Child process already removed before display loop started");
-                    let _ = terminal::disable_raw_mode();
-                    let _ = stdout.execute(cursor::Show);
-                    let _ = stdout.execute(LeaveAlternateScreen);
-                    let _ = shutdown_tx.send(());
-                    return;
+                    tracing::info!("Direct child already removed before display loop started");
+                    if manager.list().is_empty() {
+                        let _ = terminal::disable_raw_mode();
+                        let _ = stdout.execute(cursor::Show);
+                        let _ = stdout.execute(LeaveAlternateScreen);
+                        let _ = shutdown_tx.send(());
+                        return;
+                    }
+                    // Other commands remain — enter loop without a direct child.
+                    active_id = None;
+                    None
                 }
             }
         } else {
@@ -491,9 +524,17 @@ async fn run_display_loop(
                     std::future::pending::<()>().await;
                 }
             } => {
-                tracing::info!("Child process exited (channel), shutting down");
-                let _ = TerminalDisplay::clear();
-                break;
+                tracing::info!("Direct child process exited (channel)");
+                // Check if other commands remain before deciding to shut down.
+                if manager.list().is_empty() {
+                    let _ = TerminalDisplay::clear();
+                    break;
+                } else {
+                    tracing::info!("Other commands remain; switching to monitor mode");
+                    active_id = None;
+                    exit_rx = None;
+                    // Continue loop — next tick will render the first available command.
+                }
             }
 
             // ── Periodic VTTY render ──
@@ -505,9 +546,15 @@ async fn run_display_loop(
                         None => true,
                     };
                     if gone {
-                        tracing::info!("Child process exited (tick fallback), shutting down");
-                        let _ = TerminalDisplay::clear();
-                        break;
+                        tracing::info!("Direct child process exited (tick fallback)");
+                        if manager.list().is_empty() {
+                            let _ = TerminalDisplay::clear();
+                            break;
+                        } else {
+                            tracing::info!("Other commands remain; switching to monitor mode");
+                            active_id = None;
+                            exit_rx = None;
+                        }
                     }
                 }
                 // For API-spawned commands (no direct child), check if all

@@ -265,6 +265,55 @@ handles:
     sink: "null"
 ```
 
+### `environment`
+
+Default environment variables passed to all spawned commands unless overridden per-command or disabled with `--no-env`.
+
+| Key | Type | Default | CLI Flag | Description |
+|-----|------|---------|----------|-------------|
+| `variables` | `map<string, string>` | `{}` | `--env <KEY=VALUE>` | Key-value pairs of environment variables to pass to every spawned command. Per-command `--env` flags or API `env` field override these values. The `TERM` variable is always set from `vtty.term` regardless of this section. |
+
+**Example:**
+```yaml
+environment:
+  variables:
+    RUST_LOG: "info"
+    DATABASE_URL: "postgres://localhost/mydb"
+    NODE_ENV: "development"
+```
+
+### `profiles`
+
+Named configuration presets that can be selected via `--profile <name>`. Only fields present in the profile override the base configuration; CLI flags always take final precedence.
+
+| Key | Type | Default | CLI Flag | Description |
+|-----|------|---------|----------|-------------|
+| (dynamic) | `map<string, ConfigSection>` | `{}` | `--profile <name>` | Map of profile names to partial configuration overrides. Each value uses the same schema as the top-level config but only the specified fields override. |
+
+**Example:**
+```yaml
+profiles:
+  development:
+    vtty:
+      rows: 40
+      cols: 120
+    display:
+      enabled: true
+      refresh_ms: 50
+    environment:
+      variables:
+        RUST_LOG: "debug"
+
+  production:
+    server:
+      bind: "0.0.0.0"
+      port: 443
+    security:
+      require_auth: true
+    tls:
+      enabled: true
+```
+
 ---
 
 ## CLI Flag Reference
@@ -358,8 +407,18 @@ vrunner [OPTIONS] [-- <COMMAND> [ARGS...]]
 
 | Command | Argument | Description |
 |---------|----------|-------------|
-| `list` | — | List all running vrunner instances. |
-| `stop` | `<PID>` | Gracefully shut down a vrunner instance by PID. |
+| `list` | — | List all running vrunner instances |
+| `stop` | `<PID>` | Gracefully shut down a vrunner instance by PID |
+| `spawn` | `<cmd> [args...]` | Spawn a command on a running instance |
+| `freeze` | `<pid>` | Freeze (suspend) a running command via SIGSTOP |
+| `thaw` | `<pid>` | Thaw (resume) a frozen command via SIGCONT |
+| `list-vrunner` | — | List running instances (compact format) |
+| `list-commands` | — | List commands on all running instances |
+| `stop-command` | `<pid>` | Stop a specific command by PID |
+| `cert generate` | `<name>` | Generate a named certificate |
+| `cert list` | — | List all certificates in the pool |
+| `cert show` | `<name>` | Show certificate details and token |
+| `cert remove` | `<name>` | Remove a certificate from the pool |
 
 ---
 

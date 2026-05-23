@@ -222,8 +222,11 @@ vrunner [OPTIONS] [-- <COMMAND> [ARGS...]]
 | `list` | — | List all running vrunner instances |
 | `stop` | `<PID>` | Shut down a vrunner instance by PID |
 | `spawn` | `<cmd> [args...]` | Spawn a command on a running instance |
-| `freeze` | `<id>` | Freeze (suspend) a running command via SIGSTOP |
-| `thaw` | `<id>` | Thaw (resume) a frozen command via SIGCONT |
+| `freeze` | `<pid>` | Freeze (suspend) a running command via SIGSTOP |
+| `thaw` | `<pid>` | Thaw (resume) a frozen command via SIGCONT |
+| `list-vrunner` | — | List running instances (compact format) |
+| `list-commands` | — | List commands on all running instances |
+| `stop-command` | `<pid>` | Stop a specific command by PID |
 | `cert generate` | `<name>` | Generate a named certificate |
 | `cert list` | — | List all certificates in the pool |
 | `cert show` | `<name>` | Show certificate details and token |

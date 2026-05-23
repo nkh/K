@@ -76,11 +76,11 @@ This document describes the high-level architecture of **vrunner**, a Rust-based
 Uses `clap` with derive macros. Supports:
 - Options before `--` (vrunner flags)
 - Command + args after `--` (child process)
-- Subcommands: `list`, `stop <PID>`
+- Subcommands: `list`, `stop <PID>`, `spawn <cmd> [args...]`, `freeze <PID>`, `thaw <PID>`, `cert <generate|list|show|remove>`, `list-vrunner`, `list-commands`, `stop-command <PID>`
 
 **`src/cli/args.rs`** defines:
 - `Cli` struct with `#[command(trailing_var_arg = true)]`
-- `Commands` enum for `List` and `Stop`
+- `Commands` enum for `List`, `Stop`, `Spawn`, `Freeze`, `Thaw`, `Cert`, `ListVrunner`, `ListCommands`, `StopCommand`
 - `Cli::apply_overrides()` method that applies CLI flags over loaded configuration
 - Complete CLI coverage for all config entries (see [docs/configuration.md](configuration.md))
 
@@ -101,10 +101,17 @@ pub struct AppState {
     pub manager: Arc<CommandManager>,
     pub shutdown_tx: broadcast::Sender<()>,
     pub auth_token: Option<String>,  // None = no auth required
+    pub cert_store: Arc<CertificateStore>,
+    pub vtty_events: broadcast::Sender<(String, String)>,
+    pub log_events: broadcast::Sender<String>,
 }
 ```
 
 This replaces the previous global mutable static pattern, providing clean dependency injection and thread-safe access.
+
+- `cert_store` — Thread-safe pool of named certificates for per-command access control.
+- `vtty_events` — Broadcast channel for VTTY change notifications (command_id, JSON message).
+- `log_events` — Broadcast channel for real-time log entry streaming.
 
 ### 3.4 Security (`src/web/auth.rs`, `src/web/middleware.rs`)
 
@@ -146,8 +153,8 @@ Manages a directory of JSON pidfiles (`~/.local/share/vrunner/instances/<PID>.js
 | Component | Responsibility |
 |-----------|-------------|
 | `manager.rs` | `CommandManager`: owns `DashMap<CommandId, CommandHandle>`. Spawns, lists, kills, freezes, thaws. Injects `CommandLogger`. Manages named VTTY buffer snapshots with metadata. Implements the incremental diff protocol for WebSocket streaming via `spawn_diff_watcher()`. |
-| `spawner.rs` | Platform-specific PTY creation via `portable-pty`. Uses `mpsc::channel` bridge between synchronous PTY reads and async VTTY writes — a blocking thread reads from the PTY and sends chunks through the channel, while a single async receiver task feeds them to the VTTY emulator. |
-| `handle.rs` | `CommandHandle`: per-command state (ID, PID, name, args, VTTY reference, spawn time). Provides synchronous and asynchronous buffer snapshot methods, process liveness checks, and wall-clock runtime tracking. |
+| `spawner.rs` | Platform-specific PTY creation via `portable-pty`. Uses `mpsc::channel` bridge between synchronous PTY reads and async VTTY writes — a blocking thread reads from the PTY and sends chunks through the channel, while a single async receiver task feeds them to the VTTY emulator. The process waiter (blocking thread) monitors child exit, runs optional `on_exit`/`on_error` handlers, signals exit via a `watch::channel<bool>` (never loses notifications, unlike `Notify`), and removes the command from the manager's DashMap. |
+| `handle.rs` | `CommandHandle`: per-command state (ID, PID, name, args, VTTY reference, spawn time). Provides synchronous and asynchronous buffer snapshot methods, process liveness checks, wall-clock runtime tracking, and a `watch::Receiver<bool>` (`exit_rx`) for reliable exit notification. |
 
 ### 3.10 VTTY Emulator (`src/vtty/`)
 
@@ -323,6 +330,22 @@ CLI: vrunner --port 9090 --tls -- htop
 │ Web Server   │──► Start axum_server on 127.0.0.1:9090 (HTTP or HTTPS)
 │              │──► Apply auth + CORS + logging middleware
 └──────────────┘
+       │
+       ▼
+┌──────────────────────────────────────────────────────┐
+│ Lifecycle (selected mode):                           │
+│                                                      │
+│ Display mode: render VTTY → monitor child → on exit  │
+│   check manager.list().is_empty()                    │
+│   → empty: restore terminal + shutdown                │
+│   → not empty: switch to monitor mode                 │
+│                                                      │
+│ Headless mode: wait_for_child → check manager        │
+│   → empty: shutdown                                   │
+│   → not empty: idle wait on shutdown channel         │
+│                                                      │
+│ Idle mode: wait on shutdown channel (no child)       │
+└──────────────────────────────────────────────────────┘
 ```
 
 ### 4.2 Listing Instances
@@ -369,6 +392,11 @@ CLI: vrunner stop 12345
 - **Web Handlers**: Stateless, borrow `State<AppState>` from Axum.
 - **Command Logger**: `Arc<CommandLogger>` shared between web handlers and process manager.
 - **Shutdown**: `broadcast::Sender<()>` distributed via `AppState`. Signal handler sends on the channel; server listens and triggers graceful shutdown.
+- **Lifecycle Policy**: "Last-command-standing" — vrunner remains alive as long as at least one command is running in the `CommandManager`, regardless of whether it was started via CLI or spawned via the API. Shutdown only occurs at the 1 → 0 command count transition. When the initial CLI command exits but API-spawned commands remain, the process transitions to idle/monitor mode instead of shutting down.
+
+  - **Headless mode**: After `wait_for_child` returns, `manager.list().is_empty()` is checked. If empty, shutdown is broadcast. If commands remain, the process drops into the idle-wait path (listening on the shutdown channel).
+  - **Display mode**: When the direct child exits (via `exit_rx` or tick fallback), `manager.list().is_empty()` is checked. If empty, the display loop breaks and restores the terminal. If commands remain, `active_id` and `exit_rx` are cleared and the loop continues in "monitor mode," rendering the first available command from the manager.
+  - **Monitor mode**: In display mode with no direct child, keystrokes are not forwarded (read-only observation). The idle tick check (`exit_rx.is_none() && manager.list().is_empty()`) detects when the last remaining command exits.
 
 ---
 
