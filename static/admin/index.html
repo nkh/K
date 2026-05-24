@@ -1073,17 +1073,30 @@ async function sendKeysToPanel(panelId) {
     const input = document.getElementById('keyInput-' + panelId);
     if (!input || !input.value || !state.selectedCmdId) return;
 
+    const keysValue = input.value;
     const cmdId = state.selectedCmdId;
+    const instUrl = panel.instUrl;
 
     try {
-        await fetch(apiUrl(`/api/commands/${cmdId}/keys`, { url: panel.instUrl }), {
+        const res = await fetch(apiUrl(`/api/commands/${cmdId}/keys`, { url: instUrl }), {
             method: 'POST',
-            headers: authHeadersForInstance({ url: panel.instUrl, token: panel.token }),
-            body: JSON.stringify({ keys: input.value }),
+            headers: authHeadersForInstance({ url: instUrl, token: panel.token }),
+            body: JSON.stringify({ keys: keysValue }),
         });
-        input.value = '';
-        loadVttyHttp(panel.instUrl, cmdId);
-    } catch (e) { /* ignore */ }
+        const json = await res.json();
+        if (json.status === 'ok') {
+            input.value = '';
+            loadVttyHttp(instUrl, cmdId);
+        } else {
+            console.error('send_keys failed:', json.error);
+            input.style.borderColor = 'var(--red)';
+            setTimeout(() => { input.style.borderColor = ''; }, 1500);
+        }
+    } catch (e) {
+        console.error('send_keys network error:', e);
+        input.style.borderColor = 'var(--red)';
+        setTimeout(() => { input.style.borderColor = ''; }, 1500);
+    }
 }
 
 // ─── Logs ───

@@ -8,9 +8,10 @@ use std::collections::HashMap;
 use crate::web::state::AppState;
 
 /// Read command log contents with optional search/filter.
-/// Returns log entries from the configured log file.  When logging is enabled
-/// but no file path is set, logs go to stdout only and are not available via
-/// this endpoint — the response includes a helpful message.
+///
+/// When a log file is configured, reads from the file.  Otherwise falls back
+/// to the in-memory ring buffer kept by `CommandLogger` so that `--log`
+/// (without `--log-file`) still produces entries visible in the web UI.
 pub async fn get_log(
     State(state): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
@@ -38,26 +39,31 @@ pub async fn get_log(
         }));
     }
 
-    // Try to read from the configured log file path
-    let log_content = cfg.file.as_ref().and_then(|path| std::fs::read_to_string(path).ok()).filter(|c| !c.is_empty());
+    // Try to read from the configured log file path first
+    let file_lines: Option<Vec<String>> = cfg.file.as_ref().and_then(|path| {
+        let content = std::fs::read_to_string(path).ok()?;
+        if content.is_empty() {
+            return None;
+        }
+        Some(content.lines().map(|l| l.to_string()).collect())
+    });
 
-    match log_content {
-        Some(content) => {
-            let lines: Vec<&str> = content.lines().collect();
+    match file_lines {
+        Some(lines) => {
             let total = lines.len();
 
             // Filter by search term if provided
-            let filtered: Vec<&str> = if !search.is_empty() {
+            let filtered: Vec<String> = if !search.is_empty() {
                 lines.iter()
                     .filter(|line| line.to_lowercase().contains(&search.to_lowercase()))
-                    .copied()
+                    .cloned()
                     .collect()
             } else {
                 lines
             };
 
             let filtered_total = filtered.len();
-            let page: Vec<&str> = filtered
+            let page: Vec<String> = filtered
                 .into_iter()
                 .skip(offset)
                 .take(limit)
@@ -76,18 +82,57 @@ pub async fn get_log(
                 "error": null
             }))
         }
-        None => Json(serde_json::json!({
-            "status": "ok",
-            "data": {
-                "lines": [],
-                "total_lines": 0,
-                "filtered_lines": 0,
-                "offset": 0,
-                "limit": limit,
-                "search": search,
-                "message": "Logging is enabled but no log file is configured. Use --log-file <path> or set command_log.file in config.",
-            },
-            "error": null
-        })),
+        None => {
+            // No log file configured — fall back to the in-memory ring buffer
+            let mem_lines = state.manager.logger().read_memory_buffer();
+
+            if mem_lines.is_empty() {
+                return Json(serde_json::json!({
+                    "status": "ok",
+                    "data": {
+                        "lines": [],
+                        "total_lines": 0,
+                        "filtered_lines": 0,
+                        "offset": 0,
+                        "limit": limit,
+                        "search": search,
+                        "message": "No log entries yet. Logs will appear here once commands are spawned (spawn, kill, resize, etc.).",
+                    },
+                    "error": null
+                }));
+            }
+
+            let total = mem_lines.len();
+
+            let filtered: Vec<String> = if !search.is_empty() {
+                mem_lines.iter()
+                    .filter(|line| line.to_lowercase().contains(&search.to_lowercase()))
+                    .cloned()
+                    .collect()
+            } else {
+                mem_lines
+            };
+
+            let filtered_total = filtered.len();
+            let page: Vec<String> = filtered
+                .into_iter()
+                .skip(offset)
+                .take(limit)
+                .collect();
+
+            Json(serde_json::json!({
+                "status": "ok",
+                "data": {
+                    "lines": page,
+                    "total_lines": total,
+                    "filtered_lines": filtered_total,
+                    "offset": offset,
+                    "limit": limit,
+                    "search": search,
+                    "source": "memory",
+                },
+                "error": null
+            }))
+        }
     }
 }
