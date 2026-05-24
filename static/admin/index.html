@@ -60,7 +60,7 @@
         .panel-header .instance-url { font-size: 0.65rem; color: var(--text-muted); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
 
         /* VTTY */
-        .vtty-container { flex: 1; overflow: auto; background: #000; position: relative; }
+        .vtty-container { flex: 1; overflow: auto; background: #000; position: relative; cursor: text; }
         .vtty-container pre { margin: 0; padding: 0; font-family: var(--font-mono); font-size: var(--font-size); line-height: 1.2; min-width: 100%; min-height: 100%; }
         .vtty-container .cursor-indicator { position: absolute; width: 8px; height: 14px; background: rgba(88, 166, 255, 0.6); border: 1px solid var(--accent); pointer-events: none; transition: top 0.05s, left 0.05s; z-index: 5; }
 
@@ -1631,6 +1631,20 @@ document.addEventListener('keydown', (e) => {
         const panel = getSelectedPanel();
         if (panel) {
             const input = document.getElementById('keyInput-' + panel.id);
+            if (input) input.focus();
+        }
+    }
+});
+
+// ─── Click-to-focus terminal ───
+// Clicking on the VTTY container focuses the key input for that panel,
+// so the user can immediately start typing keystrokes.
+document.addEventListener('click', (e) => {
+    const vttyContainer = e.target.closest('.vtty-container');
+    if (vttyContainer && state.currentView === 'vtty') {
+        const panel = vttyContainer.closest('.panel');
+        if (panel) {
+            const input = panel.querySelector('input[id^="keyInput-"]');
             if (input) input.focus();
         }
     }
