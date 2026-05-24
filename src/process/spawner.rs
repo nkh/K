@@ -1,4 +1,5 @@
 use std::io::{Read as _, Write as _};
+use std::fmt::Write as FmtWrite;
 use anyhow::Result;
 use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
 use tokio::sync::{mpsc, oneshot};
@@ -68,6 +69,7 @@ impl ProcessSpawner {
         manager: &CommandManager,
         rows: Option<u16>,
         cols: Option<u16>,
+        pty_raw_log: Option<&str>,
     ) -> Result<CommandHandle> {
         // Use per-command overrides if provided, otherwise fall back to config defaults
         let rows = rows.unwrap_or(self.vtty_cfg.rows);
@@ -147,17 +149,48 @@ impl ProcessSpawner {
         // Spawn PTY reader task in a blocking thread.
         // portable-pty returns std::io::Read implementations, not async.
         // We use blocking_send to bridge data to the async world via mpsc.
+        //
+        // When pty_raw_log is set, raw bytes from each read() call are
+        // logged to the specified file in a human-readable escaped format
+        // (printable ASCII as-is, non-printable as \xHH) with an elapsed-
+        // time stamp.  This log can be replayed with the ansi-replay tool.
+        let pty_raw_log_owned = pty_raw_log.map(|s| s.to_string());
         tokio::task::spawn_blocking(move || {
             let mut reader = reader;
             let mut buf = [0u8; 4096];
+            let start = std::time::Instant::now();
+
+            // Open the raw PTY log file if configured.
+            let mut log_file: Option<std::fs::File> = pty_raw_log_owned.as_deref().and_then(|path| {
+                match std::fs::File::create(path) {
+                    Ok(f) => {
+                        tracing::info!(path = path, "PTY raw log opened");
+                        Some(f)
+                    }
+                    Err(e) => {
+                        tracing::warn!(path = path, error = %e,
+                            "Failed to open PTY raw log, skipping");
+                        None
+                    }
+                }
+            });
+
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => break, // EOF — child process closed
                     Ok(n) => {
-                        let data = PtyOutput(buf[..n].to_vec());
+                        let data = buf[..n].to_vec();
+
+                        // Write to raw PTY log if configured.
+                        if let Some(ref mut f) = log_file {
+                            let elapsed = start.elapsed().as_millis();
+                            let _ = writeln!(f, "{:06} {}", elapsed, escape_bytes(&data));
+                        }
+
+                        let pty_data = PtyOutput(data);
                         // blocking_send will wait if the channel is full,
                         // providing natural backpressure against fast PTY output.
-                        if pty_out_tx.blocking_send(data).is_err() {
+                        if pty_out_tx.blocking_send(pty_data).is_err() {
                             // Receiver dropped — emulator task gone, shut down reader
                             break;
                         }
@@ -306,4 +339,27 @@ impl ProcessSpawner {
             exit_rx: child_exit_rx,
         })
     }
+}
+
+/// Escape a byte slice into a human-readable string.
+///
+/// Printable ASCII characters (0x20–0x7E) are passed through as-is.
+/// All other bytes (control chars, ESC, high bytes) are represented as
+/// `\xHH` hex escapes.  Backslash itself is escaped as `\\` to avoid
+/// ambiguity in the log output.
+///
+/// This format is designed to be:
+/// - Human-readable: you can see the text content directly
+/// - Machine-parseable: the `\xHH` sequences are unambiguous
+/// - Replayable: the ansi-replay tool can decode it back to raw bytes
+fn escape_bytes(data: &[u8]) -> String {
+    let mut out = String::with_capacity(data.len() * 2);
+    for &b in data {
+        match b {
+            b'\\' => out.push_str("\\\\"),
+            0x20..=0x7e => out.push(b as char),
+            _ => write!(out, "\\x{:02x}", b).unwrap(),
+        }
+    }
+    out
 }

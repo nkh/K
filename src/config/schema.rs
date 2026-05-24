@@ -234,6 +234,22 @@ pub struct CommandLogConfig {
     /// in addition to the terminal.
     #[serde(default)]
     pub file: Option<String>,
+    /// Path to a file where raw PTY output from child processes is logged.
+    /// Each line contains one `read()` call's worth of data from the PTY
+    /// master fd, formatted with elapsed time and escaped bytes:
+    ///
+    ///   <elapsed_ms> <escaped_bytes>
+    ///
+    /// Printable ASCII is written as-is; non-printable bytes use \xHH
+    /// notation.  This produces a human-readable yet machine-parseable
+    /// log that can be replayed step-by-step with the `ansi-replay` tool.
+    ///
+    /// Set via CLI: `--log-pty-raw <FILE>`
+    /// Set via config:
+    ///   command_log:
+    ///     pty_raw_log: "/tmp/pty-output.log"
+    #[serde(default)]
+    pub pty_raw_log: Option<String>,
 }
 
 /// Daemon (background process) settings.

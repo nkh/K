@@ -87,6 +87,13 @@ pub struct Cli {
     #[arg(long, value_name = "FILE")]
     pub log_file: Option<String>,
 
+    /// Log raw PTY output from child processes to a file.
+    /// Each line records one read() call with an elapsed-time stamp and
+    /// escaped bytes (printable ASCII as-is, non-printable as \xHH).
+    /// The resulting log can be replayed step-by-step with ansi-replay.
+    #[arg(long, value_name = "FILE")]
+    pub log_pty_raw: Option<String>,
+
     /// TERM value reported to child processes
     #[arg(long, value_name = "TERM")]
     pub term: Option<String>,
@@ -358,6 +365,9 @@ impl Cli {
         if let Some(file) = &self.log_file {
             cfg.command_log.enabled = true;
             cfg.command_log.file = Some(file.clone());
+        }
+        if let Some(file) = &self.log_pty_raw {
+            cfg.command_log.pty_raw_log = Some(file.clone());
         }
 
         // VTTY

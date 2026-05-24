@@ -226,6 +226,20 @@ command_log:
   # to this file in addition to the in-memory buffer.
   # The log format is: [RFC3339 timestamp] command_type: details
   # file: "./vrunner.log"
+  # Path to a file where raw PTY output from child processes is logged.
+  # Each line records one read() call from the PTY master fd, formatted as:
+  #   <elapsed_ms> <escaped_bytes>
+  # Printable ASCII (0x20-0x7E) is written as-is; non-printable bytes
+  # and escape sequences use \xHH hex notation.  Backslash is escaped
+  # as \\.
+  #
+  # This produces a human-readable yet machine-parseable log that can
+  # be replayed step-by-step with the tools/ansi-replay utility:
+  #   perl tools/ansi-replay /tmp/pty-output.log    # interactive
+  #   perl tools/ansi-replay /tmp/pty-output.log --dump  # all at once
+  #
+  # Can also be set via CLI:  vrunner --log-pty-raw /tmp/pty-output.log -- cmd
+  # pty_raw_log: "/tmp/pty-output.log"
 
 
 # ─── Default Exit Configuration ──────────────────────────────────────

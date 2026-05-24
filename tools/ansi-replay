@@ -1,0 +1,332 @@
+#!/usr/bin/perl
+# ansi-replay — step-by-step ANSI escape sequence replay tool
+#
+# Replays a PTY raw log produced by `vrunner --log-pty-raw <file>`.
+# Each line in the log file represents one read() call from the PTY master fd,
+# containing an elapsed-time stamp and escaped bytes.
+#
+# Usage:
+#   ansi-replay <logfile>              # interactive mode (step through)
+#   ansi-replay <logfile> --dump       # dump all output at once
+#   ansi-replay <logfile> --cat        # same as --dump
+#
+# Log format:
+#   <elapsed_ms> <escaped_bytes>
+#
+#   Printable ASCII (0x20-0x7E) is written as-is.
+#   Non-printable bytes use \xHH notation.
+#   Backslash is escaped as \\.
+#
+# Interactive controls:
+#   Space / Enter / n      Replay 1 line (next read chunk)
+#   d / Right              Replay 10 lines (batch forward)
+#   f / a                  Replay all remaining lines (auto-play)
+#   p / Left               Peek at next line without outputting
+#   b                      Show previous line info (read-only, can't undo output)
+#   g <number>             Jump to line number (outputs up to that line)
+#   / <pattern>            Search forward for a pattern in escaped data
+#   j <number>             Jump to matching line number (no output, just seek)
+#   s                      Toggle speed display (show elapsed time vs line number)
+#   h                      Show help
+#   q / Esc                Quit
+
+use strict;
+use warnings;
+use Term::ReadKey;
+use Fcntl qw(:seek);
+
+my $script = $0;
+my $logfile = shift @ARGV or usage();
+
+my $mode = 'interactive';
+if (@ARGV && $ARGV[0] =~ /^--?(dump|cat|all)$/) {
+    $mode = 'dump';
+}
+
+# --- Load all lines ---
+open my $fh, '<', $logfile or die "Cannot open $logfile: $!\n";
+chomp(my @lines = <$fh>);
+close $fh;
+
+my $total = scalar @lines;
+die "Log file is empty\n" if $total == 0;
+
+# --- Dump mode: output everything at once ---
+if ($mode eq 'dump') {
+    binmode(STDOUT);
+    for my $line (@lines) {
+        my ($elapsed, $data) = parse_line($line);
+        print unescape($data);
+    }
+    exit 0;
+}
+
+# --- Interactive mode ---
+# Save terminal state and switch to raw mode
+ReadMode('raw');
+binmode(STDOUT);
+
+$| = 1;  # autoflush
+
+my $pos = 0;       # next line to output (0-indexed)
+my $show_speed = 0; # 0 = line number, 1 = elapsed time
+
+END {
+    ReadMode('restore');
+    print "\n" if defined $pos;  # clean newline on exit
+}
+
+show_status();
+
+while ($pos < $total) {
+    my $key = ReadKey(0);  # blocking
+
+    if ($key eq ' ' || $key eq "\n" || $key eq 'n') {
+        # Next 1 line
+        output_line($pos);
+        $pos++;
+        show_status();
+    }
+    elsif ($key eq 'd' || $key eq 'R') {  # Right arrow = \eOC in many terms
+        # Next 10 lines
+        my $count = ($pos + 10 > $total) ? $total - $pos : 10;
+        for my $i (0 .. $count - 1) {
+            output_line($pos);
+            $pos++;
+        }
+        show_status();
+    }
+    elsif ($key eq 'f' || $key eq 'a') {
+        # Auto-play all remaining
+        for my $i ($pos .. $total - 1) {
+            output_line($i);
+            $pos++;
+        }
+        show_status();
+    }
+    elsif ($key eq 'p' || $key eq 'L') {  # Left arrow
+        # Peek at next line without outputting
+        if ($pos < $total) {
+            my ($elapsed, $data) = parse_line($lines[$pos]);
+            show_status("PEEK> [$elapsed ms] $data");
+            ReadKey(0);  # wait for any key to continue
+            show_status();
+        }
+    }
+    elsif ($key eq 'b') {
+        # Show previous line info (read-only)
+        if ($pos > 0) {
+            my ($elapsed, $data) = parse_line($lines[$pos - 1]);
+            my $prev_elapsed = $elapsed;
+            show_status("PREV> [$prev_elapsed ms] $data");
+            ReadKey(0);
+            show_status();
+        }
+    }
+    elsif ($key eq 's') {
+        $show_speed = $show_speed ? 0 : 1;
+        show_status();
+    }
+    elsif ($key eq 'h') {
+        show_help();
+        ReadKey(0);
+        show_status();
+    }
+    elsif ($key eq 'q' || $key eq "\e") {
+        # Check for Esc sequence (arrow keys send \e[...)
+        # If we get a bare \e (not followed by [), treat as quit
+        if ($key eq "\e") {
+            my $next = '';
+            eval { $next = ReadKey(0.1); };  # non-blocking check
+            if (defined $next && $next eq '[') {
+                # Arrow key sequence — consume and handle
+                my $arrow = '';
+                eval { $arrow = ReadKey(0.1); };
+                if (defined $arrow) {
+                    if ($arrow eq 'C') {  # Right arrow
+                        my $count = ($pos + 10 > $total) ? $total - $pos : 10;
+                        for my $i (0 .. $count - 1) {
+                            output_line($pos);
+                            $pos++;
+                        }
+                        show_status();
+                    }
+                    elsif ($arrow eq 'D') {  # Left arrow = peek
+                        if ($pos < $total) {
+                            my ($elapsed, $data) = parse_line($lines[$pos]);
+                            show_status("PEEK> [$elapsed ms] $data");
+                            ReadKey(0);
+                            show_status();
+                        }
+                    }
+                    elsif ($arrow eq 'A') {  # Up arrow = prev info
+                        if ($pos > 0) {
+                            my ($elapsed, $data) = parse_line($lines[$pos - 1]);
+                            show_status("PREV> [$elapsed ms] $data");
+                            ReadKey(0);
+                            show_status();
+                        }
+                    }
+                    elsif ($arrow eq 'B') {  # Down arrow = next
+                        output_line($pos);
+                        $pos++;
+                        show_status();
+                    }
+                    next;
+                }
+                next;
+            }
+            # Bare Esc = quit
+            last;
+        }
+    }
+    elsif ($key eq '/') {
+        # Search forward
+        my $pattern = '';
+        print "\r/search: ";
+        ReadMode('normal');
+        $pattern = <STDIN>;
+        ReadMode('raw');
+        chomp $pattern if defined $pattern;
+        if (defined $pattern && $pattern ne '') {
+            my $found = -1;
+            for my $i ($pos .. $total - 1) {
+                if (index($lines[$i], $pattern) >= 0) {
+                    $found = $i;
+                    last;
+                }
+            }
+            if ($found >= 0) {
+                show_status("FOUND at line " . ($found + 1) . " (from " . ($pos + 1) . ")");
+                ReadKey(0);
+                # Jump to found position (output up to it)
+                for my $i ($pos .. $found - 1) {
+                    output_line($i);
+                    $pos++;
+                }
+                show_status();
+            } else {
+                show_status("NOT FOUND: $pattern");
+                ReadKey(0);
+                show_status();
+            }
+        } else {
+            show_status();
+        }
+    }
+    elsif ($key eq 'g') {
+        # Jump to line
+        my $target = '';
+        print "\r/goto line: ";
+        ReadMode('normal');
+        $target = <STDIN>;
+        ReadMode('raw');
+        chomp $target if defined $target;
+        if (defined $target && $target =~ /^\d+$/) {
+            $target--;  # convert to 0-indexed
+            $target = 0 if $target < 0;
+            $target = $total - 1 if $target >= $total;
+            for my $i ($pos .. $target - 1) {
+                output_line($i);
+                $pos++;
+            }
+            show_status();
+        } else {
+            show_status();
+        }
+    }
+}
+
+# --- Subroutines ---
+
+sub parse_line {
+    my ($line) = @_;
+    if ($line =~ /^(\d+)\s+(.*)$/) {
+        return ($1, $2);
+    }
+    return (0, $line);
+}
+
+sub unescape {
+    my ($str) = @_;
+    my $out = '';
+    my $pos = 0;
+    my $len = length($str);
+    while ($pos < $len) {
+        my $ch = substr($str, $pos, 1);
+        if ($ch eq '\\' && $pos + 3 < $len && substr($str, $pos + 1, 1) eq 'x') {
+            my $hex = substr($str, $pos + 2, 2);
+            if ($hex =~ /^[0-9a-fA-F]{2}$/) {
+                $out .= chr(hex($hex));
+                $pos += 4;
+                next;
+            }
+        }
+        if ($ch eq '\\' && $pos + 1 < $len && substr($str, $pos + 1, 1) eq '\\') {
+            $out .= '\\';
+            $pos += 2;
+            next;
+        }
+        $out .= $ch;
+        $pos++;
+    }
+    return $out;
+}
+
+sub output_line {
+    my ($idx) = @_;
+    return if $idx < 0 || $idx >= $total;
+    my ($elapsed, $data) = parse_line($lines[$idx]);
+    print unescape($data);
+}
+
+sub show_status {
+    my ($msg) = @_;
+    $msg //= '';
+    my $current = $pos + 1;  # 1-indexed for display
+    if ($msg ne '') {
+        # Erase to end of line, print message
+        printf("\r\e[2K%s", $msg);
+    } else {
+        if ($show_speed) {
+            my $elapsed = 0;
+            if ($pos > 0 && $pos <= $total) {
+                ($elapsed) = parse_line($lines[$pos - 1]);
+            }
+            printf("\r\e[2K[%d/%d] elapsed=%d ms | h=help", $current, $total, $elapsed);
+        } else {
+            printf("\r\e[2K[%d/%d] | h=help", $current, $total);
+        }
+    }
+}
+
+sub show_help {
+    print "\e[2J\e[H";  # clear screen, cursor home
+    print "=== ansi-replay ===\n\n";
+    print "Controls:\n";
+    print "  Space/Enter/n    Next 1 line\n";
+    print "  d/Right          Next 10 lines\n";
+    print "  f/a              Auto-play all remaining\n";
+    print "  p/Left           Peek at next line (no output)\n";
+    print "  b/Up             Show previous line info\n";
+    print "  Down             Next 1 line\n";
+    print "  g <number>       Jump to line (outputs up to it)\n";
+    print "  / <pattern>      Search forward for pattern\n";
+    print "  s                Toggle speed/line display\n";
+    print "  h                This help screen\n";
+    print "  q/Esc            Quit\n\n";
+    print "Log format: <elapsed_ms> <escaped_bytes>\n";
+    print "  Printable ASCII as-is, non-printable as \\xHH\n\n";
+    print "Press any key to continue...";
+}
+
+sub usage {
+    print "Usage: $script <logfile> [--dump|--cat]\n";
+    print "\n";
+    print "Step-by-step ANSI escape sequence replay tool.\n";
+    print "Replays PTY raw logs from vrunner --log-pty-raw.\n";
+    print "\n";
+    print "Options:\n";
+    print "  --dump, --cat    Output everything at once (non-interactive)\n";
+    exit 1;
+}

@@ -65,6 +65,7 @@ impl CommandManager {
         self.logger.log("spawn", &format!("id={} cmd={} args={:?} cert={:?} env={:?} size={}x{}", id, cmd, args, certificate, env_vars.keys().collect::<Vec<_>>(), rows.unwrap_or(self.config.vtty.rows), cols.unwrap_or(self.config.vtty.cols)));
 
         let spawner = ProcessSpawner::new(&self.config.vtty);
+        let pty_raw_log = self.config.command_log.pty_raw_log.as_deref();
         let mut handle = spawner.spawn(
             cmd,
             args,
@@ -74,6 +75,7 @@ impl CommandManager {
             env_vars,
             self,
             rows, cols,
+            pty_raw_log,
         ).await?;
 
         // Bind certificate to this command for per-command access control
@@ -463,6 +465,7 @@ impl CommandManager {
         };
 
         let spawner = ProcessSpawner::new(&self.config.vtty);
+        let pty_raw_log = self.config.command_log.pty_raw_log.as_deref();
         let mut handle = spawner.spawn(
             cmd,
             args,
@@ -472,6 +475,7 @@ impl CommandManager {
             env_vars,
             self,
             rows, cols,
+            pty_raw_log,
         ).await?;
 
         handle.certificate = certificate;
