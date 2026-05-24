@@ -987,6 +987,8 @@ function connectVttyWs(instUrl, cmdId) {
                 } else if (msg.type === 'command_ended') {
                     document.getElementById('connStatus').textContent = 'Command ended';
                     disconnectVttyWs();
+                    // Browser notification on command exit
+                    notifyCommandEnded(state.vttyWsCmdId);
                 } else if (msg.type === 'connected') {
                     // Server confirms connection. A vtty_full follows immediately.
                 }
@@ -1668,6 +1670,7 @@ function startRefresh() {
     if (state.refreshInterval) clearInterval(state.refreshInterval);
     state.refreshInterval = setInterval(() => {
         loadCommands();
+        checkForExitedCommands();
     }, 1000);
 }
 
@@ -1867,6 +1870,47 @@ function scrollTerminalBottom(panelId) {
     const vtty = panel.querySelector('.vtty-container');
     if (vtty) {
         vtty.scrollTop = vtty.scrollHeight;
+    }
+}
+
+// ─── Browser Notification on Command Exit ───
+const _notifiedExits = new Set();
+
+function notifyCommandEnded(cmdId) {
+    if (!cmdId || _notifiedExits.has(cmdId)) return;
+    _notifiedExits.add(cmdId);
+
+    // Find command name
+    let cmdName = cmdId;
+    for (const inst of state.instanceUrls) {
+        if (inst._commands) {
+            const cmd = inst._commands.find(c => c.id === cmdId);
+            if (cmd) { cmdName = cmd.name || cmdId; break; }
+        }
+    }
+
+    if ('Notification' in window) {
+        if (Notification.permission === 'granted') {
+            new Notification('vrunner: Command exited', { body: cmdName, icon: '/favicon.ico' });
+        } else if (Notification.permission !== 'denied') {
+            Notification.requestPermission().then(perm => {
+                if (perm === 'granted') {
+                    new Notification('vrunner: Command exited', { body: cmdName, icon: '/favicon.ico' });
+                }
+            });
+        }
+    }
+}
+
+// Also detect command exits via polling — notify when a previously-alive command exits
+function checkForExitedCommands() {
+    for (const inst of state.instanceUrls) {
+        if (!inst._commands) continue;
+        for (const cmd of inst._commands) {
+            if (cmd.alive === false && !_notifiedExits.has(cmd.id)) {
+                notifyCommandEnded(cmd.id);
+            }
+        }
     }
 }
 </script>
