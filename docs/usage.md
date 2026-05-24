@@ -1007,6 +1007,17 @@ command_log:
   file: "/var/log/vrunner.log"
 ```
 
+### PTY Raw Log Replay
+
+When debugging terminal output, use `tools/ansi-replay` to replay a PTY raw log step by step:
+
+```bash
+perl tools/ansi-replay /tmp/pty-output.log           # Interactive mode
+perl tools/ansi-replay /tmp/pty-output.log --dump    # Output all at once
+```
+
+Interactive controls: Space (next line), d (next 10), f (auto-play), p (peek), / (search), g (jump to line), h (help), q (quit).
+
 ---
 
 ## Environment Variables
@@ -1385,6 +1396,8 @@ When the interactive display is active, you can use configurable keybindings to 
 | `F12` | Spawn a new command | Opens a prompt to type a command; Enter to confirm, Ctrl+C to cancel |
 | `Ctrl+H` | Show help overlay | Displays all keybindings; press any key to dismiss |
 | `Ctrl+\\` | Quit display | Always active (cannot be remapped) |
+| *—* | Kill active command | Disabled by default — set `keybindings.kill_command` in config to enable |
+| *—* | Pause/resume active command | Disabled by default — set `keybindings.toggle_pause` in config to enable |
 
 #### Customizing Keybindings
 
@@ -1492,6 +1505,42 @@ vrunner -c ./configs/staging.yaml --port 9090 -- daemon
 # Production instance
 vrunner -c /etc/vrunner/production.yaml --port 443 -- daemon
 ```
+
+### Additional Management Subcommands
+
+#### `list-vrunner` — Compact Instance Listing
+
+List all running vrunner instances in a compact, machine-friendly format:
+
+```bash
+vrunner list-vrunner
+```
+
+Output includes each instance's PID, port, bind address, and daemon status. Use this when you need a quick overview without the full command details shown by `vrunner list`.
+
+#### `list-commands` — List Commands Across Instances
+
+List all running commands on all vrunner instances:
+
+```bash
+vrunner list-commands
+```
+
+This contacts every running instance and displays its active commands, arguments, PIDs, and statuses in a consolidated table.
+
+#### `stop-command` — Stop a Specific Command
+
+Stop a specific command by its OS PID without stopping the entire vrunner instance:
+
+```bash
+# Stop a command with PID 12345
+vrunner stop-command 12345
+
+# With --target to select a specific instance
+vrunner --target 54321 stop-command 12345
+```
+
+This is equivalent to calling `POST /api/commands/kill-pid/:pid` on the target instance.
 
 ---
 

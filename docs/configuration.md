@@ -19,6 +19,7 @@ Complete reference for all configuration entries, CLI flags, and their relations
    - [default_exit](#default_exit)
    - [command_log](#command_log)
    - [daemon](#daemon)
+   - [web](#web)
    - [handles](#handles)
 4. [CLI Flag Reference](#cli-flag-reference)
 5. [Config-to-CLI Mapping](#config-to-cli-mapping)
@@ -182,6 +183,7 @@ Controls logging of API commands received by the server.
 |-----|------|---------|----------|-------------|
 | `enabled` | `bool` | `false` | `--log` | When `true`, all incoming API commands (spawn, kill, send_keys, etc.) are logged. Each log entry includes a timestamp, the command type, and relevant parameters. |
 | `file` | `string?` | `null` | `--log-file <FILE>` | Path to a log file for command entries. When set, logs are written to this file in addition to the terminal (if enabled). When `null`, logs are only written to the terminal. |
+| `pty_raw_log` | `string?` | `null` | `--log-pty-raw <FILE>` | Path to log raw PTY output for ANSI debugging. When set, all bytes written to the child PTY are recorded to this file. |
 
 **Example:**
 ```yaml
@@ -221,6 +223,8 @@ Controls the interactive terminal display behavior when `--display` is enabled, 
 | `keybindings.spawn_command` | `string?` | `"f12"` | — | Key sequence to open a spawn prompt. Temporarily exits raw mode so you can type a command to spawn. Press Enter to confirm or Ctrl+C to cancel. Set to `null` to disable. |
 | `keybindings.show_help` | `string?` | `"ctrl+h"` | — | Key sequence to show the help overlay. Displays all configured keybindings with their descriptions. Press any key to dismiss. Set to `null` to disable. |
 | `keybindings.quit` | `string?` | `null` | — | Key sequence to quit the interactive display loop. When not set, use `Ctrl+\\` to quit. Set to `"esc"` for Escape-key quit. |
+| `keybindings.kill_command` | `string?` | `null` | — | Key sequence to kill the active command (SIGTERM). Disabled by default — uncomment in config to enable. |
+| `keybindings.toggle_pause` | `string?` | `null` | — | Key sequence to pause/resume (SIGSTOP/SIGCONT) the active command. Disabled by default — uncomment in config to enable. |
 
 **Hardcoded shortcuts** (always active, cannot be remapped):
 
@@ -282,6 +286,26 @@ default_exit:
 ```
 
 Exit handler commands are spawned as detached (fire-and-forget) processes. vrunner does not wait for them to complete. When a command is spawned via `POST /api/commands` with `on_exit` or `on_error` fields, those per-command values override these defaults entirely.
+
+### `web`
+
+Controls how the web UI discovers terminal buffer changes.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `update_mode` | string | `"push"` | How the web UI detects changes: `"push"` (server notifies via WebSocket) or `"poll"` (client polls) |
+| `dirty_check_ms` | number | `200` | Server-side dirty-check interval in ms (push mode) |
+| `default_poll_ms` | number | `500` | Client-side polling interval in ms (poll mode) |
+
+**Note:** These fields are config-file-only; there are no corresponding CLI flags.
+
+**Example:**
+```yaml
+web:
+  update_mode: "push"
+  dirty_check_ms: 200
+  default_poll_ms: 500
+```
 
 ### `handles`
 
@@ -377,7 +401,7 @@ vrunner [OPTIONS] [-- <COMMAND> [ARGS...]]
 | Flag | Argument | Config Key | Description |
 |------|----------|------------|-------------|
 | `--bind` | `<ADDR>` | `server.bind` | Server bind address. Default: `127.0.0.1`. |
-| `--port` | `<PORT>` | `server.port` | Server TCP port. Default: `8080`. |
+| `--port` | `<PORT>` | `server.port` | Server TCP port. Default: `9090`. |
 | `--remote` | — | `server.bind` + `security.require_auth` | Convenience flag that sets bind to `0.0.0.0` and enables authentication. Use this to accept remote connections securely. |
 
 ### Security Options
@@ -423,6 +447,7 @@ vrunner [OPTIONS] [-- <COMMAND> [ARGS...]]
 |------|----------|------------|-------------|
 | `--log` | — | `command_log.enabled` → `true` | Log API commands to the terminal. |
 | `--log-file` | `<FILE>` | `command_log.file` + `command_log.enabled` → `true` | Log API commands to a file (also enables logging). |
+| `--log-pty-raw` | `<FILE>` | `command_log.pty_raw_log` | Log raw PTY output from child processes to a file for debugging. See the PTY Raw Logging section below. |
 
 ### Daemon Options
 
@@ -496,7 +521,9 @@ Every configuration file entry has a corresponding CLI flag. This table summariz
 | `handles` | *(array)* | Config only — no CLI equivalent |
 | `certificates` | `directory` | Config only — no CLI equivalent |
 | `certificates` | `entries` | `--certificate NAME:CERT:KEY` |
+| `web` | *(all fields)* | Config only — no CLI equivalent |
 | `interactive` | `tabs` | `--tabs` |
+| `command_log` | `pty_raw_log` | `--log-pty-raw <FILE>` |
 | `default_exit.exit` | `on_exit` | `--on-exit <CMD>` |
 | `default_exit.exit` | `on_error` | `--on-error <CMD>` |
 | `default_exit.exit` | `timeout_secs` | `--exit-timeout <SECS>` |
@@ -638,6 +665,7 @@ display:
 command_log:
   enabled: false           # no command logging by default
   file: null               # null = terminal only, set path for file logging
+  pty_raw_log: null         # set path to log raw PTY output for ANSI debugging
 
 daemon:
   enabled: false           # run in foreground by default
@@ -650,6 +678,12 @@ handles: []
   #   sink: "file"         # "file", "vtty", or "null"
   #   path: "./logs/{name}-{id}.log"  # with placeholder expansion
 
+# Web admin panel options
+web:
+  update_mode: "push"       # "push" (server notifies via WebSocket) or "poll" (client polls)
+  dirty_check_ms: 200       # server-side dirty-check interval in ms (push mode)
+  default_poll_ms: 500      # client-side polling interval in ms (poll mode)
+
 # Interactive display options
 interactive:
   tabs: false               # show tab bar when --display is active
@@ -660,6 +694,8 @@ interactive:
     spawn_command: "f12"         # open prompt to spawn new command
     show_help: "ctrl+h"          # show keybinding help overlay
     # quit: "esc"                # (disabled by default; use Ctrl+\\ to quit)
+    # kill_command: "ctrl+k"     # (disabled by default; kill active command with SIGTERM)
+    # toggle_pause: "ctrl+p"     # (disabled by default; pause/resume with SIGSTOP/SIGCONT)
 
 # Default exit configuration for all commands
 default_exit:

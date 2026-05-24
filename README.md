@@ -181,6 +181,7 @@ vrunner [OPTIONS] [-- <COMMAND> [ARGS...]]
 |------|----------|---------|-------------|
 | `--log` | — | — | Log API commands to terminal |
 | `--log-file` | `<FILE>` | — | Log API commands to file |
+| `--log-pty-raw` | `<FILE>` | — | Log raw PTY output to file for debugging |
 
 ### Daemon Options
 
@@ -298,6 +299,11 @@ daemon:
   stderr_file: "/tmp/vrunner.err"
 
 handles: []
+
+web:
+  update_mode: "push"
+  dirty_check_ms: 200
+  default_poll_ms: 500
 
 interactive:
   tabs: false
