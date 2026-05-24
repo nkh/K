@@ -275,7 +275,30 @@ This mirrors the VTTY contents to stdout at the refresh interval specified by `-
 
 ### Web Admin VTTY Viewer
 
-The web admin interface at `/admin` provides a VTTY viewer that fetches terminal content from the API. The viewer renders HTML output from `GET /api/commands/:id/vtty/html`, which includes cursor position, terminal dimensions, and scrollback information. Navigate to the admin page, click on a running command, and the VTTY viewer displays its output.
+The web admin interface is available at `/admin` (or any unrecognised path, which redirects to the dashboard). It provides a full-featured terminal management dashboard with real-time VTTY streaming, command lifecycle controls, and several productivity features.
+
+#### Direct Command URLs
+
+Navigate directly to a command's terminal using its name: `http://localhost:8080/<command_name>`. For example, `/htop` opens the VTTY viewer for a command named `htop`. If multiple running commands share the same name, a picker list is displayed showing each instance with its arguments so you can choose the right one. Running commands are highlighted with their elapsed uptime.
+
+#### Dashboard Features
+
+- **Real-time VTTY Viewer** — Streams terminal output via the incremental diff WebSocket protocol (`GET /api/commands/:id/ws`). Falls back to 1-second HTTP polling if WebSocket is unavailable. Automatically selects the first running command on load.
+- **Command Sidebar** — Lists all commands with name, arguments, PID, status, and runtime. Running commands show elapsed uptime and are visually highlighted. Use the search/filter box at the top to narrow the list by command name.
+- **Batch Kill All** — A button in the top bar terminates every running command on the instance in one click.
+- **Pause / Run** — Toggle freeze/thaw on the currently selected command from the top bar using SIGSTOP/SIGCONT.
+- **Terminal Search** — Press `Ctrl+F` to open a search bar inside the terminal viewer. Matches are highlighted in the output buffer.
+- **Scroll-to-Bottom** — When scrolled up, a floating button appears in the bottom-right corner of the terminal. Click it to jump back to live output.
+- **Click to Focus** — Click anywhere on the terminal pane to immediately capture keyboard input for sending keystrokes.
+- **Auto-Fit Terminal** — The terminal automatically resizes to fill the available panel space when the browser window is resized.
+- **Drag-to-Resize Panels** — Drag the divider between the sidebar and the terminal to adjust their relative widths.
+- **Export Output** — Download the current terminal buffer contents as a `.txt` file via the toolbar or context menu.
+- **Right-Click Context Menu** — Right-click any command in the sidebar to access quick actions: kill, freeze/thaw, copy URL, open command in a new tab.
+- **Copy Command URL** — Copy the direct URL for any command to the clipboard from the context menu or a button next to the command name.
+- **Browser Notifications** — When enabled (via browser permission prompt), a desktop notification is sent when a command exits.
+- **Keyboard Shortcuts** — Press `?` to open the shortcuts help panel showing all available keybindings and their actions.
+- **Auto-Reconnect** — WebSocket connections automatically re-establish after network interruptions or server restarts, with no manual refresh needed.
+- **Responsive Layout** — The dashboard adapts to mobile and tablet screen sizes. The sidebar collapses into a toggleable drawer on narrow viewports.
 
 ### VTTY API Endpoints
 
