@@ -1073,7 +1073,7 @@ async fn handle_thaw_command(cli: &Cli, pid: u32) -> Result<()> {
 /// Resizes the VTTY of a running command by PID or name.
 /// Resizes both the in-memory buffer and the child PTY (sends SIGWINCH).
 /// If rows/cols are 0 (default), uses the current terminal size.
-async fn handle_resize_command(cli: &Cli, target: &str, rows: u16, cols: u16) -> Result<()> {
+async fn handle_resize_command(_cli: &Cli, target: &str, rows: u16, cols: u16) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let instances = registry.list_instances();
 
@@ -1161,7 +1161,7 @@ async fn handle_resize_command(cli: &Cli, target: &str, rows: u16, cols: u16) ->
     }
     if exact.len() > 1 {
         eprintln!("Multiple commands match '{}':", target);
-        for (_, _, pid, name, full) in &exact {
+        for (_, _, pid, _name, full) in &exact {
             eprintln!("  PID {} — {}", pid, full);
         }
         anyhow::bail!("Ambiguous target. Use PID to disambiguate.");
