@@ -215,6 +215,14 @@
             pointer-events: none;
         }
 
+        /* Context menu */
+        .ctx-menu { position: fixed; z-index: 200; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 4px 0; min-width: 160px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+        .ctx-menu-item { padding: 0.35rem 0.75rem; cursor: pointer; font-size: 0.75rem; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem; }
+        .ctx-menu-item:hover { background: var(--accent-dim); }
+        .ctx-menu-item.danger { color: var(--red); }
+        .ctx-menu-item.danger:hover { background: rgba(248, 81, 73, 0.15); }
+        .ctx-menu-sep { height: 1px; background: var(--border); margin: 3px 0; }
+
         /* Responsive: small screens */
         @media (max-width: 768px) {
             .sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: 280px; z-index: 50; box-shadow: 4px 0 12px rgba(0,0,0,0.5); }
@@ -700,7 +708,7 @@ async function loadCommands() {
                 ? `<span style="color:var(--text-muted);font-size:0.6rem;flex-shrink:0;">${formatRuntime(cmd.runtime_secs)}</span>`
                 : '';
             html += `
-                <div class="cmd-item${selected}" onclick="selectCommand('${inst.url}','${cmd.id}','${escHtml(cmdName)}')" title="${escHtml(inst.label)} / ${escHtml(cmdName)} ${escHtml(argsStr)}" style="${isAlive ? '' : 'opacity:0.6;'}">
+                <div class="cmd-item${selected}" onclick="selectCommand('${inst.url}','${cmd.id}','${escHtml(cmdName)}')" oncontextmenu="event.preventDefault();showCmdContextMenu(event,'${inst.url}','${cmd.id}','${escHtml(cmdName)}',${isAlive})" title="${escHtml(inst.label)} / ${escHtml(cmdName)} ${escHtml(argsStr)}" style="${isAlive ? '' : 'opacity:0.6;'}">
                     <div class="cmd-item-row">
                         ${statusDot}
                         <span class="name">${escHtml(cmdName)}</span>
@@ -2016,6 +2024,54 @@ function exportTerminal(panelId) {
     a.download = cmdName + '.txt';
     a.click();
     URL.revokeObjectURL(url);
+}
+
+// ─── Right-click Context Menu ───
+function closeContextMenu() {
+    const el = document.getElementById('ctxMenu');
+    if (el) el.remove();
+}
+
+function showCmdContextMenu(e, instUrl, cmdId, cmdName, isAlive) {
+    closeContextMenu();
+    const menu = document.createElement('div');
+    menu.id = 'ctxMenu';
+    menu.className = 'ctx-menu';
+    menu.style.left = e.clientX + 'px';
+    menu.style.top = e.clientY + 'px';
+
+    // Ensure menu stays within viewport
+    document.body.appendChild(menu);
+    const rect = menu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) menu.style.left = (window.innerWidth - rect.width - 4) + 'px';
+    if (rect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - rect.height - 4) + 'px';
+
+    const baseUrl = instUrl.replace(/^https?:\/\//, '');
+    let items = `<div class="ctx-menu-item" onclick="selectCommand('${instUrl}','${cmdId}','${escHtml(cmdName)}');closeContextMenu();">View Terminal</div>`;
+    items += `<div class="ctx-menu-item" onclick="copyCommandUrl('${instUrl}','${cmdId}','${escHtml(cmdName)}');closeContextMenu();">Copy URL</div>`;
+    if (isAlive) {
+        items += `<div class="ctx-menu-sep"></div>`;
+        items += `<div class="ctx-menu-item" onclick="togglePauseCmd('${instUrl}','${cmdId}');closeContextMenu();">Pause/Resume</div>`;
+        items += `<div class="ctx-menu-item danger" onclick="killCommand('${instUrl}','${cmdId}');closeContextMenu();">Kill</div>`;
+    }
+    menu.innerHTML = items;
+
+    // Close on click outside
+    setTimeout(() => {
+        document.addEventListener('click', closeContextMenu, { once: true });
+    }, 0);
+}
+
+function copyCommandUrl(instUrl, cmdId, cmdName) {
+    const base = cmdName.replace(/.*\//, ''); // basename
+    const url = instUrl.replace(/^http/, 'http') + '/' + encodeURIComponent(base);
+    navigator.clipboard.writeText(url).catch(() => {});
+}
+
+function togglePauseCmd(instUrl, cmdId) {
+    state.selectedInstUrl = instUrl;
+    state.selectedCmdId = cmdId;
+    togglePauseRun();
 }
 </script>
 </body>
