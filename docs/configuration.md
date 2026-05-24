@@ -210,17 +210,57 @@ daemon:
 
 ### `interactive`
 
-Controls the interactive terminal display behavior when `--display` is enabled.
+Controls the interactive terminal display behavior when `--display` is enabled, including keyboard shortcuts for navigating commands, toggling overlays, and spawning new commands.
 
 | Key | Type | Default | CLI Flag | Description |
 |-----|------|---------|----------|-------------|
 | `tabs` | `bool` | `false` | `--tabs` | When `true`, shows a tab bar listing all running commands at the top of the interactive display. When `false` (default), only the active command name is shown in the status bar. This is similar to `mprocs`-style display but the tab bar is optional. |
+| `keybindings.next_command` | `string?` | `"ctrl+right"` | — | Key sequence to switch to the next running command. Only active when `display.display_all` is enabled and multiple commands are running. Set to `null` to disable. |
+| `keybindings.prev_command` | `string?` | `"ctrl+left"` | — | Key sequence to switch to the previous running command. Wraps around to the last command. Only active when `display.display_all` is enabled. Set to `null` to disable. |
+| `keybindings.toggle_log` | `string?` | `"ctrl+l"` | — | Key sequence to show or hide the command log overlay. When the log is visible, recent log entries are displayed over the VTTY output. Press the same key again to dismiss. Set to `null` to disable. |
+| `keybindings.spawn_command` | `string?` | `"f12"` | — | Key sequence to open a spawn prompt. Temporarily exits raw mode so you can type a command to spawn. Press Enter to confirm or Ctrl+C to cancel. Set to `null` to disable. |
+| `keybindings.show_help` | `string?` | `"ctrl+h"` | — | Key sequence to show the help overlay. Displays all configured keybindings with their descriptions. Press any key to dismiss. Set to `null` to disable. |
+| `keybindings.quit` | `string?` | `null` | — | Key sequence to quit the interactive display loop. When not set, use `Ctrl+\\` to quit. Set to `"esc"` for Escape-key quit. |
+
+**Hardcoded shortcuts** (always active, cannot be remapped):
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+\\` | Quit the interactive display (always works, even if `keybindings.quit` is unset) |
+| `Ctrl+C` | Shut down the entire vrunner instance (when the display is dismissed) |
 
 **Example:**
 ```yaml
 interactive:
-  tabs: false
+  tabs: true
+  keybindings:
+    next_command: "ctrl+right"
+    prev_command: "ctrl+left"
+    toggle_log: "ctrl+l"
+    spawn_command: "f12"
+    show_help: "ctrl+h"
+    quit: "esc"
 ```
+
+#### Supported Key Names
+
+Key names use a human-readable format. The following formats are recognized:
+
+**Control keys:** `ctrl+a` through `ctrl+z`, `ctrl+@`, `ctrl+[`, `ctrl+\`, `ctrl+]`, `ctrl+^`, `ctrl+_`, `ctrl+?`
+
+**Control + arrow keys:** `ctrl+left`, `ctrl+right`, `ctrl+up`, `ctrl+down`
+
+**Alt/Meta keys:** `alt+a` through `alt+z`, `alt+0` through `alt+9`, and any other single character
+
+**Shift + arrow keys:** `shift+left`, `shift+right`, `shift+up`, `shift+down`, `shift+tab`
+
+**Function keys:** `f1` through `f12`
+
+**Special keys:** `enter` (or `return`), `tab`, `backspace`, `delete`, `insert`, `home`, `end`, `pageup` (or `page_up`), `pagedown` (or `page_down`), `up`, `down`, `left`, `right`, `esc` (or `escape`), `space`
+
+**Single characters:** Any printable ASCII character (e.g., `a`, `1`, `@`)
+
+**Raw escape sequences** (backward compatible): You can still use Rust-style escape notation like `"\x1b[1;5C"` for Ctrl+Right, but the human-readable names are strongly preferred for clarity and maintainability.
 
 ### `default_exit`
 
@@ -411,7 +451,7 @@ vrunner [OPTIONS] [-- <COMMAND> [ARGS...]]
 | Command | Argument | Description |
 |---------|----------|-------------|
 | `list` | — | List all running vrunner instances |
-| `stop` | `<PID>` | Gracefully shut down a vrunner instance by PID |
+| `stop` | `[PID]` | Gracefully shut down a vrunner instance. When no PID is given and exactly one instance is running, it is stopped automatically. When multiple instances are running, a list is shown. |
 | `spawn` | `<cmd> [args...]` | Spawn a command on a running instance |
 | `freeze` | `<pid>` | Freeze (suspend) a running command via SIGSTOP |
 | `thaw` | `<pid>` | Thaw (resume) a frozen command via SIGCONT |
@@ -613,6 +653,13 @@ handles: []
 # Interactive display options
 interactive:
   tabs: false               # show tab bar when --display is active
+  keybindings:
+    next_command: "ctrl+right"   # switch to next command (display-all mode)
+    prev_command: "ctrl+left"    # switch to previous command (display-all mode)
+    toggle_log: "ctrl+l"         # show/hide command log overlay
+    spawn_command: "f12"         # open prompt to spawn new command
+    show_help: "ctrl+h"          # show keybinding help overlay
+    # quit: "esc"                # (disabled by default; use Ctrl+\\ to quit)
 
 # Default exit configuration for all commands
 default_exit:

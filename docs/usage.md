@@ -1354,20 +1354,80 @@ curl http://127.0.0.1:8080/api/commands
 
 ## Interactive Display
 
-The `--tabs` flag enables a tab bar in the local VTTY display that shows all running commands and lets you switch between them:
+The interactive display mode provides a terminal-based UI for monitoring and controlling running commands. Enable it with `--display`:
 
 ```bash
-# Start multiple commands and view them with tabs
-vrunner --tabs --display -- htop
+# View a single command's output
+vrunner --display -- htop
+
+# Stay active after the command exits, switching to other commands
+vrunner --display-all -- htop
+
+# Show a tab bar listing all running commands
+vrunner --tabs --display-all -- htop
 ```
 
-When tabs are enabled and multiple commands are running, the display shows a navigation bar at the top listing all active commands. Use keyboard shortcuts to switch focus between commands. This is similar to tools like `mprocs` but the tab bar is optional — disable it with `--no-tabs` (the default) to show only the active command name in the status bar.
+### Tab Bar
 
-**Via config file:**
+The `--tabs` flag enables a tab bar at the top of the display that lists all running commands and allows you to switch between them. When tabs are disabled (the default), only the active command name is shown in the status bar. This is similar to tools like `mprocs` but the tab bar is optional.
+
+### Keyboard Shortcuts (Keybindings)
+
+When the interactive display is active, you can use configurable keybindings to navigate commands, toggle overlays, and spawn new processes. All keybindings use human-readable names in the config file — no raw escape sequences needed.
+
+#### Default Keybindings
+
+| Shortcut | Action | Notes |
+|----------|--------|-------|
+| `Ctrl+Right` | Switch to next command | Requires `--display-all` and 2+ commands; wraps around |
+| `Ctrl+Left` | Switch to previous command | Requires `--display-all` and 2+ commands; wraps around |
+| `Ctrl+L` | Toggle command log overlay | Shows recent log entries over the VTTY; press again to dismiss |
+| `F12` | Spawn a new command | Opens a prompt to type a command; Enter to confirm, Ctrl+C to cancel |
+| `Ctrl+H` | Show help overlay | Displays all keybindings; press any key to dismiss |
+| `Ctrl+\\` | Quit display | Always active (cannot be remapped) |
+
+#### Customizing Keybindings
+
+Keybindings are configured under `interactive.keybindings` in the config file. Set any binding to `null` to disable it:
+
 ```yaml
 interactive:
   tabs: true
+  keybindings:
+    next_command: "ctrl+right"    # default
+    prev_command: "ctrl+left"     # default
+    toggle_log: "ctrl+l"          # default
+    spawn_command: "f12"          # default
+    show_help: "ctrl+h"           # default
+    quit: "esc"                   # use Escape to quit
 ```
+
+#### Supported Key Name Formats
+
+The key parser recognizes these human-readable formats:
+
+- **Control keys:** `ctrl+a` through `ctrl+z`, `ctrl+@`, `ctrl+[`, `ctrl+\`, `ctrl+]`, `ctrl+^`, `ctrl+_`, `ctrl+?`
+- **Control + arrows:** `ctrl+left`, `ctrl+right`, `ctrl+up`, `ctrl+down`
+- **Alt/Meta:** `alt+a` through `alt+z`, `alt+0` through `alt+9`, and any other single character
+- **Shift + arrows:** `shift+left`, `shift+right`, `shift+up`, `shift+down`, `shift+tab`
+- **Function keys:** `f1` through `f12`
+- **Special keys:** `enter` (or `return`), `tab`, `backspace`, `delete`, `insert`, `home`, `end`, `pageup` (or `page_up`), `pagedown` (or `page_down`), `up`, `down`, `left`, `right`, `esc` (or `escape`), `space`
+- **Single characters:** Any printable ASCII character (e.g., `a`, `1`, `@`)
+- **Raw escape sequences** (backward compatible): Rust-style notation like `"\x1b[1;5C"` for Ctrl+Right
+
+For the complete configuration reference including all keybinding fields and their defaults, see [docs/configuration.md](configuration.md#interactive).
+
+### Command Log Overlay
+
+Press `Ctrl+L` (or your configured `toggle_log` key) to toggle a semi-transparent log overlay on top of the VTTY display. This shows the most recent vrunner command log entries (spawns, kills, send_keys events, etc.) without leaving the terminal display. Press `Ctrl+L` again to dismiss the overlay.
+
+### Spawning Commands from the Display
+
+Press `F12` (or your configured `spawn_command` key) to open an inline spawn prompt. The display temporarily exits raw mode so you get normal line editing. Type the command and press Enter to spawn it on the current vrunner instance. Press `Ctrl+C` to cancel without spawning. After the command is spawned (or cancelled), the display returns to raw mode automatically.
+
+### Help Overlay
+
+Press `Ctrl+H` (or your configured `show_help` key) to display a full-screen help overlay listing all configured keybindings with their descriptions. Press any key to dismiss the overlay and return to the VTTY display.
 
 ---
 
