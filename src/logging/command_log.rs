@@ -1,19 +1,22 @@
-use std::collections::VecDeque;
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use chrono::Utc;
 use tokio::sync::broadcast;
 
 const MEMORY_BUFFER_CAPACITY: usize = 2048;
 
+/// Shared in-memory log buffer type used by both the web UI handler
+/// and the terminal display loop.
+pub type SharedLogBuffer = Arc<Mutex<Vec<String>>>;
+
 pub struct CommandLogger {
     enabled: bool,
     file: Option<Mutex<std::fs::File>>,
     /// In-memory ring buffer of recent log entries.
-    /// This allows the web UI log viewer to show entries even when no log
-    /// file is configured (e.g. --log without --log-file).
-    memory_buffer: Mutex<VecDeque<String>>,
+    /// This allows the web UI log viewer and terminal overlay to show
+    /// entries even when no log file is configured (e.g. --log without --log-file).
+    memory_buffer: SharedLogBuffer,
     /// Broadcast channel for streaming log entries to WebSocket subscribers.
     log_tx: broadcast::Sender<String>,
 }
@@ -34,7 +37,7 @@ impl CommandLogger {
         Ok(Self {
             enabled,
             file,
-            memory_buffer: Mutex::new(VecDeque::with_capacity(MEMORY_BUFFER_CAPACITY)),
+            memory_buffer: Arc::new(Mutex::new(Vec::with_capacity(MEMORY_BUFFER_CAPACITY))),
             log_tx,
         })
     }
@@ -47,6 +50,12 @@ impl CommandLogger {
     /// Get a clone of the log broadcast sender.
     pub fn log_sender(&self) -> broadcast::Sender<String> {
         self.log_tx.clone()
+    }
+
+    /// Get a shared reference to the in-memory log buffer.
+    /// Used by the terminal display loop for the log overlay.
+    pub fn memory_buffer_arc(&self) -> SharedLogBuffer {
+        Arc::clone(&self.memory_buffer)
     }
 
     /// Read all entries from the in-memory ring buffer.
@@ -80,9 +89,9 @@ impl CommandLogger {
         // Store in the in-memory ring buffer
         if let Ok(mut buf) = self.memory_buffer.lock() {
             if buf.len() >= MEMORY_BUFFER_CAPACITY {
-                buf.pop_front();
+                buf.remove(0);
             }
-            buf.push_back(trimmed.clone());
+            buf.push(trimmed.clone());
         }
 
         // Broadcast log entry to WebSocket subscribers.

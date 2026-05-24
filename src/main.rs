@@ -130,9 +130,15 @@ async fn async_main(cli: Cli) -> Result<()> {
 
     // Handle stop-command subcommand
     if let Some(Commands::StopCommand { ref target }) = cli.command {
-        let stopped = handle_stop_command(&cli, target).await?;
+        let stopped = match target {
+            Some(t) => handle_stop_command(&cli, Some(t.as_str())).await?,
+            None => handle_stop_command(&cli, None).await?,
+        };
         if !stopped {
-            eprintln!("No matching command found for '{}'. Use `vrunner list` to see running commands.", target);
+            match target {
+                Some(t) => eprintln!("No matching command found for '{}'. Use `vrunner list` to see running commands.", t),
+                None => eprintln!("No command to stop. Use `vrunner list` to see running commands."),
+            }
             std::process::exit(1);
         }
         return Ok(());
@@ -254,12 +260,15 @@ async fn async_main(cli: Cli) -> Result<()> {
         // active command's VTTY buffer directly to the local terminal,
         // forwards keystrokes to the child, and exits on Ctrl+\ or child
         // death (when a direct child was spawned).
+        let log_entries = manager.logger().memory_buffer_arc();
         run_display_loop(
             &manager,
             spawned_id.as_deref(),
             cfg.display.refresh_ms,
             cfg.display.display_all,
             shutdown_tx.clone(),
+            &cfg.interactive.keybindings,
+            &log_entries,
         ).await;
         // run_display_loop always returns true (shutdown triggered).
         // The dismissed path now waits for q/Ctrl+C inside the loop.
@@ -347,6 +356,8 @@ async fn run_display_loop(
     refresh_ms: u64,
     display_all: bool,
     shutdown_tx: broadcast::Sender<()>,
+    keybindings: &vrunner::config::schema::KeybindingsConfig,
+    log_entries: &Arc<std::sync::Mutex<Vec<String>>>,
 ) -> bool {
     use vrunner::vtty::display::TerminalDisplay;
     use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
@@ -406,6 +417,59 @@ async fn run_display_loop(
         }
     };
     let mut stdin_buf = [0u8; 1];
+
+    // ── Escape sequence buffer for keybinding matching ──
+    // When we receive ESC (0x1b), we start buffering subsequent bytes to form
+    // a complete escape sequence (e.g., ESC [ 1 ; 5 D for Ctrl+Left).
+    // We then check if the accumulated bytes match any configured keybinding.
+    // If they do, we execute the action; if not, we forward all bytes to the
+    // active command.  Buffer is consumed after each match attempt or timeout.
+    let mut esc_buf: Vec<u8> = Vec::with_capacity(16);
+    let mut esc_deadline: Option<tokio::time::Instant> = None;
+    const ESC_TIMEOUT_MS: u64 = 50; // max ms to wait for complete escape sequence
+
+    // Build the keybinding lookup table: maps byte sequences to action names.
+    // Pre-computed once so we don't re-serialize on every keystroke.
+    let binding_map: Vec<(Vec<u8>, String)> = {
+        let mut map = Vec::new();
+        if let Some(ref seq) = keybindings.next_command {
+            map.push((seq.as_bytes().to_vec(), "next_command".to_string()));
+        }
+        if let Some(ref seq) = keybindings.prev_command {
+            map.push((seq.as_bytes().to_vec(), "prev_command".to_string()));
+        }
+        if let Some(ref seq) = keybindings.toggle_log {
+            map.push((seq.as_bytes().to_vec(), "toggle_log".to_string()));
+        }
+        if let Some(ref seq) = keybindings.spawn_command {
+            map.push((seq.as_bytes().to_vec(), "spawn_command".to_string()));
+        }
+        if let Some(ref seq) = keybindings.quit {
+            map.push((seq.as_bytes().to_vec(), "quit".to_string()));
+        }
+        map
+    };
+
+    // Check if the accumulated escape buffer matches any keybinding.
+    // Returns Some(action_name) if matched, None if no match.
+    // Also returns true for "partial match" (might still match with more bytes).
+    fn check_keybinding<'a>(buf: &[u8], bindings: &'a [(Vec<u8>, String)]) -> (Option<&'a str>, bool) {
+        let mut is_partial = false;
+        for (seq, action) in bindings {
+            if buf.len() >= seq.len() && buf[..seq.len()] == *seq {
+                return (Some(action), false);
+            }
+            // Check if buf is a prefix of this sequence (might still match)
+            if seq.len() > buf.len() && seq[..buf.len()] == *buf {
+                is_partial = true;
+            }
+        }
+        (None, is_partial)
+    }
+
+    // State for log overlay
+    let mut showing_log = false;
+    let mut log_scroll_offset: usize = 0;
 
     // Set up SIGWINCH handler for terminal resize.
     // When the user resizes their terminal emulator, the kernel delivers
@@ -645,7 +709,29 @@ async fn run_display_loop(
                 if exit_rx.is_none() && manager.list().is_empty() {
                     break;
                 }
-                render_vtty(&manager, &active_id).await;
+
+                // Handle escape sequence timeout — flush buffered bytes to command
+                if let Some(deadline) = esc_deadline {
+                    if tokio::time::Instant::now() >= deadline && !esc_buf.is_empty() {
+                        // Timeout: forward buffered bytes to active command
+                        let target_id = active_id.clone()
+                            .or_else(|| manager.list().first().map(|(id, _, _, _, _)| id.clone()));
+                        if let Some(ref tid) = target_id {
+                            if let Some(handle) = manager.get(tid) {
+                                let _ = handle.send_bytes(esc_buf.clone()).await;
+                            }
+                        }
+                        esc_buf.clear();
+                        esc_deadline = None;
+                    }
+                }
+
+                // Render log overlay or VTTY
+                if showing_log {
+                    render_log_overlay(&manager, &log_entries, log_scroll_offset, &mut stdout);
+                } else {
+                    render_vtty(&manager, &active_id).await;
+                }
             }
 
             // ── SIGWINCH — terminal resize ──
@@ -666,10 +752,12 @@ async fn run_display_loop(
                 }
             }
 
-            // ── Keystroke forwarding ──
+            // ── Keystroke forwarding with keybinding support ──
             // Read from /dev/tty via AsyncFd (no blocking thread — clean
-            // exit) and forward directly via handle.send_bytes().await
-            // (proven working path — NOT tokio::spawn).
+            // exit).  We buffer escape sequences to match configurable
+            // keybindings (e.g. Ctrl+Left/Right for command switching).
+            // If no keybinding matches, all bytes are forwarded to the
+            // active command.
             result = tty_async.readable() => {
                 match result {
                     Ok(mut guard) => {
@@ -681,6 +769,8 @@ async fn run_display_loop(
                                 Ok(Ok(0)) => break,  // EOF
                                 Ok(Ok(1)) => {
                                     let b = stdin_buf[0];
+
+                                    // Always-active hardcoded shortcuts
                                     if b == 0x1c {
                                         break 'outer;  // Ctrl+\ — quit display
                                     }
@@ -690,20 +780,170 @@ async fn run_display_loop(
                                         }
                                         continue;  // ignore other keys when dismissed
                                     }
-                                    // Forward to the active command, or fall back
-                                    // to the first available command in monitor mode.
-                                    let target_id = if let Some(ref id) = active_id {
-                                        Some(id.clone())
-                                    } else {
-                                        manager.list().first().map(|(id, _, _, _, _)| id.clone())
-                                    };
+
+                                    // If we're in the log overlay, handle navigation
+                                    if showing_log {
+                                        match b {
+                                            // Same key toggles log off
+                                            _ if esc_buf.is_empty() && keybindings.toggle_log.as_ref()
+                                                .map(|s| s.as_bytes() == [b]).unwrap_or(false) => {
+                                                showing_log = false;
+                                                esc_buf.clear();
+                                                esc_deadline = None;
+                                                continue;
+                                            }
+                                            // 'q' or Esc closes log overlay
+                                            b'q' | 0x1b if esc_buf.is_empty() => {
+                                                showing_log = false;
+                                                esc_buf.clear();
+                                                esc_deadline = None;
+                                                continue;
+                                            }
+                                            // Up/Down scroll the log
+                                            0x1b => {
+                                                esc_buf.push(b);
+                                                esc_deadline = Some(tokio::time::Instant::now()
+                                                    + tokio::time::Duration::from_millis(ESC_TIMEOUT_MS));
+                                                continue;
+                                            }
+                                            _ => {
+                                                // Other keys in log view are ignored
+                                                continue;
+                                            }
+                                        }
+                                    }
+
+                                    // ── Escape sequence buffering ──
+                                    // Start buffering on ESC (0x1b), accumulate
+                                    // subsequent bytes, then check for keybinding match.
+                                    if b == 0x1b && esc_buf.is_empty() {
+                                        esc_buf.push(b);
+                                        esc_deadline = Some(tokio::time::Instant::now()
+                                            + tokio::time::Duration::from_millis(ESC_TIMEOUT_MS));
+                                        continue;
+                                    }
+
+                                    if !esc_buf.is_empty() {
+                                        esc_buf.push(b);
+                                        // Check if current buffer matches any keybinding
+                                        let (action, partial) = check_keybinding(&esc_buf, &binding_map);
+                                        if let Some(act) = action {
+                                            // Matched! Execute action and clear buffer.
+                                            esc_buf.clear();
+                                            esc_deadline = None;
+                                            match act {
+                                                "next_command" | "prev_command" => {
+                                                    if !display_all {
+                                                        continue; // only works with display_all
+                                                    }
+                                                    let commands = manager.list();
+                                                    if commands.len() <= 1 {
+                                                        continue;
+                                                    }
+                                                    let current = active_id.clone()
+                                                        .or_else(|| commands.first().map(|(id, _, _, _, _)| id.clone()));
+                                                    if let Some(ref cur) = current {
+                                                        let idx = commands.iter().position(|(id, _, _, _, _)| id == cur).unwrap_or(0);
+                                                        let new_idx = if act == "next_command" {
+                                                            (idx + 1) % commands.len()
+                                                        } else {
+                                                            idx.checked_sub(1).unwrap_or(commands.len() - 1)
+                                                        };
+                                                        let (new_id, new_name, _, new_pid, _) = &commands[new_idx];
+                                                        active_id = Some(new_id.clone());
+                                                        manager.logger().log("switch", &format!("id={} name={} pid={}", new_id, new_name, new_pid));
+                                                        render_vtty(&manager, &active_id).await;
+                                                    }
+                                                }
+                                                "toggle_log" => {
+                                                    showing_log = !showing_log;
+                                                    log_scroll_offset = 0;
+                                                    if showing_log {
+                                                        // Render log overlay
+                                                        render_log_overlay(&manager, &log_entries, log_scroll_offset, &mut stdout);
+                                                    }
+                                                }
+                                                "spawn_command" => {
+                                                    // Spawn prompt not yet implemented in terminal — log a message
+                                                    manager.logger().log("info", "spawn_command keybinding triggered (web UI spawn available)");
+                                                }
+                                                "quit" => {
+                                                    break 'outer;
+                                                }
+                                                _ => {}
+                                            }
+                                            continue;
+                                        } else if partial {
+                                            // Might still match with more bytes — keep buffering
+                                            continue;
+                                        } else {
+                                            // No match and no partial — forward all buffered bytes
+                                            // to the active command, then clear the buffer.
+                                            let target_id = active_id.clone()
+                                                .or_else(|| manager.list().first().map(|(id, _, _, _, _)| id.clone()));
+                                            if let Some(ref tid) = target_id {
+                                                if let Some(handle) = manager.get(tid) {
+                                                    let _ = handle.send_bytes(esc_buf.clone()).await;
+                                                }
+                                            }
+                                            esc_buf.clear();
+                                            esc_deadline = None;
+                                            continue;
+                                        }
+                                    }
+
+                                    // ── Single non-ESC byte: check single-byte keybindings ──
+                                    let single_buf = [b];
+                                    let (action, _) = check_keybinding(&single_buf, &binding_map);
+                                    if let Some(act) = action {
+                                        match act {
+                                            "next_command" | "prev_command" => {
+                                                if !display_all { continue; }
+                                                let commands = manager.list();
+                                                if commands.len() <= 1 { continue; }
+                                                let current = active_id.clone()
+                                                    .or_else(|| commands.first().map(|(id, _, _, _, _)| id.clone()));
+                                                if let Some(ref cur) = current {
+                                                    let idx = commands.iter().position(|(id, _, _, _, _)| id == cur).unwrap_or(0);
+                                                    let new_idx = if act == "next_command" {
+                                                        (idx + 1) % commands.len()
+                                                    } else {
+                                                        idx.checked_sub(1).unwrap_or(commands.len() - 1)
+                                                    };
+                                                    let (new_id, new_name, _, new_pid, _) = &commands[new_idx];
+                                                    active_id = Some(new_id.clone());
+                                                    manager.logger().log("switch", &format!("id={} name={} pid={}", new_id, new_name, new_pid));
+                                                    render_vtty(&manager, &active_id).await;
+                                                }
+                                            }
+                                            "toggle_log" => {
+                                                showing_log = !showing_log;
+                                                log_scroll_offset = 0;
+                                                if showing_log {
+                                                    render_log_overlay(&manager, &log_entries, log_scroll_offset, &mut stdout);
+                                                }
+                                            }
+                                            "spawn_command" => {
+                                                manager.logger().log("info", "spawn_command keybinding triggered (web UI spawn available)");
+                                            }
+                                            "quit" => {
+                                                break 'outer;
+                                            }
+                                            _ => {}
+                                        }
+                                        continue;
+                                    }
+
+                                    // ── Default: forward byte to active command ──
+                                    let target_id = active_id.clone()
+                                        .or_else(|| manager.list().first().map(|(id, _, _, _, _)| id.clone()));
                                     if let Some(ref tid) = target_id {
                                         if let Some(handle) = manager.get(tid) {
                                             let _ = handle.send_bytes(vec![b]).await;
                                         }
                                     }
                                 }
-                                Ok(Ok(_)) => {}  // ignore >1 byte (shouldn't happen with 1-byte buf)
+                                Ok(Ok(_)) => {}  // ignore >1 byte
                                 Ok(Err(_)) => { guard.clear_ready(); break; }
                                 Err(_would_block) => { guard.clear_ready(); break; }
                             }
@@ -733,6 +973,41 @@ async fn run_display_loop(
     // (The dismissed path now waits for q/Ctrl+C inside the loop.)
     let _ = shutdown_tx.send(());
     true
+}
+
+/// Render the command log as an overlay on top of the VTTY display.
+/// Shows the most recent log entries, with the newest at the bottom.
+fn render_log_overlay(
+    _manager: &Arc<CommandManager>,
+    log_entries: &Arc<std::sync::Mutex<Vec<String>>>,
+    scroll_offset: usize,
+    stdout: &mut std::io::Stdout,
+) {
+    use std::io::Write;
+    let _ = crossterm::terminal::Clear(crossterm::terminal::ClearType::All);
+
+    let entries = log_entries.lock().unwrap_or_else(|e| e.into_inner());
+    let total = entries.len();
+
+    // Show header
+    let _ = write!(stdout, "\x1b[1;34m── Command Log ({} entries) ──\x1b[0m  Press q or Ctrl+L to close\r\n\r\n", total);
+
+    // Get terminal height, leave room for header (2 lines) and footer (1 line)
+    let (_, term_rows) = crossterm::terminal::size().unwrap_or((80, 24));
+    let available_rows = (term_rows as usize).saturating_sub(3);
+
+    // Calculate visible window
+    let max_start = total.saturating_sub(available_rows);
+    let start = if scroll_offset > max_start { max_start } else { scroll_offset };
+    let end = (start + available_rows).min(total);
+
+    for i in start..end {
+        let _ = write!(stdout, "{}\r\n", &entries[i]);
+    }
+
+    // Footer
+    let _ = write!(stdout, "\r\n\x1b[2mlines {}-{} of {}\x1b[0m", start + 1, end, total);
+    let _ = stdout.flush();
 }
 
 /// Wait for a direct child command to exit (headless, non-display mode).
@@ -1427,7 +1702,7 @@ fn format_command(cmd: &serde_json::Value) -> Option<String> {
 /// PID to disambiguate.
 ///
 /// Returns true if exactly one command was found and stopped.
-async fn handle_stop_command(_cli: &Cli, target: &str) -> Result<bool> {
+async fn handle_stop_command(_cli: &Cli, target: Option<&str>) -> Result<bool> {
     let registry = InstanceRegistry::new()?;
     let instances = registry.list_instances();
 
@@ -1436,6 +1711,62 @@ async fn handle_stop_command(_cli: &Cli, target: &str) -> Result<bool> {
     }
 
     let client = reqwest::Client::new();
+
+    // If no target given, stop the only command if there is exactly one.
+    let target = match target {
+        Some(t) => t,
+        None => {
+            // Collect all commands from all instances
+            let mut all_commands: Vec<(u32, String, u32, String, String)> = Vec::new();
+            for info in &instances {
+                let url = instance_url(info, &None);
+                if let Ok(resp) = client.get(format!("{}/api/commands", url)).send().await {
+                    if let Ok(json) = resp.json::<serde_json::Value>().await {
+                        if let Some(cmds) = json["data"].as_array() {
+                            for cmd in cmds {
+                                let name = cmd.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                let args = cmd.get("args").and_then(|v| v.as_array());
+                                let cmd_pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                                let full = match args {
+                                    Some(arr) => {
+                                        let arg_strs: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
+                                        if arg_strs.is_empty() { name.clone() }
+                                        else { format!("{} {}", name, arg_strs.join(" ")) }
+                                    }
+                                    None => name.clone(),
+                                };
+                                if let Some(id) = cmd.get("id").and_then(|v| v.as_str()) {
+                                    all_commands.push((info.pid, id.to_string(), cmd_pid, name, full));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            match all_commands.len() {
+                0 => {
+                    eprintln!("No commands running.");
+                    return Ok(false);
+                }
+                1 => {
+                    let (inst_pid, ref cmd_id, cmd_pid, _, ref full) = all_commands[0];
+                    let info = instances.iter().find(|i| i.pid == inst_pid).unwrap();
+                    let url = instance_url(info, &None);
+                    eprintln!("Stopping only command: {} (PID {})", full, cmd_pid);
+                    return stop_command_by_id(&client, &url, cmd_id, cmd_pid, inst_pid).await;
+                }
+                _ => {
+                    eprintln!("Multiple commands running. Specify which one to stop:");
+                    for (_, _, cmd_pid, _, full) in &all_commands {
+                        eprintln!("  PID {} — {}", cmd_pid, full);
+                    }
+                    eprintln!("Usage: vrunner stop-command <PID or name>");
+                    return Ok(false);
+                }
+            }
+        }
+    };
 
     // Fast path: if target is a pure number, treat as PID.
     if let Ok(pid) = target.parse::<u32>() {

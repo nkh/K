@@ -131,7 +131,10 @@ pub struct Cli {
     #[arg(long, value_name = "SECS")]
     pub exit_timeout: Option<u64>,
 
-    /// Show tab bar for command switching in interactive display
+    /// Show tab bar for command switching in interactive display.
+    /// Requires --display-all for command navigation keybindings to work.
+    /// Keybindings (Ctrl+Left/Right, Ctrl+L, F12) can be customized in the
+    /// config file under `interactive.keybindings`.
     #[arg(long)]
     pub tabs: bool,
 
@@ -214,12 +217,14 @@ pub enum Commands {
     /// List running commands only (tab-separated, machine-readable)
     ListCommands,
     /// Stop a specific command by PID or name (not the whole instance).
+    /// If no target is given and exactly one command is running, it is stopped automatically.
     /// If the target is numeric, it is treated as a PID.
     /// Otherwise it is matched against command names (and optionally args).
     /// To match name+args, quote the full string: "vim file.txt"
     StopCommand {
-        /// PID or name (and optional args, quoted) of the command to stop
-        target: String,
+        /// PID or name (and optional args, quoted) of the command to stop.
+        /// If omitted and exactly one command is running, that command is stopped.
+        target: Option<String>,
     },
     /// Resize the VTTY of a running command.
     /// Resizes both the in-memory buffer and the child PTY (sends SIGWINCH).

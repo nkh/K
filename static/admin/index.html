@@ -1053,7 +1053,7 @@ function renderPanels() {
                     <span class="title">${escHtml(panel.label)}</span>
                     <span class="instance-url">${escHtml(panel.instUrl.replace(/^https?:\/\//, ''))}</span>
                     <div class="input-row" style="flex:1;min-width:120px;">
-                        <input type="text" id="keyInput-${panel.id}" placeholder="Send keys..." style="font-size:0.7rem;" onkeydown="if(event.key==='Enter')sendKeysToPanel('${panel.id}')">
+                        <input type="text" id="keyInput-${panel.id}" placeholder="Send keys... (e.g. q, <Enter>, <C-c>)" style="font-size:0.7rem;" onkeydown="if(event.key==='Enter'){event.preventDefault();sendKeysToPanel('${panel.id}')}">
                         <button class="small" onclick="sendKeysToPanel('${panel.id}')">Send</button>
                     </div>
                     ${state.panels.length > 1 ? `<button class="small danger" onclick="removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
@@ -1083,19 +1083,24 @@ async function sendKeysToPanel(panelId) {
             headers: authHeadersForInstance({ url: instUrl, token: panel.token }),
             body: JSON.stringify({ keys: keysValue }),
         });
-        const json = await res.json();
+        let json;
+        try {
+            json = await res.json();
+        } catch (parseErr) {
+            console.error('send_keys: non-JSON response', res.status, res.statusText);
+            input.value = '';
+            loadVttyHttp(instUrl, cmdId);
+            return;
+        }
         if (json.status === 'ok') {
             input.value = '';
             loadVttyHttp(instUrl, cmdId);
         } else {
-            console.error('send_keys failed:', json.error);
-            input.style.borderColor = 'var(--red)';
-            setTimeout(() => { input.style.borderColor = ''; }, 1500);
+            console.error('send_keys server error:', res.status, json.error);
+            input.value = '';
         }
     } catch (e) {
         console.error('send_keys network error:', e);
-        input.style.borderColor = 'var(--red)';
-        setTimeout(() => { input.style.borderColor = ''; }, 1500);
     }
 }
 
