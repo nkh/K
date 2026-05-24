@@ -39,20 +39,19 @@ pub enum ActionEffect {
 pub fn execute_action(
     action: &Action,
     showing_log: bool,
-    display_all: bool,
     command_count: usize,
     _bindings: &[Binding],
 ) -> ActionEffect {
     match action {
         Action::NextCommand => {
-            if display_all && command_count > 1 {
+            if command_count > 1 {
                 ActionEffect::NextCommand
             } else {
                 ActionEffect::None
             }
         }
         Action::PrevCommand => {
-            if display_all && command_count > 1 {
+            if command_count > 1 {
                 ActionEffect::PrevCommand
             } else {
                 ActionEffect::None
@@ -178,15 +177,24 @@ pub fn render_spawn_prompt(stdout: &mut std::io::Stdout) {
 
 /// Read a command string from the user in cooked (non-raw) mode.
 ///
-/// Temporarily disables raw mode, reads a line from stdin, then re-enables
-/// raw mode.  Returns `Some(input)` on Enter, `None` on Ctrl+C / empty.
+/// Temporarily disables raw mode, moves the cursor to the bottom of the
+/// terminal, reads a line from stdin, then re-enables raw mode.
+/// Returns `Some(input)` on Enter, `None` on Ctrl+C / empty.
 pub fn read_spawn_command() -> Option<String> {
+    use std::io::Write;
+
     // Leave raw mode so the user gets normal line editing
     let _ = terminal::disable_raw_mode();
 
-    let mut input = String::new();
-    eprint!("\r\n  Command: ");
+    // Move cursor to the last line of the terminal
+    let (_, term_rows) = terminal::size().unwrap_or((80, 24));
+    eprint!("\x1b[{};1H", term_rows);  // cursor to (term_rows, 1)
+    // Clear from cursor to end of line
+    eprint!("\x1b[2K");
+    eprint!("\x1b[1;36m  Spawn:\x1b[0m ");
     let _ = std::io::stderr().flush();
+
+    let mut input = String::new();
 
     match std::io::stdin().read_line(&mut input) {
         Ok(0) => None,

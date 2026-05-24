@@ -916,7 +916,7 @@ async fn run_display_loop(
                                             esc_buf.clear();
                                             esc_deadline = None;
                                             let effect = vrunner::interactive::execute_action(
-                                                &act, showing_log, display_all, manager.list().len(), &bindings,
+                                                &act, showing_log, manager.list().len(), &bindings,
                                             );
                                             // spawn_command needs special handling: leave raw mode, read input
                                             if act == Action::SpawnCommand {
@@ -1044,7 +1044,7 @@ async fn run_display_loop(
                                             continue;
                                         }
                                         let effect = vrunner::interactive::execute_action(
-                                            act, showing_log, display_all, manager.list().len(), &bindings,
+                                            act, showing_log, manager.list().len(), &bindings,
                                         );
                                         match effect {
                                             ActionEffect::None => continue,
