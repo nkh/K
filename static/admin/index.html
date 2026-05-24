@@ -974,6 +974,15 @@ function connectVttyWs(instUrl, cmdId) {
                 if (state.selectedInstUrl && state.selectedCmdId) {
                     scheduleVttyHttp(state.selectedInstUrl, state.selectedCmdId, 0);
                 }
+                // Auto-reconnect after 2 seconds if the command is still selected and alive
+                if (state.selectedInstUrl && state.selectedCmdId && !state._wsReconnectTimer) {
+                    state._wsReconnectTimer = setTimeout(() => {
+                        state._wsReconnectTimer = null;
+                        if (state.selectedInstUrl && state.selectedCmdId && state.updateMode === 'push') {
+                            connectVttyWs(state.selectedInstUrl, state.selectedCmdId);
+                        }
+                    }, 2000);
+                }
             }
         };
 
@@ -987,6 +996,10 @@ function connectVttyWs(instUrl, cmdId) {
 }
 
 function disconnectVttyWs() {
+    if (state._wsReconnectTimer) {
+        clearTimeout(state._wsReconnectTimer);
+        state._wsReconnectTimer = null;
+    }
     if (state.vttyWs) {
         state.vttyWs.onclose = null; // prevent re-entry
         state.vttyWs.close();
