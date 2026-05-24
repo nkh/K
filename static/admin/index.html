@@ -49,7 +49,10 @@
         .panel:last-child { border-right: none; }
         .panel-header { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem; background: var(--bg-tertiary); border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; }
         .panel-header .title { font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; }
-        .panel-header .instance-url { font-size: 0.7rem; color: var(--text-muted); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .panel-header .cmd-info { display: flex; flex-direction: column; min-width: 0; flex-shrink: 1; gap: 0; overflow: hidden; }
+        .panel-header .cmd-fullname { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .panel-header .cmd-args { font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .panel-header .instance-url { font-size: 0.65rem; color: var(--text-muted); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
         /* VTTY */
         .vtty-container { flex: 1; overflow: auto; background: #000; position: relative; }
@@ -93,6 +96,8 @@
         .spawn-form .field { margin-bottom: 0.4rem; }
         .spawn-form label { display: block; font-size: 0.7rem; color: var(--text-secondary); margin-bottom: 0.15rem; }
         .spawn-form input, .spawn-form select { width: 100%; }
+        .spawn-form .field-row { display: flex; gap: 0.5rem; }
+        .spawn-form .field-row .field { flex: 1; }
 
         /* Log viewer */
         .log-viewer { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
@@ -130,6 +135,10 @@
         .bottombar .cursor-pos { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); }
         .bottombar .dims { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); }
         .bottombar .spacer { flex: 1; }
+        .bottombar.hidden { display: none; }
+        .status-toggle { position: fixed; bottom: 0.35rem; right: 0.5rem; z-index: 20; opacity: 0.3; font-size: 0.6rem; padding: 0.1rem 0.3rem; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 3px; color: var(--text-muted); cursor: pointer; }
+        .status-toggle:hover { opacity: 1; }
+        .bottombar:not(.hidden) ~ .status-toggle { bottom: 1.8rem; }
 
         /* Scrollbar styling */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -227,11 +236,21 @@
                     <div class="spawn-form">
                         <div class="field">
                             <label>Command</label>
-                            <input type="text" id="spawnCmd" placeholder="/usr/bin/htop">
+                            <input type="text" id="spawnCmd" placeholder="/usr/bin/htop" onkeydown="if(event.key==='Enter'){event.preventDefault();spawnCommand()}">
                         </div>
                         <div class="field">
                             <label>Arguments (space-separated)</label>
-                            <input type="text" id="spawnArgs" placeholder="-- arg1 arg2">
+                            <input type="text" id="spawnArgs" placeholder="-- arg1 arg2" onkeydown="if(event.key==='Enter'){event.preventDefault();spawnCommand()}">
+                        </div>
+                        <div class="field-row">
+                            <div class="field">
+                                <label>Rows</label>
+                                <input type="number" id="spawnRows" value="" min="1" max="200" placeholder="default">
+                            </div>
+                            <div class="field">
+                                <label>Cols</label>
+                                <input type="number" id="spawnCols" value="" min="1" max="500" placeholder="default">
+                            </div>
                         </div>
                         <div class="field">
                             <label>Certificate (optional)</label>
@@ -283,8 +302,8 @@
         </div>
     </div>
 
-    <!-- Bottom bar -->
-    <div class="bottombar">
+    <!-- Bottom bar (toggleable) -->
+    <div class="bottombar" id="bottomBar">
         <span class="cursor-pos" id="cursorPos">Cursor: --</span>
         <span class="dims" id="termDims">--</span>
         <span class="spacer"></span>
@@ -298,7 +317,9 @@
             <span style="font-size:0.65rem;color:var(--text-muted);">ms</span>
         </span>
         <span style="font-size:0.7rem;color:var(--text-muted);" id="connStatus">Connected</span>
+        <button class="small" onclick="toggleBottombar()" title="Hide status bar">&#x2715;</button>
     </div>
+    <button class="status-toggle" id="statusToggle" onclick="toggleBottombar()" title="Show status bar" style="display:none;">&#9650;</button>
 </div>
 
 <!-- Add panel modal -->
@@ -437,6 +458,14 @@ function toggleSidebar() {
     document.getElementById('sidebar').classList.toggle('collapsed');
 }
 
+// ─── Bottom bar toggle ───
+function toggleBottombar() {
+    const bar = document.getElementById('bottomBar');
+    const toggle = document.getElementById('statusToggle');
+    bar.classList.toggle('hidden');
+    toggle.style.display = bar.classList.contains('hidden') ? '' : 'none';
+}
+
 function switchSidebarTab(tab, el) {
     document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
     el.classList.add('active');
@@ -518,6 +547,7 @@ async function loadCommands() {
 
     // If a command is selected, refresh its VTTY
     if (state.selectedInstUrl && state.selectedCmdId) {
+        updatePanelCommandInfo();
         // Only poll via HTTP if using poll mode or viewing a non-current buffer
         if (state.updateMode === 'poll' || state.bufferView !== 'current') {
             scheduleVttyHttp(state.selectedInstUrl, state.selectedCmdId, 500);
@@ -530,11 +560,42 @@ function selectCommand(instUrl, cmdId, name) {
     state.selectedCmdId = cmdId;
     state.bufferView = 'current';
     document.getElementById('bufferSelect').value = 'current';
+    updatePanelCommandInfo();
     loadCommands(); // Re-render to update selection
     // Immediately load VTTY content via HTTP
     loadVttyHttp(instUrl, cmdId);
     // Start the active update mode (push or poll)
     startUpdateMode();
+}
+
+// Update the panel header with the selected command's full name and args.
+function updatePanelCommandInfo() {
+    if (!state.selectedInstUrl || !state.selectedCmdId) return;
+    // Find the command data from the loaded instance commands
+    let cmd = null;
+    for (const inst of state.instanceUrls) {
+        if (inst.url === state.selectedInstUrl && inst._commands) {
+            cmd = inst._commands.find(c => c.id === state.selectedCmdId);
+            break;
+        }
+    }
+    const panel = getSelectedPanel();
+    if (!panel) return;
+    const nameEl = panel.querySelector('.cmd-fullname');
+    const argsEl = panel.querySelector('.cmd-args');
+    if (nameEl && cmd) {
+        const fullName = cmd.name || cmd.id;
+        nameEl.textContent = fullName;
+        nameEl.title = fullName;
+        if (argsEl) {
+            const argsStr = (cmd.args || []).join(' ');
+            argsEl.textContent = argsStr;
+            argsEl.title = argsStr || '';
+        }
+    } else if (nameEl) {
+        nameEl.textContent = '';
+        if (argsEl) argsEl.textContent = '';
+    }
 }
 
 function getSelectedPanel() {
@@ -873,16 +934,25 @@ async function spawnCommand() {
     const instSelect = document.getElementById('spawnInstance');
     const instUrl = instSelect.value;
 
+    // Terminal size from spawn form (optional, use server defaults if empty)
+    const body = { cmd, args, certificate: cert };
+    const rows = parseInt(document.getElementById('spawnRows').value);
+    const cols = parseInt(document.getElementById('spawnCols').value);
+    if (rows > 0) body.rows = rows;
+    if (cols > 0) body.cols = cols;
+
     try {
         const res = await fetch(apiUrl('/api/commands', { url: instUrl }), {
             method: 'POST',
             headers: authHeadersForInstance({ url: instUrl }),
-            body: JSON.stringify({ cmd, args, certificate: cert }),
+            body: JSON.stringify(body),
         });
         const json = await res.json();
         if (json.status === 'ok') {
             document.getElementById('spawnCmd').value = '';
             document.getElementById('spawnArgs').value = '';
+            document.getElementById('spawnRows').value = '';
+            document.getElementById('spawnCols').value = '';
             // Auto-select the newly spawned command so its terminal output appears
             const newId = json.data && json.data.id ? json.data.id : null;
             if (newId) {
@@ -1050,7 +1120,10 @@ function renderPanels() {
         html += `
             <div class="panel" id="${panel.id}">
                 <div class="panel-header">
-                    <span class="title">${escHtml(panel.label)}</span>
+                    <div class="cmd-info" id="cmdInfo-${panel.id}">
+                        <span class="cmd-fullname" id="cmdName-${panel.id}"></span>
+                        <span class="cmd-args" id="cmdArgs-${panel.id}"></span>
+                    </div>
                     <span class="instance-url">${escHtml(panel.instUrl.replace(/^https?:\/\//, ''))}</span>
                     <div class="input-row" style="flex:1;min-width:120px;">
                         <input type="text" id="keyInput-${panel.id}" placeholder="Send keys... (e.g. q, <Enter>, <C-c>)" style="font-size:0.7rem;" onkeydown="if(event.key==='Enter'){event.preventDefault();sendKeysToPanel('${panel.id}')}">
