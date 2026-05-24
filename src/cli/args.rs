@@ -174,10 +174,11 @@ pub struct Cli {
 pub enum Commands {
     /// List all running vrunner instances
     List,
-    /// Stop a vrunner instance by PID
+    /// Stop a vrunner instance by PID.
+    /// If omitted and exactly one instance is running, it is stopped automatically.
     Stop {
-        /// PID of the instance to stop
-        pid: u32,
+        /// PID of the instance to stop (optional if only one is running)
+        pid: Option<u32>,
     },
     /// Spawn a new command on a running vrunner instance.
     /// If one instance is running, it is used automatically.

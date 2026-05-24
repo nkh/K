@@ -3,6 +3,7 @@ pub mod config;
 pub mod daemon;
 pub mod handles;
 pub mod instance;
+pub mod interactive;
 pub mod logging;
 pub mod process;
 pub mod vtty;

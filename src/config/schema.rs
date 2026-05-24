@@ -268,21 +268,26 @@ pub struct InteractiveConfig {
     #[serde(default)]
     pub tabs: bool,
     /// Configurable keybindings for the terminal display.
-    /// Maps action names to key sequences (raw bytes).
+    /// Maps action names to human-readable key names.
     /// When a key sequence matches, the corresponding action is executed
     /// instead of forwarding the keystroke to the active command.
     ///
-    /// Key sequence format: raw escape notation.
-    ///   Ctrl+Left  = "\x1b[1;5D"
-    ///   Ctrl+Right = "\x1b[1;5C"
-    ///   Ctrl+L     = "\x0c"
-    ///   F12        = "\x1b[24~"
+    /// Key name format: human-readable names.
+    ///   Ctrl+Left  = "ctrl+left"
+    ///   Ctrl+Right = "ctrl+right"
+    ///   Ctrl+L     = "ctrl+l"
+    ///   F12        = "f12"
+    ///   Ctrl+H     = "ctrl+h"
+    ///
+    /// Raw escape sequences (e.g., "\x1b[1;5C") are also accepted
+    /// for backward compatibility.
     ///
     /// Available actions:
     ///   "next_command"     — switch to the next running command (wraps around)
     ///   "prev_command"     — switch to the previous running command (wraps around)
     ///   "toggle_log"       — show/hide command log overlay
     ///   "spawn_command"    — open a prompt to spawn a new command
+    ///   "show_help"        — show keybinding help overlay
     ///   "quit"             — exit the display (same as Ctrl+\)
     #[serde(default)]
     pub keybindings: KeybindingsConfig,
@@ -299,39 +304,47 @@ impl Default for InteractiveConfig {
 
 /// Maps action names to key sequences for the interactive terminal display.
 ///
-/// Example YAML:
+/// Key names use human-readable format (preferred):
 /// ```yaml
 /// interactive:
 ///   keybindings:
-///     next_command: "\x1b[1;5C"   # Ctrl+Right
-///     prev_command: "\x1b[1;5D"   # Ctrl+Left
-///     toggle_log: "\x0c"           # Ctrl+L
-///     spawn_command: "\x1b[24~"    # F12
-///     quit: "\x1b"                 # Esc
+///     next_command: "ctrl+right"
+///     prev_command: "ctrl+left"
+///     toggle_log: "ctrl+l"
+///     spawn_command: "f12"
+///     show_help: "ctrl+h"
+///     quit: "esc"
 /// ```
+///
+/// Raw escape sequences (e.g., `"\x1b[1;5C"`) are still accepted for
+/// backward compatibility.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct KeybindingsConfig {
-    /// Switch to the next running command. Default: Ctrl+Right (`\x1b[1;5C`)
+    /// Switch to the next running command. Default: Ctrl+Right (`ctrl+right`)
     #[serde(default = "default_key_next_command")]
     pub next_command: Option<String>,
-    /// Switch to the previous running command. Default: Ctrl+Left (`\x1b[1;5D`)
+    /// Switch to the previous running command. Default: Ctrl+Left (`ctrl+left`)
     #[serde(default = "default_key_prev_command")]
     pub prev_command: Option<String>,
-    /// Toggle the command log overlay. Default: Ctrl+L (`\x0c`)
+    /// Toggle the command log overlay. Default: Ctrl+L (`ctrl+l`)
     #[serde(default = "default_key_toggle_log")]
     pub toggle_log: Option<String>,
-    /// Open a prompt to spawn a new command. Default: F12 (`\x1b[24~`)
+    /// Open a prompt to spawn a new command. Default: F12 (`f12`)
     #[serde(default = "default_key_spawn_command")]
     pub spawn_command: Option<String>,
-    /// Quit the display loop. Default: none (use Ctrl+\ = `\x1c`)
+    /// Show the help overlay. Default: Ctrl+H (`ctrl+h`)
+    #[serde(default = "default_key_show_help")]
+    pub show_help: Option<String>,
+    /// Quit the display loop. Default: none (use Ctrl+\ = `ctrl+\\`)
     #[serde(default)]
     pub quit: Option<String>,
 }
 
-fn default_key_next_command() -> Option<String> { Some("\x1b[1;5C".into()) }
-fn default_key_prev_command() -> Option<String> { Some("\x1b[1;5D".into()) }
-fn default_key_toggle_log() -> Option<String> { Some("\x0c".into()) }
-fn default_key_spawn_command() -> Option<String> { Some("\x1b[24~".into()) }
+fn default_key_next_command() -> Option<String> { Some("ctrl+right".into()) }
+fn default_key_prev_command() -> Option<String> { Some("ctrl+left".into()) }
+fn default_key_toggle_log() -> Option<String> { Some("ctrl+l".into()) }
+fn default_key_spawn_command() -> Option<String> { Some("f12".into()) }
+fn default_key_show_help() -> Option<String> { Some("ctrl+h".into()) }
 
 impl Default for KeybindingsConfig {
     fn default() -> Self {
@@ -340,6 +353,7 @@ impl Default for KeybindingsConfig {
             prev_command: default_key_prev_command(),
             toggle_log: default_key_toggle_log(),
             spawn_command: default_key_spawn_command(),
+            show_help: default_key_show_help(),
             quit: None,
         }
     }
