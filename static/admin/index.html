@@ -49,10 +49,10 @@
         .panel:last-child { border-right: none; }
         .panel-header { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem; background: var(--bg-tertiary); border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; }
         .panel-header .title { font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; }
-        .panel-header .cmd-info { display: flex; flex-direction: column; min-width: 0; flex-shrink: 1; gap: 0; overflow: hidden; }
-        .panel-header .cmd-fullname { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .panel-header .cmd-args { font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .panel-header .instance-url { font-size: 0.65rem; color: var(--text-muted); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .panel-header .cmd-info { display: flex; flex-direction: column; min-width: 0; flex-shrink: 1; gap: 0; overflow: hidden; max-width: 100%; }
+        .panel-header .cmd-fullname { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+        .panel-header .cmd-args { font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+        .panel-header .instance-url { font-size: 0.65rem; color: var(--text-muted); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
 
         /* VTTY */
         .vtty-container { flex: 1; overflow: auto; background: #000; position: relative; }
@@ -60,11 +60,14 @@
         .vtty-container .cursor-indicator { position: absolute; width: 8px; height: 14px; background: rgba(88, 166, 255, 0.6); border: 1px solid var(--accent); pointer-events: none; transition: top 0.05s, left 0.05s; z-index: 5; }
 
         /* Command list items */
-        .cmd-item { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; }
+        .cmd-item { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; flex-direction: column; gap: 0.1rem; font-size: 0.8rem; }
         .cmd-item:hover { background: var(--bg-tertiary); }
         .cmd-item.selected { background: var(--bg-tertiary); border-left: 2px solid var(--accent); }
-        .cmd-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .cmd-item .pid { color: var(--text-muted); font-size: 0.7rem; font-family: var(--font-mono); }
+        .cmd-item-row { display: flex; align-items: center; gap: 0.5rem; width: 100%; }
+        .cmd-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-primary); }
+        .cmd-item .pid { color: var(--text-muted); font-size: 0.7rem; font-family: var(--font-mono); flex-shrink: 0; }
+        .cmd-item .cmd-detail { font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 1.1rem; }
+        .cmd-item .cmd-detail:empty { display: none; }
         .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
         .status-running { background: var(--green); }
         .status-exited { background: var(--red); }
@@ -98,6 +101,9 @@
         .spawn-form input, .spawn-form select { width: 100%; }
         .spawn-form .field-row { display: flex; gap: 0.5rem; }
         .spawn-form .field-row .field { flex: 1; }
+        .spawn-form .autofit-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; }
+        .spawn-form .autofit-row .field { flex: 1; margin-bottom: 0; }
+        .spawn-form .autofit-hint { font-size: 0.6rem; color: var(--text-muted); font-style: italic; }
 
         /* Log viewer */
         .log-viewer { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
@@ -131,14 +137,19 @@
         .cert-badge.empty { background: var(--bg-tertiary); color: var(--text-muted); border-color: var(--text-muted); }
 
         /* Bottom bar */
-        .bottombar { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.75rem; background: var(--bg-secondary); border-top: 1px solid var(--border); flex-shrink: 0; }
+        .bottombar { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.75rem; background: var(--bg-secondary); border-top: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; }
         .bottombar .cursor-pos { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); }
         .bottombar .dims { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); }
+        .bottombar .cmd-label { font-family: var(--font-mono); font-size: 0.7rem; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw; }
+        .bottombar .cmd-label .cmd-label-name { color: var(--text-primary); }
+        .bottombar .cmd-label .cmd-label-sep { color: var(--text-muted); margin: 0 0.3rem; }
+        .bottombar .cmd-label .cmd-label-args { color: var(--text-secondary); }
+        .bottombar .cmd-label .cmd-label-pid { color: var(--text-muted); }
         .bottombar .spacer { flex: 1; }
         .bottombar.hidden { display: none; }
         .status-toggle { position: fixed; bottom: 0.35rem; right: 0.5rem; z-index: 20; opacity: 0.3; font-size: 0.6rem; padding: 0.1rem 0.3rem; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 3px; color: var(--text-muted); cursor: pointer; }
         .status-toggle:hover { opacity: 1; }
-        .bottombar:not(.hidden) ~ .status-toggle { bottom: 1.8rem; }
+        .bottombar:not(.hidden) ~ .status-toggle { bottom: 2rem; }
 
         /* Scrollbar styling */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -242,7 +253,7 @@
                             <label>Arguments (space-separated)</label>
                             <input type="text" id="spawnArgs" placeholder="-- arg1 arg2" onkeydown="if(event.key==='Enter'){event.preventDefault();spawnCommand()}">
                         </div>
-                        <div class="field-row">
+                        <div class="autofit-row">
                             <div class="field">
                                 <label>Rows</label>
                                 <input type="number" id="spawnRows" value="" min="1" max="200" placeholder="default">
@@ -251,7 +262,9 @@
                                 <label>Cols</label>
                                 <input type="number" id="spawnCols" value="" min="1" max="500" placeholder="default">
                             </div>
+                            <button class="small" onclick="autofitTerminalSize()" title="Calculate optimal terminal size from the panel container" style="align-self:flex-end;margin-bottom:0.2rem;">Auto-fit</button>
                         </div>
+                        <div class="autofit-hint" id="autofitHint"></div>
                         <div class="field">
                             <label>Certificate (optional)</label>
                             <select id="spawnCert">
@@ -304,6 +317,7 @@
 
     <!-- Bottom bar (toggleable) -->
     <div class="bottombar" id="bottomBar">
+        <span class="cmd-label" id="cmdLabel"></span>
         <span class="cursor-pos" id="cursorPos">Cursor: --</span>
         <span class="dims" id="termDims">--</span>
         <span class="spacer"></span>
@@ -380,6 +394,7 @@ const state = {
 (function init() {
     document.getElementById('authToken').value = state.authToken;
     applyFontSize();
+    initBottombar();
 
     // Parse URL arguments for multi-instance
     const params = new URLSearchParams(window.location.search);
@@ -463,7 +478,22 @@ function toggleBottombar() {
     const bar = document.getElementById('bottomBar');
     const toggle = document.getElementById('statusToggle');
     bar.classList.toggle('hidden');
-    toggle.style.display = bar.classList.contains('hidden') ? '' : 'none';
+    const isHidden = bar.classList.contains('hidden');
+    toggle.style.display = isHidden ? '' : 'none';
+    localStorage.setItem('vrunner_bottombar_hidden', isHidden ? 'true' : 'false');
+}
+
+function initBottombar() {
+    const shouldHide = localStorage.getItem('vrunner_bottombar_hidden') === 'true';
+    const bar = document.getElementById('bottomBar');
+    const toggle = document.getElementById('statusToggle');
+    if (shouldHide) {
+        bar.classList.add('hidden');
+        toggle.style.display = '';
+    } else {
+        bar.classList.remove('hidden');
+        toggle.style.display = 'none';
+    }
 }
 
 function switchSidebarTab(tab, el) {
@@ -518,13 +548,18 @@ async function loadCommands() {
                 : `<span class="cert-badge empty">--</span>`;
             const key = inst.url + ':' + cmd.id;
             const selected = (state.selectedInstUrl === inst.url && state.selectedCmdId === cmd.id) ? ' selected' : '';
+            const argsStr = (cmd.args || []).join(' ');
+            const detail = argsStr ? `${argsStr}  (pid ${cmd.pid})` : `pid ${cmd.pid}`;
             html += `
-                <div class="cmd-item${selected}" onclick="selectCommand('${inst.url}','${cmd.id}','${escHtml(cmd.name || cmd.id)}')" title="${escHtml(inst.label)} / ${escHtml(cmd.name || cmd.id)}">
-                    <div class="status-dot status-running"></div>
-                    <span class="name">${escHtml(cmd.name || cmd.id)}</span>
-                    ${certBadge}
-                    <span class="pid">${cmd.pid}</span>
-                    <button class="small danger" onclick="event.stopPropagation();killCommand('${inst.url}','${cmd.id}')" title="Kill">&#x2715;</button>
+                <div class="cmd-item${selected}" onclick="selectCommand('${inst.url}','${cmd.id}','${escHtml(cmd.name || cmd.id)}')" title="${escHtml(inst.label)} / ${escHtml(cmd.name || cmd.id)} ${escHtml(argsStr)}">
+                    <div class="cmd-item-row">
+                        <div class="status-dot status-running"></div>
+                        <span class="name">${escHtml(cmd.name || cmd.id)}</span>
+                        ${certBadge}
+                        <span class="pid">${cmd.pid}</span>
+                        <button class="small danger" onclick="event.stopPropagation();killCommand('${inst.url}','${cmd.id}')" title="Kill">&#x2715;</button>
+                    </div>
+                    <div class="cmd-detail">${escHtml(detail)}</div>
                 </div>`;
         }
     }
@@ -592,10 +627,58 @@ function updatePanelCommandInfo() {
             argsEl.textContent = argsStr;
             argsEl.title = argsStr || '';
         }
+        // Update bottom bar command label
+        updateBottomBarLabel(cmd);
     } else if (nameEl) {
         nameEl.textContent = '';
         if (argsEl) argsEl.textContent = '';
+        updateBottomBarLabel(null);
     }
+}
+
+// ─── Bottom bar: command label ───
+function updateBottomBarLabel(cmd) {
+    const el = document.getElementById('cmdLabel');
+    if (!el) return;
+    if (!cmd) {
+        el.innerHTML = '';
+        return;
+    }
+    const fullName = cmd.name || cmd.id;
+    const argsStr = (cmd.args || []).join(' ');
+    const pid = cmd.pid || '';
+    let html = `<span class="cmd-label-name">${escHtml(fullName)}</span>`;
+    if (argsStr) {
+        html += `<span class="cmd-label-sep">|</span><span class="cmd-label-args">${escHtml(argsStr)}</span>`;
+    }
+    if (pid) {
+        html += `<span class="cmd-label-sep">|</span><span class="cmd-label-pid">pid ${pid}</span>`;
+    }
+    el.innerHTML = html;
+    el.title = argsStr ? `${fullName} ${argsStr} (pid ${pid})` : `${fullName} (pid ${pid})`;
+}
+
+// ─── Spawn: auto-fit terminal size ───
+function autofitTerminalSize() {
+    // Calculate optimal terminal size from the current panel container
+    const panel = getSelectedPanel();
+    if (!panel) {
+        document.getElementById('autofitHint').textContent = 'No panel visible to measure';
+        return;
+    }
+    const vttyEl = panel.querySelector('.vtty-container');
+    if (!vttyEl) {
+        document.getElementById('autofitHint').textContent = 'No terminal container found';
+        return;
+    }
+    const rect = vttyEl.getBoundingClientRect();
+    const charW = state.fontSize * 0.6;
+    const charH = state.fontSize * 1.2;
+    const cols = Math.max(20, Math.min(500, Math.floor(rect.width / charW)));
+    const rows = Math.max(5, Math.min(200, Math.floor(rect.height / charH)));
+    document.getElementById('spawnRows').value = rows;
+    document.getElementById('spawnCols').value = cols;
+    document.getElementById('autofitHint').textContent = `Panel is ${Math.floor(rect.width)}x${Math.floor(rect.height)}px → ${rows} rows × ${cols} cols`;
 }
 
 function getSelectedPanel() {
