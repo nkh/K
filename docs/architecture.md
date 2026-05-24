@@ -76,11 +76,11 @@ This document describes the high-level architecture of **vrunner**, a Rust-based
 Uses `clap` with derive macros. Supports:
 - Options before `--` (vrunner flags)
 - Command + args after `--` (child process)
-- Subcommands: `list`, `stop <PID>`, `spawn <cmd> [args...]`, `freeze <PID>`, `thaw <PID>`, `cert <generate|list|show|remove>`, `list-vrunner`, `list-commands`, `stop-command <PID>`
+- Subcommands: `list`, `stop <PID>`, `spawn <cmd> [args...]`, `freeze <PID>`, `thaw <PID>`, `resize <target>`, `cert <generate|list|show|remove>`, `list-vrunner`, `list-commands`, `stop-command <PID>`
 
 **`src/cli/args.rs`** defines:
 - `Cli` struct with `#[command(trailing_var_arg = true)]`
-- `Commands` enum for `List`, `Stop`, `Spawn`, `Freeze`, `Thaw`, `Cert`, `ListVrunner`, `ListCommands`, `StopCommand`
+- `Commands` enum for `List`, `Stop`, `Spawn`, `Freeze`, `Thaw`, `Resize`, `Cert`, `ListVrunner`, `ListCommands`, `StopCommand`
 - `Cli::apply_overrides()` method that applies CLI flags over loaded configuration
 - Complete CLI coverage for all config entries (see [docs/configuration.md](configuration.md))
 
@@ -201,6 +201,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/commands/:id/vtty", get(get_vtty_full))
         .route("/api/commands/:id/vtty/html", get(get_vtty_html))
         .route("/api/commands/:id/vtty/partial", get(get_vtty_partial))
+        .route("/api/commands/:id/resize", post(resize_vtty))
         .route("/api/commands/:id/snapshot", post(snapshot_command))
         .route("/api/commands/:id/snapshots", get(list_snapshots))
         .route("/api/commands/:id/diff", post(diff_command))

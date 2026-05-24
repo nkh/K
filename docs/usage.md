@@ -252,6 +252,9 @@ vrunner spawn --target 12345 -- npm run dev
 
 # With exit handlers
 vrunner spawn --on-exit "notify-send Done" --on-error "notify-send Failed" -- ./build.sh
+
+# With a custom terminal size
+vrunner spawn --rows 50 --cols 160 -- vim notes.txt
 ```
 
 When multiple vrunner instances are running and no `--target` is specified, vrunner prints a list of all instances and asks you to use `--target PID` to select one.
@@ -684,15 +687,62 @@ The CLI `vrunner stop` command now tries the kill-by-PID API first across all ru
 
 ### Resizing the Terminal
 
-Change the virtual terminal dimensions for a running command:
+You can resize a running command's virtual terminal from the CLI, the API, or the web UI. The resize updates both the in-memory VTTY buffer and the underlying child PTY, causing the kernel to send a `SIGWINCH` signal to the child process. Terminal-aware applications (vim, htop, tmux, less) respond to SIGWINCH by adjusting their layout to the new dimensions.
+
+#### Via CLI
+
+Use the `vrunner resize` subcommand. The target can be a PID (numeric) or a command name:
 
 ```bash
-curl -X POST http://127.0.0.1:8080/api/commands/550e8400-e29b-41d4-a716-446655440000/resize \
+# Resize by command PID
+vrunner resize 12345 --rows 40 --cols 120
+
+# Resize by command name
+vrunner resize htop --rows 50 --cols 160
+
+# Use your current terminal's size (omit --rows/--cols)
+vrunner resize htop
+```
+
+When `--rows` and `--cols` are omitted (or set to 0), vrunner auto-detects your terminal's current size. The command queries all running vrunner instances to find the matching command. If multiple commands match the name, use the PID to disambiguate.
+
+#### Via curl (API)
+
+```bash
+ID="550e8400-e29b-41d4-a716-446655440000"
+
+# Resize to 40 rows by 120 columns
+curl -X POST http://127.0.0.1:8080/api/commands/$ID/resize \
   -H "Content-Type: application/json" \
   -d '{"rows": 40, "cols": 120}'
 ```
 
-Valid ranges: rows 1-200, cols 1-500. The child process receives a `SIGWINCH` signal when the terminal is resized, which allows terminal-aware applications (vim, htop, tmux) to adjust their layouts.
+Valid ranges: rows 1-200, cols 1-500.
+
+#### Via WebSocket
+
+```javascript
+ws.send(JSON.stringify({ type: 'resize', rows: 40, cols: 120 }));
+```
+
+#### Spawning with a Custom Size
+
+You can also set a per-command terminal size at spawn time, independent of the server's default VTTY dimensions. This is useful when different commands need different terminal sizes on the same vrunner instance.
+
+**Via CLI:**
+```bash
+# Spawn vim with a wide terminal
+vrunner spawn --rows 30 --cols 160 vim file.txt
+```
+
+**Via API:**
+```bash
+curl -X POST http://127.0.0.1:8080/api/commands \
+  -H "Content-Type: application/json" \
+  -d '{"cmd": "vim", "args": ["file.txt"], "rows": 30, "cols": 160}'
+```
+
+When `rows` and `cols` are omitted from the spawn request, the server's configured default VTTY size is used. You can still resize the command later via `vrunner resize` or the resize API endpoint.
 
 ---
 

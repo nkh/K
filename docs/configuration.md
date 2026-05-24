@@ -415,6 +415,7 @@ vrunner [OPTIONS] [-- <COMMAND> [ARGS...]]
 | `list-vrunner` | — | List running instances (compact format) |
 | `list-commands` | — | List commands on all running instances |
 | `stop-command` | `<pid>` | Stop a specific command by PID |
+| `resize` | `<target> --rows N --cols M` | Resize a running command's VTTY (sends SIGWINCH) |
 | `cert generate` | `<name>` | Generate a named certificate |
 | `cert list` | — | List all certificates in the pool |
 | `cert show` | `<name>` | Show certificate details and token |

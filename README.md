@@ -29,6 +29,8 @@ A virtual terminal runner and process orchestrator with a web-first control plan
 - **Freeze/Thaw** — Suspend and resume running commands via SIGSTOP/SIGCONT.
 - **Snapshot & Diff** — Store named snapshots of VTTY buffers and compute cell-level diffs against the current buffer for debugging and testing.
 - **Kill by PID** — Stop individual commands by their OS process ID from the CLI or API, without stopping the entire vrunner instance.
+- **VTTY Resize** — Resize a running command's virtual terminal from the CLI (`vrunner resize`) or the API. The child process receives SIGWINCH so terminal-aware apps adjust their layout.
+- **Per-Command Size** — Spawn commands with a custom terminal size via `vrunner spawn --rows N --cols M` or the API `rows`/`cols` fields, independent of the server's default VTTY dimensions.
 - **Enhanced Instance Listing** — `vrunner list` queries running instances to show their active commands, arguments, PIDs, and certificate bindings in a unified table.
 
 ---
@@ -227,6 +229,7 @@ vrunner [OPTIONS] [-- <COMMAND> [ARGS...]]
 | `list-vrunner` | — | List running instances (compact format) |
 | `list-commands` | — | List commands on all running instances |
 | `stop-command` | `<pid>` | Stop a specific command by PID |
+| `resize` | `<target> --rows N --cols M` | Resize a running command's VTTY (sends SIGWINCH) |
 | `cert generate` | `<name>` | Generate a named certificate |
 | `cert list` | — | List all certificates in the pool |
 | `cert show` | `<name>` | Show certificate details and token |
@@ -405,7 +408,7 @@ This first attempts to kill a command with the given PID on any running instance
 | `GET /api/commands/:id/vtty` | GET | Get full VTTY contents (raw ANSI) |
 | `GET /api/commands/:id/vtty/html` | GET | Get VTTY contents as rendered HTML |
 | `GET /api/commands/:id/vtty/partial` | GET | Get partial VTTY contents (paginated) |
-| `POST /api/commands/:id/resize` | POST | Resize a command's virtual terminal |
+| `POST /api/commands/:id/resize` | POST | Resize a command's virtual terminal (sends SIGWINCH) |
 | `GET /api/commands/:id/handles` | GET | List output handles for a command |
 | `POST /api/commands/:id/handles` | POST | Add an output handle to a command |
 | `GET /api/info` | GET | Get instance info (counts, auth status) |
@@ -448,6 +451,16 @@ Error responses:
 curl -X POST http://localhost:8080/api/commands \
   -H "Content-Type: application/json" \
   -d '{"cmd": "htop", "args": []}'
+
+# Start a command with a custom terminal size
+curl -X POST http://localhost:8080/api/commands \
+  -H "Content-Type: application/json" \
+  -d '{"cmd": "vim", "args": ["file.txt"], "rows": 40, "cols": 120}'
+
+# Resize a running command (sends SIGWINCH)
+curl -X POST http://localhost:8080/api/commands/<id>/resize \
+  -H "Content-Type: application/json" \
+  -d '{"rows": 50, "cols": 160}'
 
 # Send keystrokes
 curl -X POST http://localhost:8080/api/commands/<id>/keys \
