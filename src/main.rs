@@ -212,9 +212,14 @@ async fn async_main(cli: Cli) -> Result<()> {
     if cfg.display.enabled {
         let detected = detect_terminal_size();
         if let Some((rows, cols)) = detected {
-            tracing::info!(rows, cols, method = "multi", "Detected terminal size for display mode");
+            // When the tab bar is shown, subtract 1 row so the VTTY
+            // content fits in the remaining lines.  Without this the
+            // last line of terminal output (e.g. btop status bar,
+            // vim status line) is clipped.
+            let effective_rows = if cli.tabs { rows.saturating_sub(1) } else { rows };
+            tracing::info!(rows, cols, effective_rows, tabs = cli.tabs, method = "multi", "Detected terminal size for display mode");
             if cli.vtty_rows.is_none() {
-                cfg.vtty.rows = rows;
+                cfg.vtty.rows = effective_rows;
             }
             if cli.vtty_cols.is_none() {
                 cfg.vtty.cols = cols;
@@ -287,11 +292,15 @@ async fn async_main(cli: Cli) -> Result<()> {
         // forwards keystrokes to the child, and exits on Ctrl+\ or child
         // death (when a direct child was spawned).
         let log_entries = manager.logger().memory_buffer_arc();
+        // When tabs are enabled, treat as display_all so the display
+        // stays active and switches between tab commands instead of
+        // showing "primary command exited".
+        let effective_display_all = cfg.display.display_all || cfg.interactive.tabs;
         run_display_loop(
             &manager,
             spawned_id.as_deref(),
             cfg.display.refresh_ms,
-            cfg.display.display_all,
+            effective_display_all,
             shutdown_tx.clone(),
             &cfg.interactive.keybindings,
             &log_entries,
@@ -509,6 +518,9 @@ async fn run_display_loop(
     // Must be `mut` so we can clear it when transitioning to monitor mode
     // (when the direct child exits but other commands remain).
     let mut active_id: Option<String> = direct_child_id.map(String::from);
+    // Save the direct child's ID so we can distinguish it from
+    // commands spawned via F12 or the web UI.
+    let direct_child_owned: Option<String> = direct_child_id.map(String::from);
 
     // When `display_all == false` and the direct child exits, the display
     // enters "dismissed" state: the alternate screen stays active, a status
@@ -753,26 +765,37 @@ async fn run_display_loop(
                     }
                     continue;
                 }
-                // Fallback exit detection for the direct child.
+                // Fallback exit detection for the active command.
                 if let Some(ref id) = active_id {
                     let gone = match manager.get(id) {
                         Some(h) => !h.is_alive(),
                         None => true,
                     };
                     if gone {
-                        tracing::info!("Direct child process exited (tick fallback)");
+                        // Only dismiss the display if the DIRECT child
+                        // (the CLI command) exited.  If a later-spawned
+                        // command (via F12 / web UI) exited, switch to
+                        // another running command instead.
+                        let is_direct_child = direct_child_owned.as_deref() == Some(id);
                         if manager.list().is_empty() {
                             let _ = TerminalDisplay::clear();
                             break 'outer;
-                        } else if display_all {
-                            tracing::info!("Other commands remain; switching to monitor mode");
-                            active_id = None;
-                            exit_rx = None;
-                        } else {
+                        } else if is_direct_child && !display_all {
                             tracing::info!("Direct CLI command exited; dismissing display (commands remain)");
                             dismissed = true;
                             active_id = None;
                             exit_rx = None;
+                        } else {
+                            // Spawned command exited, or display_all mode —
+                            // switch to another running command.
+                            tracing::info!("Active command exited; switching to another command");
+                            let commands = manager.list();
+                            if let Some((new_id, new_name, _, new_pid, _)) = commands.first() {
+                                active_id = Some(new_id.clone());
+                                tracing::info!("Switched to {} (pid {})", new_name, new_pid);
+                            } else {
+                                active_id = None;
+                            }
                         }
                     }
                 }
@@ -815,13 +838,16 @@ async fn run_display_loop(
             // ── SIGWINCH — terminal resize ──
             _ = winch_rx.recv() => {
                 if let Some((rows, cols)) = detect_terminal_size() {
-                    tracing::debug!(rows, cols, "SIGWINCH: terminal resized");
+                    // Subtract 1 row for the tab bar so the VTTY content
+                    // fits the visible area.
+                    let effective_rows = if show_tabs { rows.saturating_sub(1) } else { rows };
+                    tracing::debug!(rows, cols, effective_rows, show_tabs, "SIGWINCH: terminal resized");
                     for entry in manager.list() {
                         let id = &entry.0;
                         if let Some(handle) = manager.get(id) {
-                            if let Err(e) = handle.resize_pty(rows, cols).await {
+                            if let Err(e) = handle.resize_pty(effective_rows, cols).await {
                                 tracing::warn!(
-                                    id = %id, rows, cols, error = %e,
+                                    id = %id, effective_rows, cols, error = %e,
                                     "Failed to resize command on WINCH"
                                 );
                             }
