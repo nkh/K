@@ -63,6 +63,15 @@
         .vtty-container { flex: 1; overflow: auto; background: #000; position: relative; cursor: text; }
         .vtty-container pre { margin: 0; padding: 0; font-family: var(--font-mono); font-size: var(--font-size); line-height: 1.2; min-width: 100%; min-height: 100%; }
         .vtty-container .cursor-indicator { position: absolute; width: 8px; height: 14px; background: rgba(88, 166, 255, 0.6); border: 1px solid var(--accent); pointer-events: none; transition: top 0.05s, left 0.05s; z-index: 5; }
+        .vtty-container .search-bar { position: absolute; top: 4px; right: 4px; z-index: 10; display: none; gap: 4px; align-items: center; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; }
+        .vtty-container .search-bar.visible { display: flex; }
+        .vtty-container .search-bar input { width: 160px; font-size: 0.75rem; padding: 2px 6px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 3px; }
+        .vtty-container .search-bar input:focus { outline: none; border-color: var(--accent); }
+        .vtty-container .search-bar .search-count { font-size: 0.65rem; color: var(--text-muted); min-width: 30px; text-align: center; }
+        .vtty-container .search-bar button { padding: 1px 5px; font-size: 0.7rem; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 3px; cursor: pointer; }
+        .vtty-container .search-bar button:hover { background: #30363d; }
+        .vtty-search-highlight { background: rgba(210, 153, 34, 0.4); border-radius: 2px; }
+        .vtty-search-highlight.current { background: rgba(210, 153, 34, 0.8); }
 
         /* Command list items */
         .cmd-item { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; flex-direction: column; gap: 0.1rem; font-size: 0.8rem; }
@@ -1346,6 +1355,13 @@ function renderPanels() {
                     ${state.panels.length > 1 ? `<button class="small danger" onclick="removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
                 </div>
                 <div class="vtty-container" id="vtty-${panel.id}">
+                    <div class="search-bar" id="searchBar-${panel.id}">
+                        <input type="text" id="searchInput-${panel.id}" placeholder="Search terminal..." oninput="vttySearch('${panel.id}')">
+                        <span class="search-count" id="searchCount-${panel.id}"></span>
+                        <button onclick="vttySearchNext('${panel.id}')" title="Next match">&#x25BC;</button>
+                        <button onclick="vttySearchPrev('${panel.id}')" title="Previous match">&#x25B2;</button>
+                        <button onclick="vttySearchClose('${panel.id}')" title="Close search">&#x2715;</button>
+                    </div>
                     <pre style="color:#484f58;">No command selected — spawn or select a command to view its output</pre>
                     <div class="cursor-indicator" style="display:none;"></div>
                 </div>
@@ -1634,6 +1650,29 @@ document.addEventListener('keydown', (e) => {
             if (input) input.focus();
         }
     }
+    // Ctrl+F — open terminal search bar
+    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        const vttyContainer = e.target.closest && e.target.closest('.vtty-container');
+        if (vttyContainer || state.currentView === 'vtty') {
+            e.preventDefault();
+            const panel = getSelectedPanel();
+            if (panel) {
+                const searchBar = document.getElementById('searchBar-' + panel.id);
+                if (searchBar) {
+                    searchBar.classList.add('visible');
+                    const searchInput = document.getElementById('searchInput-' + panel.id);
+                    if (searchInput) { searchInput.focus(); searchInput.select(); }
+                }
+            }
+        }
+    }
+    // Escape — close terminal search bar
+    if (e.key === 'Escape') {
+        const panel = getSelectedPanel();
+        if (panel) {
+            vttySearchClose(panel.id);
+        }
+    }
 });
 
 // ─── Click-to-focus terminal ───
@@ -1649,6 +1688,145 @@ document.addEventListener('click', (e) => {
         }
     }
 });
+
+// ─── Terminal Search ───
+const vttySearchState = { matchIndex: 0, matches: [], panelId: null };
+
+function vttySearch(panelId) {
+    const input = document.getElementById('searchInput-' + panelId);
+    const countEl = document.getElementById('searchCount-' + panelId);
+    if (!input || !countEl) return;
+    const query = input.value;
+    vttySearchState.panelId = panelId;
+    vttySearchState.matchIndex = 0;
+
+    // Get the text content of the terminal
+    const panel = document.getElementById(panelId);
+    const pre = panel ? panel.querySelector('pre') : null;
+    if (!pre) { countEl.textContent = '0/0'; return; }
+
+    // Remove previous highlights
+    vttyRemoveHighlights(pre);
+
+    if (!query) {
+        vttySearchState.matches = [];
+        countEl.textContent = '';
+        return;
+    }
+
+    // Find all text nodes and mark matches
+    const text = pre.textContent || '';
+    const lowerText = text.toLowerCase();
+    const lowerQuery = query.toLowerCase();
+    vttySearchState.matches = [];
+
+    let pos = 0;
+    while ((pos = lowerText.indexOf(lowerQuery, pos)) !== -1) {
+        vttySearchState.matches.push(pos);
+        pos += lowerQuery.length;
+    }
+
+    if (vttySearchState.matches.length > 0) {
+        vttyApplyHighlights(pre, text, query);
+        vttyScrollToMatch(panelId, 0);
+        countEl.textContent = '1/' + vttySearchState.matches.length;
+    } else {
+        countEl.textContent = '0/0';
+    }
+}
+
+function vttyApplyHighlights(pre, text, query) {
+    // Walk through text and highlight matches
+    const lowerText = text.toLowerCase();
+    const lowerQuery = query.toLowerCase();
+    const fragment = document.createDocumentFragment();
+    let lastIdx = 0;
+    let matchIdx = 0;
+    let pos = 0;
+
+    // We need to rebuild using the pre's innerHTML which has spans for ANSI
+    // Instead, work at the text level using a tree walker on text nodes
+    const walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT, null);
+    const textNodes = [];
+    while (walker.nextNode()) textNodes.push(walker.currentNode);
+
+    if (textNodes.length === 0) return;
+
+    // Simple approach: highlight by rebuilding innerHTML with mark spans
+    // Get the full innerHTML and do string replacement on text portions
+    let html = pre.innerHTML;
+    const escaped = escHtml(query);
+    // Use a regex that matches the query text (case insensitive) but only
+    // within text content, not inside HTML tags
+    const regex = new RegExp('(?![^<]*>)(' + escaped.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+    const results = [];
+    let match;
+    while ((match = regex.exec(html)) !== null) {
+        results.push(match.index);
+    }
+
+    // Apply highlights in reverse order to preserve indices
+    for (let i = results.length - 1; i >= 0; i--) {
+        const idx = results[i];
+        const originalLen = query.length;
+        // Find the end of the match in the HTML
+        const endIdx = html.indexOf(match[1], idx) + match[1].length;
+        if (endIdx <= idx) continue;
+        const cls = i === 0 ? 'vtty-search-highlight current' : 'vtty-search-highlight';
+        html = html.substring(0, idx) + '<mark class="' + cls + '" data-match-idx="' + i + '">' + html.substring(idx, endIdx) + '</mark>' + html.substring(endIdx);
+    }
+
+    pre.innerHTML = html;
+}
+
+function vttyRemoveHighlights(pre) {
+    const marks = pre.querySelectorAll('mark.vtty-search-highlight');
+    marks.forEach(mark => {
+        const parent = mark.parentNode;
+        parent.replaceChild(document.createTextNode(mark.textContent), mark);
+        parent.normalize();
+    });
+}
+
+function vttyScrollToMatch(panelId, idx) {
+    const panel = document.getElementById(panelId);
+    if (!panel) return;
+    const mark = panel.querySelector('mark.vtty-search-highlight.current');
+    if (mark) mark.classList.remove('current');
+    const marks = panel.querySelectorAll('mark.vtty-search-highlight');
+    if (marks[idx]) {
+        marks[idx].classList.add('current');
+        marks[idx].scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+}
+
+function vttySearchNext(panelId) {
+    if (vttySearchState.matches.length === 0) return;
+    vttySearchState.matchIndex = (vttySearchState.matchIndex + 1) % vttySearchState.matches.length;
+    vttyScrollToMatch(panelId, vttySearchState.matchIndex);
+    const countEl = document.getElementById('searchCount-' + panelId);
+    if (countEl) countEl.textContent = (vttySearchState.matchIndex + 1) + '/' + vttySearchState.matches.length;
+}
+
+function vttySearchPrev(panelId) {
+    if (vttySearchState.matches.length === 0) return;
+    vttySearchState.matchIndex = (vttySearchState.matchIndex - 1 + vttySearchState.matches.length) % vttySearchState.matches.length;
+    vttyScrollToMatch(panelId, vttySearchState.matchIndex);
+    const countEl = document.getElementById('searchCount-' + panelId);
+    if (countEl) countEl.textContent = (vttySearchState.matchIndex + 1) + '/' + vttySearchState.matches.length;
+}
+
+function vttySearchClose(panelId) {
+    const searchBar = document.getElementById('searchBar-' + panelId);
+    if (searchBar) searchBar.classList.remove('visible');
+    const panel = document.getElementById(panelId);
+    const pre = panel ? panel.querySelector('pre') : null;
+    if (pre) vttyRemoveHighlights(pre);
+    vttySearchState.matches = [];
+    vttySearchState.matchIndex = 0;
+    const countEl = document.getElementById('searchCount-' + panelId);
+    if (countEl) countEl.textContent = '';
+}
 </script>
 </body>
 </html>
