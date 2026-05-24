@@ -8,6 +8,9 @@ use std::collections::HashMap;
 use crate::web::state::AppState;
 
 /// Read command log contents with optional search/filter.
+/// Returns log entries from the configured log file.  When logging is enabled
+/// but no file path is set, logs go to stdout only and are not available via
+/// this endpoint — the response includes a helpful message.
 pub async fn get_log(
     State(state): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
@@ -16,10 +19,27 @@ pub async fn get_log(
     let limit = params.get("limit").and_then(|v| v.parse::<usize>().ok()).unwrap_or(200);
     let offset = params.get("offset").and_then(|v| v.parse::<usize>().ok()).unwrap_or(0);
 
-    // Try to read log from the command logger
-    // The logger is accessed via the manager, but we need the file path.
-    // For now, check common log locations.
-    let log_content = read_log_contents(&state);
+    let cfg = &state.manager.config().command_log;
+
+    // If logging is not enabled at all, return early with a clear message
+    if !cfg.enabled {
+        return Json(serde_json::json!({
+            "status": "ok",
+            "data": {
+                "lines": [],
+                "total_lines": 0,
+                "filtered_lines": 0,
+                "offset": 0,
+                "limit": limit,
+                "search": search,
+                "message": "Command logging is not enabled. Start vrunner with --log or --log-file <path> to enable.",
+            },
+            "error": null
+        }));
+    }
+
+    // Try to read from the configured log file path
+    let log_content = cfg.file.as_ref().and_then(|path| std::fs::read_to_string(path).ok()).filter(|c| !c.is_empty());
 
     match log_content {
         Some(content) => {
@@ -65,42 +85,9 @@ pub async fn get_log(
                 "offset": 0,
                 "limit": limit,
                 "search": search,
-                "message": "No log file configured or file not found",
+                "message": "Logging is enabled but no log file is configured. Use --log-file <path> or set command_log.file in config.",
             },
             "error": null
         })),
     }
-}
-
-fn read_log_contents(_state: &AppState) -> Option<String> {
-    // Try common log file paths since we don't store the path in AppState directly
-    let paths = [
-        "/tmp/vrunner.log",
-        "./vrunner.log",
-        "./vrunner-commands.log",
-    ];
-
-    for path in &paths {
-        if let Ok(content) = std::fs::read_to_string(path) {
-            if !content.is_empty() {
-                return Some(content);
-            }
-        }
-    }
-
-    // Also check the daemon stdout/stderr files
-    let daemon_paths = [
-        "/tmp/vrunner.out",
-        "/tmp/vrunner.err",
-    ];
-
-    for path in &daemon_paths {
-        if let Ok(content) = std::fs::read_to_string(path) {
-            if !content.is_empty() {
-                return Some(content);
-            }
-        }
-    }
-
-    None
 }

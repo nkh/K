@@ -205,7 +205,7 @@
         <div class="token-bar">
             <label for="authToken">Token:</label>
             <input type="password" id="authToken" placeholder="Bearer token" title="Authorization token">
-            <button class="small" onclick="saveToken()">Save</button>
+            <button class="small" onclick="saveToken()">Set Token</button>
         </div>
     </div>
 
@@ -1076,9 +1076,9 @@ async function sendKeysToPanel(panelId) {
     const cmdId = state.selectedCmdId;
 
     try {
-        await fetch(apiUrl(`/api/commands/${cmdId}/keys`, panel), {
+        await fetch(apiUrl(`/api/commands/${cmdId}/keys`, { url: panel.instUrl }), {
             method: 'POST',
-            headers: authHeadersForInstance(panel),
+            headers: authHeadersForInstance({ url: panel.instUrl, token: panel.token }),
             body: JSON.stringify({ keys: input.value }),
         });
         input.value = '';
