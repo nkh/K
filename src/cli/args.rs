@@ -215,6 +215,18 @@ pub enum Commands {
         /// PID or name (and optional args, quoted) of the command to stop
         target: String,
     },
+    /// Resize the VTTY of a running command.
+    /// Resizes both the in-memory buffer and the child PTY (sends SIGWINCH).
+    ResizeCommand {
+        /// PID or name of the command to resize
+        target: String,
+        /// Number of rows (default: terminal height)
+        #[arg(long, default_value_t = 0)]
+        rows: u16,
+        /// Number of columns (default: terminal width)
+        #[arg(long, default_value_t = 0)]
+        cols: u16,
+    },
 }
 
 #[derive(Subcommand, Debug)]

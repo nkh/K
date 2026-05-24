@@ -150,7 +150,9 @@ pub async fn resize_vtty(
 
     match state.manager.get(&id) {
         Some(handle) => {
-            match handle.resize(rows, cols).await {
+            // Use resize_pty: resizes PTY master (sends SIGWINCH to child)
+            // AND resizes the in-memory VTTY buffer.
+            match handle.resize_pty(rows, cols).await {
                 Ok(_) => {
                     state.manager.logger().log("resize", &format!("id={} rows={} cols={}", id, rows, cols));
                     Json(serde_json::json!({
