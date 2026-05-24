@@ -66,11 +66,17 @@ impl ProcessSpawner {
         exit_config: ExitConfig,
         env_vars: HashMap<String, String>,
         manager: &CommandManager,
+        rows: Option<u16>,
+        cols: Option<u16>,
     ) -> Result<CommandHandle> {
+        // Use per-command overrides if provided, otherwise fall back to config defaults
+        let rows = rows.unwrap_or(self.vtty_cfg.rows);
+        let cols = cols.unwrap_or(self.vtty_cfg.cols);
+
         let pty_system = native_pty_system();
         let pair = pty_system.openpty(PtySize {
-            rows: self.vtty_cfg.rows,
-            cols: self.vtty_cfg.cols,
+            rows,
+            cols,
             pixel_width: 0,
             pixel_height: 0,
         })?;
@@ -99,8 +105,8 @@ impl ProcessSpawner {
 
         // Create VTTY emulator
         let emulator = Arc::new(tokio::sync::RwLock::new(VttyEmulator::new(
-            self.vtty_cfg.rows,
-            self.vtty_cfg.cols,
+            rows,
+            cols,
             self.vtty_cfg.scrollback,
         )));
 

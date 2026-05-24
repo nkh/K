@@ -60,9 +60,9 @@ impl CommandManager {
         }
     }
 
-    pub async fn spawn(&self, cmd: String, args: Vec<String>, certificate: Option<String>, env_vars: std::collections::HashMap<String, String>) -> anyhow::Result<CommandId> {
+    pub async fn spawn(&self, cmd: String, args: Vec<String>, certificate: Option<String>, env_vars: std::collections::HashMap<String, String>, rows: Option<u16>, cols: Option<u16>) -> anyhow::Result<CommandId> {
         let id = Uuid::new_v4().to_string();
-        self.logger.log("spawn", &format!("id={} cmd={} args={:?} cert={:?} env={:?}", id, cmd, args, certificate, env_vars.keys().collect::<Vec<_>>()));
+        self.logger.log("spawn", &format!("id={} cmd={} args={:?} cert={:?} env={:?} size={}x{}", id, cmd, args, certificate, env_vars.keys().collect::<Vec<_>>(), rows.unwrap_or(self.config.vtty.rows), cols.unwrap_or(self.config.vtty.cols)));
 
         let spawner = ProcessSpawner::new(&self.config.vtty);
         let mut handle = spawner.spawn(
@@ -73,6 +73,7 @@ impl CommandManager {
             self.config.default_exit.exit.clone(),
             env_vars,
             self,
+            rows, cols,
         ).await?;
 
         // Bind certificate to this command for per-command access control
@@ -448,9 +449,11 @@ impl CommandManager {
         on_error: Option<String>,
         exit_timeout: u64,
         env_vars: std::collections::HashMap<String, String>,
+        rows: Option<u16>,
+        cols: Option<u16>,
     ) -> anyhow::Result<CommandId> {
         let id = Uuid::new_v4().to_string();
-        self.logger.log("spawn", &format!("id={} cmd={} args={:?} cert={:?} env={:?}", id, cmd, args, certificate, env_vars.keys().collect::<Vec<_>>()));
+        self.logger.log("spawn", &format!("id={} cmd={} args={:?} cert={:?} env={:?} size={}x{}", id, cmd, args, certificate, env_vars.keys().collect::<Vec<_>>(), rows.unwrap_or(self.config.vtty.rows), cols.unwrap_or(self.config.vtty.cols)));
 
         // Override default exit config with per-command values
         let exit_config = crate::config::schema::ExitConfig {
@@ -468,6 +471,7 @@ impl CommandManager {
             exit_config,
             env_vars,
             self,
+            rows, cols,
         ).await?;
 
         handle.certificate = certificate;

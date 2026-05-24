@@ -99,8 +99,8 @@ async fn async_main(cli: Cli) -> Result<()> {
     }
 
     // Handle spawn subcommand — send to a running vrunner instance
-    if let Some(Commands::Spawn { ref cmd, ref args }) = cli.command {
-        handle_spawn_command(&cli, &cmd, &args).await?;
+    if let Some(Commands::Spawn { ref cmd, ref args, rows, cols }) = cli.command {
+        handle_spawn_command(&cli, &cmd, &args, rows, cols).await?;
         return Ok(());
     }
 
@@ -211,7 +211,7 @@ async fn async_main(cli: Cli) -> Result<()> {
         if !cmd_args.is_empty() {
             let cmd = cmd_args[0].clone();
             let args = cmd_args[1..].to_vec();
-            let id = manager.spawn(cmd, args, None, cfg.environment.variables.clone()).await?;
+            let id = manager.spawn(cmd, args, None, cfg.environment.variables.clone(), None, None).await?;
             Some(id)
         } else {
             None
@@ -945,7 +945,7 @@ fn format_instance_list(instances: &[vrunner::instance::info::InstanceInfo]) -> 
 
 /// Handle the `vrunner spawn` subcommand.
 /// Discovers a running vrunner instance and sends a spawn request via HTTP API.
-async fn handle_spawn_command(cli: &Cli, cmd: &str, args: &[String]) -> Result<()> {
+async fn handle_spawn_command(cli: &Cli, cmd: &str, args: &[String], rows: Option<u16>, cols: Option<u16>) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let info = resolve_instance(cli, &registry)?;
 
@@ -982,6 +982,14 @@ async fn handle_spawn_command(cli: &Cli, cmd: &str, args: &[String]) -> Result<(
     // Add profile if specified
     if let Some(ref profile) = cli.profile {
         body["profile"] = serde_json::json!(profile);
+    }
+
+    // Add per-command VTTY size if specified
+    if let Some(r) = rows {
+        body["rows"] = serde_json::json!(r);
+    }
+    if let Some(c) = cols {
+        body["cols"] = serde_json::json!(c);
     }
 
     tracing::info!(target_pid = info.pid, cmd = cmd, "Spawning command on remote instance");

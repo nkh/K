@@ -93,6 +93,21 @@ pub async fn start_command(
         }
     }
 
+    // Per-command VTTY size override (optional)
+    let rows: Option<u16> = body.get("rows").and_then(|v| v.as_u64()).map(|v| v as u16);
+    let cols: Option<u16> = body.get("cols").and_then(|v| v.as_u64()).map(|v| v as u16);
+
+    // Validate dimensions if provided
+    if let (Some(r), Some(c)) = (rows, cols) {
+        if r < 1 || c < 1 || r > 200 || c > 500 {
+            return Json(serde_json::json!({
+                "status": "error",
+                "data": null,
+                "error": "Invalid dimensions: rows must be 1-200, cols must be 1-500"
+            }));
+        }
+    }
+
     // Merge per-command env vars on top of config-level env vars (unless no_env)
     let config_env = if no_env {
         crate::config::schema::EnvironmentConfig::default()
@@ -101,7 +116,7 @@ pub async fn start_command(
     };
     let merged_env = merge_command_env(&config_env, command_env);
 
-    match state.manager.spawn_with_exit(cmd, args, certificate, on_exit, on_error, exit_timeout, merged_env).await {
+    match state.manager.spawn_with_exit(cmd, args, certificate, on_exit, on_error, exit_timeout, merged_env, rows, cols).await {
         Ok(id) => {
             // Look up the child's OS PID for the response.
             let pid = state.manager.get(&id).map(|h| h.pid).unwrap_or(0);

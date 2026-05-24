@@ -186,6 +186,12 @@ pub enum Commands {
         /// Arguments for the command
         #[arg(trailing_var_arg = true)]
         args: Vec<String>,
+        /// VTTY rows for the spawned command
+        #[arg(long)]
+        rows: Option<u16>,
+        /// VTTY columns for the spawned command
+        #[arg(long)]
+        cols: Option<u16>,
     },
     /// Freeze (suspend) a running command via SIGSTOP.
     /// The command is paused but not terminated.
