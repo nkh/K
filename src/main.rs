@@ -64,7 +64,7 @@ fn pre_runtime() -> Result<Option<Cli>> {
         Some(Commands::StopCommand { target: _ }) => {
             // stop-command is async (needs HTTP), fall through to async phase
         }
-        Some(Commands::ResizeCommand { .. }) => {
+        Some(Commands::Resize { .. }) => {
             // resize-command is async (needs HTTP), fall through to async phase
         }
         None => {}
@@ -139,7 +139,7 @@ async fn async_main(cli: Cli) -> Result<()> {
     }
 
     // Handle resize-command subcommand
-    if let Some(Commands::ResizeCommand { ref target, rows, cols }) = cli.command {
+    if let Some(Commands::Resize { ref target, rows, cols }) = cli.command {
         handle_resize_command(&cli, target, rows, cols).await?;
         return Ok(());
     }

@@ -217,7 +217,7 @@ pub enum Commands {
     },
     /// Resize the VTTY of a running command.
     /// Resizes both the in-memory buffer and the child PTY (sends SIGWINCH).
-    ResizeCommand {
+    Resize {
         /// PID or name of the command to resize
         target: String,
         /// Number of rows (default: terminal height)
