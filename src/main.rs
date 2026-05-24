@@ -893,6 +893,26 @@ async fn run_display_loop(
                                                     showing_help = true;
                                                     render_help_overlay(&bindings, &mut stdout);
                                                 }
+                                                ActionEffect::KillCommand => {
+                                                    if let Some(ref id) = active_id {
+                                                        manager.logger().log("kill_keybinding", &format!("id={}", id));
+                                                        let _ = manager.kill(id, None).await;
+                                                        active_id = None;
+                                                    }
+                                                }
+                                                ActionEffect::TogglePause => {
+                                                    if let Some(ref id) = active_id {
+                                                        if let Some(handle) = manager.get(id) {
+                                                            if handle.is_alive() {
+                                                                let _ = manager.freeze(id);
+                                                                manager.logger().log("freeze_keybinding", &format!("id={}", id));
+                                                            } else {
+                                                                let _ = manager.thaw(id);
+                                                                manager.logger().log("thaw_keybinding", &format!("id={}", id));
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                                 ActionEffect::Quit => {
                                                     break 'outer;
                                                 }
@@ -975,6 +995,26 @@ async fn run_display_loop(
                                             ActionEffect::ShowHelp => {
                                                 showing_help = true;
                                                 render_help_overlay(&bindings, &mut stdout);
+                                            }
+                                            ActionEffect::KillCommand => {
+                                                if let Some(ref id) = active_id {
+                                                    manager.logger().log("kill_keybinding", &format!("id={}", id));
+                                                    let _ = manager.kill(id, None).await;
+                                                    active_id = None;
+                                                }
+                                            }
+                                            ActionEffect::TogglePause => {
+                                                if let Some(ref id) = active_id {
+                                                    if let Some(handle) = manager.get(id) {
+                                                        if handle.is_alive() {
+                                                            let _ = manager.freeze(id);
+                                                            manager.logger().log("freeze_keybinding", &format!("id={}", id));
+                                                        } else {
+                                                            let _ = manager.thaw(id);
+                                                            manager.logger().log("thaw_keybinding", &format!("id={}", id));
+                                                        }
+                                                    }
+                                                }
                                             }
                                             ActionEffect::Quit => {
                                                 break 'outer;

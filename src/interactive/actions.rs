@@ -23,6 +23,10 @@ pub enum ActionEffect {
     ToggleLog(bool),
     /// Show the help overlay.
     ShowHelp,
+    /// Kill the active command.
+    KillCommand,
+    /// Toggle pause (freeze/thaw) on the active command.
+    TogglePause,
     /// Quit the display loop.
     Quit,
 }
@@ -64,6 +68,12 @@ pub fn execute_action(
         Action::ShowHelp => {
             ActionEffect::ShowHelp
         }
+        Action::KillCommand => {
+            ActionEffect::KillCommand
+        }
+        Action::TogglePause => {
+            ActionEffect::TogglePause
+        }
         Action::Quit => {
             ActionEffect::Quit
         }
@@ -82,37 +92,67 @@ pub fn render_help_overlay(
     use std::io::Write;
 
     let _ = terminal::Clear(terminal::ClearType::All);
-
-    let _term_size = terminal::size().unwrap_or((80, 24));
+    let (term_cols, _term_rows) = terminal::size().unwrap_or((80, 24));
+    let w = term_cols as usize;
 
     // Header
-    let _ = write!(stdout, "\x1b[1;34m  vrunner — Keybindings\x1b[0m\r\n\r\n");
+    let _ = write!(stdout, "\x1b[1;34m  vrunner — Keybindings\x1b[0m\r\n");
+    let _ = write!(stdout, "\x1b[2m  {}\x1b[0m\r\n\r\n", "─".repeat(w.saturating_sub(4).min(76)));
 
-    // Group bindings: list each unique action once with its key
+    // Group 1: Navigation
+    let nav_actions = &["NextCommand", "PrevCommand"];
+    let _ = write!(stdout, "\x1b[1m  Navigation\x1b[0m\r\n");
     let mut seen = std::collections::HashSet::new();
     for binding in bindings {
-        if seen.contains(&binding.action) {
-            continue;
-        }
+        let action_name = format!("{:?}", binding.action);
+        if !nav_actions.iter().any(|a| action_name.contains(a)) { continue; }
+        if seen.contains(&binding.action) { continue; }
         seen.insert(binding.action.clone());
-
         let key_label = format_key(&binding.bytes);
         let desc = binding.action.description();
-        let _ = write!(stdout, "  \x1b[1;33m{:<20}\x1b[0m  {}\r\n", key_label, desc);
+        let _ = write!(stdout, "  \x1b[1;33m{:<18}\x1b[0m  \x1b[2m{}\x1b[0m\r\n", key_label, desc);
     }
+    if seen.is_empty() {
+        let _ = write!(stdout, "  \x1b[2m  (none configured)\x1b[0m\r\n");
+    }
+    let _ = write!(stdout, "\r\n");
 
-    // Hardcoded shortcuts
-    let _ = write!(stdout, "\r\n  \x1b[2mHardcoded shortcuts:\x1b[0m\r\n");
-    let hardcoded = [
-        ("Ctrl+\\", "Quit display (always active)"),
-        ("q / Ctrl+C", "Shut down (when dismissed)"),
-    ];
-    for (key, desc) in &hardcoded {
-        let _ = write!(stdout, "  \x1b[2m{:<20}  {}\x1b[0m\r\n", key, desc);
+    // Group 2: Actions
+    let action_names = &["SpawnCommand", "KillCommand", "TogglePause"];
+    let _ = write!(stdout, "\x1b[1m  Actions\x1b[0m\r\n");
+    for binding in bindings {
+        let action_name = format!("{:?}", binding.action);
+        if !action_names.iter().any(|a| action_name.contains(a)) { continue; }
+        if seen.contains(&binding.action) { continue; }
+        seen.insert(binding.action.clone());
+        let key_label = format_key(&binding.bytes);
+        let desc = binding.action.description();
+        let _ = write!(stdout, "  \x1b[1;33m{:<18}\x1b[0m  \x1b[2m{}\x1b[0m\r\n", key_label, desc);
     }
+    let _ = write!(stdout, "\r\n");
+
+    // Group 3: Display
+    let display_names = &["ToggleLog", "ShowHelp", "Quit"];
+    let _ = write!(stdout, "\x1b[1m  Display\x1b[0m\r\n");
+    for binding in bindings {
+        let action_name = format!("{:?}", binding.action);
+        if !display_names.iter().any(|a| action_name.contains(a)) { continue; }
+        if seen.contains(&binding.action) { continue; }
+        seen.insert(binding.action.clone());
+        let key_label = format_key(&binding.bytes);
+        let desc = binding.action.description();
+        let _ = write!(stdout, "  \x1b[1;33m{:<18}\x1b[0m  \x1b[2m{}\x1b[0m\r\n", key_label, desc);
+    }
+    let _ = write!(stdout, "\r\n");
+
+    // Always-active shortcuts
+    let _ = write!(stdout, "\x1b[2m{}\x1b[0m\r\n", "─".repeat(w.saturating_sub(4).min(76)));
+    let _ = write!(stdout, "\x1b[1m  Always active\x1b[0m\r\n");
+    let _ = write!(stdout, "  \x1b[1;33m{:<18}\x1b[0m  \x1b[2mQuit display\x1b[0m\r\n", "Ctrl+\\");
+    let _ = write!(stdout, "\r\n");
 
     // Footer
-    let _ = write!(stdout, "\r\n  \x1b[2mPress any key to close\x1b[0m");
+    let _ = write!(stdout, "\x1b[2m  Press any key to close\x1b[0m");
     let _ = stdout.flush();
 }
 

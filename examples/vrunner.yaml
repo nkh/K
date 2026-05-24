@@ -74,6 +74,38 @@ daemon:
   # Redirect stderr to this file when daemonized.
   stderr_file: "/tmp/vrunner.err"
 
+# Interactive terminal display settings.
+interactive:
+  # Show a tab bar listing all commands at the top.
+  tabs: false
+  keybindings:
+    next_command: "ctrl+right"
+    prev_command: "ctrl+left"
+    toggle_log: "ctrl+l"
+    spawn_command: "f12"
+    show_help: "ctrl+h"
+    # kill_command: "ctrl+k"
+    # toggle_pause: "ctrl+z"
+    # quit: "esc"
+
+# Default exit configuration for all commands.
+default_exit:
+  exit:
+    timeout_secs: 10
+    # on_exit: null
+    # on_error: null
+
+# Environment variables applied to every command.
+# environment:
+#   variables:
+#     RUST_LOG: "info"
+
+# Web admin panel configuration.
+web:
+  update_mode: "push"
+  dirty_check_ms: 200
+  default_poll_ms: 500
+
 # Default handles attached to every spawned command.
 # Each handle routes command output to a named sink.
 handles: []

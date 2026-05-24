@@ -288,6 +288,8 @@ pub struct InteractiveConfig {
     ///   "toggle_log"       — show/hide command log overlay
     ///   "spawn_command"    — open a prompt to spawn a new command
     ///   "show_help"        — show keybinding help overlay
+    ///   "kill_command"     — kill (SIGTERM) the active command
+    ///   "toggle_pause"     — pause/resume (SIGSTOP/SIGCONT) the active command
     ///   "quit"             — exit the display (same as Ctrl+\)
     #[serde(default)]
     pub keybindings: KeybindingsConfig,
@@ -313,6 +315,8 @@ impl Default for InteractiveConfig {
 ///     toggle_log: "ctrl+l"
 ///     spawn_command: "f12"
 ///     show_help: "ctrl+h"
+///     kill_command: "ctrl+k"
+///     toggle_pause: "ctrl+z"
 ///     quit: "esc"
 /// ```
 ///
@@ -335,6 +339,12 @@ pub struct KeybindingsConfig {
     /// Show the help overlay. Default: Ctrl+H (`ctrl+h`)
     #[serde(default = "default_key_show_help")]
     pub show_help: Option<String>,
+    /// Kill the active command. Default: none
+    #[serde(default)]
+    pub kill_command: Option<String>,
+    /// Pause / resume (freeze/thaw) the active command. Default: none
+    #[serde(default)]
+    pub toggle_pause: Option<String>,
     /// Quit the display loop. Default: none (use Ctrl+\ = `ctrl+\\`)
     #[serde(default)]
     pub quit: Option<String>,
@@ -354,6 +364,8 @@ impl Default for KeybindingsConfig {
             toggle_log: default_key_toggle_log(),
             spawn_command: default_key_spawn_command(),
             show_help: default_key_show_help(),
+            kill_command: None,
+            toggle_pause: None,
             quit: None,
         }
     }

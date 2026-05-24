@@ -14,6 +14,8 @@ pub enum Action {
     ToggleLog,
     SpawnCommand,
     ShowHelp,
+    KillCommand,
+    TogglePause,
     Quit,
 }
 
@@ -26,6 +28,8 @@ impl Action {
             Action::ToggleLog => "Toggle command log overlay",
             Action::SpawnCommand => "Spawn a new command",
             Action::ShowHelp => "Show this help screen",
+            Action::KillCommand => "Kill the active command",
+            Action::TogglePause => "Pause / resume the active command",
             Action::Quit => "Quit the display",
         }
     }
@@ -237,6 +241,8 @@ pub fn resolve_keybindings(config: &KeybindingsConfig) -> Vec<Binding> {
     try_bind("toggle_log", Action::ToggleLog, &config.toggle_log, &mut bindings);
     try_bind("spawn_command", Action::SpawnCommand, &config.spawn_command, &mut bindings);
     try_bind("show_help", Action::ShowHelp, &config.show_help, &mut bindings);
+    try_bind("kill_command", Action::KillCommand, &config.kill_command, &mut bindings);
+    try_bind("toggle_pause", Action::TogglePause, &config.toggle_pause, &mut bindings);
     try_bind("quit", Action::Quit, &config.quit, &mut bindings);
 
     bindings

@@ -26,6 +26,8 @@
 //!     toggle_log: "ctrl+l"
 //!     spawn_command: "f12"
 //!     show_help: "ctrl+h"
+//!     kill_command: "ctrl+k"
+//!     toggle_pause: "ctrl+z"
 //!     quit: "esc"
 //! ```
 //!
