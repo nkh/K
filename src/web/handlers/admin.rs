@@ -18,6 +18,21 @@ pub async fn admin_page() -> Html<String> {
     }
 }
 
+/// Serve `/favicon.ico` at the root — browsers request this automatically.
+pub async fn admin_favicon() -> Response {
+    match AdminAssets::get("favicon.ico") {
+        Some(content) => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "image/x-icon")
+            .body(Body::from(content.data.to_vec()))
+            .unwrap(),
+        None => Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::from("Not found"))
+            .unwrap(),
+    }
+}
+
 pub async fn admin_assets(Path(path): Path<String>) -> Response {
     // Clean the path to prevent directory traversal
     let path = path.trim_start_matches('/');

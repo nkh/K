@@ -38,8 +38,10 @@ pub fn create_router(state: AppState) -> Router {
 
     // Public routes — admin panel and static assets
     let public_routes = Router::new()
+        .route("/", get(handlers::admin::admin_page))
         .route("/admin", get(handlers::admin::admin_page))
-        .route("/admin/*path", get(handlers::admin::admin_assets));
+        .route("/admin/*path", get(handlers::admin::admin_assets))
+        .route("/favicon.ico", get(handlers::admin::admin_favicon));
 
     // Auth middleware layer — injects auth requirement from state into extensions
     let auth_token = state.auth_token.clone();
