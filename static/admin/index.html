@@ -76,6 +76,11 @@
         .scroll-bottom-btn:hover { opacity: 1; background: var(--bg-tertiary); }
         .scroll-bottom-btn.visible { display: flex; }
 
+        /* Panel resize handle */
+        .panel-resize-handle { width: 4px; cursor: col-resize; background: transparent; flex-shrink: 0; position: relative; z-index: 5; }
+        .panel-resize-handle:hover, .panel-resize-handle.active { background: var(--accent); }
+        .panel { flex: 1 1 0; display: flex; flex-direction: column; border-right: none; min-width: 100px; position: relative; }
+
         /* Command list items */
         .cmd-item { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; flex-direction: column; gap: 0.1rem; font-size: 0.8rem; }
         .cmd-item:hover { background: var(--bg-tertiary); }
@@ -1362,8 +1367,9 @@ function renderPanels() {
     let html = '';
     for (const panel of state.panels) {
         const inst = state.instanceUrls.find(i => i.url === panel.instUrl);
+        const resizeHandle = state.panels.length > 1 ? `<div class="panel-resize-handle" data-panel="${panel.id}"></div>` : '';
         html += `
-            <div class="panel" id="${panel.id}">
+            <div class="panel" id="${panel.id}" style="flex: 1 1 0;">
                 <div class="panel-header">
                     <div class="cmd-info" id="cmdInfo-${panel.id}">
                         <span class="cmd-fullname" id="cmdName-${panel.id}"></span>
@@ -1388,7 +1394,8 @@ function renderPanels() {
                     <div class="cursor-indicator" style="display:none;"></div>
                     <button class="scroll-bottom-btn" id="scrollBtn-${panel.id}" onclick="scrollTerminalBottom('${panel.id}')" title="Scroll to bottom">&#x25BC;</button>
                 </div>
-            </div>`;
+            </div>
+            ${resizeHandle}`;
     }
     container.innerHTML = html;
     // Attach scroll listeners for scroll-to-bottom button visibility
@@ -1913,6 +1920,45 @@ function checkForExitedCommands() {
         }
     }
 }
+
+// ─── Panel Resize via Drag ───
+(function() {
+    let resizing = false;
+    let startX = 0;
+    let startWidth = 0;
+    let resizePanel = null;
+
+    document.addEventListener('mousedown', (e) => {
+        const handle = e.target.closest('.panel-resize-handle');
+        if (!handle) return;
+        e.preventDefault();
+        resizePanel = handle.previousElementSibling;
+        if (!resizePanel) return;
+        startX = e.clientX;
+        startWidth = resizePanel.getBoundingClientRect().width;
+        handle.classList.add('active');
+        resizing = true;
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!resizing || !resizePanel) return;
+        const delta = e.clientX - startX;
+        const containerWidth = resizePanel.parentElement.getBoundingClientRect().width;
+        const panelCount = resizePanel.parentElement.children.length;
+        const minW = 100;
+        const newWidth = Math.max(minW, Math.min(containerWidth - (panelCount - 1) * minW, startWidth + delta));
+        const pct = (newWidth / containerWidth) * 100;
+        resizePanel.style.flex = `0 0 ${pct}%`;
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (resizing) {
+            document.querySelectorAll('.panel-resize-handle.active').forEach(h => h.classList.remove('active'));
+            resizing = false;
+            resizePanel = null;
+        }
+    });
+})();
 </script>
 </body>
 </html>
