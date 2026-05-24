@@ -223,6 +223,14 @@
         .ctx-menu-item.danger:hover { background: rgba(248, 81, 73, 0.15); }
         .ctx-menu-sep { height: 1px; background: var(--border); margin: 3px 0; }
 
+        /* Shortcuts help overlay */
+        .shortcuts-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 150; display: flex; align-items: center; justify-content: center; }
+        .shortcuts-panel { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; min-width: 360px; max-width: 90vw; }
+        .shortcuts-panel h2 { font-size: 1rem; color: var(--accent); margin-bottom: 0.75rem; }
+        .shortcuts-panel table { width: 100%; border-collapse: collapse; margin-bottom: 0.5rem; }
+        .shortcuts-panel td { padding: 0.25rem 0.5rem; font-size: 0.75rem; color: var(--text-secondary); border-bottom: 1px solid var(--border); }
+        .shortcuts-panel td:first-child { color: var(--text-primary); font-family: var(--font-mono); white-space: nowrap; }
+
         /* Responsive: small screens */
         @media (max-width: 768px) {
             .sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: 280px; z-index: 50; box-shadow: 4px 0 12px rgba(0,0,0,0.5); }
@@ -263,6 +271,7 @@
         <button class="small" onclick="toggleSidebar()" title="Toggle sidebar">&#9776;</button>
         <button class="small" onclick="addPanel()" title="Add panel (multi-view)">+ Panel</button>
         <button class="small" onclick="showDocs()" title="Documentation">Docs</button>
+        <button class="small" onclick="showShortcuts()" title="Keyboard shortcuts">?</button>
         <button id="pauseRunBtn" class="small" onclick="togglePauseRun()" title="Pause/Resume the selected command">&#9208; Pause</button>
         <div class="token-bar">
             <label for="authToken">Token:</label>
@@ -1771,6 +1780,12 @@ document.addEventListener('keydown', (e) => {
         if (panel) {
             vttySearchClose(panel.id);
         }
+        closeContextMenu();
+        closeShortcuts();
+    }
+    // ? — show keyboard shortcuts
+    if (e.key === '?' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
+        showShortcuts();
     }
 });
 
@@ -2110,6 +2125,35 @@ function autoFitActiveTerminal() {
             body: JSON.stringify({ rows, cols }),
         }).catch(() => {});
     }
+}
+
+// ─── Keyboard Shortcuts Help ───
+function showShortcuts() {
+    closeShortcuts();
+    const overlay = document.createElement('div');
+    overlay.className = 'shortcuts-overlay';
+    overlay.id = 'shortcutsOverlay';
+    overlay.onclick = (e) => { if (e.target === overlay) closeShortcuts(); };
+    overlay.innerHTML = `<div class="shortcuts-panel">
+        <h2>Keyboard Shortcuts</h2>
+        <table>
+            <tr><td>?</td><td>Show this help</td></tr>
+            <tr><td>Ctrl+F</td><td>Search in terminal</td></tr>
+            <tr><td>Escape</td><td>Close search / menu</td></tr>
+            <tr><td>Any key</td><td>Focus key input (when not in a field)</td></tr>
+            <tr><td>Enter</td><td>Send keystrokes to terminal</td></tr>
+        </table>
+        <p style="font-size:0.7rem;color:var(--text-muted);margin-bottom:0.5rem;">Click on the terminal to focus the key input field.</p>
+        <div style="text-align:right;margin-top:0.75rem;">
+            <button onclick="closeShortcuts()" style="font-size:0.8rem;">Close</button>
+        </div>
+    </div>`;
+    document.body.appendChild(overlay);
+}
+
+function closeShortcuts() {
+    const el = document.getElementById('shortcutsOverlay');
+    if (el) el.remove();
 }
 </script>
 </body>
