@@ -476,6 +476,21 @@ const state = {
         document.getElementById('sidebar').classList.add('collapsed');
     }
 
+    // Auto-fit terminal on window resize (debounced)
+    let _resizeTimer = null;
+    window.addEventListener('resize', () => {
+        if (_resizeTimer) clearTimeout(_resizeTimer);
+        _resizeTimer = setTimeout(() => {
+            // Auto-collapse/expand sidebar on resize
+            const sidebar = document.getElementById('sidebar');
+            if (window.innerWidth <= 768) {
+                sidebar.classList.add('collapsed');
+            }
+            // Auto-fit terminal to panel size
+            autoFitActiveTerminal();
+        }, 300);
+    });
+
     // ── Command-name URL routing ──
     // If the path is /command-name (e.g. /htop, /btop), auto-select
     // that command.  Supports basename matching so /usr/bin/htop works too.
@@ -2072,6 +2087,29 @@ function togglePauseCmd(instUrl, cmdId) {
     state.selectedInstUrl = instUrl;
     state.selectedCmdId = cmdId;
     togglePauseRun();
+}
+
+// ─── Auto-fit Terminal on Window Resize ───
+function autoFitActiveTerminal() {
+    if (!state.selectedInstUrl || !state.selectedCmdId) return;
+    const panel = getSelectedPanel();
+    if (!panel) return;
+    const vttyEl = panel.querySelector('.vtty-container');
+    if (!vttyEl) return;
+    const rect = vttyEl.getBoundingClientRect();
+    if (rect.width < 10 || rect.height < 10) return; // too small or hidden
+    const charW = state.fontSize * 0.6;
+    const charH = state.fontSize * 1.2;
+    const cols = Math.max(20, Math.min(500, Math.floor(rect.width / charW)));
+    const rows = Math.max(5, Math.min(200, Math.floor(rect.height / charH)));
+    // Only resize if dimensions actually changed
+    if (rows !== state._termRows || cols !== state._termCols) {
+        fetch(apiUrl(`/api/commands/${state.selectedCmdId}/resize`, { url: state.selectedInstUrl }), {
+            method: 'POST',
+            headers: authHeadersForInstance({ url: state.selectedInstUrl }),
+            body: JSON.stringify({ rows, cols }),
+        }).catch(() => {});
+    }
 }
 </script>
 </body>
