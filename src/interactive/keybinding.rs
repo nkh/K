@@ -268,20 +268,42 @@ pub fn check_bindings<'a>(buf: &'a [u8], bindings: &'a [Binding]) -> (Option<&'a
 /// Used for displaying keybindings in the help overlay.
 pub fn format_key(bytes: &[u8]) -> String {
     match bytes {
+        // Function keys (CSI sequences)
+        [0x1b, b'[', b'1', b'1', b'~'] => "F1".into(),
+        [0x1b, b'[', b'1', b'2', b'~'] => "F2".into(),
+        [0x1b, b'[', b'1', b'3', b'~'] => "F3".into(),
+        [0x1b, b'[', b'1', b'4', b'~'] => "F4".into(),
+        [0x1b, b'[', b'1', b'5', b'~'] => "F5".into(),
+        [0x1b, b'[', b'1', b'7', b'~'] => "F6".into(),
+        [0x1b, b'[', b'1', b'8', b'~'] => "F7".into(),
+        [0x1b, b'[', b'1', b'9', b'~'] => "F8".into(),
+        [0x1b, b'[', b'2', b'0', b'~'] => "F9".into(),
+        [0x1b, b'[', b'2', b'1', b'~'] => "F10".into(),
+        [0x1b, b'[', b'2', b'3', b'~'] => "F11".into(),
+        [0x1b, b'[', b'2', b'4', b'~'] => "F12".into(),
+        // Modified arrow keys
         [0x1b, b'[', b'1', b';', b'5', b'D'] => "Ctrl+Left".into(),
         [0x1b, b'[', b'1', b';', b'5', b'C'] => "Ctrl+Right".into(),
         [0x1b, b'[', b'1', b';', b'5', b'A'] => "Ctrl+Up".into(),
         [0x1b, b'[', b'1', b';', b'5', b'B'] => "Ctrl+Down".into(),
+        [0x1b, b'[', b'1', b';', b'2', b'D'] => "Shift+Left".into(),
+        [0x1b, b'[', b'1', b';', b'2', b'C'] => "Shift+Right".into(),
+        [0x1b, b'[', b'1', b';', b'2', b'A'] => "Shift+Up".into(),
+        [0x1b, b'[', b'1', b';', b'2', b'B'] => "Shift+Down".into(),
+        [0x1b, b'[', b'Z'] => "Shift+Tab".into(),
+        // Arrow keys
         [0x1b, b'[', b'A'] => "Up".into(),
         [0x1b, b'[', b'B'] => "Down".into(),
         [0x1b, b'[', b'C'] => "Right".into(),
         [0x1b, b'[', b'D'] => "Left".into(),
+        // Editing keys
         [0x1b, b'[', b'H'] => "Home".into(),
         [0x1b, b'[', b'F'] => "End".into(),
         [0x1b, b'[', b'3', b'~'] => "Delete".into(),
         [0x1b, b'[', b'2', b'~'] => "Insert".into(),
         [0x1b, b'[', b'5', b'~'] => "PageUp".into(),
         [0x1b, b'[', b'6', b'~'] => "PageDown".into(),
+        // Single-byte keys
         [0x1b] => "Esc".into(),
         [0x0d] => "Enter".into(),
         [0x09] => "Tab".into(),
@@ -290,6 +312,8 @@ pub fn format_key(bytes: &[u8]) -> String {
         [b] if (0x01..=0x1a).contains(b) => {
             format!("Ctrl+{}", ((*b + 0x40) as char))
         }
+        // Alt+key sequences
+        [0x1b, ch] => format!("Alt+{}", *ch as char),
         _ => {
             // Fallback: show as hex
             let hex: Vec<String> = bytes.iter().map(|b| format!("\\x{:02x}", b)).collect();
@@ -342,5 +366,9 @@ mod tests {
         assert_eq!(format_key(&[0x1b, b'[', b'1', b';', b'5', b'D']), "Ctrl+Left");
         assert_eq!(format_key(&[0x0c]), "Ctrl+L");
         assert_eq!(format_key(&[0x1b]), "Esc");
+        assert_eq!(format_key(&[0x1b, b'[', b'2', b'4', b'~']), "F12");
+        assert_eq!(format_key(&[0x1b, b'[', b'1', b'1', b'~']), "F1");
+        assert_eq!(format_key(&[0x1b, b'[', b'Z']), "Shift+Tab");
+        assert_eq!(format_key(&[0x1b, b'a']), "Alt+a");
     }
 }

@@ -92,61 +92,72 @@ pub fn render_help_overlay(
     use std::io::Write;
 
     let _ = terminal::Clear(terminal::ClearType::All);
+    // Ensure cursor is at home position after clear
+    let _ = write!(stdout, "\x1b[H");
     let (term_cols, _term_rows) = terminal::size().unwrap_or((80, 24));
     let w = term_cols as usize;
 
     // Header
-    let _ = write!(stdout, "\x1b[1;34m  vrunner — Keybindings\x1b[0m\r\n");
-    let _ = write!(stdout, "\x1b[2m  {}\x1b[0m\r\n\r\n", "─".repeat(w.saturating_sub(4).min(76)));
+    let _ = write!(stdout, "\x1b[1;34m  vrunner \u{2014} Keybindings\x1b[0m\r\n");
+    let _ = write!(stdout, "\x1b[2m  {}\x1b[0m\r\n\r\n", "\u{2500}".repeat(w.saturating_sub(4).min(76)));
+
+    // Track which actions we've already displayed to avoid duplicates
+    // across groups.  The "Always active" section is handled separately
+    // and is not part of the bindings list.
+    let mut seen = std::collections::HashSet::new();
+
+    /// Helper: render one group of keybindings.
+    fn render_group(
+        stdout: &mut std::io::Stdout,
+        group_name: &str,
+        action_names: &[&str],
+        bindings: &[Binding],
+        seen: &mut std::collections::HashSet<Action>,
+    ) {
+        let _ = write!(stdout, "\x1b[1m  {}\x1b[0m\r\n", group_name);
+        let mut had_any = false;
+        for binding in bindings {
+            let action_name = format!("{:?}", binding.action);
+            if !action_names.iter().any(|a| action_name.contains(a)) { continue; }
+            if seen.contains(&binding.action) { continue; }
+            seen.insert(binding.action.clone());
+            had_any = true;
+            let key_label = format_key(&binding.bytes);
+            let desc = binding.action.description();
+            let _ = write!(stdout, "  \x1b[1;33m{:<18}\x1b[0m  \x1b[2m{}\x1b[0m\r\n", key_label, desc);
+        }
+        if !had_any {
+            let _ = write!(stdout, "  \x1b[2m  (none configured)\x1b[0m\r\n");
+        }
+        let _ = write!(stdout, "\r\n");
+    }
 
     // Group 1: Navigation
-    let nav_actions = &["NextCommand", "PrevCommand"];
-    let _ = write!(stdout, "\x1b[1m  Navigation\x1b[0m\r\n");
-    let mut seen = std::collections::HashSet::new();
-    for binding in bindings {
-        let action_name = format!("{:?}", binding.action);
-        if !nav_actions.iter().any(|a| action_name.contains(a)) { continue; }
-        if seen.contains(&binding.action) { continue; }
-        seen.insert(binding.action.clone());
-        let key_label = format_key(&binding.bytes);
-        let desc = binding.action.description();
-        let _ = write!(stdout, "  \x1b[1;33m{:<18}\x1b[0m  \x1b[2m{}\x1b[0m\r\n", key_label, desc);
-    }
-    if seen.is_empty() {
-        let _ = write!(stdout, "  \x1b[2m  (none configured)\x1b[0m\r\n");
-    }
-    let _ = write!(stdout, "\r\n");
+    render_group(
+        stdout,
+        "Navigation",
+        &["NextCommand", "PrevCommand"],
+        bindings, &mut seen,
+    );
 
     // Group 2: Actions
-    let action_names = &["SpawnCommand", "KillCommand", "TogglePause"];
-    let _ = write!(stdout, "\x1b[1m  Actions\x1b[0m\r\n");
-    for binding in bindings {
-        let action_name = format!("{:?}", binding.action);
-        if !action_names.iter().any(|a| action_name.contains(a)) { continue; }
-        if seen.contains(&binding.action) { continue; }
-        seen.insert(binding.action.clone());
-        let key_label = format_key(&binding.bytes);
-        let desc = binding.action.description();
-        let _ = write!(stdout, "  \x1b[1;33m{:<18}\x1b[0m  \x1b[2m{}\x1b[0m\r\n", key_label, desc);
-    }
-    let _ = write!(stdout, "\r\n");
+    render_group(
+        stdout,
+        "Actions",
+        &["SpawnCommand", "KillCommand", "TogglePause"],
+        bindings, &mut seen,
+    );
 
     // Group 3: Display
-    let display_names = &["ToggleLog", "ShowHelp", "Quit"];
-    let _ = write!(stdout, "\x1b[1m  Display\x1b[0m\r\n");
-    for binding in bindings {
-        let action_name = format!("{:?}", binding.action);
-        if !display_names.iter().any(|a| action_name.contains(a)) { continue; }
-        if seen.contains(&binding.action) { continue; }
-        seen.insert(binding.action.clone());
-        let key_label = format_key(&binding.bytes);
-        let desc = binding.action.description();
-        let _ = write!(stdout, "  \x1b[1;33m{:<18}\x1b[0m  \x1b[2m{}\x1b[0m\r\n", key_label, desc);
-    }
-    let _ = write!(stdout, "\r\n");
+    render_group(
+        stdout,
+        "Display",
+        &["ToggleLog", "ShowHelp", "Quit"],
+        bindings, &mut seen,
+    );
 
-    // Always-active shortcuts
-    let _ = write!(stdout, "\x1b[2m{}\x1b[0m\r\n", "─".repeat(w.saturating_sub(4).min(76)));
+    // Always-active shortcuts (hardcoded, not from config)
+    let _ = write!(stdout, "\x1b[2m{}\x1b[0m\r\n", "\u{2500}".repeat(w.saturating_sub(4).min(76)));
     let _ = write!(stdout, "\x1b[1m  Always active\x1b[0m\r\n");
     let _ = write!(stdout, "  \x1b[1;33m{:<18}\x1b[0m  \x1b[2mQuit display\x1b[0m\r\n", "Ctrl+\\");
     let _ = write!(stdout, "\r\n");
