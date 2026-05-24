@@ -1414,6 +1414,7 @@ function renderPanels() {
                         <button class="small" onclick="sendKeysToPanel('${panel.id}')">Send</button>
                     </div>
                     ${state.panels.length > 1 ? `<button class="small danger" onclick="removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
+                    <button class="small" onclick="exportTerminal('${panel.id}')" title="Export terminal as text">&#x2913;</button>
                 </div>
                 <div class="vtty-container" id="vtty-${panel.id}">
                     <div class="search-bar" id="searchBar-${panel.id}">
@@ -1992,6 +1993,30 @@ function checkForExitedCommands() {
         }
     });
 })();
+
+// ─── Export Terminal Output ───
+function exportTerminal(panelId) {
+    const panel = document.getElementById(panelId);
+    if (!panel) return;
+    const pre = panel.querySelector('pre');
+    if (!pre) return;
+    const text = pre.textContent || pre.innerText || '';
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    // Use command name for the filename
+    let cmdName = 'terminal';
+    for (const inst of state.instanceUrls) {
+        if (inst._commands) {
+            const cmd = inst._commands.find(c => c.id === state.selectedCmdId);
+            if (cmd) { cmdName = (cmd.name || cmd.id).replace(/\//g, '_'); break; }
+        }
+    }
+    a.href = url;
+    a.download = cmdName + '.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+}
 </script>
 </body>
 </html>
