@@ -274,6 +274,10 @@
             <div class="sidebar-content" id="sidebarContent">
                 <!-- Commands tab (default) -->
                 <div id="tab-commands">
+                    <div style="padding:0.3rem 0.5rem;border-bottom:1px solid var(--border);display:flex;gap:0.3rem;align-items:center;">
+                        <input type="text" id="cmdFilter" placeholder="Filter commands..." oninput="loadCommands()" style="flex:1;font-size:0.7rem;padding:0.15rem 0.4rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:3px;">
+                        <button class="small danger" onclick="killAllCommands()" title="Kill all running commands">Kill All</button>
+                    </div>
                     <div id="commandList"></div>
                 </div>
                 <!-- Spawn tab -->
@@ -655,6 +659,8 @@ async function loadCommands() {
     // Render command list (merge all instances)
     const container = document.getElementById('commandList');
     let html = '';
+    const filter = (document.getElementById('cmdFilter') || {}).value || '';
+    const filterLower = filter.toLowerCase();
 
     function formatRuntime(secs) {
         if (!secs || secs < 0) return '';
@@ -673,6 +679,11 @@ async function loadCommands() {
         }
 
         for (const cmd of (inst._commands || [])) {
+            const cmdName = cmd.name || cmd.id;
+            // Apply filter
+            if (filterLower && !cmdName.toLowerCase().includes(filterLower) &&
+                !(cmd.args || []).join(' ').toLowerCase().includes(filterLower) &&
+                !String(cmd.pid).includes(filterLower)) continue;
             const cert = cmd.certificate || '';
             const certBadge = cert
                 ? `<span class="cert-badge" title="Bound to: ${escHtml(cert)}">${escHtml(cert)}</span>`
@@ -689,10 +700,10 @@ async function loadCommands() {
                 ? `<span style="color:var(--text-muted);font-size:0.6rem;flex-shrink:0;">${formatRuntime(cmd.runtime_secs)}</span>`
                 : '';
             html += `
-                <div class="cmd-item${selected}" onclick="selectCommand('${inst.url}','${cmd.id}','${escHtml(cmd.name || cmd.id)}')" title="${escHtml(inst.label)} / ${escHtml(cmd.name || cmd.id)} ${escHtml(argsStr)}" style="${isAlive ? '' : 'opacity:0.6;'}">
+                <div class="cmd-item${selected}" onclick="selectCommand('${inst.url}','${cmd.id}','${escHtml(cmdName)}')" title="${escHtml(inst.label)} / ${escHtml(cmdName)} ${escHtml(argsStr)}" style="${isAlive ? '' : 'opacity:0.6;'}">
                     <div class="cmd-item-row">
                         ${statusDot}
-                        <span class="name">${escHtml(cmd.name || cmd.id)}</span>
+                        <span class="name">${escHtml(cmdName)}</span>
                         ${runtimeStr}
                         ${certBadge}
                         <span class="pid">${cmd.pid}</span>
@@ -1231,6 +1242,28 @@ async function killCommand(instUrl, cmdId) {
         }
         loadCommands();
     } catch (e) { /* ignore */ }
+}
+
+async function killAllCommands() {
+    if (!confirm('Kill all running commands?')) return;
+    const promises = [];
+    for (const inst of state.instanceUrls) {
+        for (const cmd of (inst._commands || [])) {
+            if (cmd.alive) {
+                promises.push(
+                    fetch(apiUrl(`/api/commands/${cmd.id}/kill`, { url: inst.url }), {
+                        method: 'POST',
+                        headers: authHeadersForInstance({ url: inst.url }),
+                        body: JSON.stringify({}),
+                    }).catch(() => {})
+                );
+            }
+        }
+    }
+    await Promise.all(promises);
+    state.selectedInstUrl = null;
+    state.selectedCmdId = null;
+    loadCommands();
 }
 
 async function sendKeys() {
