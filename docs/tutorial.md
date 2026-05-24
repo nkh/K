@@ -46,10 +46,12 @@ vrunner has a built-in web admin panel:
 vrunner --display -- htop
 ```
 
-Open your browser: **http://127.0.0.1:9090/admin**
+Open your browser: **http://127.0.0.1:9090/** (or `/admin`)
+
+You can also navigate directly to a command by name: **http://127.0.0.1:9090/htop**
 
 The web UI shows:
-- A sidebar with all running commands
+- A sidebar with all running commands (with alive status and runtime)
 - A terminal view with live output
 - A spawn form to launch new commands
 - A status bar at the bottom with the full command name

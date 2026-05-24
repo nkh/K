@@ -22,12 +22,18 @@ pub async fn list_commands(
                     "exit_timeout": h.exit_config.timeout_secs,
                 })
             }).unwrap_or(serde_json::json!(null));
+            // Check alive status and compute runtime
+            let (alive, runtime_secs) = state.manager.get(&id).map(|h| {
+                (h.is_alive(), h.runtime_secs())
+            }).unwrap_or((false, 0.0));
             serde_json::json!({
                 "id": id,
                 "name": name,
                 "args": args,
                 "pid": pid,
-                "status": "running",
+                "alive": alive,
+                "runtime_secs": runtime_secs,
+                "status": if alive { "running" } else { "exited" },
                 "certificate": certificate,
                 "exit": exit_info,
             })
@@ -343,4 +349,49 @@ pub async fn delete_snapshot(
             "error": e.to_string()
         })),
     }
+}
+
+/// GET /api/commands/lookup/:name
+/// Find commands by name.  Returns matching commands with alive status
+/// and runtime.  Used by the web UI for `/command-name` URL routing.
+pub async fn lookup_command(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+) -> Json<Value> {
+    let commands = state.manager.list();
+    let matches: Vec<Value> = commands
+        .into_iter()
+        .filter(|(_, cmd_name, _, _, _)| {
+            // Match the basename of the command (e.g. "/usr/bin/htop" -> "htop")
+            cmd_name == &name
+                || cmd_name
+                    .rsplit('/')
+                    .next()
+                    .map(|base| base == name)
+                    .unwrap_or(false)
+        })
+        .map(|(id, cmd_name, args, pid, certificate)| {
+            let alive = state.manager.get(&id).map(|h| h.is_alive()).unwrap_or(false);
+            let runtime = state
+                .manager
+                .get(&id)
+                .map(|h| h.runtime_secs())
+                .unwrap_or(0.0);
+            serde_json::json!({
+                "id": id,
+                "name": cmd_name,
+                "args": args,
+                "pid": pid,
+                "alive": alive,
+                "runtime_secs": runtime,
+                "certificate": certificate,
+            })
+        })
+        .collect();
+
+    Json(serde_json::json!({
+        "status": "ok",
+        "data": matches,
+        "error": null
+    }))
 }

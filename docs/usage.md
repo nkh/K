@@ -61,7 +61,7 @@ The key architectural concept is the separation between **starting a command** a
 
 vrunner supports three controllers plus a real-time streaming layer:
 - **CLI** — direct command-line invocation for starting, listing, and stopping instances
-- **Web Admin** — a browser-based dashboard at `/admin` for managing commands visually
+- **Web Admin** — a browser-based dashboard at `/` or `/admin` for managing commands visually. Supports direct command-name URLs like `/htop` to jump straight to a command's terminal.
 - **HTTP API** — a RESTful API for programmatic access from scripts, curl, or custom clients
 - **WebSocket API** — real-time bidirectional streaming for terminal output and log entries, eliminating the need for polling
 

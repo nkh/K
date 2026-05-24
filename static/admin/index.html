@@ -429,7 +429,90 @@ const state = {
     // Fetch server config and apply update mode defaults
     fetchServerConfig();
     applyUpdateModeUI();
+
+    // ── Command-name URL routing ──
+    // If the path is /command-name (e.g. /htop, /btop), auto-select
+    // that command.  Supports basename matching so /usr/bin/htop works too.
+    // If multiple commands share the same name, show a picker.
+    const pathname = window.location.pathname.replace(/^\/+|\/+$/g, '');
+    if (pathname && pathname !== 'admin' && !pathname.startsWith('api/')) {
+        lookupAndSelectCommand(pathname);
+    }
 })();
+
+// ── Command-name URL lookup ──
+async function lookupAndSelectCommand(name) {
+    try {
+        const base = getBaseUrl();
+        const res = await fetch(apiUrl('/api/commands/lookup/' + encodeURIComponent(name)), {
+            headers: authHeaders()
+        });
+        const json = await res.json();
+        if (json.status !== 'ok') return;
+        const matches = json.data;
+        if (matches.length === 0) return; // no match, show admin page
+
+        if (matches.length === 1) {
+            // Single match — auto-select after loadCommands has run
+            state._pendingSelectId = matches[0].id;
+            loadCommands();
+        } else {
+            // Multiple matches — show picker overlay
+            showCommandPicker(matches);
+        }
+    } catch (e) { /* ignore */ }
+}
+
+function showCommandPicker(matches) {
+    // Remove existing picker if any
+    const old = document.getElementById('cmdPicker');
+    if (old) old.remove();
+
+    function formatRuntime(secs) {
+        if (secs < 60) return Math.floor(secs) + 's';
+        if (secs < 3600) return Math.floor(secs / 60) + 'm ' + Math.floor(secs % 60) + 's';
+        const h = Math.floor(secs / 3600);
+        const m = Math.floor((secs % 3600) / 60);
+        return h + 'h ' + m + 'm';
+    }
+
+    let items = matches.map(m => {
+        const argsStr = (m.args || []).join(' ');
+        const detail = argsStr ? `${argsStr} (pid ${m.pid})` : `pid ${m.pid}`;
+        const aliveBadge = m.alive
+            ? '<span style="color:var(--green);font-size:0.65rem;">● running ' + formatRuntime(m.runtime_secs) + '</span>'
+            : '<span style="color:var(--red);font-size:0.65rem;">● exited</span>';
+        return `<div class="cmd-item" onclick="pickCommand('${m.id}','${escHtml(m.name)}')" style="cursor:pointer;">
+            <div class="cmd-item-row">
+                <div style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-mono);font-size:0.75rem;color:var(--text-primary);">${escHtml(m.name)}</div>
+                ${aliveBadge}
+                <span class="pid" style="color:var(--text-muted);font-size:0.7rem;">pid ${m.pid}</span>
+            </div>
+            <div class="cmd-detail" style="font-family:var(--font-mono);font-size:0.65rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-left:1.1rem;">${escHtml(detail)}</div>
+        </div>`;
+    }).join('');
+
+    const overlay = document.createElement('div');
+    overlay.id = 'cmdPicker';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:100;display:flex;align-items:center;justify-content:center;';
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    overlay.innerHTML = `<div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:1.25rem;min-width:420px;max-width:90vw;">
+        <h2 style="font-size:1rem;color:var(--accent);margin-bottom:0.75rem;">Multiple commands matching "${escHtml(window.location.pathname.replace(/^\/+|\/+$/g, ''))}"</h2>
+        <p style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.75rem;">Click a command to view its terminal:</p>
+        <div style="max-height:50vh;overflow-y:auto;">${items}</div>
+        <div style="margin-top:0.75rem;text-align:right;">
+            <button onclick="document.getElementById('cmdPicker').remove()" style="font-size:0.8rem;">Cancel</button>
+        </div>
+    </div>`;
+    document.body.appendChild(overlay);
+}
+
+function pickCommand(id, name) {
+    const picker = document.getElementById('cmdPicker');
+    if (picker) picker.remove();
+    state._pendingSelectId = id;
+    loadCommands();
+}
 
 function getBaseUrl() {
     return state.instanceUrls.length > 0 ? state.instanceUrls[0].url : window.location.origin;
@@ -539,6 +622,15 @@ async function loadCommands() {
     const container = document.getElementById('commandList');
     let html = '';
 
+    function formatRuntime(secs) {
+        if (!secs || secs < 0) return '';
+        if (secs < 60) return Math.floor(secs) + 's';
+        if (secs < 3600) return Math.floor(secs / 60) + 'm ' + Math.floor(secs % 60) + 's';
+        const h = Math.floor(secs / 3600);
+        const m = Math.floor((secs % 3600) / 60);
+        return h + 'h ' + m + 'm';
+    }
+
     for (const inst of state.instanceUrls) {
         if (inst._lastError) {
             html += `<div style="padding:0.5rem;color:var(--red);font-size:0.75rem;">${escHtml(inst.label)}: ${escHtml(inst._lastError)}</div>`;
@@ -555,11 +647,19 @@ async function loadCommands() {
             const selected = (state.selectedInstUrl === inst.url && state.selectedCmdId === cmd.id) ? ' selected' : '';
             const argsStr = (cmd.args || []).join(' ');
             const detail = argsStr ? `${argsStr}  (pid ${cmd.pid})` : `pid ${cmd.pid}`;
+            const isAlive = cmd.alive !== false;
+            const statusDot = isAlive
+                ? '<div class="status-dot status-running"></div>'
+                : '<div class="status-dot status-exited"></div>';
+            const runtimeStr = isAlive && cmd.runtime_secs > 0
+                ? `<span style="color:var(--text-muted);font-size:0.6rem;flex-shrink:0;">${formatRuntime(cmd.runtime_secs)}</span>`
+                : '';
             html += `
-                <div class="cmd-item${selected}" onclick="selectCommand('${inst.url}','${cmd.id}','${escHtml(cmd.name || cmd.id)}')" title="${escHtml(inst.label)} / ${escHtml(cmd.name || cmd.id)} ${escHtml(argsStr)}">
+                <div class="cmd-item${selected}" onclick="selectCommand('${inst.url}','${cmd.id}','${escHtml(cmd.name || cmd.id)}')" title="${escHtml(inst.label)} / ${escHtml(cmd.name || cmd.id)} ${escHtml(argsStr)}" style="${isAlive ? '' : 'opacity:0.6;'}">
                     <div class="cmd-item-row">
-                        <div class="status-dot status-running"></div>
+                        ${statusDot}
                         <span class="name">${escHtml(cmd.name || cmd.id)}</span>
+                        ${runtimeStr}
                         ${certBadge}
                         <span class="pid">${cmd.pid}</span>
                         <button class="small danger" onclick="event.stopPropagation();killCommand('${inst.url}','${cmd.id}')" title="Kill">&#x2715;</button>
@@ -573,6 +673,19 @@ async function loadCommands() {
 
     // Update spawn instance dropdown
     updateInstanceDropdown();
+
+    // Auto-select a pending command (from URL routing /command-name)
+    if (state._pendingSelectId) {
+        const pendingId = state._pendingSelectId;
+        state._pendingSelectId = null;
+        for (const inst of state.instanceUrls) {
+            if (inst._commands && inst._commands.find(c => c.id === pendingId)) {
+                const cmd = inst._commands.find(c => c.id === pendingId);
+                selectCommand(inst.url, cmd.id, cmd.name || cmd.id);
+                return;
+            }
+        }
+    }
 
     // Auto-select the first command if none is selected yet
     if (!state.selectedCmdId) {

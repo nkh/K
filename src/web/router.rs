@@ -13,6 +13,7 @@ pub fn create_router(state: AppState) -> Router {
     // API routes — protected by auth middleware when auth is enabled
     let api_routes = Router::new()
         .route("/api/commands", get(handlers::commands::list_commands).post(handlers::commands::start_command))
+        .route("/api/commands/lookup/{name}", get(handlers::commands::lookup_command))
         .route("/api/certificates", get(handlers::certificates::list_certificates))
         .route("/api/info", get(handlers::commands::get_info))
         .route("/api/log", get(handlers::logs::get_log))
@@ -41,7 +42,10 @@ pub fn create_router(state: AppState) -> Router {
         .route("/", get(handlers::admin::admin_page))
         .route("/admin", get(handlers::admin::admin_page))
         .route("/admin/*path", get(handlers::admin::admin_assets))
-        .route("/favicon.ico", get(handlers::admin::admin_favicon));
+        .route("/favicon.ico", get(handlers::admin::admin_favicon))
+        // Catch-all: serve index.html for any other path (e.g. /htop).
+        // The JS reads window.location.pathname and auto-selects the command.
+        .fallback(handlers::admin::admin_page);
 
     // Auth middleware layer — injects auth requirement from state into extensions
     let auth_token = state.auth_token.clone();

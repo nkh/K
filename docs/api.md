@@ -600,17 +600,73 @@ and forwards log entries as they are written.
 
 ## Web UI
 
-The admin web interface is served at:
+### Admin Panel
+
+The admin web interface is served at the root URL and `/admin`:
 
 ```
+GET /
 GET /admin
 ```
 
-All static assets (HTML, CSS, JS) are embedded in the binary. No external
+All static assets (HTML, CSS, JS, favicon) are embedded in the binary. No external
 dependencies or CDN resources are required.
+
+### Command-Name URL Routing
+
+Any path that doesn't match an API endpoint is treated as a command name.
+Navigate to `/<command-name>` to auto-select and view that command's VTTY:
+
+```
+/htop           → shows the htop command's terminal
+/btop           → shows the btop command's terminal
+/my-script.sh   → shows the my-script.sh command's terminal
+```
+
+If multiple commands share the same name, a picker overlay is displayed
+letting you choose which one to view (showing arguments, PID, and status).
+
+Paths that don't match any command name fall back to the admin panel.
+
+### Multi-Instance View
 
 Multi-instance view is supported via query parameters:
 
 ```
+/?instance=http://host1:9090&label=Instance1&instance=http://host2:9091&label=Instance2
 /admin?instance=http://host1:9090&label=Instance1&instance=http://host2:9091&label=Instance2
 ```
+
+### Command Lookup API
+
+```
+GET /api/commands/lookup/:name
+```
+
+Returns all commands matching the given name (supports basename matching,
+e.g. `/usr/bin/htop` matches `htop`).  Each result includes alive status
+and runtime:
+
+```json
+{
+  "status": "ok",
+  "data": [
+    {
+      "id": "abc123",
+      "name": "htop",
+      "args": [],
+      "pid": 12345,
+      "alive": true,
+      "runtime_secs": 342.5,
+      "certificate": null
+    }
+  ],
+  "error": null
+}
+```
+
+### Command List Enhancements
+
+The `GET /api/commands` response now includes per-command `alive` status and
+`runtime_secs` fields, and the `status` field reflects the actual process
+state (`"running"` or `"exited"`) instead of always returning `"running"`.
