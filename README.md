@@ -485,11 +485,34 @@ curl -X POST http://localhost:8080/api/shutdown
 
 ## Admin Interface
 
-Open `http://localhost:8080/admin` in your browser for a built-in web dashboard.
+Open `http://localhost:8080/admin` in your browser for a built-in web dashboard. Any unrecognised path also serves the admin page, so `http://localhost:8080/anything` redirects to the dashboard.
 
 When TLS is enabled, use `https://localhost:8080/admin` instead.
 
-The admin interface features a real-time VTTY viewer powered by the incremental diff WebSocket protocol, a Pause/Run button to freeze and thaw commands, 1-second polling for HTTP fallback, and auto-selection of the first available command.
+### Direct Command URLs
+
+Navigate to `http://localhost:8080/<command_name>` to jump straight to a specific command's terminal (e.g. `/htop`, `/npm`). If multiple commands share the same name, a picker list is shown. Running commands are highlighted with their uptime.
+
+### Dashboard Features
+
+The admin interface includes:
+
+- **Real-time VTTY Viewer** — Incremental diff WebSocket protocol for low-bandwidth terminal streaming, with 1-second HTTP polling fallback and auto-selection of the first available command.
+- **Pause / Run** — Freeze and thaw the currently selected command from the top bar.
+- **Command Sidebar** — Lists all commands with name, PID, status, and runtime. Running commands are highlighted with elapsed uptime. Supports filtering and searching by command name.
+- **Batch Kill All** — One-click button to terminate every running command on the instance.
+- **Terminal Search** — Press `Ctrl+F` inside the terminal viewer to search within the output buffer.
+- **Scroll-to-Bottom** — A floating button appears when scrolled up; click it to jump back to live output.
+- **Click to Focus** — Click anywhere on the terminal pane to capture keyboard input immediately.
+- **Auto-Fit Terminal** — Terminal automatically resizes to fill the available panel space when the window is resized.
+- **Drag-to-Resize Panels** — Drag the divider between the sidebar and terminal to adjust their widths.
+- **Export Output** — Download the current terminal buffer contents as a `.txt` file.
+- **Right-Click Context Menu** — Right-click a command in the sidebar for quick actions (kill, freeze/thaw, copy URL, open in new tab).
+- **Copy Command URL** — Copy the direct URL for a command to the clipboard from the context menu or sidebar.
+- **Browser Notifications** — Receive a desktop notification when a command exits (requires notification permission).
+- **Keyboard Shortcuts** — Press `?` to open the shortcuts help panel showing all available keybindings.
+- **Auto-Reconnect** — WebSocket connections automatically re-establish after network interruptions.
+- **Responsive Layout** — The dashboard adapts to mobile and tablet screen sizes with collapsible sidebar.
 
 ---
 
