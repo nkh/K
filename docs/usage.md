@@ -96,7 +96,7 @@ Start vrunner in its simplest form — idle mode on localhost with no command:
 vrunner
 ```
 
-This starts an HTTP server on `http://127.0.0.1:8080`. No commands are running yet; the instance is ready to receive API requests or web UI connections. You can verify it is working by listing commands:
+This starts an HTTP server on `http://127.0.0.1:9090`. No commands are running yet; the instance is ready to receive API requests or web UI connections. You can verify it is working by listing commands:
 
 ```bash
 curl http://127.0.0.1:8080/api/commands

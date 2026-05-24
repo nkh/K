@@ -55,6 +55,8 @@ vtty:
 display:
   # Show VTTY output on the local terminal screen.
   enabled: false
+  # Keep displaying after the initial CLI command exits (monitor mode).
+  display_all: false
   # Refresh interval in milliseconds when display is enabled.
   refresh_ms: 100
 

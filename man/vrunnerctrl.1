@@ -28,6 +28,27 @@ vrunnerctrl \- CLI controller for vrunner instances (subcommands of vrunner)
 .B vrunner
 \fBcert remove\fR \fINAME\fR
 
+.B vrunner
+\fBspawn\fR [\fIOPTIONS\fR] \fICMD\fR [\fIARGS...\fR]
+
+.B vrunner
+\fBfreeze\fR \fIPID\fR
+
+.B vrunner
+\fBthaw\fR \fIPID\fR
+
+.B vrunner
+\fBlist\-vrunner\fR
+
+.B vrunner
+\fBlist\-commands\fR
+
+.B vrunner
+\fBstop\-command\fR \fITARGET\fR
+
+.B vrunner
+\fBresize\fR \fITARGET\fR [\fB\-\-rows\fR \fIN\fR] [\fB\-\-cols\fR \fIN\fR]
+
 .SH DESCRIPTION
 \fBvrunnerctrl\fR is not a separate binary. It documents the CLI controller subcommands built into the \fBvrunner\fR(1) binary. These subcommands connect to running vrunner instances over HTTP to inspect, manage, and shut them down remotely. They are the command-line equivalent of the web admin interface.
 
@@ -80,6 +101,7 @@ Example output:
 PID        PORT     BIND                 DAEMON     DISPLAY    COMMAND
 12345      8080     127.0.0.1            yes        no         (idle)
 12346      9090     127.0.0.1            no         yes        vim
+.fi
 .RE
 
 .SS stop
@@ -109,6 +131,7 @@ PID        PORT     BIND        DAEMON     COMMAND
 
 \fB$ vrunner stop 12346\fR
 Sent shutdown request to PID 12346 (port 9090)
+.fi
 .RE
 
 .SS cert generate
@@ -140,6 +163,7 @@ Certificate 'my-app' generated successfully.
   Certificate: /home/user/.config/vrunner/certs/my-app/cert.pem
   Key:        /home/user/.config/vrunner/certs/my-app/key.pem
   Token:      a3f8c1e2b7d94001... (first 16 of 64 chars)
+.fi
 .RE
 
 .SS cert list
@@ -162,6 +186,7 @@ Output:
 NAME                     CERT FILE                                         TOKEN (prefix)
 my-app                   /home/user/.config/vrunner/certs/my-app/cert.pem   a3f8c1e2b7d94001
 ci-pipeline              /home/user/.config/vrunner/certs/ci-pipeline/cert.pem 7c1e9d4a8f2...
+.fi
 .RE
 
 .SS cert show
@@ -186,6 +211,7 @@ Certificate: my-app
   Key:        /home/user/.config/vrunner/certs/my-app/key.pem
   Token:      a3f8c1e2b7d94001... (full SHA-256 hex)
   Token (16): a3f8c1e2b7d94001...
+.fi
 .RE
 
 .SS cert remove
@@ -198,6 +224,290 @@ Remove a certificate from the pool registry. This removes the certificate from v
 .RS
 vrunner cert remove \fINAME\fR
 .RE
+.RE
+
+.SS spawn
+
+Spawn a new command inside a running vrunner instance. This is the CLI equivalent of \fBPOST /api/commands\fR. The command runs in a virtual terminal (VTTY) and can be controlled remotely.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner spawn [\fIOPTIONS\fR] \fICMD\fR [\fIARGS...\fR]
+.RE
+.RE
+
+.PP
+Options:
+.RS
+.TP
+.B \-\-rows \fIN\fR
+Initial terminal height (default: 24, max: 200).
+.TP
+.B \-\-cols \fIN\fR
+Initial terminal width (default: 80, max: 500).
+.TP
+.B \-\-env \fIKEY=VALUE\fR
+Pass an environment variable to the spawned command. May be specified multiple times.
+.TP
+.B \-\-no\-env
+Do not inherit the parent process environment. Only variables set with \fB\-\-env\fR will be available.
+.TP
+.B \-\-target \fIPID\fR
+Spawn the command on a specific vrunner instance (by PID). If omitted, vrunner selects the first available instance.
+.RE
+
+.PP
+Examples:
+.RS
+.PP
+.nf
+\fB# Spawn htop on the default instance\fR
+$ vrunner spawn htop
+Command spawned: id=abc123 status=running
+
+\fB# Spawn with a custom terminal size\fR
+$ vrunner spawn \-\-rows 50 \-\-cols 160 vim notes.txt
+Command spawned: id=def456 status=running
+
+\fB# Spawn with environment variables\fR
+$ vrunner spawn \-\-env RUST_LOG=debug \-\-env MODE=test cargo test
+Command spawned: id=ghi789 status=running
+
+\fB# Spawn on a specific instance\fR
+$ vrunner spawn \-\-target 12345 python3 -m http.server
+Command spawned: id=jkl012 status=running
+
+\fB# Spawn with clean environment\fR
+$ vrunner spawn \-\-no\-env \-\-env PATH=/usr/bin:/bin /bin/sh
+Command spawned: id=mno345 status=running
+.fi
+.RE
+
+.PP
+Equivalent curl:
+.RS
+.PP
+.nf
+curl -s -X POST http://localhost:8080/api/commands \e
+  -H "Content-Type: application/json" \e
+  -d '{"cmd": "htop", "args": [], "rows": 50, "cols": 160}'
+.fi
+.RE
+
+.SS resize
+
+Resize the virtual terminal of a running command. This is the CLI equivalent of \fBPOST /api/commands/:id/resize\fR.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner resize \fITARGET\fR [\fB\-\-rows\fR \fIN\fR] [\fB\-\-cols\fR \fIN\fR]
+.RE
+.RE
+
+.PP
+Options:
+.RS
+.TP
+.B \-\-rows \fIN\fR
+New terminal height (1-200).
+.TP
+.B \-\-cols \fIN\fR
+New terminal width (1-500).
+.RE
+
+.PP
+\fITARGET\fR can be a command ID or an OS PID. If \fB\-\-rows\fR and \fB\-\-cols\fR are both omitted, vrunner attempts to auto-detect the terminal size from the controlling terminal (\fB$COLUMNS\fR and \fB$LINES\fR, or \fBstty size\fR as a fallback).
+
+.PP
+Examples:
+.RS
+.PP
+.nf
+\fB# Resize to 40x120\fR
+$ vrunner resize abc123 \-\-rows 40 \-\-cols 120
+Resized command abc123 to 40x120
+
+\fB# Auto-detect from current terminal\fR
+$ vrunner resize abc123
+Resized command abc123 to 50x200
+
+\fB# Resize by OS PID\fR
+$ vrunner resize 98765 \-\-rows 30 \-\-cols 100
+Resized command for PID 98765 to 30x100
+.fi
+.RE
+
+.PP
+Equivalent curl:
+.RS
+.PP
+.nf
+curl -s -X POST "http://localhost:8080/api/commands/abc123/resize" \e
+  -H "Content-Type: application/json" \e
+  -d '{"rows": 40, "cols": 120}'
+.fi
+.RE
+
+.SS freeze
+
+Freeze (suspend) a running command by sending it SIGSTOP. The command's OS process is paused but not terminated; it can be resumed later with \fBvrunner thaw\fR. This is useful for temporarily suspending resource-intensive tasks.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner freeze \fIPID\fR
+.RE
+.RE
+
+.PP
+\fIPID\fR is the OS process ID of the command to freeze.
+
+.PP
+Example:
+.RS
+.PP
+.nf
+$ vrunner freeze 45678
+Command (PID 45678) frozen
+.fi
+.RE
+
+.PP
+Equivalent curl:
+.RS
+.PP
+.nf
+curl -s -X POST "http://localhost:8080/api/commands/abc123/freeze" \e
+  -H "Content-Type: application/json" \e
+  -d '{}'
+.fi
+.RE
+
+.SS thaw
+
+Thaw (resume) a frozen command by sending it SIGCONT. The command resumes execution from where it was suspended by \fBvrunner freeze\fR.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner thaw \fIPID\fR
+.RE
+.RE
+
+.PP
+\fIPID\fR is the OS process ID of the command to thaw.
+
+.PP
+Example:
+.RS
+.PP
+.nf
+$ vrunner thaw 45678
+Command (PID 45678) thawed
+.fi
+.RE
+
+.PP
+Equivalent curl:
+.RS
+.PP
+.nf
+curl -s -X POST "http://localhost:8080/api/commands/abc123/thaw" \e
+  -H "Content-Type: application/json" \e
+  -d '{}'
+.fi
+.RE
+
+.SS list\-vrunner
+
+List all running vrunner instances in a compact, machine-friendly format. This is an alternative to \fBvrunner list\fR that outputs one instance per line with fields separated by whitespace, suitable for parsing in scripts.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner list\-vrunner
+.RE
+.RE
+
+.PP
+Output format:
+.RS
+.PP
+.nf
+PID  PORT  BIND         DAEMON  DISPLAY  COMMAND
+12345 8080 127.0.0.1    1      0        (idle)
+.fi
+.RE
+
+.SS list\-commands
+
+List all commands running inside vrunner instances in a compact, machine-friendly format. Unlike \fBvrunner list\fR (which lists instances), this lists the individual commands within each instance.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner list\-commands
+.RE
+.RE
+
+.PP
+Output format:
+.RS
+.PP
+.nf
+ID      PID   CMD          STATUS    ROWS  COLS
+abc123  45678 htop         running   24    80
+def456  45679 vim notes    running   24    80
+.fi
+.RE
+
+.SS stop\-command
+
+Stop a running command by its OS PID or command name. This sends a graceful kill request (SIGINT followed by SIGKILL after the configured timeout). This is the CLI equivalent of \fBPOST /api/commands/:id/kill\fR.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner stop\-command \fITARGET\fR
+.RE
+.RE
+
+.PP
+\fITARGET\fR can be either an OS PID (numeric) or a command name/ID string. If multiple commands match a name, all matching commands are stopped.
+
+.PP
+Examples:
+.RS
+.PP
+.nf
+\fB# Stop by PID\fR
+$ vrunner stop\-command 45678
+Command (PID 45678) stopped
+
+\fB# Stop by command ID\fR
+$ vrunner stop\-command abc123
+Command abc123 stopped
+.fi
+.RE
+
+.PP
+Equivalent curl:
+.RS
+.PP
+.nf
+curl -s -X POST "http://localhost:8080/api/commands/abc123/kill" \e
+  -H "Content-Type: application/json" \e
+  -d '{}'
+.fi
 .RE
 
 .SH HTTP API CONTROLLER
@@ -261,6 +571,17 @@ curl -s -X POST http://localhost:8080/api/commands \e
        "on_exit": "notify-send Tests Passed", \e
        "on_error": "notify-send Tests Failed", \e
        "exit_timeout": 30}'
+
+\fB# Start with a custom terminal size\fR
+curl -s -X POST http://localhost:8080/api/commands \e
+  -H "Content-Type: application/json" \e
+  -d '{"cmd": "vim", "args": ["Makefile"], "rows": 50, "cols": 160}'
+
+\fB# Start with environment variables\fR
+curl -s -X POST http://localhost:8080/api/commands \e
+  -H "Content-Type: application/json" \e
+  -d '{"cmd": "cargo", "args": ["build", "\-\-release"], \e
+       "env": {"RUST_LOG": "debug", "CARGO_TARGET_DIR": "/tmp/build"}}'
 
 \fB# Save the command ID for later use\fR
 ID=$(curl -s -X POST http://localhost:8080/api/commands \e
@@ -355,6 +676,11 @@ curl -s http://localhost:8080/api/commands/$ID/vtty/html | \e
 .RS
 .PP
 .nf
+\fB# Resize via CLI\fR
+$ vrunner resize \fICOMMAND_ID\fR \-\-rows 40 \-\-cols 120
+Resized command abc123 to 40x120
+
+\fB# Resize via curl\fR
 curl -s -X POST "http://localhost:8080/api/commands/$ID/resize" \e
   -H "Content-Type: application/json" \e
   -d '{"rows": 40, "cols": 120}'

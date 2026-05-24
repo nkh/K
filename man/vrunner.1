@@ -31,6 +31,27 @@ vrunner \- virtual terminal runner and process orchestrator with web control pla
 .B vrunner
 \fBcert\fR \fBremove\fR \fINAME\fR
 
+.B vrunner
+\fBspawn\fR [\fIOPTIONS\fR] \fICMD\fR [\fIARGS...\fR]
+
+.B vrunner
+\fBfreeze\fR \fIPID\fR
+
+.B vrunner
+\fBthaw\fR \fIPID\fR
+
+.B vrunner
+\fBlist\-vrunner\fR
+
+.B vrunner
+\fBlist\-commands\fR
+
+.B vrunner
+\fBstop\-command\fR \fITARGET\fR
+
+.B vrunner
+\fBresize\fR \fITARGET\fR [\fB\-\-rows\fR \fIN\fR] [\fB\-\-cols\fR \fIN\fR]
+
 .SH DESCRIPTION
 \fBvrunner\fR executes commands inside virtual TTYs (VTTYs), exposes their output through a web API, and provides a built-in administrative interface for remote control. By default, it runs silently with no terminal output, making it ideal for background development servers, CI pipelines, or headless environments.
 
@@ -60,7 +81,7 @@ Server bind address (default: \fB127.0.0.1\fR). Use \fB0.0.0.0\fR to accept remo
 
 .TP
 .B \-\-port \fIPORT\fR
-Server TCP port (default: \fB8080\fR).
+Server TCP port (default: \fB9090\fR).
 
 .TP
 .B \-\-remote
@@ -141,6 +162,10 @@ Show VTTY output on the local terminal screen.
 Disable local terminal display (default).
 
 .TP
+.B \-\-display\-all
+Keep displaying VTTY output after the initial CLI command exits, switching to the next available command (monitor mode). Without this flag, the display is dismissed when the CLI command finishes but the server continues running.
+
+.TP
 .B \-\-refresh\-ms \fIMS\fR
 VTTY display refresh interval in milliseconds (default: \fB100\fR).
 
@@ -187,6 +212,26 @@ Maximum seconds to wait for a child process to exit after SIGINT before sending 
 .TP
 .B \-\-tabs
 Show a tab bar listing all running commands at the top of the interactive display (requires \fB\-\-display\fR). When disabled (default), only the active command name is shown in the status bar. This provides an \fBmprocs\fR-style multi-command view.
+
+.SS Environment Variable Options
+
+.TP
+.B \-\-env \fIKEY=VALUE\fR
+Set environment variable for spawned commands (repeatable). Overrides config file environment variables.
+
+.TP
+.B \-\-no\-env
+Ignore environment variables from the config file. Only variables set via \fB\-\-env\fR flags or the API \fBenv\fR field will be passed to the spawned command.
+
+.SS Profile Options
+
+.TP
+.B \-\-profile \fINAME\fR
+Apply a named configuration profile from the config file. Profile fields override the base config; CLI flags override both.
+
+.TP
+.B \-\-target \fIPID\fR
+Target a specific vrunner instance by PID when using spawn, freeze, thaw, or resize subcommands.
 
 .SS Command Specification
 
@@ -262,6 +307,99 @@ vrunner cert remove \fINAME\fR
 .RE
 .RE
 
+.SS spawn
+Spawn a new command in a vrunner instance. Connects to a running vrunner server and requests command creation via the HTTP API. Supports all command options including terminal dimensions, environment variables, exit handlers, and certificate binding.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner spawn [\fIOPTIONS\fR] \fICMD\fR [\fIARGS...\fR]
+.RE
+.PP
+.B Options:
+.RS
+.TP
+.BR \-\-rows \fIN\fR, \-\-cols \fIN\fR
+Set the virtual terminal dimensions for the spawned command.
+.TP
+.BR \-\-env \fIKEY=VALUE\fR
+Set environment variable (repeatable).
+.TP
+.B \-\-no\-env
+Ignore config file environment variables.
+.TP
+.BR \-\-target \fIPID\fR
+Target a specific vrunner instance by PID.
+.RE
+.RE
+
+.SS freeze
+Freeze (SIGSTOP) a running command by its process ID. The command is paused but not terminated; use \fBthaw\fR to resume.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner freeze \fIPID\fR
+.RE
+.RE
+
+.SS thaw
+Thaw (SIGCONT) a previously frozen command by its process ID, resuming its execution.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner thaw \fIPID\fR
+.RE
+.RE
+
+.SS list-vrunner
+List all running vrunner instances on the system. Displays PID, port, bind address, daemon status, display status, and current command for each instance.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner list-vrunner
+.RE
+.RE
+
+.SS list-commands
+List all commands running in the target vrunner instance.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner list-commands
+.RE
+.RE
+
+.SS stop-command
+Stop a running command in a vrunner instance. Sends a kill request to the specified command.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner stop-command \fITARGET\fR
+.RE
+.RE
+
+.SS resize
+Resize a command's virtual terminal. When used without explicit \fB\-\-rows\fR or \fB\-\-cols\fR flags, the terminal is automatically resized to match the dimensions of the current terminal (auto-detect mode). When one dimension is specified, the other is auto-detected from the current terminal.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner resize \fITARGET\fR [\fB\-\-rows\fR \fIN\fR] [\fB\-\-cols\fR \fIN\fR]
+.RE
+.RE
+
 .SH WEB ADMIN INTERFACE
 
 The built-in web admin dashboard is available at \fB/admin\fR on the running instance. Open a browser and navigate to:
@@ -303,7 +441,7 @@ List all running commands. Returns an array of objects with \fBid\fR, \fBname\fR
 
 .TP
 .B POST /api/commands
-Start a new command. Request body: \fB{"cmd": "string", "args": ["string"], "certificate": "string|null"}\fR. Returns the command ID.
+Start a new command. Request body: \fB{"cmd": "string", "args": ["string"], "rows": N, "cols": N, "on_exit": "string", "on_error": "string", "exit_timeout": N, "env": {"KEY": "VALUE"}, "no_env": bool, "certificate": "string|null"}\fR. All fields except \fBcmd\fR are optional. Returns the command ID.
 
 .TP
 .B POST /api/commands/:id/keys
@@ -328,6 +466,14 @@ Get paginated VTTY content. Default offset is 0, default limit is 50.
 .TP
 .B POST /api/commands/:id/resize
 Resize a command's virtual terminal. Request body: \fB{"rows": N, "cols": N}\fR. Valid ranges: rows 1-200, cols 1-500.
+
+.TP
+.B POST /api/commands/:id/freeze
+Freeze (SIGSTOP) a running command, pausing its execution without terminating it.
+
+.TP
+.B POST /api/commands/:id/thaw
+Thaw (SIGCONT) a previously frozen command, resuming its execution.
 
 .TP
 .B GET /api/commands/:id/handles
@@ -438,6 +584,14 @@ Controls command logging (\fBenabled\fR, \fBfile\fR).
 .TP
 .B daemon
 Controls daemon mode (\fBenabled\fR, \fBstdout_file\fR, \fBstderr_file\fR).
+
+.TP
+.B environment
+Defines environment variables for spawned commands. A mapping of key-value pairs that are set in the child process environment. Can be overridden per-command via \fB\-\-env\fR flags or the API \fBenv\fR field, or suppressed entirely with \fB\-\-no\-env\fR.
+
+.TP
+.B profiles
+Named configuration profiles that override base config fields. Each profile can specify any config section, and its values take precedence over the base configuration. CLI flags override profile values. A profile is selected with \fB\-\-profile <NAME>\fR.
 
 .TP
 .B handles
@@ -683,6 +837,7 @@ Child command exited with a non-zero status (when running a command directly).
 
 .SH SEE ALSO
 
+.BR vrunnerctrl (1),
 .BR curl (1),
 .BR kill (1),
 .BR lsof (8)

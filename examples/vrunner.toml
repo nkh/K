@@ -46,6 +46,7 @@ mouse = false
 
 [display]
 enabled = false
+display_all = false
 refresh_ms = 100
 
 [command_log]

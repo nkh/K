@@ -59,13 +59,13 @@ Controls the HTTP server binding and port.
 | Key | Type | Default | CLI Flag | Description |
 |-----|------|---------|----------|-------------|
 | `bind` | `string` | `"127.0.0.1"` | `--bind <ADDR>` | Network interface to bind to. `"127.0.0.1"` restricts access to localhost only (safe default). Set to `"0.0.0.0"` to listen on all interfaces and accept remote connections. |
-| `port` | `u16` | `8080` | `--port <PORT>` | TCP port for the HTTP server. |
+| `port` | `u16` | `9090` | `--port <PORT>` | TCP port for the HTTP server. |
 
 **Example:**
 ```yaml
 server:
   bind: "127.0.0.1"
-  port: 8080
+  port: 9090
 ```
 
 ### `security`
@@ -163,12 +163,14 @@ Controls local terminal display of the VTTY output.
 | Key | Type | Default | CLI Flag | Description |
 |-----|------|---------|----------|-------------|
 | `enabled` | `bool` | `false` | `--display` / `--no-display` | When `true`, the VTTY output is mirrored to the local terminal screen in real time. This is useful for interactive programs when you want to see the output directly. When `false` (default), vrunner operates silently with no terminal output. Automatically disabled in daemon mode. |
+| `display_all` | `bool` | `false` | `--display-all` | When `true`, the local display stays active after the initial CLI command exits, switching to show the next available command (monitor mode). When `false` (default), the display is dismissed when the direct CLI command finishes but the server continues running. |
 | `refresh_ms` | `u64` | `100` | `--refresh-ms <MS>` | Refresh interval in milliseconds when local display is enabled. Lower values provide smoother rendering at the cost of higher CPU usage. Recommended range: 50–200ms. |
 
 **Example:**
 ```yaml
 display:
   enabled: false
+  display_all: false
   refresh_ms: 100
 ```
 
@@ -371,6 +373,7 @@ vrunner [OPTIONS] [-- <COMMAND> [ARGS...]]
 | Flag | Argument | Config Key | Description |
 |------|----------|------------|-------------|
 | `--display` | — | `display.enabled` → `true` | Show VTTY output on the local terminal. |
+| `--display-all` | — | `display.display_all` → `true` | Keep displaying after the initial CLI command exits, switching to the next available command. |
 | `--no-display` | — | `display.enabled` → `false` | Disable local terminal display. |
 | `--refresh-ms` | `<MS>` | `display.refresh_ms` | Display refresh interval in milliseconds. |
 
@@ -443,6 +446,7 @@ Every configuration file entry has a corresponding CLI flag. This table summariz
 | `vtty` | `truecolor` | `--truecolor` / `--no-truecolor` |
 | `vtty` | `mouse` | `--mouse` / `--no-mouse` |
 | `display` | `enabled` | `--display` / `--no-display` |
+| `display` | `display_all` | `--display-all` |
 | `display` | `refresh_ms` | `--refresh-ms <MS>` |
 | `command_log` | `enabled` | `--log` |
 | `command_log` | `file` | `--log-file <FILE>` |
@@ -567,7 +571,7 @@ A complete `vrunner.yaml` with all sections documented:
 
 server:
   bind: "127.0.0.1"       # localhost only (safe default)
-  port: 8080               # TCP port
+  port: 9090               # TCP port
 
 security:
   require_auth: false      # no auth for localhost
@@ -588,6 +592,7 @@ vtty:
 
 display:
   enabled: false           # silent by default
+  display_all: false       # dismiss display when CLI command exits
   refresh_ms: 100          # 10 FPS when display is on
 
 command_log:

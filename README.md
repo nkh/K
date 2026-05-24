@@ -132,7 +132,7 @@ vrunner [OPTIONS] [-- <COMMAND> [ARGS...]]
 | Flag | Argument | Default | Description |
 |------|----------|---------|-------------|
 | `--bind` | `<ADDR>` | `127.0.0.1` | Server bind address |
-| `--port` | `<PORT>` | `8080` | Server TCP port |
+| `--port` | `<PORT>` | `9090` | Server TCP port |
 | `--remote` | — | — | Bind to `0.0.0.0` and enable auth |
 
 ### Security Options
@@ -172,6 +172,7 @@ vrunner [OPTIONS] [-- <COMMAND> [ARGS...]]
 | Flag | Argument | Default | Description |
 |------|----------|---------|-------------|
 | `--display` / `--no-display` | — | off | Show/hide VTTY on local terminal |
+| `--display-all` | — | off | Keep displaying after initial command exits (switch to next) |
 | `--refresh-ms` | `<MS>` | `100` | Display refresh interval (ms) |
 
 ### Logging Options
@@ -209,7 +210,7 @@ vrunner [OPTIONS] [-- <COMMAND> [ARGS...]]
 | Flag | Argument | Description |
 |------|----------|-------------|
 | `--profile` | `<NAME>` | Apply a named configuration profile from config |
-| `--target` | `<PID>` | Target a specific vrunner instance by PID (for spawn/freeze/thaw) |
+| `--target` | `<PID>` | Target a specific vrunner instance by PID (for spawn/freeze/thaw/resize) |
 
 ### Interactive Options
 
@@ -264,7 +265,7 @@ Here `--port 3000` and `--display` are vrunner options, while `python -m http.se
 ```yaml
 server:
   bind: "127.0.0.1"
-  port: 8080
+  port: 9090
 
 security:
   require_auth: false
