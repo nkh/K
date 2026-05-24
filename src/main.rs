@@ -295,6 +295,7 @@ async fn async_main(cli: Cli) -> Result<()> {
             shutdown_tx.clone(),
             &cfg.interactive.keybindings,
             &log_entries,
+            cfg.interactive.tabs,
         ).await;
         // run_display_loop always returns true (shutdown triggered).
         // The dismissed path now waits for q/Ctrl+C inside the loop.
@@ -384,6 +385,7 @@ async fn run_display_loop(
     shutdown_tx: broadcast::Sender<()>,
     keybindings: &vrunner::config::schema::KeybindingsConfig,
     log_entries: &Arc<std::sync::Mutex<Vec<String>>>,
+    show_tabs: bool,
 ) -> bool {
     use vrunner::interactive::{Binding, Action, ActionEffect, check_bindings, resolve_keybindings};
     use vrunner::interactive::{render_help_overlay, read_spawn_command, restore_raw_mode};
@@ -608,6 +610,7 @@ async fn run_display_loop(
     async fn render_vtty(
         manager: &Arc<CommandManager>,
         active_id: &Option<String>,
+        tab_offset: u16,
     ) {
         let commands = manager.list();
         let target_id = active_id.as_ref()
@@ -618,12 +621,84 @@ async fn run_display_loop(
                 let buf = handle.vtty_snapshot().await;
                 let (cur_row, cur_col) = handle.cursor_position().await;
                 drop(handle);
-                let _ = TerminalDisplay::render(&buf);
-                let _ = TerminalDisplay::show_cursor_at(cur_row, cur_col);
+                let _ = TerminalDisplay::render(&buf, tab_offset);
+                let _ = TerminalDisplay::show_cursor_at(cur_row + tab_offset as usize, cur_col);
             }
         } else {
             let _ = TerminalDisplay::clear();
         }
+    }
+
+    /// Render a tab bar at the top of the terminal listing all running commands.
+    /// The active command is highlighted with reverse video.
+    fn render_tab_bar(
+        manager: &CommandManager,
+        active_id: &Option<String>,
+    ) {
+        use crossterm::{
+            style::{self, Attribute, Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
+            cursor::MoveTo,
+            terminal::ClearType,
+            QueueableCommand,
+        };
+        let mut stdout = std::io::stdout();
+        let (phys_cols, _) = crossterm::terminal::size().unwrap_or((80, 24));
+        let commands = manager.list();
+
+        // Background for the tab bar
+        stdout.queue(SetBackgroundColor(Color::Rgb { r: 40, g: 42, b: 54 })).ok();
+        stdout.queue(SetForegroundColor(Color::Rgb { r: 180, g: 180, b: 180 })).ok();
+        stdout.queue(MoveTo(0, 0)).ok();
+        stdout.queue(crossterm::terminal::Clear(ClearType::UntilNewLine)).ok();
+
+        if commands.is_empty() {
+            stdout.queue(Print(" (no commands)")).ok();
+            stdout.queue(ResetColor).ok();
+            stdout.flush().ok();
+            return;
+        }
+
+        let mut col: u16 = 1;
+        for (id, name, _args, _pid, _cert) in &commands {
+            let is_active = active_id.as_ref().map_or(false, |a| a == id);
+            if is_active {
+                stdout.queue(SetBackgroundColor(Color::Rgb { r: 68, g: 71, b: 90 })).ok();
+                stdout.queue(SetForegroundColor(Color::Rgb { r: 255, g: 255, b: 255 })).ok();
+                stdout.queue(style::SetAttribute(Attribute::Bold)).ok();
+            } else {
+                stdout.queue(SetBackgroundColor(Color::Rgb { r: 40, g: 42, b: 54 })).ok();
+                stdout.queue(SetForegroundColor(Color::Rgb { r: 140, g: 140, b: 140 })).ok();
+                stdout.queue(style::SetAttribute(Attribute::NoBold)).ok();
+            }
+
+            // Truncate display name to fit
+            let label = if col == 1 { "" } else { " " };
+            let max_width = (phys_cols.saturating_sub(col + 1)) as usize;
+            let display = if name.len() > max_width {
+                format!("{}{}", label, &name[..max_width])
+            } else {
+                format!("{}{}", label, name)
+            };
+
+            if col + display.len() as u16 >= phys_cols {
+                // Overflow — print ellipsis and stop
+                stdout.queue(Print(format!("{}...", &display[..display.len().min(3)]))).ok();
+                break;
+            }
+
+            stdout.queue(Print(&display)).ok();
+            col += display.len() as u16;
+        }
+
+        // Clear remaining space
+        stdout.queue(ResetColor).ok();
+        stdout.queue(SetBackgroundColor(Color::Rgb { r: 40, g: 42, b: 54 })).ok();
+        if (col as u16) < phys_cols {
+            stdout.queue(MoveTo(col, 0)).ok();
+            stdout.queue(crossterm::terminal::Clear(ClearType::UntilNewLine)).ok();
+        }
+        stdout.queue(ResetColor).ok();
+        stdout.flush().ok();
     }
 
     'outer: loop {
@@ -730,7 +805,10 @@ async fn run_display_loop(
                 } else if showing_log {
                     render_log_overlay(&manager, &log_entries, log_scroll_offset, &mut stdout);
                 } else {
-                    render_vtty(&manager, &active_id).await;
+                    if show_tabs {
+                        render_tab_bar(&manager, &active_id);
+                    }
+                    render_vtty(&manager, &active_id, if show_tabs { 1 } else { 0 }).await;
                 }
             }
 
@@ -882,7 +960,7 @@ async fn run_display_loop(
                                                         let (new_id, new_name, _, new_pid, _) = &commands[new_idx];
                                                         active_id = Some(new_id.clone());
                                                         manager.logger().log("switch", &format!("id={} name={} pid={}", new_id, new_name, new_pid));
-                                                        render_vtty(&manager, &active_id).await;
+                                                        render_vtty(&manager, &active_id, if show_tabs { 1 } else { 0 }).await;
                                                     }
                                                 }
                                                 ActionEffect::ToggleLog(show) => {
@@ -985,7 +1063,7 @@ async fn run_display_loop(
                                                     let (new_id, new_name, _, new_pid, _) = &commands[new_idx];
                                                     active_id = Some(new_id.clone());
                                                     manager.logger().log("switch", &format!("id={} name={} pid={}", new_id, new_name, new_pid));
-                                                    render_vtty(&manager, &active_id).await;
+                                                    render_vtty(&manager, &active_id, if show_tabs { 1 } else { 0 }).await;
                                                 }
                                             }
                                             ActionEffect::ToggleLog(show) => {

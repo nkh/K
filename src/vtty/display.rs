@@ -45,14 +45,18 @@ impl TerminalDisplay {
     /// Each row is explicitly positioned with MoveTo(0, row) to avoid
     /// cursor drift in raw mode, where \n moves down without returning
     /// to column 0.
-    pub fn render(buffer: &Buffer) -> io::Result<()> {
+    ///
+    /// `row_offset` shifts all output down by the given number of rows,
+    /// used to make room for a tab bar at the top of the terminal.
+    pub fn render(buffer: &Buffer, row_offset: u16) -> io::Result<()> {
         let mut stdout = stdout();
 
         // Determine the physical terminal size and clamp to it.
         // NOTE: crossterm::terminal::size() returns (columns, rows).
         let (phys_cols, phys_rows) = crossterm::terminal::size()
             .unwrap_or((buffer.width as u16, buffer.height as u16));
-        let render_rows = (buffer.rows.len() as u16).min(phys_rows) as usize;
+        let available_rows = phys_rows.saturating_sub(row_offset);
+        let render_rows = (buffer.rows.len() as u16).min(available_rows) as usize;
         let render_cols = (buffer.width as u16).min(phys_cols) as usize;
 
         // Track the last rendered style to avoid redundant SGR sequences.
@@ -69,7 +73,8 @@ impl TerminalDisplay {
         for (row_idx, row) in buffer.rows.iter().enumerate().take(render_rows) {
             // Move to the start of each row — critical in raw mode
             // where \n does NOT reset the column to 0.
-            stdout.queue(MoveTo(0, row_idx as u16))?;
+            // Apply row_offset so VTTY content starts below the tab bar.
+            stdout.queue(MoveTo(0, row_idx as u16 + row_offset))?;
 
             // Clamp the visible portion to the physical terminal width.
             let visible_len = render_cols.min(row.len());
@@ -184,9 +189,9 @@ impl TerminalDisplay {
 
         // Clear any remaining rows below the VTTY buffer if the
         // terminal is taller than the VTTY.
-        if (render_rows as u16) < phys_rows {
-            for row in render_rows..(phys_rows as usize) {
-                stdout.queue(MoveTo(0, row as u16))?;
+        if (render_rows as u16 + row_offset) < phys_rows {
+            for row in render_rows..(available_rows as usize) {
+                stdout.queue(MoveTo(0, row as u16 + row_offset))?;
                 stdout.queue(crossterm::terminal::Clear(ClearType::UntilNewLine))?;
             }
         }
