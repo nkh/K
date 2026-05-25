@@ -623,6 +623,7 @@ async fn run_display_loop(
         manager: &Arc<CommandManager>,
         active_id: &Option<String>,
         tab_offset: u16,
+        display_all: bool,
     ) {
         let commands = manager.list();
         let target_id = active_id.as_ref()
@@ -637,7 +638,17 @@ async fn run_display_loop(
                 let _ = TerminalDisplay::show_cursor_at(cur_row + tab_offset as usize, cur_col);
             }
         } else {
+            // No active command — in display_all mode show a waiting
+            // message instead of a blank screen so the user knows the
+            // display is alive and waiting for commands.
+            let mut stdout = std::io::stdout();
             let _ = TerminalDisplay::clear();
+            if display_all {
+                let _ = write!(stdout, "\r\n  vrunner: no commands running.\r\n");
+                let _ = write!(stdout, "  Waiting for commands (web UI, API, or F12 to spawn).\r\n");
+                let _ = write!(stdout, "\r\n  Press Ctrl+\\ to quit.\r\n");
+                let _ = stdout.flush();
+            }
         }
     }
 
@@ -834,7 +845,7 @@ async fn run_display_loop(
                     if show_tabs {
                         render_tab_bar(&manager, &active_id);
                     }
-                    render_vtty(&manager, &active_id, if show_tabs { 1 } else { 0 }).await;
+                    render_vtty(&manager, &active_id, if show_tabs { 1 } else { 0 }, display_all).await;
                 }
             }
 
@@ -989,7 +1000,7 @@ async fn run_display_loop(
                                                         let (new_id, new_name, _, new_pid, _) = &commands[new_idx];
                                                         active_id = Some(new_id.clone());
                                                         manager.logger().log("switch", &format!("id={} name={} pid={}", new_id, new_name, new_pid));
-                                                        render_vtty(&manager, &active_id, if show_tabs { 1 } else { 0 }).await;
+                                                        render_vtty(&manager, &active_id, if show_tabs { 1 } else { 0 }, display_all).await;
                                                     }
                                                 }
                                                 ActionEffect::ToggleLog(show) => {
@@ -1092,7 +1103,7 @@ async fn run_display_loop(
                                                     let (new_id, new_name, _, new_pid, _) = &commands[new_idx];
                                                     active_id = Some(new_id.clone());
                                                     manager.logger().log("switch", &format!("id={} name={} pid={}", new_id, new_name, new_pid));
-                                                    render_vtty(&manager, &active_id, if show_tabs { 1 } else { 0 }).await;
+                                                    render_vtty(&manager, &active_id, if show_tabs { 1 } else { 0 }, display_all).await;
                                                 }
                                             }
                                             ActionEffect::ToggleLog(show) => {
