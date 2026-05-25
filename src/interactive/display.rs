@@ -416,6 +416,67 @@ pub async fn run_display_loop(
         stdout.flush().ok();
     }
 
+    /// Render a status bar at the bottom of the terminal showing info
+    /// about the active command (name, PID, uptime, terminal size).
+    fn render_status_bar(
+        manager: &CommandManager,
+        active_id: &Option<String>,
+    ) {
+        use std::io::Write;
+        use crossterm::{
+            style::{Color, ResetColor, SetBackgroundColor, SetForegroundColor},
+            cursor::MoveTo,
+            terminal::ClearType,
+            QueueableCommand,
+        };
+        let mut stdout = std::io::stdout();
+        let (phys_cols, phys_rows) = crossterm::terminal::size().unwrap_or((80, 24));
+        let bottom = phys_rows.saturating_sub(1);
+
+        // Background
+        stdout.queue(SetBackgroundColor(Color::Rgb { r: 40, g: 42, b: 54 })).ok();
+        stdout.queue(SetForegroundColor(Color::Rgb { r: 160, g: 160, b: 160 })).ok();
+        stdout.queue(MoveTo(0, bottom)).ok();
+        stdout.queue(crossterm::terminal::Clear(ClearType::UntilNewLine)).ok();
+
+        let commands = manager.list();
+        let target_id = active_id.as_ref()
+            .or_else(|| commands.first().map(|(id, _, _, _, _)| id));
+
+        let info = if let Some(ref id) = target_id {
+            if let Some(handle) = manager.get(id) {
+                let pid = handle.pid;
+                let uptime = handle.runtime_secs();
+                let buf = handle.vtty_snapshot_blocking();
+                let (w, h) = (buf.width, buf.height);
+                let mins = (uptime as u64) / 60;
+                let secs = (uptime as u64) % 60;
+                let id_short: &str = &id[..id.len().min(8)];
+                format!(" {}  pid:{}  {}x{}  {:02}:{:02} ", id_short, pid, w, h, mins, secs)
+            } else {
+                " (command not found) ".to_string()
+            }
+        } else {
+            " (no active command) ".to_string()
+        };
+
+        // Right-align hint
+        let hint = " [Shift+Arrows] scroll [PgUp/PgDn] page [Ctrl+\\] quit";
+        let total = info.len() + hint.len();
+        let info = if total <= phys_cols as usize {
+            info
+        } else {
+            let max_info = phys_cols as usize - hint.len();
+            info[..max_info.min(info.len())].to_string()
+        };
+
+        let _ = write!(stdout, "{}", info);
+        stdout.queue(SetForegroundColor(Color::Rgb { r: 100, g: 100, b: 100 })).ok();
+        let _ = write!(stdout, "{}", hint);
+        stdout.queue(ResetColor).ok();
+        stdout.flush().ok();
+    }
+
     'outer: loop {
         tokio::select! {
             biased;
@@ -533,6 +594,7 @@ pub async fn run_display_loop(
                         render_tab_bar(&manager, &active_id);
                     }
                     render_vtty(&manager, &active_id, if show_tabs { 1 } else { 0 }, scrollback_offset, display_all).await;
+                    render_status_bar(&manager, &active_id);
                     // Render visual bell flash overlay if active.
                     // Uses reverse-video on the entire visible area for 150ms.
                     if let Some(until) = bell_until {
