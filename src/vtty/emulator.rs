@@ -1424,5 +1424,196 @@ mod tests {
         assert_eq!(buf.rows[0][0].width, 2);
         assert_eq!(buf.rows[0][1].width, 0);
     }
-}
+
+    // ── Proposal #2: Bracketed paste mode tests ──
+
+    #[test]
+    fn test_bracketed_paste_enable_disable() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        assert!(!emu.bracketed_paste_enabled());
+        emu.feed_str("\x1b[?2004h");
+        assert!(emu.bracketed_paste_enabled());
+        emu.feed_str("\x1b[?2004l");
+        assert!(!emu.bracketed_paste_enabled());
+    }
+
+    #[test]
+    fn test_bracketed_paste_cleared_on_reset() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed_str("\x1b[?2004h");
+        assert!(emu.bracketed_paste_enabled());
+        emu.feed_str("\x1bc"); // RIS (full reset)
+        assert!(!emu.bracketed_paste_enabled());
+    }
+
+    // ── Proposal #5: Scroll region reset tests ──
+
+    #[test]
+    fn test_scroll_region_set_and_use() {
+        // CSI 2;4 r sets scroll region to rows 2-4 (1-based)
+        // Internally: scroll_top=1, scroll_bottom=3 (0-indexed)
+        // Cursor moves to home (0,0) after DECSTBM
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed_str("\x1b[2;4r");
+        assert_eq!(emu.cursor(), (0, 0));
+    }
+
+    #[test]
+    fn test_scroll_region_reset_no_params() {
+        // CSI r with no params resets to full screen
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed_str("\x1b[2;4r"); // Set scroll region
+        emu.feed_str("\x1b[r");     // Reset
+        assert_eq!(emu.cursor(), (0, 0));
+    }
+
+    #[test]
+    fn test_scroll_region_reset_invalid_range() {
+        // CSI 5;3 r is invalid (top > bottom) → reset to full screen
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed_str("\x1b[5;3r");
+        assert_eq!(emu.cursor(), (0, 0));
+    }
+
+    #[test]
+    fn test_scroll_region_scrolls_within_region() {
+        // When scroll region is set, newlines only scroll within region
+        let mut emu = VttyEmulator::new(5, 10, 100);
+        emu.feed_str("\x1b[2;4r"); // Set scroll region rows 2-4 (1-based)
+        emu.feed_str("\x1b[2;1H"); // Move to row 2 (1-based)
+        // Fill lines 2-4, the 4th line should push line 2 out and scroll within region
+        emu.feed_str("AAAAAA\r\nBBBBBB\r\nCCCCCC\r\nDDDDDD");
+        // Row 0 (outside region) should be unaffected
+        let buf = emu.buffer();
+        assert_eq!(buf.rows[0][0].ch, ' ');
+    }
+
+    // ── Proposal #6: Deferred wrap edge case tests ──
+
+    #[test]
+    fn test_deferred_wrap_basic() {
+        // Fill exactly to the right margin → wrap_pending should be set
+        // Next character wraps to next line
+        let mut emu = VttyEmulator::new(3, 5, 100);
+        emu.feed_str("ABCDE"); // Fill entire first line
+        assert_eq!(emu.cursor(), (0, 4)); // At last col
+        // wrap_pending should be true (check by writing next char)
+        emu.feed_str("X");
+        assert_eq!(emu.cursor(), (1, 1));
+        let buf = emu.buffer();
+        assert_eq!(buf.rows[0][4].ch, 'E');
+        assert_eq!(buf.rows[1][0].ch, 'X');
+    }
+
+    #[test]
+    fn test_deferred_wrap_cleared_by_cursor_movement() {
+        // Write to last col → wrap_pending
+        // Then move cursor up → wrap_pending cleared
+        // Write another char → should NOT wrap
+        let mut emu = VttyEmulator::new(5, 5, 100);
+        emu.feed_str("ABCDE"); // Fill line, wrap_pending
+        emu.feed_str("\x1b[A"); // Cursor up (clears wrap_pending)
+        emu.feed_str("X");      // Should go at (0, 4), not wrap
+        assert_eq!(emu.cursor(), (0, 4));
+        let buf = emu.buffer();
+        assert_eq!(buf.rows[0][4].ch, 'X');
+    }
+
+    #[test]
+    fn test_deferred_wrap_cleared_by_cr() {
+        let mut emu = VttyEmulator::new(3, 5, 100);
+        emu.feed_str("ABCDE"); // Fill line, wrap_pending
+        emu.feed_str("\r");     // CR clears wrap_pending
+        assert_eq!(emu.cursor(), (0, 0));
+    }
+
+    #[test]
+    fn test_deferred_wrap_cleared_by_tab() {
+        let mut emu = VttyEmulator::new(3, 20, 100);
+        emu.feed_str("12345678901234567890"); // Fill line, wrap_pending
+        emu.feed_str("\t"); // Tab clears wrap_pending
+        // Cursor should stay on row 0 (not wrap)
+        assert!(emu.cursor().0 == 0); // Still on row 0
+    }
+
+    #[test]
+    fn test_deferred_wrap_at_scroll_bottom() {
+        // If wrap_pending at the last visible row, writing should scroll
+        let mut emu = VttyEmulator::new(3, 5, 100);
+        emu.feed_str("AAAAA\r\nBBBBB\r\nCCCCC"); // Fill all 3 rows, last char on row 2
+        assert_eq!(emu.cursor(), (2, 4));
+        emu.feed_str("D"); // Should wrap to row 3 and scroll
+        assert_eq!(emu.cursor(), (2, 1));
+        let buf = emu.buffer();
+        assert_eq!(buf.rows[2][0].ch, 'D');
+        assert_eq!(buf.scrollback.len(), 1); // One line scrolled out
+    }
+
+    // ── Proposal #8: DECSCUSR cursor style tests ──
+
+    #[test]
+    fn test_decscusr_blinking_block() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed_str("\x1b[0 q"); // Note: space before q is the intermediate byte
+        assert_eq!(emu.cursor_style(), CursorStyle::Block(true));
+    }
+
+    #[test]
+    fn test_decscusr_steady_block() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed_str("\x1b[2 q");
+        assert_eq!(emu.cursor_style(), CursorStyle::Block(false));
+    }
+
+    #[test]
+    fn test_decscusr_blinking_underline() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed_str("\x1b[3 q");
+        assert_eq!(emu.cursor_style(), CursorStyle::Underline(true));
+    }
+
+    #[test]
+    fn test_decscursor_steady_bar() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed_str("\x1b[6 q");
+        assert_eq!(emu.cursor_style(), CursorStyle::Bar(false));
+    }
+
+    #[test]
+    fn test_decscusr_reset_to_default() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed_str("\x1b[6 q"); // Set to steady bar
+        assert_eq!(emu.cursor_style(), CursorStyle::Bar(false));
+        emu.feed_str("\x1b[1 q"); // Reset to blinking block
+        assert_eq!(emu.cursor_style(), CursorStyle::Block(true));
+    }
+
+    // ── Proposal #9: DCS pass-through tests ──
+
+    #[test]
+    fn test_dcs_kitty_graphics() {
+        // DCS q is the kitty graphics protocol
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        // Minimal kitty graphics: DCS 1;0;0 q ST
+        emu.feed(b"\x1bP1;0;0q\x1b\\");
+        assert!(emu.dcs_buffer().starts_with("kitty:"));
+    }
+
+    #[test]
+    fn test_dcs_unknown_silently_consumed() {
+        // Unknown DCS sequences should be silently consumed (no panic)
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed(b"\x1bPunknown\x1b\\");
+        // Should not panic and dcs_buffer should remain empty
+        assert!(emu.dcs_buffer().is_empty());
+    }
+
+    #[test]
+    fn test_dcs_cleared_on_reset() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed(b"\x1bP1;0;0q\x1b\\");
+        assert!(!emu.dcs_buffer().is_empty());
+        emu.feed_str("\x1bc"); // RIS (full reset)
+        assert!(emu.dcs_buffer().is_empty());
+    }
 }

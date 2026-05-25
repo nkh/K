@@ -122,6 +122,33 @@ impl CommandHandle {
         emu.cursor()
     }
 
+    /// Get the current cursor style.
+    pub async fn cursor_style(&self) -> crate::vtty::emulator::CursorStyle {
+        let emu = self.emulator.read().await;
+        emu.cursor_style()
+    }
+
+    /// Send pasted text to the command, wrapping in bracketed paste
+    /// escape sequences if the child has enabled bracketed paste mode (?2004).
+    /// When bracketed paste mode is active, the text is sent as:
+    ///   ESC[200~ text ESC[201~
+    /// This allows the child application to distinguish pasted text from
+    /// typed input (e.g., to avoid triggering auto-complete or line editing).
+    pub async fn send_paste(&self, text: &str) -> Result<()> {
+        let bracketed = {
+            let emu = self.emulator.read().await;
+            emu.bracketed_paste_enabled()
+        };
+        if bracketed {
+            let mut data = b"\x1b[200~".to_vec();
+            data.extend_from_slice(text.as_bytes());
+            data.extend_from_slice(b"\x1b[201~");
+            self.send_bytes(data).await
+        } else {
+            self.send_bytes(text.as_bytes().to_vec()).await
+        }
+    }
+
     pub async fn dimensions(&self) -> (usize, usize) {
         let emu = self.emulator.read().await;
         emu.dimensions()

@@ -248,6 +248,18 @@ async fn handle_vtty_client_message(
                 json!({"type": "pong"}).to_string().into()
             )).await;
         }
+        "paste" => {
+            let text = msg.get("text").and_then(|v| v.as_str()).unwrap_or("");
+            if !text.is_empty() {
+                if let Some(handle) = manager.get(id) {
+                    if let Err(e) = handle.send_paste(text).await {
+                        let _ = ws_tx.send(Message::Text(
+                            json!({"type": "error", "message": e.to_string()}).to_string().into()
+                        )).await;
+                    }
+                }
+            }
+        }
         _ => {
             tracing::warn!(?msg_type, "ws_vtty: unknown message type");
         }
