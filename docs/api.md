@@ -442,7 +442,30 @@ List output handles attached to a command.
 
 #### `POST /api/commands/:id/handles`
 
-Attach a new output handle to a command. (Stub — not yet fully implemented.)
+Attach a new output handle to a command.
+
+**Request body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Logical name for the handle (must be unique per command) |
+| `sink` | string | Yes | Sink type: `"file"`, `"vtty"`, or `"null"` |
+| `path` | string | No | File path for `"file"` sinks. Supports `{id}` and `{name}` placeholders. Ignored for other types. |
+
+**Response:**
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "id": "uuid-string",
+    "name": "stdout",
+    "sink": "file",
+    "message": "Handle attached successfully"
+  },
+  "error": null
+}
+```
 
 ---
 

@@ -4,6 +4,12 @@ use uuid::Uuid;
 use tokio::sync::broadcast;
 
 use crate::config::schema::Config;
+use crate::handles::{
+    file_sink::FileSink,
+    null_sink::NullSink,
+    vtty_sink::VttySink,
+    sink::Sink,
+};
 use crate::logging::command_log::CommandLogger;
 use crate::vtty::buffer::Buffer;
 use super::handle::CommandHandle;
@@ -97,6 +103,112 @@ impl CommandManager {
         self.spawn_diff_watcher(id.clone());
 
         Ok(id)
+    }
+
+    /// Register an externally-created [`CommandHandle`] with the manager.
+    ///
+    /// This is the **"attach to running process"** registration path.  The
+    /// caller is responsible for having already created the PTY, spawned the
+    /// process, wired up the VTTY emulator, and set up all I/O plumbing.
+    /// This method performs only the bookkeeping that [`CommandManager::spawn`]
+    /// normally does *after* process creation:
+    ///
+    /// 1. Validates that no command with the same ID already exists.
+    /// 2. Binds an optional certificate for per-command access control.
+    /// 3. Logs the registration event via [`CommandLogger`].
+    /// 4. Inserts the handle into the internal [`DashMap`] command registry.
+    /// 5. Starts the background diff-watcher for VTTY change notifications.
+    ///
+    /// # Arguments
+    ///
+    /// * `handle` — A fully-constructed [`CommandHandle`] (typically built by
+    ///   [`ProcessSpawner::spawn`] or a custom spawner for the attach case).
+    /// * `certificate` — Optional certificate name to bind for per-command
+    ///   access control.  When `Some`, only clients presenting that
+    ///   certificate (or its derived bearer token) may interact with the
+    ///   command.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a command with the same ID is already registered.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use vrunner::process::manager::CommandManager;
+    /// // Build a handle via ProcessSpawner or custom code, then:
+    /// // manager.add_handle(handle, Some("my-cert".into()))?;
+    /// ```
+    pub fn add_handle(&self, mut handle: CommandHandle, certificate: Option<String>) -> anyhow::Result<CommandId> {
+        let id = handle.id.clone();
+
+        if self.commands.contains_key(&id) {
+            anyhow::bail!("Command {} is already registered", id);
+        }
+
+        // Bind certificate for per-command access control
+        handle.certificate = certificate;
+
+        self.logger.log(
+            "add_handle",
+            &format!("id={} cmd={} pid={} cert={:?}", id, handle.name, handle.pid, handle.certificate),
+        );
+
+        // Register in the internal command registry
+        self.commands.insert(id.clone(), handle);
+
+        // Start the background diff-watcher for VTTY push notifications
+        self.spawn_diff_watcher(id.clone());
+
+        Ok(id)
+    }
+
+    /// Dynamically attach an output sink to a running command.
+    ///
+    /// This completes the `POST /api/commands/:id/handles` API so that
+    /// callers can add file, VTTY, or null sinks *after* a command has
+    /// already been spawned.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` — The command to attach the sink to.
+    /// * `name` — A logical name for the sink (must be unique per command).
+    /// * `sink_type` — One of `"file"`, `"vtty"`, or `"null"`.
+    /// * `path` — For `"file"` sinks, the output file path.  Supports
+    ///   `{id}` and `{name}` placeholders.  Ignored for other sink types.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the command does not exist or if a sink with
+    /// the given name is already registered.
+    pub fn register_sink(&self, id: &CommandId, name: String, sink_type: &str, path: Option<&str>) -> anyhow::Result<()> {
+        let mut entry = self.commands.get_mut(id)
+            .ok_or_else(|| anyhow::anyhow!("Command {} not found", id))?;
+
+        let handle = entry.value_mut();
+
+        // Reject duplicate sink names
+        if handle.handle_registry.list().iter().any(|n| n == &name) {
+            anyhow::bail!("Sink '{}' is already registered for command {}", name, id);
+        }
+
+        let sink: Box<dyn Sink> = match sink_type {
+            "file" => {
+                let resolved = path.unwrap_or("/dev/null");
+                // Substitute {id} and {name} placeholders
+                let resolved = resolved
+                    .replace("{id}", id)
+                    .replace("{name}", &handle.name);
+                Box::new(FileSink::new(&resolved)?)
+            }
+            "vtty" => Box::new(VttySink::new()),
+            "null" => Box::new(NullSink),
+            _ => anyhow::bail!("Unknown sink type '{}'. Supported: file, vtty, null", sink_type),
+        };
+
+        self.logger.log("register_sink", &format!("id={} name={} type={}", id, name, sink_type));
+        handle.handle_registry.add(name, sink);
+        Ok(())
     }
 
     /// Spawn a background watcher that detects buffer changes and broadcasts
