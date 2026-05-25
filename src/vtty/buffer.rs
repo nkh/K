@@ -7,6 +7,11 @@ pub struct Buffer {
     pub width: usize,
     pub height: usize,
     max_scrollback: usize,
+    /// Monotonically increasing counter incremented on every buffer mutation.
+    /// Used for cheap change detection — callers compare this value instead
+    /// of cloning the entire buffer and comparing cell by cell.
+    /// Wraps on overflow (u64::MAX → 0) which is safe for equality checks.
+    generation: u64,
 }
 
 impl Buffer {
@@ -17,7 +22,21 @@ impl Buffer {
             width,
             height,
             max_scrollback,
+            generation: 0,
         }
+    }
+
+    /// Get the current generation counter value.
+    ///
+    /// Used by [`CommandManager::has_changed`](crate::process::manager::CommandManager::has_changed)
+    /// and the diff watcher for O(1) change detection without cloning the buffer.
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    /// Increment the generation counter. Called internally after every mutation.
+    fn bump_generation(&mut self) {
+        self.generation = self.generation.wrapping_add(1);
     }
 
     pub fn resize(&mut self, new_width: usize, new_height: usize) {
@@ -27,6 +46,7 @@ impl Buffer {
         self.rows.resize(new_height, vec![Cell::default(); new_width]);
         self.width = new_width;
         self.height = new_height;
+        self.bump_generation();
     }
 
     pub fn get(&self, row: usize, col: usize) -> Option<&Cell> {
@@ -40,6 +60,7 @@ impl Buffer {
     pub fn set(&mut self, row: usize, col: usize, cell: Cell) {
         if let Some(c) = self.get_mut(row, col) {
             *c = cell;
+            self.bump_generation();
         }
     }
 
@@ -50,6 +71,7 @@ impl Buffer {
                 cell.clear();
             }
         }
+        self.bump_generation();
     }
 
     /// Clear the entire buffer using a template cell (respects current SGR attributes).
@@ -61,6 +83,7 @@ impl Buffer {
                 *cell = blank;
             }
         }
+        self.bump_generation();
     }
 
     /// Clear from the given column to end of line.
@@ -69,6 +92,7 @@ impl Buffer {
             for cell in row_cells.iter_mut().skip(col) {
                 cell.clear();
             }
+            self.bump_generation();
         }
     }
 
@@ -79,6 +103,7 @@ impl Buffer {
             for cell in row_cells.iter_mut().skip(col) {
                 *cell = blank;
             }
+            self.bump_generation();
         }
     }
 
@@ -88,6 +113,7 @@ impl Buffer {
             for cell in row_cells.iter_mut().take(col + 1) {
                 cell.clear();
             }
+            self.bump_generation();
         }
     }
 
@@ -98,6 +124,7 @@ impl Buffer {
             for cell in row_cells.iter_mut().take(col + 1) {
                 *cell = blank;
             }
+            self.bump_generation();
         }
     }
 
@@ -107,6 +134,7 @@ impl Buffer {
             for cell in row_cells {
                 cell.clear();
             }
+            self.bump_generation();
         }
     }
 
@@ -117,6 +145,7 @@ impl Buffer {
             for cell in row_cells {
                 *cell = blank;
             }
+            self.bump_generation();
         }
     }
 
@@ -183,6 +212,7 @@ impl Buffer {
             }
             // When top > 0, the scrolled-out line is simply discarded (not scrollback).
             self.rows.insert(bottom, vec![Cell::default(); self.width]);
+            self.bump_generation();
         }
     }
 
@@ -199,6 +229,7 @@ impl Buffer {
             }
             let blank = Cell { ch: ' ', ..*template };
             self.rows.insert(bottom, vec![blank; self.width]);
+            self.bump_generation();
         }
     }
 
@@ -208,6 +239,7 @@ impl Buffer {
         if !self.rows.is_empty() && top <= bottom && bottom < self.height {
             self.rows.remove(bottom);
             self.rows.insert(top, vec![Cell::default(); self.width]);
+            self.bump_generation();
         }
     }
 
@@ -218,6 +250,7 @@ impl Buffer {
             self.rows.remove(bottom);
             let blank = Cell { ch: ' ', ..*template };
             self.rows.insert(top, vec![blank; self.width]);
+            self.bump_generation();
         }
     }
 
@@ -229,6 +262,7 @@ impl Buffer {
         if row < self.height && bottom < self.height && row <= bottom {
             self.rows.insert(row, vec![Cell::default(); self.width]);
             self.rows.remove(bottom + 1);
+            self.bump_generation();
         }
     }
 
@@ -239,6 +273,7 @@ impl Buffer {
             let blank = Cell { ch: ' ', ..*template };
             self.rows.insert(row, vec![blank; self.width]);
             self.rows.remove(bottom + 1);
+            self.bump_generation();
         }
     }
 
@@ -250,6 +285,7 @@ impl Buffer {
         if row < self.height && bottom < self.height && row <= bottom {
             self.rows.remove(row);
             self.rows.insert(bottom, vec![Cell::default(); self.width]);
+            self.bump_generation();
         }
     }
 
@@ -260,6 +296,7 @@ impl Buffer {
             self.rows.remove(row);
             let blank = Cell { ch: ' ', ..*template };
             self.rows.insert(bottom, vec![blank; self.width]);
+            self.bump_generation();
         }
     }
 
@@ -272,6 +309,7 @@ impl Buffer {
             for cell in row_cells.iter_mut().skip(col).take(count) {
                 cell.clear();
             }
+            self.bump_generation();
         }
     }
 
@@ -287,6 +325,7 @@ impl Buffer {
             for cell in row_cells.iter_mut().skip(col).take(count) {
                 *cell = blank;
             }
+            self.bump_generation();
         }
     }
 
@@ -299,6 +338,7 @@ impl Buffer {
             for cell in row_cells.iter_mut().take(self.width).skip(self.width - count) {
                 cell.clear();
             }
+            self.bump_generation();
         }
     }
 
@@ -314,6 +354,7 @@ impl Buffer {
             for cell in row_cells.iter_mut().take(self.width).skip(self.width - count) {
                 *cell = blank;
             }
+            self.bump_generation();
         }
     }
 
@@ -442,6 +483,7 @@ mod tests {
         let b = Buffer::new(80, 24, 5000);
         assert_eq!(b.width, 80);
         assert_eq!(b.height, 24);
+        assert_eq!(b.generation(), 0);
     }
 
     #[test]
@@ -550,5 +592,75 @@ mod tests {
         b.scroll_up();
         b.scroll_up();
         assert_eq!(b.total_lines(), 7);
+    }
+
+    // -- Generation counter tests --
+
+    #[test]
+    fn test_generation_increments_on_set() {
+        let mut b = Buffer::new(10, 5, 100);
+        let gen0 = b.generation();
+        b.set(0, 0, Cell::new('X'));
+        assert_eq!(b.generation(), gen0 + 1);
+    }
+
+    #[test]
+    fn test_generation_increments_on_clear() {
+        let mut b = Buffer::new(10, 5, 100);
+        let gen0 = b.generation();
+        b.clear_all();
+        assert!(b.generation() > gen0);
+    }
+
+    #[test]
+    fn test_generation_increments_on_scroll() {
+        let mut b = Buffer::new(10, 5, 100);
+        let gen0 = b.generation();
+        b.scroll_up();
+        assert!(b.generation() > gen0);
+        let gen1 = b.generation();
+        b.scroll_region_down(0, 4);
+        assert!(b.generation() > gen1);
+    }
+
+    #[test]
+    fn test_generation_increments_on_insert_delete_cells() {
+        let mut b = Buffer::new(10, 5, 100);
+        let gen0 = b.generation();
+        b.insert_cells(0, 0, 3);
+        assert!(b.generation() > gen0);
+        let gen1 = b.generation();
+        b.delete_cells(0, 0, 2);
+        assert!(b.generation() > gen1);
+    }
+
+    #[test]
+    fn test_generation_increments_on_resize() {
+        let mut b = Buffer::new(10, 5, 100);
+        let gen0 = b.generation();
+        b.resize(20, 10);
+        assert!(b.generation() > gen0);
+    }
+
+    #[test]
+    fn test_generation_does_not_change_on_read() {
+        let mut b = Buffer::new(10, 5, 100);
+        let gen = b.generation();
+        let _ = b.get(0, 0);
+        let _ = b.total_lines();
+        let _ = b.get_line(0);
+        let _ = b.get_lines(0, 1);
+        assert_eq!(b.generation(), gen);
+    }
+
+    #[test]
+    fn test_generation_wraps_on_overflow() {
+        let mut b = Buffer::new(10, 5, 100);
+        // Set generation to near u64::MAX
+        b.generation = u64::MAX - 1;
+        b.set(0, 0, Cell::new('X'));
+        assert_eq!(b.generation(), u64::MAX);
+        b.set(0, 1, Cell::new('Y'));
+        assert_eq!(b.generation(), 0); // wrapped
     }
 }

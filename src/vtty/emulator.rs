@@ -643,6 +643,13 @@ impl VttyEmulator {
         self.buffer.read().clone()
     }
 
+    /// Return the current buffer's generation counter.
+    /// This is a cheap O(1) read (requires only a read lock) that can be used
+    /// for change detection without cloning the entire buffer.
+    pub fn buffer_generation(&self) -> u64 {
+        self.buffer.read().generation()
+    }
+
     /// Snapshot the main buffer (returns the main buffer even if the
     /// alternate screen is currently active).
     pub fn snapshot_main(&self) -> Buffer {

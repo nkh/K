@@ -46,9 +46,10 @@ pub struct CommandManager {
     vtty_change_tx: broadcast::Sender<(String, String)>,
     /// Named snapshots: (command_id, snapshot_name) -> StoredSnapshot
     snapshots: Arc<DashMap<(CommandId, String), StoredSnapshot>>,
-    /// Last-sent buffer per command for incremental diff.
-    /// Key: command_id, Value: Buffer clone from the last broadcast.
-    last_buffer: Arc<DashMap<CommandId, Buffer>>,
+    /// Last-known buffer generation per command for O(1) change detection.
+    /// Replaces the old `last_buffer: DashMap<CommandId, Buffer>` approach
+    /// which cloned the entire buffer on every poll.
+    last_generation: Arc<DashMap<CommandId, u64>>,
 }
 
 impl CommandManager {
@@ -64,7 +65,7 @@ impl CommandManager {
             logger,
             vtty_change_tx,
             snapshots: Arc::new(DashMap::new()),
-            last_buffer: Arc::new(DashMap::new()),
+            last_generation: Arc::new(DashMap::new()),
         }
     }
 
@@ -228,11 +229,9 @@ impl CommandManager {
 
         tokio::spawn(async move {
             // The watcher maintains its OWN local baseline for change detection.
-            // We intentionally do NOT touch last_buffer (the shared DashMap)
-            // — that belongs exclusively to has_changed() / poll mode.
-            // If the watcher also wrote to it, poll mode would always see
-            // "no change" because the watcher consumes changes first.
-            let mut prev_buffer: Option<crate::vtty::buffer::Buffer> = None;
+            // Uses the buffer generation counter for O(1) comparison instead
+            // of cloning the entire buffer on every tick.
+            let mut prev_gen: Option<u64> = None;
 
             loop {
                 tokio::time::sleep(std::time::Duration::from_millis(check_interval_ms)).await;
@@ -251,19 +250,15 @@ impl CommandManager {
                 };
                 // DashMap shard lock is now released.
 
-                // Clone the current buffer for comparison (no DashMap lock held)
-                let current_buffer = {
+                // Read the buffer generation for O(1) change detection (no clone needed)
+                let current_gen = {
                     let emu = emulator.read().await;
-                    emu.snapshot()
+                    emu.buffer_generation()
                 };
 
-                // Check if anything changed by comparing to the watcher's own baseline
-                let has_changed = match &prev_buffer {
-                    Some(p) => {
-                        p.width != current_buffer.width
-                            || p.height != current_buffer.height
-                            || p.rows != current_buffer.rows
-                    }
+                // Check if anything changed using the generation counter
+                let has_changed = match prev_gen {
+                    Some(prev) => current_gen != prev,
                     None => true,
                 };
 
@@ -271,8 +266,8 @@ impl CommandManager {
                     continue;
                 }
 
-                // Update the watcher's local baseline (NOT the shared last_buffer)
-                prev_buffer = Some(current_buffer);
+                // Update the watcher's local baseline
+                prev_gen = Some(current_gen);
 
                 // Send a lightweight dirty signal — no diff data, no HTML.
                 // The client decides when and how to fetch the updated content.
@@ -381,7 +376,7 @@ impl CommandManager {
         self.logger.log("kill", &format!("id={}", id));
         if let Some((_, handle)) = self.commands.remove(id) {
             // Clean up associated state
-            self.last_buffer.remove(id);
+            self.last_generation.remove(id);
             // Remove all snapshots for this command
             self.snapshots.retain(|k, _| k.0 != *id);
 
@@ -517,33 +512,30 @@ impl CommandManager {
     /// the buffer is unchanged.  Returns an error if the command does not exist.
     pub fn has_changed(&self, id: &CommandId) -> Result<bool> {
         // Clone the emulator Arc and drop the DashMap entry BEFORE
-        // the blocking snapshot read, to avoid holding the shard lock
-        // across the blocking_read() call.
+        // the blocking read, to avoid holding the shard lock.
         let emulator = match self.commands.get(id) {
             Some(e) => e.emulator.clone(),
             None => return Err(ProcessError::CommandNotFound(id.to_string())),
         };
         // DashMap shard lock is now released.
 
-        let current = {
+        // Use the generation counter for O(1) change detection.
+        // This replaces the old approach that cloned the entire buffer
+        // (O(rows * cols)) on every poll request.
+        let current_gen = {
             let emu = emulator.blocking_read();
-            emu.snapshot()
+            emu.buffer_generation()
         };
 
-        let changed = match self.last_buffer.get(id) {
-            Some(prev) => {
-                let p = prev.value();
-                p.width != current.width
-                    || p.height != current.height
-                    || p.rows != current.rows
-            }
+        let changed = match self.last_generation.get(id) {
+            Some(prev) => *prev.value() != current_gen,
             None => true,
         };
 
         if changed {
-            // Update the last-known buffer so the next check won't report
+            // Update the last-known generation so the next check won't report
             // changed unless the buffer actually changes again.
-            self.last_buffer.insert(id.to_string(), current);
+            self.last_generation.insert(id.to_string(), current_gen);
         }
 
         Ok(changed)
