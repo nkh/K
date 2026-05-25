@@ -28,10 +28,10 @@ use crate::process::manager::CommandManager;
 ///   command.  Keystrokes are forwarded to that command.  The loop only breaks
 ///   (and sends shutdown) when the command manager is empty.
 ///
-/// - `display_all == false` (default): the display is dismissed — the
-///   alternate screen is torn down and a status message is printed.  The
-///   function returns *without* sending shutdown, allowing the caller to
-///   idle-wait for the remaining commands or an explicit shutdown signal.
+/// - `display_all == false` (default): the loop exits immediately when the
+///   direct CLI command finishes (regardless of other running commands),
+///   sending shutdown to terminate the process.  Use `--display-all` or
+///   daemon mode to keep the display alive.
 ///
 /// It renders the VTTY buffer to the local terminal using crossterm,
 /// forwards all keystrokes to the active child command, and handles
@@ -179,13 +179,8 @@ pub async fn run_display_loop(
     // commands spawned via F12 or the web UI.
     let direct_child_owned: Option<String> = direct_child_id.map(String::from);
 
-    // When `display_all == false` and the direct child exits, the display
-    // enters "dismissed" state: the alternate screen stays active, a status
-    // message is rendered, and the loop waits for 'q' / Ctrl+C to shut down.
-    // We stay in the same raw-mode / AsyncFd loop that was already working —
-    // no need to tear down and re-create the terminal setup.
-    let mut dismissed = false;
-    let mut dismiss_rendered = false;
+    // When the last command exits, the display loop breaks and the process
+    // shuts down — no waiting for user input.
 
     // ── Event-driven exit detection ──
     // We use a tokio::sync::watch channel instead of Notify.
@@ -212,7 +207,11 @@ pub async fn run_display_loop(
                             return true;
                         }
                         if !display_all {
-                            dismissed = true;
+                            let _ = terminal::disable_raw_mode();
+                            let _ = stdout.execute(cursor::Show);
+                            let _ = stdout.execute(LeaveAlternateScreen);
+                            let _ = shutdown_tx.send(());
+                            return true;
                         }
                         active_id = None;
                         None
@@ -223,15 +222,12 @@ pub async fn run_display_loop(
                         // immediately.  But check *value* first as a fast path.
                         if *rx.borrow() {
                             tracing::info!("Direct child already exited (watch flag set)");
-                            if !display_all && manager.list().is_empty() {
+                            if !display_all {
                                 let _ = terminal::disable_raw_mode();
                                 let _ = stdout.execute(cursor::Show);
                                 let _ = stdout.execute(LeaveAlternateScreen);
                                 let _ = shutdown_tx.send(());
                                 return true;
-                            }
-                            if !display_all {
-                                dismissed = true;
                             }
                             active_id = None;
                             None
@@ -251,7 +247,12 @@ pub async fn run_display_loop(
                         return true;
                     }
                     if !display_all {
-                        dismissed = true;
+                        // Last command exited, not in daemon mode — exit immediately.
+                        let _ = terminal::disable_raw_mode();
+                        let _ = stdout.execute(cursor::Show);
+                        let _ = stdout.execute(LeaveAlternateScreen);
+                        let _ = shutdown_tx.send(());
+                        return true;
                     }
                     active_id = None;
                     None
@@ -409,35 +410,15 @@ pub async fn run_display_loop(
                     let _ = TerminalDisplay::clear();
                     break 'outer;
                 } else {
-                    // Display was only for the CLI command — dismiss it.
-                    tracing::info!("Direct CLI command exited; dismissing display (commands remain)");
-                    dismissed = true;
-                    active_id = None;
-                    exit_rx = None;
+                    // Not in display_all (daemon) mode — exit immediately.
+                    tracing::info!("Direct CLI command exited; shutting down (commands remain)");
+                    let _ = TerminalDisplay::clear();
+                    break 'outer;
                 }
             }
 
             // ── Periodic VTTY render ──
             _ = tick_rx.recv() => {
-                // ── Dismissed state: show status message, skip VTTY ──
-                if dismissed {
-                    if !dismiss_rendered {
-                        dismiss_rendered = true;
-                        let remaining = manager.list();
-                        let _ = TerminalDisplay::clear();
-                        let _ = write!(stdout, "\r\n\r\n  vrunner: primary command exited. {} command(s) still running.\r\n", remaining.len());
-                        for (id, name, _args, pid, _cert) in &remaining {
-                            let _ = write!(stdout, "    PID {} — {} ({})\r\n", pid, name, &id[..id.len().min(8)]);
-                        }
-                        let _ = write!(stdout, "\r\n  Press 'q' or Ctrl+C to shut down.\r\n");
-                        let _ = stdout.flush();
-                    }
-                    // Still check if all commands disappeared via external stop.
-                    if manager.list().is_empty() {
-                        break 'outer;
-                    }
-                    continue;
-                }
                 // Fallback exit detection for the active command.
                 if let Some(ref id) = active_id {
                     let gone = match manager.get(id) {
@@ -454,10 +435,9 @@ pub async fn run_display_loop(
                             let _ = TerminalDisplay::clear();
                             break 'outer;
                         } else if is_direct_child && !display_all {
-                            tracing::info!("Direct CLI command exited; dismissing display (commands remain)");
-                            dismissed = true;
-                            active_id = None;
-                            exit_rx = None;
+                            tracing::info!("Direct CLI command exited; shutting down (commands remain)");
+                            let _ = TerminalDisplay::clear();
+                            break 'outer;
                         } else {
                             // Spawned command exited, or display_all mode —
                             // switch to another running command.
@@ -553,13 +533,6 @@ pub async fn run_display_loop(
                                     if b == 0x1c {
                                         break 'outer;  // Ctrl+\ — quit display
                                     }
-                                    if dismissed {
-                                        if b == b'q' || b == 0x03 {
-                                            break 'outer;  // q or Ctrl+C — shut down
-                                        }
-                                        continue;  // ignore other keys when dismissed
-                                    }
-
                                     // ── Help overlay: any key dismisses ──
                                     if showing_help {
                                         showing_help = false;
@@ -838,7 +811,6 @@ pub async fn run_display_loop(
     let _ = stdout.flush();
 
     // If we broke out of the loop, always trigger shutdown.
-    // (The dismissed path now waits for q/Ctrl+C inside the loop.)
     let _ = shutdown_tx.send(());
     true
 }

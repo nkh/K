@@ -115,24 +115,19 @@ fn spawn_signal_handler(shutdown_tx: broadcast::Sender<()>) {
                 Ok(s) => s,
                 Err(_) => return,
             };
-            loop {
-                tokio::select! {
-                    _ = sigint.recv() => {
-                        tracing::info!("Received SIGINT, triggering shutdown");
-                        let _ = shutdown_tx.send(());
-                        break;
-                    }
-                    _ = sigterm.recv() => {
-                        tracing::info!("Received SIGTERM, triggering shutdown");
-                        let _ = shutdown_tx.send(());
-                        break;
-                    }
-                    _ = shutdown_rx.recv() => {
-                        // Server is already shutting down from another
-                        // source — exit the handler so the runtime can
-                        // drop the signal driver without deadlocking.
-                        break;
-                    }
+            tokio::select! {
+                _ = sigint.recv() => {
+                    tracing::info!("Received SIGINT, triggering shutdown");
+                    let _ = shutdown_tx.send(());
+                }
+                _ = sigterm.recv() => {
+                    tracing::info!("Received SIGTERM, triggering shutdown");
+                    let _ = shutdown_tx.send(());
+                }
+                _ = shutdown_rx.recv() => {
+                    // Server is already shutting down from another
+                    // source — exit the handler so the runtime can
+                    // drop the signal driver without deadlocking.
                 }
             }
         }
