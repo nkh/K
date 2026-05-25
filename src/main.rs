@@ -547,7 +547,7 @@ async fn run_display_loop(
                     // Command still in manager — check if it's already dead.
                     if !h.is_alive() {
                         tracing::info!("Direct child already exited before display loop started");
-                        if manager.list().is_empty() {
+                        if !display_all && manager.list().is_empty() {
                             let _ = terminal::disable_raw_mode();
                             let _ = stdout.execute(cursor::Show);
                             let _ = stdout.execute(LeaveAlternateScreen);
@@ -566,7 +566,7 @@ async fn run_display_loop(
                         // immediately.  But check *value* first as a fast path.
                         if *rx.borrow() {
                             tracing::info!("Direct child already exited (watch flag set)");
-                            if manager.list().is_empty() {
+                            if !display_all && manager.list().is_empty() {
                                 let _ = terminal::disable_raw_mode();
                                 let _ = stdout.execute(cursor::Show);
                                 let _ = stdout.execute(LeaveAlternateScreen);
@@ -586,7 +586,7 @@ async fn run_display_loop(
                 None => {
                     // Command already removed — child is gone.
                     tracing::info!("Direct child already removed before display loop started");
-                    if manager.list().is_empty() {
+                    if !display_all && manager.list().is_empty() {
                         let _ = terminal::disable_raw_mode();
                         let _ = stdout.execute(cursor::Show);
                         let _ = stdout.execute(LeaveAlternateScreen);
@@ -727,14 +727,15 @@ async fn run_display_loop(
             } => {
                 tracing::info!("Direct child process exited (channel)");
                 // Check if other commands remain before deciding to shut down.
-                if manager.list().is_empty() {
-                    let _ = TerminalDisplay::clear();
-                    break 'outer;
-                } else if display_all {
-                    // Stay in display, show first available command.
-                    tracing::info!("Other commands remain; switching to monitor mode");
+                if display_all {
+                    // Stay in display even when no commands exist — wait for
+                    // new commands to be spawned via web UI, API, or F12.
+                    tracing::info!("Display-all mode: entering monitor mode");
                     active_id = None;
                     exit_rx = None;
+                } else if manager.list().is_empty() {
+                    let _ = TerminalDisplay::clear();
+                    break 'outer;
                 } else {
                     // Display was only for the CLI command — dismiss it.
                     tracing::info!("Direct CLI command exited; dismissing display (commands remain)");
@@ -801,7 +802,9 @@ async fn run_display_loop(
                 }
                 // For API-spawned commands (no direct child), check if all
                 // commands have been removed.
-                if exit_rx.is_none() && manager.list().is_empty() {
+                // When display_all is active, keep the display alive waiting
+                // for new commands instead of breaking.
+                if !display_all && exit_rx.is_none() && manager.list().is_empty() {
                     break;
                 }
 
