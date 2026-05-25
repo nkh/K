@@ -86,6 +86,12 @@ pub struct VttyEmulator {
     /// next line is pending.  The wrap is executed when the next
     /// printable character is written (VT100 deferred-wrap semantics).
     wrap_pending: bool,
+    /// SGR extended coordinate mode (?1006)
+    mouse_sgr: bool,
+    /// Button event tracking (?1002)
+    mouse_button_tracking: bool,
+    /// Any-event tracking (?1003)
+    mouse_any_tracking: bool,
 }
 
 impl VttyEmulator {
@@ -113,6 +119,9 @@ impl VttyEmulator {
             scroll_top: 0,
             scroll_bottom: rows.saturating_sub(1),
             wrap_pending: false,
+            mouse_sgr: false,
+            mouse_button_tracking: false,
+            mouse_any_tracking: false,
         }
     }
 
@@ -530,6 +539,17 @@ impl VttyEmulator {
                 }
                 7 => self.auto_wrap = set,
                 6 => self.origin_mode = set,
+                1000 => {
+                    // VT200 mouse tracking — basic button press/release
+                    if !set {
+                        // Disabling 1000 also disables higher modes
+                        self.mouse_button_tracking = false;
+                        self.mouse_any_tracking = false;
+                    }
+                }
+                1002 => self.mouse_button_tracking = set,
+                1003 => self.mouse_any_tracking = set,
+                1006 => self.mouse_sgr = set,
                 _ => {}
             }
         }
@@ -618,6 +638,9 @@ impl VttyEmulator {
         self.scroll_top = 0;
         self.scroll_bottom = self.rows.saturating_sub(1);
         self.wrap_pending = false;
+        self.mouse_sgr = false;
+        self.mouse_button_tracking = false;
+        self.mouse_any_tracking = false;
         {
             let mut buf = self.buffer.write();
             buf.clear_all();
@@ -744,6 +767,16 @@ impl VttyEmulator {
 
     pub fn dimensions(&self) -> (usize, usize) {
         (self.rows, self.cols)
+    }
+
+    /// Whether SGR extended mouse coordinates (?1006) is enabled.
+    pub fn mouse_sgr_enabled(&self) -> bool {
+        self.mouse_sgr
+    }
+
+    /// Whether any mouse tracking mode is enabled (1002 or 1003).
+    pub fn mouse_tracking_enabled(&self) -> bool {
+        self.mouse_button_tracking || self.mouse_any_tracking
     }
 
     pub fn resize(&mut self, new_rows: usize, new_cols: usize) {
@@ -1084,5 +1117,65 @@ mod tests {
         // Row 1 should be unaffected
         assert_eq!(buf.rows[1][0].ch, 'K');
         assert_eq!(buf.rows[1][0].bg, [0, 0, 0]);
+    }
+
+    #[test]
+    fn test_mouse_sgr_enable() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        assert!(!emu.mouse_sgr_enabled());
+        emu.feed_str("\x1b[?1006h");
+        assert!(emu.mouse_sgr_enabled());
+    }
+
+    #[test]
+    fn test_mouse_sgr_disable() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed_str("\x1b[?1006h");
+        assert!(emu.mouse_sgr_enabled());
+        emu.feed_str("\x1b[?1006l");
+        assert!(!emu.mouse_sgr_enabled());
+    }
+
+    #[test]
+    fn test_mouse_button_tracking() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        assert!(!emu.mouse_tracking_enabled());
+        emu.feed_str("\x1b[?1002h");
+        assert!(emu.mouse_tracking_enabled());
+        emu.feed_str("\x1b[?1002l");
+        assert!(!emu.mouse_tracking_enabled());
+    }
+
+    #[test]
+    fn test_mouse_any_tracking() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        assert!(!emu.mouse_tracking_enabled());
+        emu.feed_str("\x1b[?1003h");
+        assert!(emu.mouse_tracking_enabled());
+        emu.feed_str("\x1b[?1003l");
+        assert!(!emu.mouse_tracking_enabled());
+    }
+
+    #[test]
+    fn test_mouse_reset() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed_str("\x1b[?1006h\x1b[?1002h\x1b[?1003h");
+        assert!(emu.mouse_sgr_enabled());
+        assert!(emu.mouse_tracking_enabled());
+        emu.feed_str("\x1bc"); // full reset
+        assert!(!emu.mouse_sgr_enabled());
+        assert!(!emu.mouse_tracking_enabled());
+    }
+
+    #[test]
+    fn test_mouse_tracking_returns_true_when_any_enabled() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        assert!(!emu.mouse_tracking_enabled());
+        emu.feed_str("\x1b[?1002h");
+        assert!(emu.mouse_tracking_enabled());
+        emu.feed_str("\x1b[?1002l\x1b[?1003h");
+        assert!(emu.mouse_tracking_enabled());
+        emu.feed_str("\x1b[?1003l");
+        assert!(!emu.mouse_tracking_enabled());
     }
 }
