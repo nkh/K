@@ -1,8 +1,11 @@
-//! Interactive terminal features: keybindings, actions, help overlay, spawn prompt.
+//! Interactive terminal features: keybindings, actions, help overlay, spawn prompt,
+//! and the main display loop.
 //!
 //! This module provides all the interactive functionality for the terminal display
-//! loop in `main.rs`, including:
+//! loop, including:
 //!
+//! - **Display loop**: The core interactive rendering loop that displays VTTY
+//!   buffers, forwards keystrokes, handles overlays, and manages terminal state.
 //! - **Key name parsing**: Converts human-readable key names (e.g., `ctrl+left`,
 //!   `f12`, `enter`) to raw byte sequences for terminal matching.
 //! - **Keybinding resolution**: Builds a lookup table from config keybindings,
@@ -34,6 +37,7 @@
 //! Raw escape sequences (e.g., `"\x1b[1;5C"`) are still accepted for backward
 //! compatibility, but readable names are strongly preferred.
 
+pub mod display;
 mod keybinding;
 mod actions;
 
