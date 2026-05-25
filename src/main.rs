@@ -7,12 +7,47 @@ use vrunner::cli::args::{Cli, Commands};
 use vrunner::cli::subcommands;
 use vrunner::config::loader::load_config;
 use vrunner::config::merge::apply_profile;
+use vrunner::config::schema::Config;
 use vrunner::daemon;
 use vrunner::instance::registry::InstanceRegistry;
 use vrunner::interactive::display::{run_display_loop, detect_terminal_size, wait_for_child};
 use vrunner::process::manager::CommandManager;
 use vrunner::web::auth::AuthManager;
 use vrunner::web::server::start_server;
+
+/// Load, profile-merge, and CLI-override the configuration.
+///
+/// Config loading is intentionally **lazy** — it only runs after clap has
+/// finished parsing, so `vrunner --help` and `vrunner --version` respond
+/// instantly without touching the filesystem.  Subcommands that don't
+/// need config (list, stop, spawn, freeze, thaw, etc.) also return
+/// before reaching this code path.
+fn resolve_config(cli: &Cli) -> Result<Config> {
+    let mut cfg = load_config(cli.config.as_deref())?;
+
+    // Apply named profile if specified
+    if let Some(ref profile_name) = cli.profile {
+        if let Some(profile) = cfg.profiles.entries.clone().get(profile_name) {
+            tracing::info!(profile = %profile_name, "Applying configuration profile");
+            cfg = apply_profile(cfg, profile);
+        } else {
+            anyhow::bail!(
+                "Profile '{}' not found. Available profiles: {}",
+                profile_name,
+                if cfg.profiles.entries.is_empty() {
+                    "(none defined in config)".to_string()
+                } else {
+                    cfg.profiles.entries.keys().cloned().collect::<Vec<_>>().join(", ")
+                }
+            );
+        }
+    }
+
+    // Apply CLI overrides (highest precedence)
+    cli.apply_overrides(&mut cfg);
+
+    Ok(cfg)
+}
 
 /// Synchronous pre-runtime phase: parse CLI, handle subcommands, load config,
 /// and daemonize. Daemonization MUST happen before the tokio runtime starts,
@@ -141,29 +176,8 @@ async fn async_main(cli: Cli) -> Result<()> {
         return Ok(());
     }
 
-    // Load and merge configuration
-    let mut cfg = load_config(cli.config.as_deref())?;
-
-    // Apply named profile if specified
-    if let Some(ref profile_name) = cli.profile {
-        if let Some(profile) = cfg.profiles.entries.clone().get(profile_name) {
-            tracing::info!(profile = %profile_name, "Applying configuration profile");
-            cfg = apply_profile(cfg, profile);
-        } else {
-            anyhow::bail!(
-                "Profile '{}' not found. Available profiles: {}",
-                profile_name,
-                if cfg.profiles.entries.is_empty() {
-                    "(none defined in config)".to_string()
-                } else {
-                    cfg.profiles.entries.keys().cloned().collect::<Vec<_>>().join(", ")
-                }
-            );
-        }
-    }
-
-    // Apply CLI overrides (highest precedence)
-    cli.apply_overrides(&mut cfg);
+    // Load and merge configuration (lazy — only reached if no subcommand handled)
+    let mut cfg = resolve_config(&cli)?;
 
     // When --display is enabled, detect the real terminal size and use it
     // for the VTTY so that the child process (e.g. htop) formats its output
@@ -335,17 +349,7 @@ fn main() -> Result<()> {
         #[cfg(unix)]
         {
             // For daemon mode, we need to load config early to get log file paths.
-            let cfg = load_config(cli.config.as_deref())?;
-            let mut cfg = cfg;
-
-            // Apply profile if specified
-            if let Some(ref profile_name) = cli.profile {
-                if let Some(profile) = cfg.profiles.entries.clone().get(profile_name) {
-                    cfg = apply_profile(cfg, profile);
-                }
-            }
-
-            cli.apply_overrides(&mut cfg);
+            let mut cfg = resolve_config(&cli)?;
 
             if !cfg.daemon.enabled {
                 // CLI --daemon flag overrides config
