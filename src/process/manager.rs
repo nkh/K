@@ -3,6 +3,8 @@ use dashmap::DashMap;
 use uuid::Uuid;
 use tokio::sync::broadcast;
 
+use super::error::{ProcessError, Result};
+
 use crate::config::schema::Config;
 use crate::handles::{
     file_sink::FileSink,
@@ -72,7 +74,7 @@ impl CommandManager {
     /// from `config.default_exit.exit` is used.  When `Some(...)`, the
     /// provided `ExitConfig` takes full precedence (on_exit, on_error,
     /// timeout_secs).
-    pub async fn spawn(&self, cmd: String, args: Vec<String>, certificate: Option<String>, exit_config: Option<crate::config::schema::ExitConfig>, env_vars: std::collections::HashMap<String, String>, rows: Option<u16>, cols: Option<u16>) -> anyhow::Result<CommandId> {
+    pub async fn spawn(&self, cmd: String, args: Vec<String>, certificate: Option<String>, exit_config: Option<crate::config::schema::ExitConfig>, env_vars: std::collections::HashMap<String, String>, rows: Option<u16>, cols: Option<u16>) -> Result<CommandId> {
         let id = Uuid::new_v4().to_string();
         self.logger.log("spawn", &format!("id={} cmd={} args={:?} cert={:?} env={:?} size={}x{}", id, cmd, args, certificate, env_vars.keys().collect::<Vec<_>>(), rows.unwrap_or(self.config.vtty.rows), cols.unwrap_or(self.config.vtty.cols)));
 
@@ -139,11 +141,11 @@ impl CommandManager {
     /// // Build a handle via ProcessSpawner or custom code, then:
     /// // manager.add_handle(handle, Some("my-cert".into()))?;
     /// ```
-    pub fn add_handle(&self, mut handle: CommandHandle, certificate: Option<String>) -> anyhow::Result<CommandId> {
+    pub fn add_handle(&self, mut handle: CommandHandle, certificate: Option<String>) -> Result<CommandId> {
         let id = handle.id.clone();
 
         if self.commands.contains_key(&id) {
-            anyhow::bail!("Command {} is already registered", id);
+            return Err(ProcessError::CommandAlreadyExists(id));
         }
 
         // Bind certificate for per-command access control
@@ -181,15 +183,18 @@ impl CommandManager {
     ///
     /// Returns an error if the command does not exist or if a sink with
     /// the given name is already registered.
-    pub fn register_sink(&self, id: &CommandId, name: String, sink_type: &str, path: Option<&str>) -> anyhow::Result<()> {
+    pub fn register_sink(&self, id: &CommandId, name: String, sink_type: &str, path: Option<&str>) -> Result<()> {
         let mut entry = self.commands.get_mut(id)
-            .ok_or_else(|| anyhow::anyhow!("Command {} not found", id))?;
+            .ok_or_else(|| ProcessError::CommandNotFound(id.clone()))?;
 
         let handle = entry.value_mut();
 
         // Reject duplicate sink names
         if handle.handle_registry.list().iter().any(|n| n == &name) {
-            anyhow::bail!("Sink '{}' is already registered for command {}", name, id);
+            return Err(ProcessError::SinkAlreadyExists {
+                name: name.clone(),
+                command_id: id.clone(),
+            });
         }
 
         let sink: Box<dyn Sink> = match sink_type {
@@ -203,7 +208,7 @@ impl CommandManager {
             }
             "vtty" => Box::new(VttySink::new()),
             "null" => Box::new(NullSink),
-            _ => anyhow::bail!("Unknown sink type '{}'. Supported: file, vtty, null", sink_type),
+            _ => return Err(ProcessError::UnknownSinkType(sink_type.to_string())),
         };
 
         self.logger.log("register_sink", &format!("id={} name={} type={}", id, name, sink_type));
@@ -313,7 +318,7 @@ impl CommandManager {
 
     /// Freeze (suspend) a command by sending SIGSTOP.
     /// The process is paused but not terminated — it can be resumed with thaw().
-    pub fn freeze(&self, id: &CommandId) -> anyhow::Result<()> {
+    pub fn freeze(&self, id: &CommandId) -> Result<()> {
         self.logger.log("freeze", &format!("id={}", id));
         if let Some(handle) = self.commands.get(id) {
             let pid = handle.pid;
@@ -322,21 +327,25 @@ impl CommandManager {
             {
                 let ret = unsafe { libc::kill(pid as i32, libc::SIGSTOP) };
                 if ret != 0 {
-                    anyhow::bail!("Failed to freeze command {}: SIGSTOP returned {}", id, ret);
+                    return Err(ProcessError::SignalFailed {
+                        id: id.to_string(),
+                        signal: "SIGSTOP".to_string(),
+                        code: ret,
+                    });
                 }
             }
             #[cfg(not(unix))]
             {
-                anyhow::bail!("freeze is only supported on Unix-like systems");
+                return Err(ProcessError::PlatformNotSupported("freeze".to_string()));
             }
             Ok(())
         } else {
-            anyhow::bail!("Command {} not found", id)
+            Err(ProcessError::CommandNotFound(id.to_string()))
         }
     }
 
     /// Thaw (resume) a frozen command by sending SIGCONT.
-    pub fn thaw(&self, id: &CommandId) -> anyhow::Result<()> {
+    pub fn thaw(&self, id: &CommandId) -> Result<()> {
         self.logger.log("thaw", &format!("id={}", id));
         if let Some(handle) = self.commands.get(id) {
             let pid = handle.pid;
@@ -345,16 +354,20 @@ impl CommandManager {
             {
                 let ret = unsafe { libc::kill(pid as i32, libc::SIGCONT) };
                 if ret != 0 {
-                    anyhow::bail!("Failed to thaw command {}: SIGCONT returned {}", id, ret);
+                    return Err(ProcessError::SignalFailed {
+                        id: id.to_string(),
+                        signal: "SIGCONT".to_string(),
+                        code: ret,
+                    });
                 }
             }
             #[cfg(not(unix))]
             {
-                anyhow::bail!("thaw is only supported on Unix-like systems");
+                return Err(ProcessError::PlatformNotSupported("thaw".to_string()));
             }
             Ok(())
         } else {
-            anyhow::bail!("Command {} not found", id)
+            Err(ProcessError::CommandNotFound(id.to_string()))
         }
     }
 
@@ -364,7 +377,7 @@ impl CommandManager {
     /// the caller (API handler) is not blocked waiting for the child
     /// process to exit, which previously prevented the server from
     /// shutting down gracefully.
-    pub async fn kill(&self, id: &CommandId, _signal: Option<String>) -> anyhow::Result<()> {
+    pub async fn kill(&self, id: &CommandId, _signal: Option<String>) -> Result<()> {
         self.logger.log("kill", &format!("id={}", id));
         if let Some((_, handle)) = self.commands.remove(id) {
             // Clean up associated state
@@ -411,17 +424,17 @@ impl CommandManager {
     }
 
     /// Kill a command by its PID.
-    pub async fn kill_by_pid(&self, pid: u32) -> anyhow::Result<()> {
+    pub async fn kill_by_pid(&self, pid: u32) -> Result<()> {
         if let Some(id) = self.find_by_pid(pid) {
             self.kill(&id, None).await
         } else {
-            anyhow::bail!("No command found with PID {}", pid)
+            Err(ProcessError::CommandNotFound(format!("PID {}", pid)))
         }
     }
 
     /// Store a named snapshot of a command's current VTTY buffer.
-    pub fn store_snapshot(&self, id: &CommandId, name: &str) -> anyhow::Result<SnapshotMeta> {
-        let entry = self.commands.get(id).ok_or_else(|| anyhow::anyhow!("Command {} not found", id))?;
+    pub fn store_snapshot(&self, id: &CommandId, name: &str) -> Result<SnapshotMeta> {
+        let entry = self.commands.get(id).ok_or_else(|| ProcessError::CommandNotFound(id.to_string()))?;
         let buffer = entry.vtty_snapshot_blocking();
         let meta = SnapshotMeta {
             name: name.to_string(),
@@ -458,14 +471,17 @@ impl CommandManager {
     }
 
     /// Compute a diff of the current buffer against a stored named snapshot.
-    pub fn diff_snapshot(&self, id: &CommandId, name: &str) -> anyhow::Result<crate::vtty::buffer::BufferDiff> {
-        let entry = self.commands.get(id).ok_or_else(|| anyhow::anyhow!("Command {} not found", id))?;
+    pub fn diff_snapshot(&self, id: &CommandId, name: &str) -> Result<crate::vtty::buffer::BufferDiff> {
+        let entry = self.commands.get(id).ok_or_else(|| ProcessError::CommandNotFound(id.to_string()))?;
         let current = entry.vtty_snapshot_blocking();
         drop(entry);
 
         let key = (id.clone(), name.to_string());
         let stored = self.snapshots.get(&key)
-            .ok_or_else(|| anyhow::anyhow!("Snapshot '{}' not found for command {}", name, id))?;
+            .ok_or_else(|| ProcessError::SnapshotNotFound {
+                name: name.to_string(),
+                command_id: id.to_string(),
+            })?;
 
         let diff = current.diff(&stored.buffer);
         self.logger.log("diff", &format!("id={} name={} changed={}", id, name, diff.changed_count));
@@ -473,13 +489,16 @@ impl CommandManager {
     }
 
     /// Delete a stored snapshot.
-    pub fn delete_snapshot(&self, id: &CommandId, name: &str) -> anyhow::Result<()> {
+    pub fn delete_snapshot(&self, id: &CommandId, name: &str) -> Result<()> {
         let key = (id.clone(), name.to_string());
         if self.snapshots.remove(&key).is_some() {
             self.logger.log("snapshot_delete", &format!("id={} name={}", id, name));
             Ok(())
         } else {
-            anyhow::bail!("Snapshot '{}' not found for command {}", name, id)
+            Err(ProcessError::SnapshotNotFound {
+                name: name.to_string(),
+                command_id: id.to_string(),
+            })
         }
     }
 
@@ -496,13 +515,13 @@ impl CommandManager {
     /// Returns `true` if the command exists and the buffer differs from the
     /// last-known state (or if this is the first check).  Returns `false` if
     /// the buffer is unchanged.  Returns an error if the command does not exist.
-    pub fn has_changed(&self, id: &CommandId) -> anyhow::Result<bool> {
+    pub fn has_changed(&self, id: &CommandId) -> Result<bool> {
         // Clone the emulator Arc and drop the DashMap entry BEFORE
         // the blocking snapshot read, to avoid holding the shard lock
         // across the blocking_read() call.
         let emulator = match self.commands.get(id) {
             Some(e) => e.emulator.clone(),
-            None => return Err(anyhow::anyhow!("Command {} not found", id)),
+            None => return Err(ProcessError::CommandNotFound(id.to_string())),
         };
         // DashMap shard lock is now released.
 
@@ -550,14 +569,14 @@ impl CommandManager {
         self.commands.clone()
     }
 
-    pub async fn send_keys(&self, id: &CommandId, keys: &str) -> anyhow::Result<()> {
+    pub async fn send_keys(&self, id: &CommandId, keys: &str) -> Result<()> {
         self.logger.log("send_keys", &format!("id={} keys={}", id, keys));
         if let Some(handle) = self.commands.get(id) {
             let bytes = encode_keys(keys);
             handle.send_bytes(bytes).await?;
             Ok(())
         } else {
-            anyhow::bail!("Command {} not found", id)
+            Err(ProcessError::CommandNotFound(id.to_string()))
         }
     }
 

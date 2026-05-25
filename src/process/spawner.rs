@@ -1,6 +1,7 @@
 use std::io::{Read as _, Write as _};
 use std::fmt::Write as FmtWrite;
-use anyhow::Result;
+
+use super::error::{ProcessError, Result};
 use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
 use tokio::sync::{mpsc, oneshot};
 use std::sync::Arc;
@@ -72,6 +73,7 @@ impl ProcessSpawner {
         cols: Option<u16>,
         pty_raw_log: Option<&str>,
     ) -> Result<CommandHandle> {
+        let _cmd_display = cmd.clone(); // for error reporting
         // Use per-command overrides if provided, otherwise fall back to config defaults
         let rows = rows.unwrap_or(self.vtty_cfg.rows);
         let cols = cols.unwrap_or(self.vtty_cfg.cols);
@@ -82,7 +84,9 @@ impl ProcessSpawner {
             cols,
             pixel_width: 0,
             pixel_height: 0,
-        })?;
+        }).map_err(|e| ProcessError::Io(
+            std::io::Error::new(std::io::ErrorKind::Other, format!("openpty failed: {}", e))
+        ))?;
 
         let mut cmd_builder = CommandBuilder::new(&cmd);
         for arg in &args {
@@ -103,7 +107,8 @@ impl ProcessSpawner {
             cmd_builder.env("TERM", &self.vtty_cfg.term);
         }
 
-        let mut child = pair.slave.spawn_command(cmd_builder)?;
+        let mut child = pair.slave.spawn_command(cmd_builder)
+            .map_err(|_| ProcessError::SpawnFailed { cmd: _cmd_display })?;
         let pid = child.process_id().unwrap_or(0);
 
         // Create VTTY emulator
@@ -139,8 +144,14 @@ impl ProcessSpawner {
         let (pty_out_tx, mut pty_out_rx) = mpsc::channel::<PtyOutput>(64);
 
         // Get PTY master reader and writer (both are synchronous I/O from portable-pty)
-        let reader = pair.master.try_clone_reader()?;
-        let writer = pair.master.take_writer()?;
+        let reader = pair.master.try_clone_reader()
+            .map_err(|e| ProcessError::Io(
+                std::io::Error::new(std::io::ErrorKind::Other, format!("clone PTY reader: {}", e))
+            ))?;
+        let writer = pair.master.take_writer()
+            .map_err(|e| ProcessError::Io(
+                std::io::Error::new(std::io::ErrorKind::Other, format!("take PTY writer: {}", e))
+            ))?;
         // Store the PTY master handle for later resize (e.g. WINCH handling).
         // All MasterPty methods take &self, so it remains valid after
         // extracting reader/writer.

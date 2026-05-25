@@ -2,6 +2,8 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot, RwLock};
 use portable_pty::MasterPty;
 
+use super::error::{ProcessError, Result};
+
 use crate::config::schema::ExitConfig;
 use crate::vtty::emulator::VttyEmulator;
 use crate::vtty::sink::VttyOutput;
@@ -44,17 +46,17 @@ pub struct CommandHandle {
 }
 
 impl CommandHandle {
-    pub async fn send_bytes(&self, data: Vec<u8>) -> anyhow::Result<()> {
+    pub async fn send_bytes(&self, data: Vec<u8>) -> Result<()> {
         self.stdin_tx.send(StdinMessage::Bytes(data)).await
-            .map_err(|_| anyhow::anyhow!("stdin channel closed"))
+            .map_err(|_| ProcessError::ChannelClosed(self.id.clone()))
     }
 
-    pub async fn send_signal(&self, signal: String) -> anyhow::Result<()> {
+    pub async fn send_signal(&self, signal: String) -> Result<()> {
         self.stdin_tx.send(StdinMessage::Signal(signal)).await
-            .map_err(|_| anyhow::anyhow!("stdin channel closed"))
+            .map_err(|_| ProcessError::ChannelClosed(self.id.clone()))
     }
 
-    pub async fn kill(&self) -> anyhow::Result<()> {
+    pub async fn kill(&self) -> Result<()> {
         self.send_bytes(vec![0x03]).await?;
         Ok(())
     }
@@ -130,7 +132,7 @@ impl CommandHandle {
         emu.snapshot().scrollback.len()
     }
 
-    pub async fn resize(&self, rows: u16, cols: u16) -> anyhow::Result<()> {
+    pub async fn resize(&self, rows: u16, cols: u16) -> Result<()> {
         let mut emu = self.emulator.write().await;
         emu.resize(rows as usize, cols as usize);
         Ok(())
@@ -140,7 +142,7 @@ impl CommandHandle {
     /// This is the correct way to handle terminal resize (SIGWINCH):
     ///   1. Resize the PTY master → kernel sends SIGWINCH to the child
     ///   2. Resize the in-memory VTTY buffer to match
-    pub async fn resize_pty(&self, rows: u16, cols: u16) -> anyhow::Result<()> {
+    pub async fn resize_pty(&self, rows: u16, cols: u16) -> Result<()> {
         // Resize the PTY master first — this sends SIGWINCH to the child.
         // The Mutex lock is very short-lived (just an ioctl syscall).
         {
@@ -150,7 +152,9 @@ impl CommandHandle {
                 cols,
                 pixel_width: 0,
                 pixel_height: 0,
-            }).map_err(|e| anyhow::anyhow!("PTY resize failed: {}", e))?;
+            }).map_err(|e| ProcessError::Io(
+                std::io::Error::new(std::io::ErrorKind::Other, format!("PTY resize failed: {}", e))
+            ))?;
         }
 
         // Then resize the in-memory VTTY buffer

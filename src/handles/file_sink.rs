@@ -10,7 +10,7 @@ pub struct FileSink {
 }
 
 impl FileSink {
-    pub fn new(path: &str) -> anyhow::Result<Self> {
+    pub fn new(path: &str) -> std::io::Result<Self> {
         let file = OpenOptions::new()
             .create(true)
             .append(true)
