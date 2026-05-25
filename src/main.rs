@@ -115,6 +115,10 @@ fn pre_runtime() -> Result<Option<Cli>> {
         Some(Commands::Resize { .. }) => {
             // resize is async (needs HTTP), fall through to async phase
         }
+        Some(Commands::ConfigCheck) => {
+            subcommands::handle_config_check_command(cli.config.as_deref())?;
+            return Ok(None);
+        }
         None => {}
     }
 

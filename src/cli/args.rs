@@ -246,6 +246,9 @@ pub enum Commands {
         #[arg(long, default_value_t = 0)]
         cols: u16,
     },
+    /// Validate config files without starting the server.
+    /// Reports validation errors and warnings with field paths.
+    ConfigCheck,
 }
 
 #[derive(Subcommand, Debug)]
