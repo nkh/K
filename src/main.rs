@@ -8,6 +8,7 @@ use vrunner::cli::subcommands;
 use vrunner::config::loader::load_config;
 use vrunner::config::merge::apply_profile;
 use vrunner::config::schema::Config;
+use vrunner::config::validation::{validate_config, ValidationLevel};
 use vrunner::daemon;
 use vrunner::instance::registry::InstanceRegistry;
 use vrunner::interactive::display::{run_display_loop, detect_terminal_size, wait_for_child};
@@ -45,6 +46,29 @@ fn resolve_config(cli: &Cli) -> Result<Config> {
 
     // Apply CLI overrides (highest precedence)
     cli.apply_overrides(&mut cfg);
+
+    // Validate the final merged configuration
+    let issues = validate_config(&cfg);
+    let mut error_fields = Vec::new();
+    for issue in &issues {
+        match issue.level {
+            ValidationLevel::Error => {
+                tracing::error!(field = %issue.field, "{}", issue.message);
+                error_fields.push(issue.field.clone());
+            }
+            ValidationLevel::Warning => {
+                tracing::warn!(field = %issue.field, "{}", issue.message);
+            }
+        }
+    }
+    if !error_fields.is_empty() {
+        anyhow::bail!(
+            "Configuration validation failed ({})
+Fields with errors: {}",
+            error_fields.len(),
+            error_fields.join(", "),
+        );
+    }
 
     Ok(cfg)
 }
