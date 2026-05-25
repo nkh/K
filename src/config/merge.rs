@@ -19,6 +19,7 @@ pub fn merge_configs(global: Config, local: Config) -> Config {
         default_exit: local.default_exit,
         environment: merge_env(global.environment, local.environment),
         web: local.web,
+        hooks: local.hooks,
         profiles: merge_profiles(global.profiles, local.profiles),
     }
 }
@@ -59,7 +60,8 @@ pub fn apply_profile(base: Config, profile: &PartialConfig) -> Config {
         interactive: profile.interactive.clone().unwrap_or(base.interactive),
         default_exit: profile.default_exit.clone().unwrap_or(base.default_exit),
         environment: profile.environment.clone().unwrap_or(base.environment),
-        web: base.web,
+        web: profile.web.clone().unwrap_or(base.web),
+        hooks: profile.hooks.clone().unwrap_or(base.hooks),
         profiles: base.profiles,
     }
 }

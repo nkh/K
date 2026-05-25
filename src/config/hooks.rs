@@ -1,5 +1,35 @@
 use serde::{Deserialize, Serialize};
 
+/// Event hooks configuration.
+/// Allows registering shell commands that run on lifecycle events.
+///
+/// Example:
+/// ```yaml
+/// hooks:
+///   on_spawn: "notify-send 'Started' {name}"
+///   on_exit: "echo done"
+///   on_kill: "echo killed {name} (pid={pid})"
+/// ```
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct HooksConfig {
+    /// Command to run when ANY child process is spawned.
+    /// Placeholders: {name}, {id}, {pid}
+    #[serde(default)]
+    pub on_spawn: Option<String>,
+    /// Command to run when ANY child process exits cleanly (exit code 0).
+    /// Placeholders: {name}, {id}, {pid}, {exit_code}
+    #[serde(default)]
+    pub on_exit: Option<String>,
+    /// Command to run when ANY child process exits with error (non-zero).
+    /// Placeholders: {name}, {id}, {pid}, {exit_code}
+    #[serde(default)]
+    pub on_error: Option<String>,
+    /// Command to run when ANY child process is killed.
+    /// Placeholders: {name}, {id}, {pid}
+    #[serde(default)]
+    pub on_kill: Option<String>,
+}
+
 /// Exit configuration for a command.
 /// Controls what happens when a command exits, including cleanup commands and timeouts.
 /// This can be set per-command via the spawn API or as defaults in the config.
@@ -73,4 +103,54 @@ pub struct CommandLogConfig {
     ///     pty_raw_log: "/tmp/pty-output.log"
     #[serde(default)]
     pub pty_raw_log: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hooks_config_defaults() {
+        let hooks = HooksConfig::default();
+        assert!(hooks.on_spawn.is_none());
+        assert!(hooks.on_exit.is_none());
+        assert!(hooks.on_error.is_none());
+        assert!(hooks.on_kill.is_none());
+    }
+
+    #[test]
+    fn test_hooks_config_partial() {
+        let hooks = HooksConfig {
+            on_spawn: Some("echo spawn".to_string()),
+            on_exit: Some("echo exit".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(hooks.on_spawn.as_deref(), Some("echo spawn"));
+        assert_eq!(hooks.on_exit.as_deref(), Some("echo exit"));
+        assert!(hooks.on_error.is_none());
+        assert!(hooks.on_kill.is_none());
+    }
+
+    #[test]
+    fn test_hooks_config_all_fields() {
+        let hooks = HooksConfig {
+            on_spawn: Some("notify-send 'Started' {name}".to_string()),
+            on_exit: Some("echo '{name} exited successfully'".to_string()),
+            on_error: Some("notify-send 'vrunner' '{name} failed (exit {exit_code})'".to_string()),
+            on_kill: Some("echo 'Killed {name}'".to_string()),
+        };
+        assert!(hooks.on_spawn.is_some());
+        assert!(hooks.on_exit.is_some());
+        assert!(hooks.on_error.is_some());
+        assert!(hooks.on_kill.is_some());
+    }
+
+    #[test]
+    fn test_hooks_config_default_trait() {
+        let hooks = HooksConfig::default();
+        assert!(hooks.on_spawn.is_none());
+        assert!(hooks.on_exit.is_none());
+        assert!(hooks.on_error.is_none());
+        assert!(hooks.on_kill.is_none());
+    }
 }

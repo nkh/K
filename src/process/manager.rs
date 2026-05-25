@@ -16,6 +16,7 @@ use crate::logging::command_log::CommandLogger;
 use crate::vtty::buffer::Buffer;
 use super::handle::CommandHandle;
 use super::spawner::ProcessSpawner;
+use crate::hooks::runner::run_hook;
 
 pub type CommandId = String;
 
@@ -84,12 +85,14 @@ impl CommandManager {
 
         let spawner = ProcessSpawner::new(&self.config.vtty, &self.config.web.rate_limit);
         let pty_raw_log = self.config.command_log.pty_raw_log.as_deref();
+        let hooks = self.config.hooks.clone();
         let mut handle = spawner.spawn(
             cmd,
             args,
             self.config.handles.clone(),
             &id,
             exit_config,
+            hooks,
             env_vars,
             self,
             rows, cols,
@@ -383,6 +386,22 @@ impl CommandManager {
             let pid = handle.pid;
             let timeout_secs = handle.exit_config.timeout_secs;
             let watch_id = id.to_string();
+            let cmd_name = handle.name.clone();
+
+            // Run on_kill hook if configured
+            if let Some(ref on_kill) = self.config.hooks.on_kill {
+                let mut vars = std::collections::HashMap::new();
+                vars.insert("name", cmd_name.clone());
+                vars.insert("id", watch_id.clone());
+                vars.insert("pid", pid.to_string());
+                tracing::info!(
+                    id = %watch_id,
+                    name = %cmd_name,
+                    pid = pid,
+                    "Running on_kill hook"
+                );
+                run_hook(on_kill, &vars);
+            }
 
             // Step 1: send Ctrl+C (SIGINT) for graceful shutdown
             let _ = handle.send_bytes(vec![0x03]).await;

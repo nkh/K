@@ -2,6 +2,7 @@ pub mod cli;
 pub mod config;
 pub mod daemon;
 pub mod handles;
+pub mod hooks;
 pub mod instance;
 pub mod interactive;
 pub mod logging;

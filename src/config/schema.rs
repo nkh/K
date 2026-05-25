@@ -6,7 +6,7 @@ pub use super::daemon::DaemonConfig;
 pub use super::display::{DisplayConfig, InteractiveConfig, KeybindingsConfig};
 pub use super::environment::EnvironmentConfig;
 pub use super::handles::HandleConfig;
-pub use super::hooks::{CommandLogConfig, DefaultExitConfig, ExitConfig};
+pub use super::hooks::{CommandLogConfig, DefaultExitConfig, ExitConfig, HooksConfig};
 pub use super::security::{CertificateEntryConfig, CertificatesConfig, SecurityConfig, TlsConfig};
 pub use super::server::ServerConfig;
 pub use super::vtty::VttyConfig;
@@ -58,6 +58,9 @@ pub struct Config {
     /// Default exit configuration applied to all commands unless overridden per-command.
     #[serde(default)]
     pub default_exit: DefaultExitConfig,
+    /// Global event hooks — shell commands triggered on lifecycle events.
+    #[serde(default)]
+    pub hooks: HooksConfig,
     /// Environment variables applied to all spawned commands by default.
     /// Can be overridden per-command via the API or CLI.
     /// Ignored when --no-env is passed on the command line.
@@ -106,4 +109,6 @@ pub struct PartialConfig {
     pub environment: Option<EnvironmentConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub web: Option<WebConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hooks: Option<HooksConfig>,
 }

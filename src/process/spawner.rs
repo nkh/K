@@ -9,6 +9,8 @@ use std::sync::Arc;
 use std::collections::HashMap;
 
 use crate::config::schema::{VttyConfig, HandleConfig, ExitConfig, RateLimitConfig};
+use crate::config::hooks::HooksConfig;
+use crate::hooks::runner::run_hook;
 use crate::handles::{
     file_sink::FileSink,
     null_sink::NullSink,
@@ -92,6 +94,7 @@ impl ProcessSpawner {
         handle_configs: Vec<HandleConfig>,
         command_id: &str,
         exit_config: ExitConfig,
+        hooks: HooksConfig,
         env_vars: HashMap<String, String>,
         manager: &CommandManager,
         rows: Option<u16>,
@@ -113,6 +116,21 @@ impl ProcessSpawner {
             &env_vars,
         )?;
         let pid = child.process_id().unwrap_or(0);
+
+        // Run on_spawn hook if configured
+        if let Some(ref on_spawn) = hooks.on_spawn {
+            let mut vars = HashMap::new();
+            vars.insert("name", cmd.clone());
+            vars.insert("id", command_id.to_string());
+            vars.insert("pid", pid.to_string());
+            tracing::info!(
+                id = %command_id,
+                name = %cmd,
+                pid = pid,
+                "Running on_spawn hook"
+            );
+            run_hook(on_spawn, &vars);
+        }
 
         // Create VTTY emulator
         let emulator = Arc::new(tokio::sync::RwLock::new(VttyEmulator::new(
@@ -298,6 +316,8 @@ impl ProcessSpawner {
         let watch_id = command_id.to_string();
         let on_exit = exit_config.on_exit.clone();
         let on_error = exit_config.on_error.clone();
+        let global_on_exit = hooks.on_exit.clone();
+        let global_on_error = hooks.on_error.clone();
         let manager_cmds = manager.commands_arc();
         let (child_exit_tx, child_exit_rx) = tokio::sync::watch::channel(false);
 
@@ -316,14 +336,14 @@ impl ProcessSpawner {
                 "Command exited"
             );
 
-            // Run on_exit or on_error command if configured
-            let on_cmd = if exit_status.success() {
+            // Run per-command on_exit or on_error handler if configured
+            let per_cmd_hook = if exit_status.success() {
                 on_exit.as_ref()
             } else {
                 on_error.as_ref()
             };
 
-            if let Some(ref on_cmd_str) = on_cmd {
+            if let Some(ref on_cmd_str) = per_cmd_hook {
                 let parts: Vec<&str> = on_cmd_str.split_whitespace().collect();
                 if !parts.is_empty() {
                     let binary = parts[0];
@@ -333,7 +353,7 @@ impl ProcessSpawner {
                         trigger = if exit_status.success() { "on_exit" } else { "on_error" },
                         command = binary,
                         args = ?cmd_args,
-                        "Running exit handler"
+                        "Running per-command exit handler"
                     );
                     match std::process::Command::new(binary).args(&cmd_args).spawn() {
                         Ok(mut child) => {
@@ -343,11 +363,32 @@ impl ProcessSpawner {
                             tracing::warn!(
                                 id = %watch_id,
                                 error = %e,
-                                "Failed to run exit handler"
+                                "Failed to run per-command exit handler"
                             );
                         }
                     }
                 }
+            }
+
+            // Run global on_exit or on_error hook if configured
+            let global_hook = if exit_status.success() {
+                global_on_exit.as_ref()
+            } else {
+                global_on_error.as_ref()
+            };
+
+            if let Some(ref global_hook_str) = global_hook {
+                let mut vars = HashMap::new();
+                vars.insert("name", watch_id.clone());
+                vars.insert("id", watch_id.clone());
+                vars.insert("pid", 0.to_string());
+                vars.insert("exit_code", exit_status.code.map(|c| c.to_string()).unwrap_or("unknown".to_string()));
+                tracing::info!(
+                    id = %watch_id,
+                    trigger = if exit_status.success() { "global on_exit" } else { "global on_error" },
+                    "Running global hook"
+                );
+                run_hook(global_hook_str, &vars);
             }
 
             let _ = child_exit_tx.send(true);

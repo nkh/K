@@ -43,6 +43,7 @@ fn test_config() -> Config {
         environment: Default::default(),
         web: Default::default(),
         profiles: Default::default(),
+        hooks: Default::default(),
     }
 }
 
