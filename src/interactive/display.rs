@@ -447,6 +447,13 @@ pub async fn run_display_loop(
                         None => true,
                     };
                     if gone {
+                        // Recover from stale alternate screen if the exited
+                        // command left it active (common with vim, htop, less).
+                        if let Some(ref cid) = active_id {
+                            if let Some(handle) = manager.get(cid) {
+                                handle.recover_alternate_screen().await;
+                            }
+                        }
                         // Only dismiss the display if the DIRECT child
                         // (the CLI command) exited.  If a later-spawned
                         // command (via F12 / web UI) exited, switch to

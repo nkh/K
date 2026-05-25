@@ -209,4 +209,11 @@ impl CommandHandle {
         let emu = self.emulator.read().await;
         emu.focus_reporting_enabled()
     }
+
+    /// Force-exit the alternate screen if active (auto-recovery).
+    /// Called when a command exits without properly restoring the main screen.
+    pub async fn recover_alternate_screen(&self) {
+        let mut emu = self.emulator.write().await;
+        emu.recover_from_alternate_screen();
+    }
 }

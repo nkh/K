@@ -854,6 +854,20 @@ impl VttyEmulator {
         self.alternate_screen
     }
 
+    /// Force-exit the alternate screen if active.
+    /// Used when a command exits without properly restoring the main screen
+    /// (e.g., vim killed without :q, htop killed without q).
+    /// Returns true if we were on the alternate screen and recovered.
+    pub fn recover_from_alternate_screen(&mut self) -> bool {
+        if self.alternate_screen {
+            self.exit_alternate_screen();
+            tracing::info!("Auto-recovered from stale alternate screen");
+            true
+        } else {
+            false
+        }
+    }
+
     // Public API
     pub fn buffer(&self) -> Buffer {
         self.buffer.read().clone()
