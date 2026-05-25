@@ -345,7 +345,10 @@ impl Cli {
         }
 
         // Display
-        if self.display {
+        // --display-all implies --display: keep displaying after the CLI
+        // command exits, which requires the display to be active in the
+        // first place.
+        if self.display || self.display_all {
             cfg.display.enabled = true;
         }
         if self.display_all {
