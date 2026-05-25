@@ -213,7 +213,7 @@ async fn async_main(cli: Cli) -> Result<()> {
         if !cmd_args.is_empty() {
             let cmd = cmd_args[0].clone();
             let args = cmd_args[1..].to_vec();
-            let id = manager.spawn(cmd, args, None, cfg.environment.variables.clone(), None, None).await?;
+            let id = manager.spawn(cmd, args, None, None, cfg.environment.variables.clone(), None, None).await?;
             Some(id)
         } else {
             None

@@ -60,9 +60,18 @@ impl CommandManager {
         }
     }
 
-    pub async fn spawn(&self, cmd: String, args: Vec<String>, certificate: Option<String>, env_vars: std::collections::HashMap<String, String>, rows: Option<u16>, cols: Option<u16>) -> anyhow::Result<CommandId> {
+    /// Spawn a command with optional per-command exit configuration.
+    ///
+    /// When `exit_config` is `None`, the global default exit configuration
+    /// from `config.default_exit.exit` is used.  When `Some(...)`, the
+    /// provided `ExitConfig` takes full precedence (on_exit, on_error,
+    /// timeout_secs).
+    pub async fn spawn(&self, cmd: String, args: Vec<String>, certificate: Option<String>, exit_config: Option<crate::config::schema::ExitConfig>, env_vars: std::collections::HashMap<String, String>, rows: Option<u16>, cols: Option<u16>) -> anyhow::Result<CommandId> {
         let id = Uuid::new_v4().to_string();
         self.logger.log("spawn", &format!("id={} cmd={} args={:?} cert={:?} env={:?} size={}x{}", id, cmd, args, certificate, env_vars.keys().collect::<Vec<_>>(), rows.unwrap_or(self.config.vtty.rows), cols.unwrap_or(self.config.vtty.cols)));
+
+        // Use per-command exit config if provided, otherwise fall back to defaults
+        let exit_config = exit_config.unwrap_or_else(|| self.config.default_exit.exit.clone());
 
         let spawner = ProcessSpawner::new(&self.config.vtty);
         let pty_raw_log = self.config.command_log.pty_raw_log.as_deref();
@@ -71,7 +80,7 @@ impl CommandManager {
             args,
             self.config.handles.clone(),
             &id,
-            self.config.default_exit.exit.clone(),
+            exit_config,
             env_vars,
             self,
             rows, cols,
@@ -440,54 +449,7 @@ impl CommandManager {
         }
     }
 
-    /// Spawn a command with per-command exit configuration and environment variables.
-    /// This is used by the API handler to allow on_exit/on_error/env per-command.
-    pub async fn spawn_with_exit(
-        &self,
-        cmd: String,
-        args: Vec<String>,
-        certificate: Option<String>,
-        on_exit: Option<String>,
-        on_error: Option<String>,
-        exit_timeout: u64,
-        env_vars: std::collections::HashMap<String, String>,
-        rows: Option<u16>,
-        cols: Option<u16>,
-    ) -> anyhow::Result<CommandId> {
-        let id = Uuid::new_v4().to_string();
-        self.logger.log("spawn", &format!("id={} cmd={} args={:?} cert={:?} env={:?} size={}x{}", id, cmd, args, certificate, env_vars.keys().collect::<Vec<_>>(), rows.unwrap_or(self.config.vtty.rows), cols.unwrap_or(self.config.vtty.cols)));
 
-        // Override default exit config with per-command values
-        let exit_config = crate::config::schema::ExitConfig {
-            on_exit,
-            on_error,
-            timeout_secs: exit_timeout,
-        };
-
-        let spawner = ProcessSpawner::new(&self.config.vtty);
-        let pty_raw_log = self.config.command_log.pty_raw_log.as_deref();
-        let mut handle = spawner.spawn(
-            cmd,
-            args,
-            self.config.handles.clone(),
-            &id,
-            exit_config,
-            env_vars,
-            self,
-            rows, cols,
-            pty_raw_log,
-        ).await?;
-
-        handle.certificate = certificate;
-
-        self.commands.insert(id.clone(), handle);
-
-        // Spawn a background watcher that detects VTTY changes and broadcasts them
-        // using the incremental diff protocol.
-        self.spawn_diff_watcher(id.clone());
-
-        Ok(id)
-    }
 }
 
 pub fn encode_keys(keys: &str) -> Vec<u8> {

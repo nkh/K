@@ -122,7 +122,12 @@ pub async fn start_command(
     };
     let merged_env = merge_command_env(&config_env, command_env);
 
-    match state.manager.spawn_with_exit(cmd, args, certificate, on_exit, on_error, exit_timeout, merged_env, rows, cols).await {
+    let exit_config = crate::config::schema::ExitConfig {
+        on_exit,
+        on_error,
+        timeout_secs: exit_timeout,
+    };
+    match state.manager.spawn(cmd, args, certificate, Some(exit_config), merged_env, rows, cols).await {
         Ok(id) => {
             // Look up the child's OS PID for the response.
             let pid = state.manager.get(&id).map(|h| h.pid).unwrap_or(0);

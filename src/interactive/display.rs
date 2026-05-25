@@ -630,7 +630,7 @@ pub async fn run_display_loop(
                                                     if !parts.is_empty() {
                                                         let cmd = parts[0].to_string();
                                                         let args = parts[1..].iter().map(|s| s.to_string()).collect();
-                                                        match manager.spawn(cmd, args, None, std::collections::HashMap::new(), None, None).await {
+                                                        match manager.spawn(cmd, args, None, None, std::collections::HashMap::new(), None, None).await {
                                                             Ok(id) => {
                                                                 manager.logger().log("spawn_terminal", &format!("id={} cmd={}", id, cmd_str));
                                                                 active_id = Some(id);
@@ -730,7 +730,7 @@ pub async fn run_display_loop(
                                                 if !parts.is_empty() {
                                                     let cmd = parts[0].to_string();
                                                     let args = parts[1..].iter().map(|s| s.to_string()).collect();
-                                                    match manager.spawn(cmd, args, None, std::collections::HashMap::new(), None, None).await {
+                                                    match manager.spawn(cmd, args, None, None, std::collections::HashMap::new(), None, None).await {
                                                         Ok(id) => {
                                                             manager.logger().log("spawn_terminal", &format!("id={} cmd={}", id, cmd_str));
                                                             active_id = Some(id);
