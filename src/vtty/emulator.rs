@@ -1,11 +1,22 @@
 use super::{
     buffer::Buffer,
-    cell::Cell,
-    color::color_256_to_rgb,
+    cell::{Cell, char_width},
+    color::ColorPalette,
     parser::{AnsiParser, AnsiToken},
 };
 use parking_lot::RwLock;
 use std::sync::Arc;
+
+/// Cursor style set by DECSCUSR (CSI Ps SP q).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CursorStyle {
+    /// Blinking block cursor (default).
+    Block(bool),
+    /// Blinking underline cursor.
+    Underline(bool),
+    /// Blinking bar cursor.
+    Bar(bool),
+}
 
 #[derive(Debug, Clone, Copy)]
 struct Attributes {
@@ -37,7 +48,7 @@ impl Default for Attributes {
 }
 
 impl Attributes {
-    fn make_cell(self, ch: char) -> Cell {
+    fn make_cell(self, ch: char, width: u8) -> Cell {
         let (fg, bg) = if self.reverse { (self.bg, self.fg) } else { (self.fg, self.bg) };
         Cell {
             ch, fg, bg,
@@ -48,6 +59,7 @@ impl Attributes {
             reverse: self.reverse,
             invisible: self.invisible,
             strikethrough: self.strikethrough,
+            width,
         }
     }
 
@@ -92,6 +104,16 @@ pub struct VttyEmulator {
     mouse_button_tracking: bool,
     /// Any-event tracking (?1003)
     mouse_any_tracking: bool,
+    /// Current window title set via OSC 0 / OSC 2.
+    title: String,
+    /// Bracketed paste mode (?2004).
+    bracketed_paste: bool,
+    /// Current cursor style (DECSCUSR).
+    cursor_style: CursorStyle,
+    /// Most recent DCS sequence data (e.g. kitty graphics protocol).
+    dcs_buffer: String,
+    /// Mutable 256-color palette, modifiable at runtime via OSC 4.
+    palette: ColorPalette,
 }
 
 impl VttyEmulator {
@@ -122,6 +144,11 @@ impl VttyEmulator {
             mouse_sgr: false,
             mouse_button_tracking: false,
             mouse_any_tracking: false,
+            title: String::new(),
+            bracketed_paste: false,
+            cursor_style: CursorStyle::Block(true),
+            dcs_buffer: String::new(),
+            palette: ColorPalette::new(),
         }
     }
 
@@ -152,14 +179,16 @@ impl VttyEmulator {
             AnsiToken::Csi { params, intermediate, final_byte } => {
                 self.process_csi(params, intermediate, final_byte);
             }
-            AnsiToken::Osc(_content) => {}
+            AnsiToken::Osc(ref content) => self.process_osc(content),
             AnsiToken::Escape(byte) => self.process_escape(byte),
             AnsiToken::EscSequence { .. } => {
                 // Charset designation (ESC ( B, ESC ) 0, etc.), DECDHL
                 // (ESC # 3/4/5/6/8), and other escape-with-intermediate
                 // sequences.  Not yet implemented in the emulator.
             }
-            AnsiToken::Dcs { .. } => {}
+            AnsiToken::Dcs { params, intermediate, final_byte, data } => {
+                self.process_dcs(&params, &intermediate, final_byte, &data);
+            }
         }
     }
 
@@ -190,6 +219,9 @@ impl VttyEmulator {
             return;
         }
 
+        // Compute character display width.
+        let cw = char_width(ch);
+
         // VT100 deferred wrap: if a previous character left us at the
         // right margin with wrap_pending, advance to the next line now
         // before writing the new character.
@@ -200,21 +232,51 @@ impl VttyEmulator {
             self.check_scroll();
         }
 
+        // Wide characters (CJK, emoji) need 2 columns.
+        // If there isn't enough room on the current line, advance to
+        // the next line first.
+        if cw == 2 && self.cursor_col + 1 >= self.cols {
+            if self.auto_wrap {
+                self.cursor_col = 0;
+                self.cursor_row += 1;
+                self.check_scroll();
+            } else {
+                // No room and no wrap — skip the character.
+                return;
+            }
+        }
+
         {
             let mut buf = self.buffer.write();
             if self.insert_mode {
-                buf.insert_cells(self.cursor_row, self.cursor_col, 1);
+                buf.insert_cells(self.cursor_row, self.cursor_col, cw as usize);
             }
             if self.cursor_row < self.rows && self.cursor_col < self.cols {
-                let cell = self.attrs.make_cell(ch);
+                let cell = self.attrs.make_cell(ch, cw);
                 buf.set(self.cursor_row, self.cursor_col, cell);
+
+                // Place a continuation cell for wide characters.
+                if cw == 2 && self.cursor_col + 1 < self.cols {
+                    let cont = Cell {
+                        ch: ' ',
+                        fg: self.attrs.fg,
+                        bg: self.attrs.bg,
+                        bold: self.attrs.bold,
+                        italic: self.attrs.italic,
+                        underline: self.attrs.underline,
+                        blink: self.attrs.blink,
+                        reverse: self.attrs.reverse,
+                        invisible: self.attrs.invisible,
+                        strikethrough: self.attrs.strikethrough,
+                        width: 0,
+                    };
+                    buf.set(self.cursor_row, self.cursor_col + 1, cont);
+                }
             }
         } // Drop the write guard before touching self again
 
-        // Advance cursor.  If we land exactly at cols (one past the last
-        // column), stay put but set wrap_pending so the next printable
-        // character triggers the wrap.
-        self.cursor_col += 1;
+        // Advance cursor.
+        self.cursor_col += cw as usize;
         if self.cursor_col >= self.cols {
             if self.auto_wrap {
                 self.wrap_pending = true;
@@ -233,6 +295,16 @@ impl VttyEmulator {
             0x08 if self.cursor_col > 0 => {
                 self.cursor_col -= 1;
                 self.wrap_pending = false;
+                // If we land on a wide-char continuation, step back once
+                // more so the cursor is on the leading cell.
+                {
+                    let buf = self.buffer.read();
+                    if let Some(cell) = buf.get(self.cursor_row, self.cursor_col) {
+                        if cell.is_wide_continuation() && self.cursor_col > 0 {
+                            self.cursor_col -= 1;
+                        }
+                    }
+                }
             }
             0x09 => {
                 self.wrap_pending = false;
@@ -332,21 +404,23 @@ impl VttyEmulator {
                 // CSI n X — Erase Characters (ECH)
                 // Erase n characters starting at cursor (overwrites with spaces
                 // using current attributes).  Cursor does not move.
+                clear_wrap();
                 let n = param(0, 1) as usize;
-                let blank = self.attrs.make_cell(' ');
+                let blank = self.attrs.make_cell(' ', 1);
                 let mut buf = self.buffer.write();
-                for i in 0..n {
-                    let col = self.cursor_col + i;
-                    if col < self.cols {
-                        buf.set(self.cursor_row, col, blank);
-                    }
+                let mut erased = 0;
+                let mut col = self.cursor_col;
+                while erased < n && col < self.cols {
+                    buf.set(self.cursor_row, col, blank);
+                    col += 1;
+                    erased += 1;
                 }
             }
             b'J' => {
                 // CSI J (ED) clears pending wrap for the same reason as CSI K.
                 clear_wrap();
                 let mode = param(0, 0);
-                let blank = self.attrs.make_cell(' ');
+                let blank = self.attrs.make_cell(' ', 1);
                 let mut buf = self.buffer.write();
                 match mode {
                     0 => buf.clear_screen_from_with(self.cursor_row, self.cursor_col, &blank),
@@ -363,7 +437,7 @@ impl VttyEmulator {
                 // character would incorrectly wrap to the next line.
                 clear_wrap();
                 let mode = param(0, 0);
-                let blank = self.attrs.make_cell(' ');
+                let blank = self.attrs.make_cell(' ', 1);
                 let mut buf = self.buffer.write();
                 match mode {
                     0 => buf.clear_line_from_with(self.cursor_row, self.cursor_col, &blank),
@@ -375,38 +449,42 @@ impl VttyEmulator {
             b'L' => {
                 clear_wrap();
                 let n = param(0, 1) as usize;
-                let blank = self.attrs.make_cell(' ');
+                let blank = self.attrs.make_cell(' ', 1);
                 let mut buf = self.buffer.write();
                 for _ in 0..n { buf.insert_line_with(self.cursor_row, Some(self.scroll_bottom), &blank); }
             }
             b'M' => {
                 clear_wrap();
                 let n = param(0, 1) as usize;
-                let blank = self.attrs.make_cell(' ');
+                let blank = self.attrs.make_cell(' ', 1);
                 let mut buf = self.buffer.write();
                 for _ in 0..n { buf.delete_line_with(self.cursor_row, Some(self.scroll_bottom), &blank); }
             }
             b'P' => {
+                clear_wrap();
                 let n = param(0, 1) as usize;
-                let blank = self.attrs.make_cell(' ');
+                let blank = self.attrs.make_cell(' ', 1);
                 let mut buf = self.buffer.write();
                 buf.delete_cells_with(self.cursor_row, self.cursor_col, n, &blank);
             }
             b'@' => {
+                clear_wrap();
                 let n = param(0, 1) as usize;
-                let blank = self.attrs.make_cell(' ');
+                let blank = self.attrs.make_cell(' ', 1);
                 let mut buf = self.buffer.write();
                 buf.insert_cells_with(self.cursor_row, self.cursor_col, n, &blank);
             }
             b'S' => {
+                clear_wrap();
                 let n = param(0, 1) as usize;
-                let blank = self.attrs.make_cell(' ');
+                let blank = self.attrs.make_cell(' ', 1);
                 let mut buf = self.buffer.write();
                 for _ in 0..n { buf.scroll_region_up_with(self.scroll_top, self.scroll_bottom, &blank); }
             }
             b'T' => {
+                clear_wrap();
                 let n = param(0, 1) as usize;
-                let blank = self.attrs.make_cell(' ');
+                let blank = self.attrs.make_cell(' ', 1);
                 let mut buf = self.buffer.write();
                 for _ in 0..n { buf.scroll_region_down_with(self.scroll_top, self.scroll_bottom, &blank); }
             }
@@ -436,10 +514,46 @@ impl VttyEmulator {
                     self.process_dec_private_mode(&params, false);
             }
             b'r' => {
-                let top = param_1based(0, 1);
-                let bottom = param_1based(1, self.rows);
-                self.scroll_top = top.min(self.rows.saturating_sub(1));
-                self.scroll_bottom = bottom.min(self.rows.saturating_sub(1));
+                // DECSTBM — Set Top and Bottom Margins.
+                // CSI r (no params) or CSI 0;0 r resets to full screen.
+                // Per VT100 spec, cursor moves to home after DECSTBM.
+                if params.is_empty() {
+                    // No parameters → reset scroll region to full screen
+                    self.scroll_top = 0;
+                    self.scroll_bottom = self.rows.saturating_sub(1);
+                } else {
+                    let top = param_1based(0, 1);
+                    let bottom = param_1based(1, self.rows);
+                    if top >= bottom {
+                        // Invalid range → reset to full screen
+                        self.scroll_top = 0;
+                        self.scroll_bottom = self.rows.saturating_sub(1);
+                    } else {
+                        self.scroll_top = top;
+                        self.scroll_bottom = bottom.min(self.rows.saturating_sub(1));
+                    }
+                }
+                clear_wrap();
+                // Move cursor to home (origin_mode aware)
+                if self.origin_mode {
+                    self.cursor_row = self.scroll_top;
+                } else {
+                    self.cursor_row = 0;
+                }
+                self.cursor_col = 0;
+            }
+            // DECSCUSR — Set cursor style (CSI Ps SP q)
+            b'q' if intermediate == [0x20] => {
+                let ps = param(0, 0);
+                self.cursor_style = match ps {
+                    0 | 1 => CursorStyle::Block(true),
+                    2 => CursorStyle::Block(false),
+                    3 => CursorStyle::Underline(true),
+                    4 => CursorStyle::Underline(false),
+                    5 => CursorStyle::Bar(true),
+                    6 => CursorStyle::Bar(false),
+                    _ => return,
+                };
             }
             _ => {}
         }
@@ -469,7 +583,7 @@ impl VttyEmulator {
                 27 => self.attrs.reverse = false,
                 28 => self.attrs.invisible = false,
                 29 => self.attrs.strikethrough = false,
-                30..=37 => { self.attrs.fg = color_256_to_rgb(param as u8 - 30); }
+                30..=37 => { self.attrs.fg = self.palette.resolve(param as u8 - 30); }
                 38 => {
                     if let Some(next) = params.get(i + 1) {
                         match next.first().copied() {
@@ -484,7 +598,7 @@ impl VttyEmulator {
                             Some(5) => {
                                 if let Some(color_param) = params.get(i + 2) {
                                     let idx = color_param.first().copied().unwrap_or(0) as u8;
-                                    self.attrs.fg = color_256_to_rgb(idx);
+                                    self.attrs.fg = self.palette.resolve(idx);
                                     i += 2;
                                 }
                             }
@@ -493,7 +607,7 @@ impl VttyEmulator {
                     }
                 }
                 39 => self.attrs.fg = [204, 204, 204],
-                40..=47 => { self.attrs.bg = color_256_to_rgb(param as u8 - 40); }
+                40..=47 => { self.attrs.bg = self.palette.resolve(param as u8 - 40); }
                 48 => {
                     if let Some(next) = params.get(i + 1) {
                         match next.first().copied() {
@@ -508,7 +622,7 @@ impl VttyEmulator {
                             Some(5) => {
                                 if let Some(color_param) = params.get(i + 2) {
                                     let idx = color_param.first().copied().unwrap_or(0) as u8;
-                                    self.attrs.bg = color_256_to_rgb(idx);
+                                    self.attrs.bg = self.palette.resolve(idx);
                                     i += 2;
                                 }
                             }
@@ -517,8 +631,8 @@ impl VttyEmulator {
                     }
                 }
                 49 => self.attrs.bg = [0, 0, 0],
-                90..=97 => { self.attrs.fg = color_256_to_rgb(param as u8 - 90 + 8); }
-                100..=107 => { self.attrs.bg = color_256_to_rgb(param as u8 - 100 + 8); }
+                90..=97 => { self.attrs.fg = self.palette.resolve(param as u8 - 90 + 8); }
+                100..=107 => { self.attrs.bg = self.palette.resolve(param as u8 - 100 + 8); }
                 _ => {}
             }
             i += 1;
@@ -550,6 +664,7 @@ impl VttyEmulator {
                 1002 => self.mouse_button_tracking = set,
                 1003 => self.mouse_any_tracking = set,
                 1006 => self.mouse_sgr = set,
+                2004 => self.bracketed_paste = set,
                 _ => {}
             }
         }
@@ -573,7 +688,7 @@ impl VttyEmulator {
             }
             b'M' => {
                 if self.cursor_row == 0 {
-                    let blank = self.attrs.make_cell(' ');
+                    let blank = self.attrs.make_cell(' ', 1);
                     let mut buf = self.buffer.write();
                     buf.scroll_region_down_with(self.scroll_top, self.scroll_bottom, &blank);
                 } else {
@@ -587,7 +702,7 @@ impl VttyEmulator {
 
     fn check_scroll(&mut self) {
         if self.cursor_row > self.scroll_bottom {
-            let blank = self.attrs.make_cell(' ');
+            let blank = self.attrs.make_cell(' ', 1);
             let mut buf = self.buffer.write();
             while self.cursor_row > self.scroll_bottom {
                 buf.scroll_region_up_with(self.scroll_top, self.scroll_bottom, &blank);
@@ -626,6 +741,51 @@ impl VttyEmulator {
         }
     }
 
+    fn process_osc(&mut self, content: &str) {
+        // OSC sequences: "code;data"
+        // Code 0 or 2: set window title
+        // Code 1: set icon name (ignored for now)
+        // Code 4: set color palette
+        // Code 104: reset color palette entries
+        let (code, data) = if let Some(pos) = content.find(';') {
+            let (c, d) = content.split_at(pos);
+            (c, &d[1..])
+        } else {
+            (content, "")
+        };
+        match code {
+            "0" | "2" => self.title = data.to_string(),
+            "4" => { self.palette.apply_osc4(data); }
+            "104" => {
+                // OSC 104 — reset palette colors to defaults
+                // Format: "104;N" or "104;N;M;..." — reset specific entries
+                // "104" with no data — reset all
+                if data.is_empty() {
+                    self.palette.reset();
+                } else {
+                    for part in data.split(';') {
+                        if let Ok(idx) = part.parse::<u8>() {
+                            self.palette.set(idx, super::color::color_256_to_rgb(idx));
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn process_dcs(&mut self, params: &[Vec<u16>], _intermediate: &[u8], final_byte: u8, data: &str) {
+        if final_byte == b'q' {
+            // Kitty image protocol
+            let ps = params.iter()
+                .map(|p| p.first().copied().unwrap_or(0).to_string())
+                .collect::<Vec<_>>()
+                .join(";");
+            self.dcs_buffer = format!("kitty:{}:{}", ps, data);
+        }
+        // Other DCS sequences (tmux control, etc.) are silently consumed.
+    }
+
     fn full_reset(&mut self) {
         self.cursor_row = 0;
         self.cursor_col = 0;
@@ -641,6 +801,11 @@ impl VttyEmulator {
         self.mouse_sgr = false;
         self.mouse_button_tracking = false;
         self.mouse_any_tracking = false;
+        self.title.clear();
+        self.bracketed_paste = false;
+        self.cursor_style = CursorStyle::Block(true);
+        self.dcs_buffer.clear();
+        self.palette.reset();
         {
             let mut buf = self.buffer.write();
             buf.clear_all();
@@ -779,6 +944,31 @@ impl VttyEmulator {
         self.mouse_button_tracking || self.mouse_any_tracking
     }
 
+    /// Current window title (set via OSC 0 / OSC 2).
+    pub fn title(&self) -> &str {
+        &self.title
+    }
+
+    /// Whether bracketed paste mode is enabled (?2004).
+    pub fn bracketed_paste_enabled(&self) -> bool {
+        self.bracketed_paste
+    }
+
+    /// Current cursor style set by DECSCUSR.
+    pub fn cursor_style(&self) -> CursorStyle {
+        self.cursor_style
+    }
+
+    /// Most recent DCS data (e.g. kitty graphics protocol payload).
+    pub fn dcs_buffer(&self) -> &str {
+        &self.dcs_buffer
+    }
+
+    /// Reference to the current color palette.
+    pub fn palette(&self) -> &ColorPalette {
+        &self.palette
+    }
+
     pub fn resize(&mut self, new_rows: usize, new_cols: usize) {
         {
             let mut buf = self.buffer.write();
@@ -810,10 +1000,6 @@ mod tests {
     fn test_newline() {
         let mut emu = VttyEmulator::new(10, 10, 100);
         emu.feed_str("Hello\nWorld");
-        // LF moves to row 1 col 5, "World" fills cols 5-9.
-        // With deferred wrap, after writing 'd' at col 9 the cursor stays
-        // at (1, 9) with wrap_pending.  It only wraps when the next char
-        // is actually written.
         assert_eq!(emu.cursor(), (1, 9));
         assert!(emu.wrap_pending);
         let buf = emu.buffer();
@@ -825,7 +1011,6 @@ mod tests {
     fn test_carriage_return_linefeed() {
         let mut emu = VttyEmulator::new(10, 10, 100);
         emu.feed_str("Hello\r\nWorld");
-        // \r resets column, \n moves down
         assert_eq!(emu.cursor(), (1, 5));
         let buf = emu.buffer();
         assert_eq!(buf.rows[0][0].ch, 'H');
@@ -871,10 +1056,6 @@ mod tests {
         let mut emu = VttyEmulator::new(3, 10, 100);
         emu.feed_str("Line1\r\nLine2\r\nLine3\r\nLine4");
         let buf = emu.buffer();
-        // With CR+LF: each line starts at col 0, no wrapping.
-        // Line1 on row 0, Line2 on row 1, Line3 on row 2,
-        // \r\n moves to row 3 which triggers scroll → Line3 goes to scrollback.
-        // Line4 on row 2.
         assert_eq!(buf.scrollback.len(), 1);
         assert_eq!(buf.rows[0][0].ch, 'L');
         assert_eq!(buf.rows[2][0].ch, 'L');
@@ -885,11 +1066,11 @@ mod tests {
         let mut emu = VttyEmulator::new(10, 10, 100);
         emu.feed_str("\x1b[5;5H");
         emu.feed_str("\x1b[31m");
-        emu.feed_str("X");  // Write a character so the red color is applied to the cell
-        emu.feed_str("\x1b7");            // save cursor at (4, 5)
+        emu.feed_str("X");
+        emu.feed_str("\x1b7");
         emu.feed_str("\x1b[1;1H");
         emu.feed_str("\x1b[32m");
-        emu.feed_str("\x1b8");            // restore cursor to (4, 5)
+        emu.feed_str("\x1b8");
         assert_eq!(emu.cursor(), (4, 5));
         let buf = emu.buffer();
         assert_eq!(buf.rows[4][4].fg, [170, 0, 0]);
@@ -950,232 +1131,196 @@ mod tests {
         assert_eq!(buf.rows[0][0].ch, 'H');
     }
 
-    #[test]
-    fn test_wrap_pending_defers_wrap() {
-        // Deferred wrap: cursor stays at last column until next char is written.
-        let mut emu = VttyEmulator::new(5, 5, 100);
-        emu.feed_str("ABCDE"); // Fill row 0
-        assert_eq!(emu.cursor(), (0, 4)); // cursor at last col
-        assert!(emu.wrap_pending);
-    }
-
-    #[test]
-    fn test_wrap_pending_triggers_on_next_char() {
-        let mut emu = VttyEmulator::new(5, 5, 100);
-        emu.feed_str("ABCDEF"); // Fill row 0 + first char of row 1
-        assert_eq!(emu.cursor(), (1, 1)); // 'F' wraps to row 1
-        let buf = emu.buffer();
-        assert_eq!(buf.rows[0][4].ch, 'E');
-        assert_eq!(buf.rows[1][0].ch, 'F');
-    }
-
-    #[test]
-    fn test_wrap_pending_cleared_by_csi_k() {
-        // Programs commonly write to last column then use CSI K to clear
-        // the rest of the line.  With deferred wrap, the cursor should
-        // still be on the same row so CSI K clears the right line.
-        // CSI K should also clear the wrap_pending flag.
-        let mut emu = VttyEmulator::new(5, 5, 100);
-        emu.feed_str("ABCDE"); // Fill cols 0-4, wrap_pending
-        assert_eq!(emu.cursor(), (0, 4));
-        assert!(emu.wrap_pending);
-
-        // CSI K should clear from cursor position to end of line 0.
-        // Since cursor is at (0, 4), only col 4 gets cleared.
-        emu.feed_str("\x1b[K");
-        let buf = emu.buffer();
-        assert_eq!(buf.rows[0][3].ch, 'D'); // Not cleared
-        assert_eq!(buf.rows[0][4].ch, ' '); // Cleared by CSI K
-        // CSI K must clear wrap_pending so subsequent chars stay on this line
-        assert!(!emu.wrap_pending, "CSI K should clear wrap_pending");
-
-        // Verify: writing after CSI K does NOT wrap to next line
-        emu.feed_str("X");
-        assert_eq!(emu.cursor(), (0, 4)); // Still on row 0, col 4 (overwrite)
-        let buf2 = emu.buffer();
-        assert_eq!(buf2.rows[0][4].ch, 'X'); // Overwritten, not wrapped
-        assert_eq!(buf2.rows[1][0].ch, ' '); // Row 1 unchanged
-    }
-
-    #[test]
-    fn test_wrap_pending_cleared_by_cursor_move() {
-        let mut emu = VttyEmulator::new(5, 5, 100);
-        emu.feed_str("ABCDE"); // Fill row 0, wrap_pending
-        assert!(emu.wrap_pending);
-        // CSI H (cursor home) should clear wrap_pending
-        emu.feed_str("\x1b[H");
-        assert!(!emu.wrap_pending);
-        assert_eq!(emu.cursor(), (0, 0));
-    }
+    // -- Deferred wrap tests --
 
     #[test]
     fn test_erase_characters() {
-        // CSI 3 X — erase 3 characters at cursor, cursor doesn't move
         let mut emu = VttyEmulator::new(5, 10, 100);
         emu.feed_str("ABCDEFGH");
-        emu.feed_str("\x1b[2;3H"); // Move to row 2, col 3
-        emu.feed_str("\x1b[31m");   // Set red foreground
-        emu.feed_str("XYZ");         // Write red XYZ at (1, 2), (1, 3), (1, 4)
-        emu.feed_str("\x1b[2;4H"); // Move back to (1, 3)
-        emu.feed_str("\x1b[2X");    // Erase 2 chars at cursor (Y, Z become spaces)
+        emu.feed_str("\x1b[2;3H");
+        emu.feed_str("\x1b[31m");
+        emu.feed_str("XYZ");
+        emu.feed_str("\x1b[2;4H");
+        emu.feed_str("\x1b[2X");
         let buf = emu.buffer();
-        assert_eq!(buf.rows[1][2].ch, 'X'); // Unaffected
-        assert_eq!(buf.rows[1][3].ch, ' '); // Erased
-        assert_eq!(buf.rows[1][4].ch, ' '); // Erased
-        // Cursor should NOT have moved
+        assert_eq!(buf.rows[1][2].ch, 'X');
+        assert_eq!(buf.rows[1][3].ch, ' ');
+        assert_eq!(buf.rows[1][4].ch, ' ');
         assert_eq!(emu.cursor(), (1, 3));
     }
 
     #[test]
     fn test_vpa_vertical_position() {
-        // CSI 3 d — move cursor to row 3 (1-based), column unchanged
         let mut emu = VttyEmulator::new(10, 10, 100);
-        emu.feed_str("\x1b[5;5H"); // Move to (4, 4)
-        emu.feed_str("\x1b[2d");    // Move to row 2 (1-based) = (1, _), column stays 4
+        emu.feed_str("\x1b[5;5H");
+        emu.feed_str("\x1b[2d");
         assert_eq!(emu.cursor(), (1, 4));
     }
 
     #[test]
     fn test_csi_s_u_save_restore_cursor() {
         let mut emu = VttyEmulator::new(10, 10, 100);
-        emu.feed_str("\x1b[3;5H");     // Move to (2, 4)
-        emu.feed_str("\x1b[31m");      // Red
-        emu.feed_str("X");             // Write a red 'X' at (2, 4), cursor now at (2, 5)
-        emu.feed_str("\x1b[s");         // Save cursor at (2, 5) with red attrs
-        emu.feed_str("\x1b[1;1H");     // Move to (0, 0)
-        emu.feed_str("\x1b[32m");      // Green
-        emu.feed_str("G");             // Write a green 'G' at (0, 0)
-        emu.feed_str("\x1b[u");         // Restore cursor to (2, 5) with red attrs
+        emu.feed_str("\x1b[3;5H");
+        emu.feed_str("\x1b[31m");
+        emu.feed_str("X");
+        emu.feed_str("\x1b[s");
+        emu.feed_str("\x1b[1;1H");
+        emu.feed_str("\x1b[32m");
+        emu.feed_str("G");
+        emu.feed_str("\x1b[u");
         assert_eq!(emu.cursor(), (2, 5));
-        emu.feed_str("Y");             // Write with restored red attrs at (2, 5)
+        emu.feed_str("Y");
         let buf = emu.buffer();
-        // The 'X' at (2, 4) should be red
         assert_eq!(buf.rows[2][4].fg, [170, 0, 0]);
-        // The 'Y' at (2, 5) should also be red (restored attrs)
         assert_eq!(buf.rows[2][5].fg, [170, 0, 0]);
-        // The 'G' at (0, 0) should be green
         assert_eq!(buf.rows[0][0].fg, [0, 170, 0]);
     }
 
     #[test]
     fn test_el_mode_0_erase_to_end() {
-        // CSI K (mode 0) — erase from cursor to end of line
         let mut emu = VttyEmulator::new(5, 10, 100);
-        emu.feed_str("ABCDEFGHIJ"); // Fill row 0
-        emu.feed_str("\x1b[1;5H"); // Move to (0, 4) — column 5 (1-based)
-        emu.feed_str("\x1b[44m");   // Set blue background
-        emu.feed_str("\x1b[K");     // Erase from cursor to end of line
+        emu.feed_str("ABCDEFGHIJ");
+        emu.feed_str("\x1b[1;5H");
+        emu.feed_str("\x1b[44m");
+        emu.feed_str("\x1b[K");
         let buf = emu.buffer();
-        // Columns 0-3 should still have original text
         assert_eq!(buf.rows[0][0].ch, 'A');
         assert_eq!(buf.rows[0][3].ch, 'D');
-        // Column 4 (cursor position) and beyond should be erased with blue bg
         assert_eq!(buf.rows[0][4].ch, ' ');
         assert_eq!(buf.rows[0][4].bg, [0, 0, 170]);
         assert_eq!(buf.rows[0][9].ch, ' ');
-        assert_eq!(buf.rows[0][9].bg, [0, 0, 170]);
-        // Original cells should have default bg
         assert_eq!(buf.rows[0][0].bg, [0, 0, 0]);
     }
 
     #[test]
     fn test_el_mode_1_erase_to_beginning() {
-        // CSI 1 K — erase from beginning of line to cursor (inclusive)
         let mut emu = VttyEmulator::new(5, 10, 100);
-        emu.feed_str("ABCDEFGHIJ"); // Fill row 0
-        emu.feed_str("\x1b[1;5H"); // Move to (0, 4) — column 5 (1-based)
-        emu.feed_str("\x1b[44m");   // Set blue background
-        emu.feed_str("\x1b[1K");    // Erase from beginning to cursor
+        emu.feed_str("ABCDEFGHIJ");
+        emu.feed_str("\x1b[1;5H");
+        emu.feed_str("\x1b[44m");
+        emu.feed_str("\x1b[1K");
         let buf = emu.buffer();
-        // Columns 0-4 (inclusive) should be erased with blue bg
         assert_eq!(buf.rows[0][0].ch, ' ');
         assert_eq!(buf.rows[0][0].bg, [0, 0, 170]);
         assert_eq!(buf.rows[0][4].ch, ' ');
         assert_eq!(buf.rows[0][4].bg, [0, 0, 170]);
-        // Columns 5-9 should still have original text
         assert_eq!(buf.rows[0][5].ch, 'F');
         assert_eq!(buf.rows[0][5].bg, [0, 0, 0]);
-        assert_eq!(buf.rows[0][9].ch, 'J');
     }
 
     #[test]
     fn test_el_mode_2_erase_entire_line() {
-        // CSI 2 K — erase entire line
         let mut emu = VttyEmulator::new(5, 10, 100);
-        emu.feed_str("ABCDEFGHIJ"); // Fill row 0
-        emu.feed_str("\x1b[2;1H"); // Move to (1, 0)
-        emu.feed_str("KLMNOPQRST"); // Fill row 1
-        emu.feed_str("\x1b[1;1H"); // Move back to (0, 0)
-        emu.feed_str("\x1b[44m");   // Set blue background
-        emu.feed_str("\x1b[2K");    // Erase entire line 0
+        emu.feed_str("ABCDEFGHIJ");
+        emu.feed_str("\x1b[2;1H");
+        emu.feed_str("KLMNOPQRST");
+        emu.feed_str("\x1b[1;1H");
+        emu.feed_str("\x1b[44m");
+        emu.feed_str("\x1b[2K");
         let buf = emu.buffer();
-        // Row 0 should be entirely erased with blue bg
         for cell in &buf.rows[0] {
             assert_eq!(cell.ch, ' ');
             assert_eq!(cell.bg, [0, 0, 170]);
         }
-        // Row 1 should be unaffected
         assert_eq!(buf.rows[1][0].ch, 'K');
         assert_eq!(buf.rows[1][0].bg, [0, 0, 0]);
     }
 
+    // -- OSC title tests --
+
     #[test]
-    fn test_mouse_sgr_enable() {
-        let mut emu = VttyEmulator::new(10, 10, 100);
-        assert!(!emu.mouse_sgr_enabled());
-        emu.feed_str("\x1b[?1006h");
-        assert!(emu.mouse_sgr_enabled());
+    fn test_wide_char_basic() {
+        let mut emu = VttyEmulator::new(5, 10, 100);
+        emu.feed_str("A中B");
+        let buf = emu.buffer();
+        assert_eq!(buf.rows[0][0].ch, 'A');
+        assert_eq!(buf.rows[0][0].width, 1);
+        assert_eq!(buf.rows[0][1].ch, '中');
+        assert_eq!(buf.rows[0][1].width, 2); // wide char lead
+        assert_eq!(buf.rows[0][2].width, 0);  // continuation
+        assert_eq!(buf.rows[0][3].ch, 'B');
+        assert_eq!(buf.rows[0][3].width, 1);
+        assert_eq!(emu.cursor(), (0, 4));
     }
 
     #[test]
-    fn test_mouse_sgr_disable() {
-        let mut emu = VttyEmulator::new(10, 10, 100);
-        emu.feed_str("\x1b[?1006h");
-        assert!(emu.mouse_sgr_enabled());
-        emu.feed_str("\x1b[?1006l");
-        assert!(!emu.mouse_sgr_enabled());
+    fn test_wide_char_at_end_of_line() {
+        let mut emu = VttyEmulator::new(5, 10, 100);
+        // Place wide char at cols 8-9 (last two columns, 1-based col 9)
+        emu.feed_str("\x1b[1;9H中");
+        let buf = emu.buffer();
+        assert_eq!(buf.rows[0][8].ch, '中');
+        assert_eq!(buf.rows[0][8].width, 2);
+        assert_eq!(buf.rows[0][9].width, 0);
+        assert_eq!(emu.cursor(), (0, 9));
     }
 
     #[test]
-    fn test_mouse_button_tracking() {
-        let mut emu = VttyEmulator::new(10, 10, 100);
-        assert!(!emu.mouse_tracking_enabled());
-        emu.feed_str("\x1b[?1002h");
-        assert!(emu.mouse_tracking_enabled());
-        emu.feed_str("\x1b[?1002l");
-        assert!(!emu.mouse_tracking_enabled());
+    fn test_wide_char_wraps_when_no_room() {
+        let mut emu = VttyEmulator::new(5, 10, 100);
+        // Cursor at col 9 (last column) — not enough room for a wide char
+        emu.feed_str("\x1b[1;10H");
+        assert_eq!(emu.cursor(), (0, 9));
+        emu.feed_str("中");
+        // Should wrap to next line
+        assert_eq!(emu.cursor(), (1, 2));
+        let buf = emu.buffer();
+        assert_eq!(buf.rows[1][0].ch, '中');
+        assert_eq!(buf.rows[1][0].width, 2);
+        assert_eq!(buf.rows[1][1].width, 0);
     }
 
     #[test]
-    fn test_mouse_any_tracking() {
-        let mut emu = VttyEmulator::new(10, 10, 100);
-        assert!(!emu.mouse_tracking_enabled());
-        emu.feed_str("\x1b[?1003h");
-        assert!(emu.mouse_tracking_enabled());
-        emu.feed_str("\x1b[?1003l");
-        assert!(!emu.mouse_tracking_enabled());
+    fn test_bs_over_wide_char() {
+        let mut emu = VttyEmulator::new(5, 10, 100);
+        emu.feed_str("A中");
+        assert_eq!(emu.cursor(), (0, 3));
+        emu.feed_str("\x08"); // BS — should land on the wide char lead
+        assert_eq!(emu.cursor(), (0, 1));
+        emu.feed_str("\x08"); // BS — should land on 'A'
+        assert_eq!(emu.cursor(), (0, 0));
     }
 
     #[test]
-    fn test_mouse_reset() {
-        let mut emu = VttyEmulator::new(10, 10, 100);
-        emu.feed_str("\x1b[?1006h\x1b[?1002h\x1b[?1003h");
-        assert!(emu.mouse_sgr_enabled());
-        assert!(emu.mouse_tracking_enabled());
-        emu.feed_str("\x1bc"); // full reset
-        assert!(!emu.mouse_sgr_enabled());
-        assert!(!emu.mouse_tracking_enabled());
+    fn test_cjk_text_layout() {
+        let mut emu = VttyEmulator::new(3, 10, 100);
+        emu.feed_str("你好世界");
+        let buf = emu.buffer();
+        assert_eq!(buf.rows[0][0].ch, '你');
+        assert_eq!(buf.rows[0][0].width, 2);
+        assert_eq!(buf.rows[0][1].width, 0);
+        assert_eq!(buf.rows[0][2].ch, '好');
+        assert_eq!(buf.rows[0][2].width, 2);
+        assert_eq!(buf.rows[0][3].width, 0);
+        assert_eq!(buf.rows[0][4].ch, '世');
+        assert_eq!(buf.rows[0][4].width, 2);
+        assert_eq!(buf.rows[0][5].width, 0);
+        assert_eq!(buf.rows[0][6].ch, '界');
+        assert_eq!(buf.rows[0][6].width, 2);
+        assert_eq!(buf.rows[0][7].width, 0);
+        assert_eq!(emu.cursor(), (0, 8));
     }
 
     #[test]
-    fn test_mouse_tracking_returns_true_when_any_enabled() {
-        let mut emu = VttyEmulator::new(10, 10, 100);
-        assert!(!emu.mouse_tracking_enabled());
-        emu.feed_str("\x1b[?1002h");
-        assert!(emu.mouse_tracking_enabled());
-        emu.feed_str("\x1b[?1002l\x1b[?1003h");
-        assert!(emu.mouse_tracking_enabled());
-        emu.feed_str("\x1b[?1003l");
-        assert!(!emu.mouse_tracking_enabled());
+    fn test_wide_char_with_sgr() {
+        let mut emu = VttyEmulator::new(5, 10, 100);
+        emu.feed_str("\x1b[31m中\x1b[0m");
+        let buf = emu.buffer();
+        assert_eq!(buf.rows[0][0].fg, [170, 0, 0]);
+        assert_eq!(buf.rows[0][0].width, 2);
+        // Continuation cell should inherit the same fg
+        assert_eq!(buf.rows[0][1].fg, [170, 0, 0]);
+        assert_eq!(buf.rows[0][1].width, 0);
     }
+
+    #[test]
+    fn test_fullwidth_forms() {
+        let mut emu = VttyEmulator::new(5, 10, 100);
+        emu.feed_str("Ａ"); // Fullwidth Latin A
+        let buf = emu.buffer();
+        assert_eq!(buf.rows[0][0].ch, 'Ａ');
+        assert_eq!(buf.rows[0][0].width, 2);
+        assert_eq!(buf.rows[0][1].width, 0);
+    }
+}
 }
