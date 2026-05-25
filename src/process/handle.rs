@@ -4,6 +4,7 @@ use portable_pty::MasterPty;
 
 use crate::config::schema::ExitConfig;
 use crate::vtty::emulator::VttyEmulator;
+use crate::vtty::sink::VttyOutput;
 use crate::handles::registry::HandleRegistry;
 use super::spawner::{StdinMessage, ExitStatus};
 
@@ -26,6 +27,10 @@ pub struct CommandHandle {
     /// Wrapped in a Mutex because `MasterPty` is `Send` but not `Sync`,
     /// which is required by `DashMap` (used in `CommandManager`).
     pub pty_master: Arc<parking_lot::Mutex<Box<dyn MasterPty + Send>>>,
+    /// Output sink manager — notified after each emulator feed.
+    /// Sinks receive push notifications when the VTTY buffer changes,
+    /// replacing the need for polling-based change detection.
+    pub vtty_output: Arc<VttyOutput>,
     /// Watch-channel receiver for the child-exit signal.  Unlike
     /// tokio::sync::Notify (which loses notifications when no waiter
     /// is present), a watch channel always stores the latest value.

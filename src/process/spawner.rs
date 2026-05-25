@@ -16,6 +16,7 @@ use crate::handles::{
     vtty_sink::VttySink,
 };
 use crate::vtty::emulator::VttyEmulator;
+use crate::vtty::sink::{VttyOutput, BroadcastVttySink};
 use crate::process::manager::CommandManager;
 use super::handle::CommandHandle;
 
@@ -200,19 +201,37 @@ impl ProcessSpawner {
             }
         });
 
-        // Spawn async PTY output consumer — feeds data into the emulator.
+        // Create VttyOutput with a BroadcastVttySink that pushes dirty
+        // notifications via the same broadcast channel used by the existing
+        // diff watcher.  This provides an immediate, push-based notification
+        // path that complements the polling-based watcher.
+        let vtty_output: Arc<VttyOutput> = Arc::new(VttyOutput::with_sinks(vec![
+            Arc::new(BroadcastVttySink::new(
+                manager.vtty_change_sender(),
+                command_id.to_string(),
+            )),
+        ]));
+
+        // Spawn async PTY output consumer — feeds data into the emulator
+        // and notifies all registered VttySinks.
         // This is the single async task that writes to the emulator, avoiding
         // the previous pattern of spawning a new task per 4KB chunk.
         let emu_writer = emulator.clone();
+        let sink_output = vtty_output.clone();
         tokio::spawn(async move {
             while let Some(PtyOutput(data)) = pty_out_rx.recv().await {
                 let mut emu = emu_writer.write().await;
                 emu.feed(&data);
+                let snapshot = emu.snapshot();
+                drop(emu);
+                sink_output.notify_sinks(&snapshot);
             }
             // PTY closed (child exited / EOF). Flush any trailing bytes
             // that the parser may still be holding (e.g. incomplete UTF-8
             // or a partially-received escape sequence).
             emu_writer.write().await.finish();
+            // Notify sinks that the VTTY is closing.
+            sink_output.close();
         });
 
         // Spawn stdin writer task in a blocking thread.
@@ -336,6 +355,7 @@ impl ProcessSpawner {
             exit_config,
             spawn_time: std::time::Instant::now(),
             pty_master,
+            vtty_output,
             exit_rx: child_exit_rx,
         })
     }

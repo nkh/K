@@ -5,3 +5,4 @@ pub mod display;
 pub mod emulator;
 pub mod parser;
 pub mod renderer;
+pub mod sink;
