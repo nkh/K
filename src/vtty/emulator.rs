@@ -112,6 +112,9 @@ pub struct VttyEmulator {
     cursor_style: CursorStyle,
     /// Most recent DCS sequence data (e.g. kitty graphics protocol).
     dcs_buffer: String,
+    /// Pending response bytes to send back to the child PTY.
+    /// Collected during feed() and consumed by drain_responses().
+    response_buf: Vec<u8>,
     /// Mutable 256-color palette, modifiable at runtime via OSC 4.
     palette: ColorPalette,
 }
@@ -148,6 +151,7 @@ impl VttyEmulator {
             bracketed_paste: false,
             cursor_style: CursorStyle::Block(true),
             dcs_buffer: String::new(),
+            response_buf: Vec::new(),
             palette: ColorPalette::new(),
         }
     }
@@ -555,6 +559,13 @@ impl VttyEmulator {
                     _ => return,
                 };
             }
+            // DA1 — Primary Device Attributes (CSI c without intermediate)
+            // Respond with VT100 identity: ESC [ ? 1 ; 0 c
+            // DA2 (CSI > c) and DA3 (CSI = c) have intermediate bytes and
+            // are NOT handled here (we don't claim VT220+ identity).
+            b'c' if intermediate.is_empty() => {
+                self.response_buf.extend_from_slice(b"\x1b[?1;0c");
+            }
             _ => {}
         }
     }
@@ -805,6 +816,7 @@ impl VttyEmulator {
         self.bracketed_paste = false;
         self.cursor_style = CursorStyle::Block(true);
         self.dcs_buffer.clear();
+        self.response_buf.clear();
         self.palette.reset();
         {
             let mut buf = self.buffer.write();
@@ -962,6 +974,14 @@ impl VttyEmulator {
     /// Most recent DCS data (e.g. kitty graphics protocol payload).
     pub fn dcs_buffer(&self) -> &str {
         &self.dcs_buffer
+    }
+
+    /// Drain pending response bytes (e.g. DA1 replies) that should be
+    /// written back to the child PTY.  Returns an empty vec if nothing
+    /// is pending.  The caller is responsible for sending these bytes
+    /// to the PTY's stdin.
+    pub fn drain_responses(&mut self) -> Vec<u8> {
+        std::mem::take(&mut self.response_buf)
     }
 
     /// Reference to the current color palette.
@@ -1615,5 +1635,23 @@ mod tests {
         assert!(!emu.dcs_buffer().is_empty());
         emu.feed_str("\x1bc"); // RIS (full reset)
         assert!(emu.dcs_buffer().is_empty());
+    }
+
+    #[test]
+    fn test_da1_response() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed(b"\x1b[c"); // DA1 request (CSI c with no params)
+        let responses = emu.drain_responses();
+        assert_eq!(responses, b"\x1b[?1;0c");
+        // After draining, should be empty
+        assert!(emu.drain_responses().is_empty());
+    }
+
+    #[test]
+    fn test_da1_with_params_no_response() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed(b"\x1b[>c"); // DA2 / VT220 response — we only handle DA1 (no params)
+        let responses = emu.drain_responses();
+        assert!(responses.is_empty());
     }
 }

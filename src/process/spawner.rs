@@ -235,10 +235,16 @@ impl ProcessSpawner {
             )),
         ]));
 
+        // Wrap PTY writer in Arc<Mutex> for shared access between the stdin
+        // writer task and the PTY output consumer (which needs to write
+        // emulator responses like DA1 replies back to the child PTY).
+        let writer = Arc::new(parking_lot::Mutex::new(writer));
+
         // Spawn async PTY output consumer — feeds data into the emulator
         // and notifies all registered VttySinks, with rate limiting.
         let emu_writer = emulator.clone();
         let sink_output = vtty_output.clone();
+        let emu_writer_ptm = writer.clone();
         let mut rate_limiter = RateLimiter::from_config(self.rate_limit_cfg.max_updates_per_sec);
         let flush_interval = rate_limiter.interval();
         tokio::spawn(async move {
@@ -249,8 +255,15 @@ impl ProcessSpawner {
                 while let Some(PtyOutput(data)) = pty_out_rx.recv().await {
                     let mut emu = emu_writer.write().await;
                     emu.feed(&data);
+                    let responses = emu.drain_responses();
                     let snapshot = emu.snapshot();
                     drop(emu);
+                    // Send any pending emulator responses back to the child PTY
+                    // (e.g., DA1 replies, focus event reports).
+                    if !responses.is_empty() {
+                        let _ = emu_writer_ptm.lock().write_all(&responses);
+                        let _ = emu_writer_ptm.lock().flush();
+                    }
                     sink_output.notify_sinks(&snapshot);
                 }
             } else {
@@ -266,8 +279,14 @@ impl ProcessSpawner {
                                 Some(PtyOutput(data)) => {
                                     let mut emu = emu_writer.write().await;
                                     emu.feed(&data);
+                                    let responses = emu.drain_responses();
                                     let snapshot = emu.snapshot();
                                     drop(emu);
+                                    // Send any pending emulator responses back
+                                    if !responses.is_empty() {
+                                        let _ = emu_writer_ptm.lock().write_all(&responses);
+                                        let _ = emu_writer_ptm.lock().flush();
+                                    }
 
                                     if rate_limiter.allow() {
                                         sink_output.notify_sinks(&snapshot);
@@ -298,13 +317,14 @@ impl ProcessSpawner {
         });
 
         // Spawn stdin writer task in a blocking thread.
+        // Shares the PTY writer with the emulator output consumer via Arc<Mutex>.
+        let stdin_writer = writer.clone();
         tokio::task::spawn_blocking(move || {
-            let mut writer = writer;
             while let Some(msg) = stdin_rx.blocking_recv() {
                 match msg {
                     StdinMessage::Bytes(data) => {
-                        let _ = writer.write_all(&data);
-                        let _ = writer.flush();
+                        let _ = stdin_writer.lock().write_all(&data);
+                        let _ = stdin_writer.lock().flush();
                     }
                     StdinMessage::Signal(_sig) => {}
                 }
