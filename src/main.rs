@@ -127,8 +127,8 @@ async fn async_main(cli: Cli) -> Result<()> {
         };
         if !stopped {
             match target {
-                Some(t) => eprintln!("No matching command found for '{}'. Use `vrunner list` to see running commands.", t),
-                None => eprintln!("No command to stop. Use `vrunner list` to see running commands."),
+                Some(t) => tracing::error!("No matching command found for '{}'. Use `vrunner list` to see running commands.", t),
+                None => tracing::error!("No command to stop. Use `vrunner list` to see running commands."),
             }
             std::process::exit(1);
         }

@@ -58,11 +58,9 @@ pub fn resolve_instance(
     }
 
     // Multiple instances — prompt the user
-    eprintln!("Multiple vrunner instances are running:");
-    eprintln!("{}", format_instance_list(&instances));
-    eprintln!();
-    eprint!("Enter the PID of the instance to use (or Ctrl+C to abort): ");
-    eprintln!();
+    tracing::warn!("Multiple vrunner instances are running:");
+    tracing::warn!("{}", format_instance_list(&instances));
+    tracing::warn!("Enter the PID of the instance to use (or Ctrl+C to abort): ");
 
     // Since we can't easily read stdin in all contexts (piped, daemon, etc.),
     // return an error with instructions
@@ -158,7 +156,7 @@ pub async fn handle_spawn_command(cli: &Cli, cmd: &str, args: &[String], rows: O
         println!("  VTTY:      {}/api/commands/{}/vtty/html", url, cmd_id);
     } else {
         let error = result["error"].as_str().unwrap_or("Unknown error");
-        eprintln!("Failed to spawn command: {}", error);
+        tracing::error!("Failed to spawn command: {}", error);
         std::process::exit(1);
     }
 
@@ -187,7 +185,7 @@ pub async fn handle_freeze_command(cli: &Cli, pid: u32) -> Result<()> {
         println!("Command with PID {} frozen (SIGSTOP) on instance {}", pid, info.pid);
     } else {
         let error = result["error"].as_str().unwrap_or("Unknown error");
-        eprintln!("Failed to freeze command: {}", error);
+        tracing::error!("Failed to freeze command: {}", error);
         std::process::exit(1);
     }
 
@@ -216,7 +214,7 @@ pub async fn handle_thaw_command(cli: &Cli, pid: u32) -> Result<()> {
         println!("Command with PID {} thawed (SIGCONT) on instance {}", pid, info.pid);
     } else {
         let error = result["error"].as_str().unwrap_or("Unknown error");
-        eprintln!("Failed to thaw command: {}", error);
+        tracing::error!("Failed to thaw command: {}", error);
         std::process::exit(1);
     }
 
@@ -280,9 +278,9 @@ pub async fn handle_resize_command(_cli: &Cli, target: &str, rows: u16, cols: u1
         return resize_command_by_id(&client, &url, cmd_id, *cmd_pid, *inst_pid, rows, cols).await;
     }
     if exact.len() > 1 {
-        eprintln!("Multiple commands match '{}':", target);
+        tracing::warn!("Multiple commands match '{}':", target);
         for (_, _, pid, _name, full) in &exact {
-            eprintln!("  PID {} — {}", pid, full);
+            tracing::warn!("  PID {} — {}", pid, full);
         }
         anyhow::bail!("Ambiguous target. Use PID to disambiguate.");
     }
@@ -607,22 +605,22 @@ pub async fn handle_stop_command(_cli: &Cli, target: Option<&str>) -> Result<boo
 
             match all_commands.len() {
                 0 => {
-                    eprintln!("No commands running.");
+                    tracing::warn!("No commands running.");
                     return Ok(false);
                 }
                 1 => {
                     let (inst_pid, ref cmd_id, cmd_pid, _, ref full) = all_commands[0];
                     let info = instances.iter().find(|i| i.pid == inst_pid).unwrap();
                     let url = instance_url(info, &None);
-                    eprintln!("Stopping only command: {} (PID {})", full, cmd_pid);
+                    tracing::info!("Stopping only command: {} (PID {})", full, cmd_pid);
                     return stop_command_by_id(&client, &url, cmd_id, cmd_pid, inst_pid).await;
                 }
                 _ => {
-                    eprintln!("Multiple commands running. Specify which one to stop:");
+                    tracing::warn!("Multiple commands running. Specify which one to stop:");
                     for (_, _, cmd_pid, _, full) in &all_commands {
-                        eprintln!("  PID {} — {}", cmd_pid, full);
+                        tracing::warn!("  PID {} — {}", cmd_pid, full);
                     }
-                    eprintln!("Usage: vrunner stop-command <PID or name>");
+                    tracing::warn!("Usage: vrunner stop-command <PID or name>");
                     return Ok(false);
                 }
             }
@@ -653,11 +651,11 @@ pub async fn handle_stop_command(_cli: &Cli, target: Option<&str>) -> Result<boo
         return stop_command_by_id(&client, &url, cmd_id, *cmd_pid, *inst_pid).await;
     }
     if exact.len() > 1 {
-        eprintln!("Multiple commands match '{}':", target);
+        tracing::warn!("Multiple commands match '{}':", target);
         for (inst_pid, _, cmd_pid, _, full) in &exact {
-            eprintln!("  PID {} — {} (on instance {})", cmd_pid, full, inst_pid);
+            tracing::warn!("  PID {} — {} (on instance {})", cmd_pid, full, inst_pid);
         }
-        eprintln!("Use a PID to disambiguate.");
+        tracing::warn!("Use a PID to disambiguate.");
         return Ok(false);
     }
 
@@ -673,11 +671,11 @@ pub async fn handle_stop_command(_cli: &Cli, target: Option<&str>) -> Result<boo
         return stop_command_by_id(&client, &url, cmd_id, *cmd_pid, *inst_pid).await;
     }
     if prefix_full.len() > 1 {
-        eprintln!("Multiple commands match '{}':", target);
+        tracing::warn!("Multiple commands match '{}':", target);
         for (inst_pid, _, cmd_pid, _, full) in &prefix_full {
-            eprintln!("  PID {} — {} (on instance {})", cmd_pid, full, inst_pid);
+            tracing::warn!("  PID {} — {} (on instance {})", cmd_pid, full, inst_pid);
         }
-        eprintln!("Use a longer prefix or a PID to disambiguate.");
+        tracing::warn!("Use a longer prefix or a PID to disambiguate.");
         return Ok(false);
     }
 
@@ -693,11 +691,11 @@ pub async fn handle_stop_command(_cli: &Cli, target: Option<&str>) -> Result<boo
         return stop_command_by_id(&client, &url, cmd_id, *cmd_pid, *inst_pid).await;
     }
     if prefix_name.len() > 1 {
-        eprintln!("Multiple commands match '{}':", target);
+        tracing::warn!("Multiple commands match '{}':", target);
         for (inst_pid, _, cmd_pid, _, full) in &prefix_name {
-            eprintln!("  PID {} — {} (on instance {})", cmd_pid, full, inst_pid);
+            tracing::warn!("  PID {} — {} (on instance {})", cmd_pid, full, inst_pid);
         }
-        eprintln!("Use a longer prefix or a PID to disambiguate.");
+        tracing::warn!("Use a longer prefix or a PID to disambiguate.");
         return Ok(false);
     }
 
@@ -730,12 +728,12 @@ pub async fn stop_command_by_id(
                 let err_msg = body.get("error").and_then(|e| e.as_str())
                     .map(|s| s.to_string())
                     .unwrap_or_else(|| format!("HTTP {}", status));
-                eprintln!("Failed to stop command with PID {}: {}", cmd_pid, err_msg);
+                tracing::error!("Failed to stop command with PID {}: {}", cmd_pid, err_msg);
                 Ok(false)
             }
         }
         Err(e) => {
-            eprintln!("Failed to stop command with PID {}: {}", cmd_pid, e);
+            tracing::error!("Failed to stop command with PID {}: {}", cmd_pid, e);
             Ok(false)
         }
     }
@@ -772,12 +770,12 @@ pub async fn handle_stop_command_by_pid_on_instances(
                     let err_msg = body.get("error").and_then(|e| e.as_str())
                         .map(|s| s.to_string())
                         .unwrap_or_else(|| format!("HTTP {}", status));
-                    eprintln!("Failed to stop command with PID {}: {}", pid, err_msg);
+                    tracing::error!("Failed to stop command with PID {}: {}", pid, err_msg);
                     return Ok(false);
                 }
             }
             Err(e) => {
-                eprintln!("Failed to stop command with PID {}: {}", pid, e);
+                tracing::error!("Failed to stop command with PID {}: {}", pid, e);
                 return Ok(false);
             }
         }
@@ -996,20 +994,20 @@ pub fn resolve_stop_target(
             // No PID given — stop the only instance if exactly one is running
             match instances.len() {
                 0 => {
-                    eprintln!("No vrunner instances running.");
+                    tracing::error!("No vrunner instances running.");
                     std::process::exit(1);
                 }
                 1 => {
                     let p = instances[0].pid;
-                    eprintln!("Stopping only running instance (PID {})", p);
+                    tracing::info!("Stopping only running instance (PID {})", p);
                     p
                 }
                 _ => {
-                    eprintln!("Multiple vrunner instances running. Specify which one to stop:");
+                    tracing::warn!("Multiple vrunner instances running. Specify which one to stop:");
                     for inst in instances {
-                        eprintln!("  PID {} — port {}", inst.pid, inst.port);
+                        tracing::warn!("  PID {} — port {}", inst.pid, inst.port);
                     }
-                    eprintln!("Usage: vrunner stop <PID>");
+                    tracing::warn!("Usage: vrunner stop <PID>");
                     std::process::exit(1);
                 }
             }
