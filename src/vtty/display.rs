@@ -8,6 +8,7 @@ use std::io::{self, stdout, Write};
 
 use super::buffer::Buffer;
 use super::cell::Cell;
+use super::emulator::CursorStyle;
 
 /// VTTY default foreground: light grey.
 const DEFAULT_FG: [u8; 3] = [204, 204, 204];
@@ -27,6 +28,7 @@ const DEFAULT_CELL: Cell = Cell {
     reverse: false,
     invisible: false,
     strikethrough: false,
+    width: 1,
 };
 
 /// Renders a VTTY buffer to the local terminal using crossterm.
@@ -229,6 +231,23 @@ impl TerminalDisplay {
     /// Show the cursor (uses terminal default style).
     pub fn show_cursor() -> io::Result<()> {
         stdout().execute(cursor::Show)?;
+        Ok(())
+    }
+
+    /// Show cursor with the specified style.
+    /// `style` determines the shape (block/underline/bar) and blink state.
+    pub fn show_cursor_with_style(row: usize, col: usize, style: CursorStyle) -> io::Result<()> {
+        let mut stdout = stdout();
+        // DECSCUSR: set cursor style in the hosting terminal
+        let ps: u8 = match style {
+            CursorStyle::Block(blink) => if blink { 1 } else { 2 },
+            CursorStyle::Underline(blink) => if blink { 3 } else { 4 },
+            CursorStyle::Bar(blink) => if blink { 5 } else { 6 },
+        };
+        stdout.queue(Print(format!("\x1b[{} q", ps)))?;
+        stdout.queue(cursor::Show)?;
+        stdout.queue(MoveTo(col as u16, row as u16))?;
+        stdout.flush()?;
         Ok(())
     }
 }

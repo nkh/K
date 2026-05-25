@@ -292,9 +292,10 @@ pub async fn run_display_loop(
             if let Some(handle) = manager.get(id) {
                 let buf = handle.vtty_snapshot().await;
                 let (cur_row, cur_col) = handle.cursor_position().await;
+                let cur_style = handle.cursor_style().await;
                 drop(handle);
                 let _ = TerminalDisplay::render(&buf, tab_offset);
-                let _ = TerminalDisplay::show_cursor_at(cur_row + tab_offset as usize, cur_col);
+                let _ = TerminalDisplay::show_cursor_with_style(cur_row + tab_offset as usize, cur_col, cur_style);
             }
         } else {
             // No active command — in display_all mode show a waiting
