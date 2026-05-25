@@ -1229,6 +1229,53 @@ mod tests {
     // -- OSC title tests --
 
     #[test]
+    fn test_osc_0_set_title() {
+        let mut emu = VttyEmulator::new(5, 10, 100);
+        emu.feed_str("\x1b]0;My Title\x07");
+        assert_eq!(emu.title(), "My Title");
+    }
+
+    #[test]
+    fn test_osc_2_set_title() {
+        let mut emu = VttyEmulator::new(5, 10, 100);
+        emu.feed_str("\x1b]2;Window Title\x07");
+        assert_eq!(emu.title(), "Window Title");
+    }
+
+    #[test]
+    fn test_osc_1_ignored() {
+        let mut emu = VttyEmulator::new(5, 10, 100);
+        emu.feed_str("\x1b]0;Original\x07");
+        emu.feed_str("\x1b]1;Icon Name\x07");
+        assert_eq!(emu.title(), "Original");
+    }
+
+    #[test]
+    fn test_osc_title_with_semicolons() {
+        let mut emu = VttyEmulator::new(5, 10, 100);
+        emu.feed_str("\x1b]0;foo;bar;baz\x07");
+        assert_eq!(emu.title(), "foo;bar;baz");
+    }
+
+    #[test]
+    fn test_osc_title_st_terminated() {
+        let mut emu = VttyEmulator::new(5, 10, 100);
+        emu.feed_str("\x1b]0;ST Title\x1b\\");
+        assert_eq!(emu.title(), "ST Title");
+    }
+
+    #[test]
+    fn test_osc_title_cleared_on_reset() {
+        let mut emu = VttyEmulator::new(5, 10, 100);
+        emu.feed_str("\x1b]0;Title\x07");
+        assert_eq!(emu.title(), "Title");
+        emu.feed_str("\x1bc"); // full reset
+        assert_eq!(emu.title(), "");
+    }
+
+    // -- Bracketed paste tests --
+
+    #[test]
     fn test_osc4_set_color() {
         let mut emu = VttyEmulator::new(10, 10, 100);
         emu.feed_str("\x1b]4;1;rgb:ff/00/00\x07");
