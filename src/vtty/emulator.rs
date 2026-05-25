@@ -1229,6 +1229,61 @@ mod tests {
     // -- OSC title tests --
 
     #[test]
+    fn test_osc4_set_color() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed_str("\x1b]4;1;rgb:ff/00/00\x07");
+        assert_eq!(emu.palette().get(1), [255, 0, 0]);
+    }
+
+    #[test]
+    fn test_osc4_affects_sgr() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        // Redefine color 1 (normally red) to pure blue
+        emu.feed_str("\x1b]4;1;#0000ff\x07");
+        emu.feed_str("\x1b[31mX"); // SGR 31 should now use the custom blue
+        let buf = emu.buffer();
+        assert_eq!(buf.rows[0][0].fg, [0, 0, 255]);
+    }
+
+    #[test]
+    fn test_osc4_multiple_colors() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed_str("\x1b]4;0;rgb:ff/00/00;1;rgb:00/ff/00;2;#0000ff\x07");
+        assert_eq!(emu.palette().get(0), [255, 0, 0]);
+        assert_eq!(emu.palette().get(1), [0, 255, 0]);
+        assert_eq!(emu.palette().get(2), [0, 0, 255]);
+    }
+
+    #[test]
+    fn test_osc104_reset_color() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed_str("\x1b]4;1;#0000ff\x07");
+        assert_eq!(emu.palette().get(1), [0, 0, 255]);
+        emu.feed_str("\x1b]104;1\x07"); // Reset color 1
+        assert_eq!(emu.palette().get(1), [170, 0, 0]); // Back to default
+    }
+
+    #[test]
+    fn test_osc104_reset_all() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed_str("\x1b]4;0;#ffffff;1;#000000\x07");
+        emu.feed_str("\x1b]104\x07"); // Reset all
+        assert_eq!(emu.palette().get(0), [0, 0, 0]); // Back to default
+        assert_eq!(emu.palette().get(1), [170, 0, 0]); // Back to default
+    }
+
+    #[test]
+    fn test_palette_reset_on_full_reset() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed_str("\x1b]4;1;#0000ff\x07");
+        assert_eq!(emu.palette().get(1), [0, 0, 255]);
+        emu.feed_str("\x1bc");
+        assert_eq!(emu.palette().get(1), [170, 0, 0]); // Back to default
+    }
+
+    // -- Unicode wide character tests --
+
+    #[test]
     fn test_wide_char_basic() {
         let mut emu = VttyEmulator::new(5, 10, 100);
         emu.feed_str("A中B");
