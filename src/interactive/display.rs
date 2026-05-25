@@ -142,6 +142,12 @@ pub async fn run_display_loop(
     let mut esc_deadline: Option<tokio::time::Instant> = None;
     const ESC_TIMEOUT_MS: u64 = 50; // max ms to wait for complete escape sequence
 
+    // ── Visual bell state ──
+    // When BEL (0x07) is received from any command, we flash the terminal
+    // border briefly to provide visual feedback.  bell_until is the instant
+    // after which the flash should stop.
+    let mut bell_until: Option<tokio::time::Instant> = None;
+
     // Build the keybinding lookup table using the interactive module.
     // Accepts both human-readable names ("ctrl+right") and raw escapes.
     let bindings: Vec<Binding> = resolve_keybindings(keybindings);
@@ -498,10 +504,36 @@ pub async fn run_display_loop(
                 } else if showing_log {
                     render_log_overlay(&manager, &log_entries, log_scroll_offset, &mut stdout);
                 } else {
+                    // Check for bell events from any command (visual feedback)
+                    for entry in manager.list() {
+                        if let Some(handle) = manager.get(&entry.0) {
+                            let mut emu = handle.emulator.write().await;
+                            if emu.drain_bell() {
+                                bell_until = Some(tokio::time::Instant::now() + tokio::time::Duration::from_millis(150));
+                            }
+                        }
+                    }
                     if show_tabs {
                         render_tab_bar(&manager, &active_id);
                     }
                     render_vtty(&manager, &active_id, if show_tabs { 1 } else { 0 }, display_all).await;
+                    // Render visual bell flash overlay if active.
+                    // Uses reverse-video on the entire visible area for 150ms.
+                    if let Some(until) = bell_until {
+                        if tokio::time::Instant::now() < until {
+                            let (_, phys_rows) = crossterm::terminal::size().unwrap_or((80, 24));
+                            let offset = if show_tabs { 1u16 } else { 0 };
+                            let _ = write!(stdout, "\x1b[7m"); // reverse video on
+                            for r in offset..phys_rows {
+                                let _ = write!(stdout, "\x1b[{};1H", r + 1);
+                                let _ = write!(stdout, "\x1b[2K"); // clear line (visible due to reverse)
+                            }
+                            let _ = write!(stdout, "\x1b[0m"); // reset
+                            let _ = stdout.flush();
+                        } else {
+                            bell_until = None;
+                        }
+                    }
                 }
             }
 

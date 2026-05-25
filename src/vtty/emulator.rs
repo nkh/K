@@ -110,6 +110,9 @@ pub struct VttyEmulator {
     bracketed_paste: bool,
     /// Focus reporting mode (?1004).
     focus_reporting: bool,
+    /// Pending bell flag — set when BEL (0x07) is received.
+    /// Checked and cleared by drain_bell().
+    bell_pending: bool,
     /// Current cursor style (DECSCUSR).
     cursor_style: CursorStyle,
     /// Most recent DCS sequence data (e.g. kitty graphics protocol).
@@ -152,6 +155,7 @@ impl VttyEmulator {
             title: String::new(),
             bracketed_paste: false,
             focus_reporting: false,
+            bell_pending: false,
             cursor_style: CursorStyle::Block(true),
             dcs_buffer: String::new(),
             response_buf: Vec::new(),
@@ -298,7 +302,9 @@ impl VttyEmulator {
 
     fn process_control(&mut self, byte: u8) {
         match byte {
-            0x07 => {}
+            0x07 => {
+                self.bell_pending = true;
+            }
             0x08 if self.cursor_col > 0 => {
                 self.cursor_col -= 1;
                 self.wrap_pending = false;
@@ -771,6 +777,15 @@ impl VttyEmulator {
         match code {
             "0" | "2" => self.title = data.to_string(),
             "4" => { self.palette.apply_osc4(data); }
+            "777" => {
+                // OSC 777 — desktop notification.  Format: "777;title;body"
+                // Log it as a tracing event for the host to act on.
+                // The data is semicolon-separated: title;body
+                let parts: Vec<&str> = data.splitn(2, ';').collect();
+                let title = parts.first().copied().unwrap_or("");
+                let body = parts.get(1).copied().unwrap_or("");
+                tracing::debug!(title, body, "OSC 777 desktop notification");
+            }
             "104" => {
                 // OSC 104 — reset palette colors to defaults
                 // Format: "104;N" or "104;N;M;..." — reset specific entries
@@ -819,6 +834,7 @@ impl VttyEmulator {
         self.title.clear();
         self.bracketed_paste = false;
         self.focus_reporting = false;
+        self.bell_pending = false;
         self.cursor_style = CursorStyle::Block(true);
         self.dcs_buffer.clear();
         self.response_buf.clear();
@@ -974,6 +990,12 @@ impl VttyEmulator {
     /// Whether focus reporting is enabled (?1004).
     pub fn focus_reporting_enabled(&self) -> bool {
         self.focus_reporting
+    }
+
+    /// Check and clear the bell pending flag.
+    /// Returns true if BEL was received since the last check.
+    pub fn drain_bell(&mut self) -> bool {
+        std::mem::replace(&mut self.bell_pending, false)
     }
 
     /// Current cursor style set by DECSCUSR.
