@@ -50,7 +50,13 @@ impl TerminalDisplay {
     ///
     /// `row_offset` shifts all output down by the given number of rows,
     /// used to make room for a tab bar at the top of the terminal.
-    pub fn render(buffer: &Buffer, row_offset: u16) -> io::Result<()> {
+    ///
+    /// `scrollback_offset` shifts the viewport backward into the
+    /// scrollback buffer.  0 = normal (bottom of visible area), 1 = one
+    /// line up, etc.  When offset > 0, the top of the viewport shows
+    /// scrollback content and the bottom of the visible area may be
+    /// blanked.
+    pub fn render(buffer: &Buffer, row_offset: u16, scrollback_offset: usize) -> io::Result<()> {
         let mut stdout = stdout();
 
         // Determine the physical terminal size and clamp to it.
@@ -58,8 +64,15 @@ impl TerminalDisplay {
         let (phys_cols, phys_rows) = crossterm::terminal::size()
             .unwrap_or((buffer.width as u16, buffer.height as u16));
         let available_rows = phys_rows.saturating_sub(row_offset);
-        let render_rows = (buffer.rows.len() as u16).min(available_rows) as usize;
         let render_cols = (buffer.width as u16).min(phys_cols) as usize;
+
+        // Build the effective row list: scrollback + visible rows.
+        // When scrollback_offset > 0, the viewport is shifted up into
+        // the scrollback buffer.
+        let total_lines = buffer.total_lines(); // scrollback.len() + rows.len()
+        let max_offset = total_lines.saturating_sub(available_rows as usize);
+        let effective_offset = scrollback_offset.min(max_offset);
+        let viewport_start = total_lines.saturating_sub(effective_offset + available_rows as usize);
 
         // Track the last rendered style to avoid redundant SGR sequences.
         // `None` means "terminal default" (ESC[39m / ESC[49m).
@@ -72,11 +85,16 @@ impl TerminalDisplay {
         let mut last_reverse = false;
         let mut last_strikethrough = false;
 
-        for (row_idx, row) in buffer.rows.iter().enumerate().take(render_rows) {
+        for screen_row in 0..(available_rows as usize) {
+            let line_idx = viewport_start + screen_row;
+            let row: &[Cell] = match buffer.get_line(line_idx) {
+                Some(r) => r,
+                None => continue,
+            };
             // Move to the start of each row — critical in raw mode
             // where \n does NOT reset the column to 0.
             // Apply row_offset so VTTY content starts below the tab bar.
-            stdout.queue(MoveTo(0, row_idx as u16 + row_offset))?;
+            stdout.queue(MoveTo(0, screen_row as u16 + row_offset))?;
 
             // Clamp the visible portion to the physical terminal width.
             let visible_len = render_cols.min(row.len());
@@ -190,13 +208,8 @@ impl TerminalDisplay {
         }
 
         // Clear any remaining rows below the VTTY buffer if the
-        // terminal is taller than the VTTY.
-        if (render_rows as u16 + row_offset) < phys_rows {
-            for row in render_rows..(available_rows as usize) {
-                stdout.queue(MoveTo(0, row as u16 + row_offset))?;
-                stdout.queue(crossterm::terminal::Clear(ClearType::UntilNewLine))?;
-            }
-        }
+        // terminal is taller than the viewport.
+        // (With scrollback, we always render available_rows lines.)
 
         stdout.flush()?;
         Ok(())

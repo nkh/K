@@ -148,6 +148,11 @@ pub async fn run_display_loop(
     // after which the flash should stop.
     let mut bell_until: Option<tokio::time::Instant> = None;
 
+    // ── Scrollback navigation state ──
+    // Shift+Up/Down or Page Up/Down scroll the VTTY buffer backward into
+    // scrollback history.  Any other key or VTTY output resets to 0.
+    let mut scrollback_offset: usize = 0;
+
     // Build the keybinding lookup table using the interactive module.
     // Accepts both human-readable names ("ctrl+right") and raw escapes.
     let bindings: Vec<Binding> = resolve_keybindings(keybindings);
@@ -302,6 +307,7 @@ pub async fn run_display_loop(
         manager: &Arc<CommandManager>,
         active_id: &Option<String>,
         tab_offset: u16,
+        scrollback_offset: usize,
         display_all: bool,
     ) {
         use crate::vtty::display::TerminalDisplay;
@@ -316,8 +322,11 @@ pub async fn run_display_loop(
                 let (cur_row, cur_col) = handle.cursor_position().await;
                 let cur_style = handle.cursor_style().await;
                 drop(handle);
-                let _ = TerminalDisplay::render(&buf, tab_offset);
-                let _ = TerminalDisplay::show_cursor_with_style(cur_row + tab_offset as usize, cur_col, cur_style);
+                let _ = TerminalDisplay::render(&buf, tab_offset, scrollback_offset);
+                // Only show cursor when not scrolled back into history
+                if scrollback_offset == 0 {
+                    let _ = TerminalDisplay::show_cursor_with_style(cur_row + tab_offset as usize, cur_col, cur_style);
+                }
             }
         } else {
             // No active command — in display_all mode show a waiting
@@ -523,7 +532,7 @@ pub async fn run_display_loop(
                     if show_tabs {
                         render_tab_bar(&manager, &active_id);
                     }
-                    render_vtty(&manager, &active_id, if show_tabs { 1 } else { 0 }, display_all).await;
+                    render_vtty(&manager, &active_id, if show_tabs { 1 } else { 0 }, scrollback_offset, display_all).await;
                     // Render visual bell flash overlay if active.
                     // Uses reverse-video on the entire visible area for 150ms.
                     if let Some(until) = bell_until {
@@ -662,6 +671,7 @@ pub async fn run_display_loop(
                                                             Ok(id) => {
                                                                 manager.logger().log("spawn_terminal", &format!("id={} cmd={}", id, cmd_str));
                                                                 active_id = Some(id);
+                                                                scrollback_offset = 0;
                                                             }
                                                             Err(e) => {
                                                                 manager.logger().log("spawn_terminal_error", &format!("error={} cmd={}", e, cmd_str));
@@ -687,8 +697,9 @@ pub async fn run_display_loop(
                                                         };
                                                         let (new_id, new_name, _, new_pid, _) = &commands[new_idx];
                                                         active_id = Some(new_id.clone());
+                                                        scrollback_offset = 0;
                                                         manager.logger().log("switch", &format!("id={} name={} pid={}", new_id, new_name, new_pid));
-                                                        render_vtty(&manager, &active_id, if show_tabs { 1 } else { 0 }, display_all).await;
+                                                        render_vtty(&manager, &active_id, if show_tabs { 1 } else { 0 }, scrollback_offset, display_all).await;
                                                     }
                                                 }
                                                 ActionEffect::ToggleLog(show) => {
@@ -728,8 +739,33 @@ pub async fn run_display_loop(
                                             // Might still match with more bytes — keep buffering
                                             continue;
                                         } else {
-                                            // No match and no partial — forward all buffered bytes
-                                            // to the active command, then clear the buffer.
+                                            // No match and no partial — check for scroll keys
+                                            // before forwarding to the command.
+                                            let scroll_delta = match esc_buf.as_slice() {
+                                                // Page Up: ESC [ 5 ~ — scroll up by half a page
+                                                [0x1b, b'[', b'5', b'~'] => {
+                                                    let (_, rows) = crossterm::terminal::size().unwrap_or((80, 24));
+                                                    (rows as usize / 2) as isize
+                                                }
+                                                // Page Down: ESC [ 6 ~ — scroll down
+                                                [0x1b, b'[', b'6', b'~'] => {
+                                                    let (_, rows) = crossterm::terminal::size().unwrap_or((80, 24));
+                                                    -((rows as usize / 2) as isize)
+                                                }
+                                                // Shift+Up: ESC [ 1 ; 2 A — scroll up 1 line
+                                                [0x1b, b'[', b'1', b';', b'2', b'A'] => 1,
+                                                // Shift+Down: ESC [ 1 ; 2 B — scroll down 1 line
+                                                [0x1b, b'[', b'1', b';', b'2', b'B'] => -1,
+                                                _ => 0,
+                                            };
+                                            if scroll_delta != 0 {
+                                                scrollback_offset = scrollback_offset
+                                                    .saturating_add(scroll_delta as usize);
+                                                esc_buf.clear();
+                                                esc_deadline = None;
+                                                continue;
+                                            }
+                                            // Forward to the active command
                                             let target_id = active_id.clone()
                                                 .or_else(|| manager.list().first().map(|(id, _, _, _, _)| id.clone()));
                                             if let Some(ref tid) = target_id {
@@ -791,7 +827,7 @@ pub async fn run_display_loop(
                                                     let (new_id, new_name, _, new_pid, _) = &commands[new_idx];
                                                     active_id = Some(new_id.clone());
                                                     manager.logger().log("switch", &format!("id={} name={} pid={}", new_id, new_name, new_pid));
-                                                    render_vtty(&manager, &active_id, if show_tabs { 1 } else { 0 }, display_all).await;
+                                                    render_vtty(&manager, &active_id, if show_tabs { 1 } else { 0 }, scrollback_offset, display_all).await;
                                                 }
                                             }
                                             ActionEffect::ToggleLog(show) => {
