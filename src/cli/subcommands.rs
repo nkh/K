@@ -261,43 +261,8 @@ pub async fn handle_resize_command(_cli: &Cli, target: &str, rows: u16, cols: u1
         return handle_resize_by_pid(&client, &instances, pid, rows, cols).await;
     }
 
-    // Collect all commands from all instances (same logic as stop-command).
-    let mut all_commands: Vec<(u32, String, u32, String, String)> = Vec::new();
-    for info in &instances {
-        let url = instance_url(info, &None);
-        let resp = client
-            .get(format!("{}/api/commands", url))
-            .send()
-            .await;
-
-        if let Ok(resp) = resp {
-            if let Ok(json) = resp.json::<serde_json::Value>().await {
-                if let Some(cmds) = json["data"].as_array() {
-                    for cmd in cmds {
-                        let name = cmd.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                        let args = cmd.get("args").and_then(|v| v.as_array());
-                        let cmd_pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-
-                        let full = match args {
-                            Some(arr) => {
-                                let arg_strs: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
-                                if arg_strs.is_empty() {
-                                    name.clone()
-                                } else {
-                                    format!("{} {}", name, arg_strs.join(" "))
-                                }
-                            }
-                            None => name.clone(),
-                        };
-
-                        if let Some(id) = cmd.get("id").and_then(|v| v.as_str()) {
-                            all_commands.push((info.pid, id.to_string(), cmd_pid, name, full));
-                        }
-                    }
-                }
-            }
-        }
-    }
+    // Collect all commands from all instances.
+    let all_commands = collect_all_commands(&client, &instances).await;
 
     if all_commands.is_empty() {
         anyhow::bail!("No running commands found. Use `vrunner list` to see running commands.");
@@ -394,6 +359,55 @@ pub async fn handle_resize_by_pid(
         }
     }
     anyhow::bail!("No command found with PID {}. Use `vrunner list` to see running commands.", pid);
+}
+
+/// Build the full display string ("name arg1 arg2") from a command JSON value.
+fn build_full_display_string(cmd: &serde_json::Value) -> (String, String) {
+    let name = cmd.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let args = cmd.get("args").and_then(|v| v.as_array());
+    let full = match args {
+        Some(arr) => {
+            let arg_strs: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
+            if arg_strs.is_empty() {
+                name.clone()
+            } else {
+                format!("{} {}", name, arg_strs.join(" "))
+            }
+        }
+        None => name.clone(),
+    };
+    (name, full)
+}
+
+/// Collect all running commands from all instances.
+/// Returns Vec of (instance_pid, cmd_id, cmd_pid, name, full_display_string).
+pub async fn collect_all_commands(
+    client: &reqwest::Client,
+    instances: &[InstanceInfo],
+) -> Vec<(u32, String, u32, String, String)> {
+    let mut all_commands: Vec<(u32, String, u32, String, String)> = Vec::new();
+    for info in instances {
+        let url = instance_url(info, &None);
+        let resp = client
+            .get(format!("{}/api/commands", url))
+            .send()
+            .await;
+
+        if let Ok(resp) = resp {
+            if let Ok(json) = resp.json::<serde_json::Value>().await {
+                if let Some(cmds) = json["data"].as_array() {
+                    for cmd in cmds {
+                        let cmd_pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                        if let Some(id) = cmd.get("id").and_then(|v| v.as_str()) {
+                            let (name, full) = build_full_display_string(cmd);
+                            all_commands.push((info.pid, id.to_string(), cmd_pid, name, full));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    all_commands
 }
 
 /// Resolve a PID to a command UUID by querying the instance's command list.
@@ -589,32 +603,7 @@ pub async fn handle_stop_command(_cli: &Cli, target: Option<&str>) -> Result<boo
         Some(t) => t,
         None => {
             // Collect all commands from all instances
-            let mut all_commands: Vec<(u32, String, u32, String, String)> = Vec::new();
-            for info in &instances {
-                let url = instance_url(info, &None);
-                if let Ok(resp) = client.get(format!("{}/api/commands", url)).send().await {
-                    if let Ok(json) = resp.json::<serde_json::Value>().await {
-                        if let Some(cmds) = json["data"].as_array() {
-                            for cmd in cmds {
-                                let name = cmd.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                                let args = cmd.get("args").and_then(|v| v.as_array());
-                                let cmd_pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-                                let full = match args {
-                                    Some(arr) => {
-                                        let arg_strs: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
-                                        if arg_strs.is_empty() { name.clone() }
-                                        else { format!("{} {}", name, arg_strs.join(" ")) }
-                                    }
-                                    None => name.clone(),
-                                };
-                                if let Some(id) = cmd.get("id").and_then(|v| v.as_str()) {
-                                    all_commands.push((info.pid, id.to_string(), cmd_pid, name, full));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            let all_commands = collect_all_commands(&client, &instances).await;
 
             match all_commands.len() {
                 0 => {
@@ -646,43 +635,7 @@ pub async fn handle_stop_command(_cli: &Cli, target: Option<&str>) -> Result<boo
     }
 
     // Collect all commands from all instances.
-    // Each entry: (instance_pid, cmd_id, cmd_pid, name, full_display)
-    let mut all_commands: Vec<(u32, String, u32, String, String)> = Vec::new();
-    for info in &instances {
-        let url = instance_url(info, &None);
-        let resp = client
-            .get(format!("{}/api/commands", url))
-            .send()
-            .await;
-
-        if let Ok(resp) = resp {
-            if let Ok(json) = resp.json::<serde_json::Value>().await {
-                if let Some(cmds) = json["data"].as_array() {
-                    for cmd in cmds {
-                        let name = cmd.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                        let args = cmd.get("args").and_then(|v| v.as_array());
-                        let cmd_pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-
-                        let full = match args {
-                            Some(arr) => {
-                                let arg_strs: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
-                                if arg_strs.is_empty() {
-                                    name.clone()
-                                } else {
-                                    format!("{} {}", name, arg_strs.join(" "))
-                                }
-                            }
-                            None => name.clone(),
-                        };
-
-                        if let Some(id) = cmd.get("id").and_then(|v| v.as_str()) {
-                            all_commands.push((info.pid, id.to_string(), cmd_pid, name, full));
-                        }
-                    }
-                }
-            }
-        }
-    }
+    let all_commands = collect_all_commands(&client, &instances).await;
 
     if all_commands.is_empty() {
         return Ok(false);
@@ -1061,5 +1014,96 @@ pub fn resolve_stop_target(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Helper: the `build_full_display_string` function is private but tests
+    /// inside the same module can access it.
+    #[test]
+    fn test_build_full_display_string_with_args() {
+        let cmd = serde_json::json!({
+            "name": "vim",
+            "args": ["file.txt", "-p"],
+            "pid": 1234,
+            "id": "abc-123"
+        });
+        let (name, full) = build_full_display_string(&cmd);
+        assert_eq!(name, "vim");
+        assert_eq!(full, "vim file.txt -p");
+    }
+
+    #[test]
+    fn test_build_full_display_string_no_args() {
+        let cmd = serde_json::json!({
+            "name": "htop",
+            "args": [],
+            "pid": 5678,
+            "id": "def-456"
+        });
+        let (name, full) = build_full_display_string(&cmd);
+        assert_eq!(name, "htop");
+        assert_eq!(full, "htop");
+    }
+
+    #[test]
+    fn test_build_full_display_string_missing_name() {
+        let cmd = serde_json::json!({
+            "args": ["-la"],
+            "pid": 9999,
+            "id": "ghi-789"
+        });
+        let (name, full) = build_full_display_string(&cmd);
+        assert_eq!(name, "");
+        assert_eq!(full, " -la");
+    }
+
+    #[test]
+    fn test_build_full_display_string_missing_args() {
+        let cmd = serde_json::json!({
+            "name": "bash",
+            "pid": 1111,
+            "id": "jkl-012"
+        });
+        let (name, full) = build_full_display_string(&cmd);
+        assert_eq!(name, "bash");
+        assert_eq!(full, "bash");
+    }
+
+    #[test]
+    fn test_build_full_display_string_empty_object() {
+        let cmd = serde_json::json!({});
+        let (name, full) = build_full_display_string(&cmd);
+        assert_eq!(name, "");
+        assert_eq!(full, "");
+    }
+
+    #[test]
+    fn test_build_full_display_string_null_args() {
+        let cmd = serde_json::json!({
+            "name": "sleep",
+            "args": null,
+            "pid": 2222,
+            "id": "mno-345"
+        });
+        let (name, full) = build_full_display_string(&cmd);
+        assert_eq!(name, "sleep");
+        assert_eq!(full, "sleep");
+    }
+
+    #[test]
+    fn test_build_full_display_string_non_string_args_ignored() {
+        let cmd = serde_json::json!({
+            "name": "cmd",
+            "args": [42, true, "only-string"],
+            "pid": 3333,
+            "id": "pqr-678"
+        });
+        let (name, full) = build_full_display_string(&cmd);
+        assert_eq!(name, "cmd");
+        assert_eq!(full, "cmd only-string");
     }
 }
