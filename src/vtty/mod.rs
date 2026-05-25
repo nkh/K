@@ -1,9 +1,7 @@
 pub mod buffer;
-pub mod capabilities;
 pub mod cell;
 pub mod color;
 pub mod display;
 pub mod emulator;
-pub mod error;
 pub mod parser;
 pub mod renderer;
