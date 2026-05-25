@@ -14,7 +14,12 @@ pub struct Cell {
     pub reverse: bool,
     pub invisible: bool,
     pub strikethrough: bool,
+    /// Display width of the character: 0 (continuation of wide char), 1, or 2.
+    #[serde(default = "default_width")]
+    pub width: u8,
 }
+
+fn default_width() -> u8 { 1 }
 
 impl Default for Cell {
     fn default() -> Self {
@@ -29,6 +34,7 @@ impl Default for Cell {
             reverse: false,
             invisible: false,
             strikethrough: false,
+            width: 1,
         }
     }
 }
@@ -58,6 +64,11 @@ impl Cell {
         *self = Self::default();
     }
 
+    /// Whether this cell is a wide-character continuation (width=0).
+    pub fn is_wide_continuation(&self) -> bool {
+        self.width == 0
+    }
+
     pub fn is_empty(&self) -> bool {
         self.ch == ' '
             && self.fg == [204, 204, 204]
@@ -70,6 +81,14 @@ impl Cell {
             && !self.invisible
             && !self.strikethrough
     }
+}
+
+/// Compute the terminal display width of a Unicode character.
+/// Returns 2 for East Asian Wide / Fullwidth characters (CJK, emoji, etc.),
+/// 1 for all other characters.
+pub fn char_width(ch: char) -> u8 {
+    use unicode_width::UnicodeWidthChar;
+    ch.width().unwrap_or(1) as u8
 }
 
 #[cfg(test)]

@@ -41,6 +41,99 @@ pub fn rgb_to_color_256(r: u8, g: u8, b: u8) -> u8 {
     16 + r_idx * 36 + g_idx * 6 + b_idx
 }
 
+/// Mutable 256-color palette used by the VTTY emulator.
+/// Entries 0-15 are the standard ANSI colors, 16-231 the 6x6x6 color
+/// cube, and 232-255 the grayscale ramp.  Programs can remap any slot
+/// at runtime via OSC 4 / OSC 104.
+#[derive(Debug, Clone)]
+pub struct ColorPalette {
+    slots: [[u8; 3]; 256],
+}
+
+impl ColorPalette {
+    pub fn new() -> Self {
+        let mut slots = [[0u8; 3]; 256];
+        for i in 0..256 {
+            slots[i] = color_256_to_rgb(i as u8);
+        }
+        Self { slots }
+    }
+
+    /// Resolve a 256-color index to an RGB triplet.
+    pub fn resolve(&self, index: u8) -> [u8; 3] {
+        self.slots[index as usize]
+    }
+
+    /// Get a palette entry by index (alias for resolve).
+    pub fn get(&self, index: u8) -> [u8; 3] {
+        self.resolve(index)
+    }
+
+    /// Set a single palette slot.
+    pub fn set(&mut self, index: u8, rgb: [u8; 3]) {
+        self.slots[index as usize] = rgb;
+    }
+
+    /// Reset the entire palette to the standard 256-color defaults.
+    pub fn reset(&mut self) {
+        for i in 0..=255u8 {
+            self.slots[i as usize] = color_256_to_rgb(i);
+        }
+    }
+
+    /// Apply an OSC 4 payload, which may contain multiple color specifications.
+    /// Format: "N;spec" or "N;spec;M;spec;..." where spec is:
+    ///   - rgb:RR/GG/BB   (e.g. "rgb:ff/00/00")
+    ///   - #RRGGBB         (CSS hex)
+    pub fn apply_osc4(&mut self, data: &str) {
+        let mut parts = data.split(';').peekable();
+        while let Some(index_str) = parts.next() {
+            let spec = match parts.peek() {
+                Some(s) if !s.is_empty() => *s,
+                _ => break,
+            };
+            parts.next(); // consume the spec
+
+            if let Ok(index) = index_str.parse::<u8>() {
+                if let Some(rgb) = parse_osc4_color(spec) {
+                    self.set(index, rgb);
+                }
+            }
+        }
+    }
+}
+
+/// Parse an OSC 4 color specification into an RGB triplet.
+fn parse_osc4_color(spec: &str) -> Option<[u8; 3]> {
+    let spec = spec.trim();
+    if spec.starts_with("rgb:") {
+        // rgb:RR/GG/BB or rgb:rr/gg/bb
+        let hex = &spec[4..];
+        let parts: Vec<&str> = hex.split('/').collect();
+        if parts.len() == 3 {
+            let r = u8::from_str_radix(parts[0], 16).ok()?;
+            let g = u8::from_str_radix(parts[1], 16).ok()?;
+            let b = u8::from_str_radix(parts[2], 16).ok()?;
+            return Some([r, g, b]);
+        }
+    } else if spec.starts_with('#') {
+        // #RRGGBB
+        if spec.len() == 7 {
+            let r = u8::from_str_radix(&spec[1..3], 16).ok()?;
+            let g = u8::from_str_radix(&spec[3..5], 16).ok()?;
+            let b = u8::from_str_radix(&spec[5..7], 16).ok()?;
+            return Some([r, g, b]);
+        }
+    }
+    None
+}
+
+impl Default for ColorPalette {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
