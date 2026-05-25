@@ -203,4 +203,10 @@ impl CommandHandle {
             true // best-effort on non-Unix
         }
     }
+
+    /// Whether the child has enabled focus reporting (?1004h).
+    pub async fn focus_reporting_enabled(&self) -> bool {
+        let emu = self.emulator.read().await;
+        emu.focus_reporting_enabled()
+    }
 }

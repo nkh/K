@@ -72,6 +72,21 @@ pub async fn run_display_loop(
     let _ = stdout.execute(EnterAlternateScreen);
     let _ = stdout.execute(cursor::Hide);
 
+    // ── Send focus gained event to commands with ?1004h enabled ──
+    // When a command has enabled focus reporting, we send OSC 101 I
+    // to indicate the terminal gained focus (display mode entered).
+    async fn send_focus_event(manager: &Arc<CommandManager>, gained: bool) {
+        let event = if gained { b"\x1b]101;i\x1b\\".to_vec() } else { b"\x1b]101;o\x1b\\".to_vec() };
+        for entry in manager.list() {
+            if let Some(handle) = manager.get(&entry.0) {
+                if handle.focus_reporting_enabled().await {
+                    let _ = handle.send_bytes(event.clone()).await;
+                }
+            }
+        }
+    }
+    send_focus_event(&manager, true).await;
+
     // ── Keystroke reading via /dev/tty + AsyncFd ──
     //
     // We read from /dev/tty (not tokio::io::stdin()) because tokio's Stdin

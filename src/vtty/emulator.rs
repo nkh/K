@@ -108,6 +108,8 @@ pub struct VttyEmulator {
     title: String,
     /// Bracketed paste mode (?2004).
     bracketed_paste: bool,
+    /// Focus reporting mode (?1004).
+    focus_reporting: bool,
     /// Current cursor style (DECSCUSR).
     cursor_style: CursorStyle,
     /// Most recent DCS sequence data (e.g. kitty graphics protocol).
@@ -149,6 +151,7 @@ impl VttyEmulator {
             mouse_any_tracking: false,
             title: String::new(),
             bracketed_paste: false,
+            focus_reporting: false,
             cursor_style: CursorStyle::Block(true),
             dcs_buffer: String::new(),
             response_buf: Vec::new(),
@@ -675,6 +678,7 @@ impl VttyEmulator {
                 1002 => self.mouse_button_tracking = set,
                 1003 => self.mouse_any_tracking = set,
                 1006 => self.mouse_sgr = set,
+                1004 => self.focus_reporting = set,
                 2004 => self.bracketed_paste = set,
                 _ => {}
             }
@@ -814,6 +818,7 @@ impl VttyEmulator {
         self.mouse_any_tracking = false;
         self.title.clear();
         self.bracketed_paste = false;
+        self.focus_reporting = false;
         self.cursor_style = CursorStyle::Block(true);
         self.dcs_buffer.clear();
         self.response_buf.clear();
@@ -964,6 +969,11 @@ impl VttyEmulator {
     /// Whether bracketed paste mode is enabled (?2004).
     pub fn bracketed_paste_enabled(&self) -> bool {
         self.bracketed_paste
+    }
+
+    /// Whether focus reporting is enabled (?1004).
+    pub fn focus_reporting_enabled(&self) -> bool {
+        self.focus_reporting
     }
 
     /// Current cursor style set by DECSCUSR.
