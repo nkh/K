@@ -1,8 +1,8 @@
 use std::io::{Read as _, Write as _};
 use std::fmt::Write as FmtWrite;
 
-use super::error::{ProcessError, Result};
-use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
+use super::error::Result;
+use super::pty::{PtyBackend, PortablePtyBackend, PtySize};
 use tokio::sync::{mpsc, oneshot};
 use std::sync::Arc;
 
@@ -26,6 +26,10 @@ use super::handle::CommandHandle;
 pub struct ProcessSpawner {
     vtty_cfg: VttyConfig,
     rate_limit_cfg: RateLimitConfig,
+    /// The PTY backend used to open pseudo-terminals.
+    /// Defaults to [`PortablePtyBackend`] but can be swapped for testing
+    /// or to use a custom implementation (Unix native PTY, ConPTY, etc.).
+    pty_backend: Box<dyn PtyBackend>,
 }
 
 pub enum StdinMessage {
@@ -61,6 +65,23 @@ impl ProcessSpawner {
         Self {
             vtty_cfg: vtty_cfg.clone(),
             rate_limit_cfg: rate_limit_cfg.clone(),
+            pty_backend: Box::new(PortablePtyBackend::new()),
+        }
+    }
+
+    /// Create a spawner with a custom PTY backend.
+    ///
+    /// This allows injecting alternative PTY implementations for testing
+    /// or platform-specific backends (Unix native PTY, ConPTY, etc.).
+    pub fn with_backend(
+        vtty_cfg: &VttyConfig,
+        rate_limit_cfg: &RateLimitConfig,
+        backend: Box<dyn PtyBackend>,
+    ) -> Self {
+        Self {
+            vtty_cfg: vtty_cfg.clone(),
+            rate_limit_cfg: rate_limit_cfg.clone(),
+            pty_backend: backend,
         }
     }
 
@@ -82,37 +103,15 @@ impl ProcessSpawner {
         let rows = rows.unwrap_or(self.vtty_cfg.rows);
         let cols = cols.unwrap_or(self.vtty_cfg.cols);
 
-        let pty_system = native_pty_system();
-        let pair = pty_system.openpty(PtySize {
-            rows,
-            cols,
-            pixel_width: 0,
-            pixel_height: 0,
-        }).map_err(|e| ProcessError::Io(
-            std::io::Error::new(std::io::ErrorKind::Other, format!("openpty failed: {}", e))
-        ))?;
+        let pair = self.pty_backend.openpty(PtySize { rows, cols })?;
 
-        let mut cmd_builder = CommandBuilder::new(&cmd);
-        for arg in &args {
-            cmd_builder.arg(arg);
-        }
-
-        // Apply environment variables.
-        // portable_pty inherits the parent environment by default.
-        // We clear it and set only the explicitly provided vars so that
-        // per-command env isolation is controlled and predictable.
-        if !env_vars.is_empty() {
-            cmd_builder.env("TERM", &self.vtty_cfg.term);
-            for (key, value) in &env_vars {
-                cmd_builder.env(key, value);
-            }
-        } else {
-            // No explicit env vars — still ensure TERM is set correctly
-            cmd_builder.env("TERM", &self.vtty_cfg.term);
-        }
-
-        let mut child = pair.slave.spawn_command(cmd_builder)
-            .map_err(|_| ProcessError::SpawnFailed { cmd: _cmd_display })?;
+        // Spawn the child process via the PTY slave
+        let mut child = pair.slave.spawn_command(
+            &cmd,
+            &args,
+            &self.vtty_cfg.term,
+            &env_vars,
+        )?;
         let pid = child.process_id().unwrap_or(0);
 
         // Create VTTY emulator
@@ -147,24 +146,15 @@ impl ProcessSpawner {
         // (emulator writer) is slow, the blocking reader will naturally wait.
         let (pty_out_tx, mut pty_out_rx) = mpsc::channel::<PtyOutput>(64);
 
-        // Get PTY master reader and writer (both are synchronous I/O from portable-pty)
-        let reader = pair.master.try_clone_reader()
-            .map_err(|e| ProcessError::Io(
-                std::io::Error::new(std::io::ErrorKind::Other, format!("clone PTY reader: {}", e))
-            ))?;
-        let writer = pair.master.take_writer()
-            .map_err(|e| ProcessError::Io(
-                std::io::Error::new(std::io::ErrorKind::Other, format!("take PTY writer: {}", e))
-            ))?;
+        // Get PTY master reader and writer
+        let reader = pair.master.clone_reader()?;
+        let writer = pair.master.take_writer()?;
+
         // Store the PTY master handle for later resize (e.g. WINCH handling).
-        // All MasterPty methods take &self, so it remains valid after
-        // extracting reader/writer.
-        let pty_master: Arc<parking_lot::Mutex<Box<dyn MasterPty + Send>>> =
+        let pty_master: Arc<parking_lot::Mutex<Box<dyn crate::process::pty::PtyMaster + Send>>> =
             Arc::new(parking_lot::Mutex::new(pair.master));
 
         // Spawn PTY reader task in a blocking thread.
-        // portable-pty returns std::io::Read implementations, not async.
-        // We use blocking_send to bridge data to the async world via mpsc.
         //
         // When pty_raw_log is set, raw bytes from each read() call are
         // logged to the specified file in a human-readable escaped format
@@ -229,19 +219,12 @@ impl ProcessSpawner {
 
         // Spawn async PTY output consumer — feeds data into the emulator
         // and notifies all registered VttySinks, with rate limiting.
-        //
-        // The rate limiter throttles how often `notify_sinks` is called,
-        // preventing WebSocket client flood from high-output commands.
-        // When rate-limited, the latest buffer snapshot is held and flushed
-        // on a periodic timer, so clients always get the most recent state.
         let emu_writer = emulator.clone();
         let sink_output = vtty_output.clone();
         let mut rate_limiter = RateLimiter::from_config(self.rate_limit_cfg.max_updates_per_sec);
         let flush_interval = rate_limiter.interval();
         tokio::spawn(async move {
             // State for rate-limited buffering.
-            // When the rate limiter denies a notification, we store the
-            // latest buffer snapshot here and flush it on the next tick.
             let mut pending_snapshot: Option<Buffer> = None;
             // If rate limiting is disabled, use a simple loop (no timer overhead).
             if rate_limiter.is_disabled() {
@@ -256,7 +239,6 @@ impl ProcessSpawner {
                 // Rate-limited path: use tokio::select! to combine PTY
                 // output reception with a periodic flush timer.
                 let mut tick = tokio::time::interval(flush_interval);
-                // The first tick completes immediately, skip it.
                 tick.tick().await;
 
                 loop {
@@ -273,14 +255,10 @@ impl ProcessSpawner {
                                         sink_output.notify_sinks(&snapshot);
                                         pending_snapshot = None;
                                     } else {
-                                        // Buffer the latest snapshot — it will
-                                        // be flushed on the next timer tick.
                                         pending_snapshot = Some(snapshot);
                                     }
                                 }
                                 None => {
-                                    // PTY closed (channel dropped). Flush any
-                                    // pending snapshot before exiting.
                                     if let Some(snapshot) = pending_snapshot.take() {
                                         sink_output.notify_sinks(&snapshot);
                                     }
@@ -289,9 +267,6 @@ impl ProcessSpawner {
                             }
                         }
                         _ = tick.tick() => {
-                            // Periodic flush: send the latest buffered snapshot
-                            // (if any) so the client always sees the most
-                            // recent terminal state.
                             if let Some(snapshot) = pending_snapshot.take() {
                                 sink_output.notify_sinks(&snapshot);
                             }
@@ -299,16 +274,12 @@ impl ProcessSpawner {
                     }
                 }
             }
-            // PTY closed (child exited / EOF). Flush any trailing bytes
-            // that the parser may still be holding (e.g. incomplete UTF-8
-            // or a partially-received escape sequence).
+            // PTY closed — flush trailing bytes from parser
             emu_writer.write().await.finish();
-            // Notify sinks that the VTTY is closing.
             sink_output.close();
         });
 
         // Spawn stdin writer task in a blocking thread.
-        // Uses blocking_recv to bridge from the async mpsc channel to sync I/O.
         tokio::task::spawn_blocking(move || {
             let mut writer = writer;
             while let Some(msg) = stdin_rx.blocking_recv() {
@@ -323,39 +294,22 @@ impl ProcessSpawner {
         });
 
         // Spawn process waiter (blocking — child.wait() is sync)
-        //
-        // After the child exits, this task:
-        //   1. Runs on_exit/on_error handler if configured
-        //   2. Removes the command from the CommandManager's DashMap
-        //   3. Sends the exit status via the oneshot channel
-        //
-        // Removing the command from the DashMap is critical for the
-        // display loop to detect that the command has exited (via
-        // manager.get(id) returning None).
         let (exit_tx, exit_rx) = oneshot::channel::<ExitStatus>();
         let watch_id = command_id.to_string();
         let on_exit = exit_config.on_exit.clone();
         let on_error = exit_config.on_error.clone();
         let manager_cmds = manager.commands_arc();
-        // Buffered exit channel (capacity 1): unlike tokio::sync::Notify,
-        // this NEVER loses a notification.  If the child exits before the
-        // display loop starts awaiting, the message sits in the channel
-        // and the loop picks it up on the first changed() call.
-        //
-        // We use watch (not mpsc) because watch::Receiver is Clone —
-        // we can copy it from the DashMap without mutable access.
         let (child_exit_tx, child_exit_rx) = tokio::sync::watch::channel(false);
 
         tokio::task::spawn_blocking({
             let child_exit_tx = child_exit_tx.clone();
             move || {
-            let status = child.wait().ok().and_then(|s| Some(s.exit_code() as i32));
+            let status = child.wait().ok().flatten();
             let exit_status = ExitStatus {
                 code: status,
                 signal: None,
             };
 
-            // Log the exit
             tracing::info!(
                 id = %watch_id,
                 code = ?exit_status.code,
@@ -370,7 +324,6 @@ impl ProcessSpawner {
             };
 
             if let Some(ref on_cmd_str) = on_cmd {
-                // Parse command: split on whitespace
                 let parts: Vec<&str> = on_cmd_str.split_whitespace().collect();
                 if !parts.is_empty() {
                     let binary = parts[0];
@@ -382,10 +335,8 @@ impl ProcessSpawner {
                         args = ?cmd_args,
                         "Running exit handler"
                     );
-                    // Run the exit handler as a detached process (fire and forget)
                     match std::process::Command::new(binary).args(&cmd_args).spawn() {
                         Ok(mut child) => {
-                            // Don't wait for it — fire and forget
                             let _ = child.try_wait();
                         }
                         Err(e) => {
@@ -399,18 +350,10 @@ impl ProcessSpawner {
                 }
             }
 
-            // Signal the display/headless loop that the child exited.
-            // Unlike Notify, the watch channel stores this value so
-            // it is NEVER lost — even if the loop hasn't started yet.
             let _ = child_exit_tx.send(true);
-
-            // Remove the command from the manager's DashMap.
-            // This signals to the display loop (and diff watcher)
-            // that the command has exited.
             manager_cmds.remove(&watch_id);
             tracing::info!(id = %watch_id, "Command removed from manager after exit");
 
-            // Send exit status to anyone listening
             let _ = exit_tx.send(exit_status);
         }
         });
@@ -440,11 +383,6 @@ impl ProcessSpawner {
 /// All other bytes (control chars, ESC, high bytes) are represented as
 /// `\xHH` hex escapes.  Backslash itself is escaped as `\\` to avoid
 /// ambiguity in the log output.
-///
-/// This format is designed to be:
-/// - Human-readable: you can see the text content directly
-/// - Machine-parseable: the `\xHH` sequences are unambiguous
-/// - Replayable: the ansi-replay tool can decode it back to raw bytes
 fn escape_bytes(data: &[u8]) -> String {
     let mut out = String::with_capacity(data.len() * 2);
     for &b in data {

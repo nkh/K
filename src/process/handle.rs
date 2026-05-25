@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot, RwLock};
-use portable_pty::MasterPty;
+use crate::process::pty::PtyMaster;
 
 use super::error::{ProcessError, Result};
 
@@ -26,9 +26,9 @@ pub struct CommandHandle {
     /// Wall-clock time when this command was spawned.
     pub spawn_time: std::time::Instant,
     /// PTY master handle for resizing the child PTY (e.g. on SIGWINCH).
-    /// Wrapped in a Mutex because `MasterPty` is `Send` but not `Sync`,
-    /// which is required by `DashMap` (used in `CommandManager`).
-    pub pty_master: Arc<parking_lot::Mutex<Box<dyn MasterPty + Send>>>,
+    /// Wrapped in a Mutex because `PtyMaster` methods may not be thread-safe.
+    /// Uses the `PtyMaster` trait for backend independence.
+    pub pty_master: Arc<parking_lot::Mutex<Box<dyn PtyMaster + Send>>>,
     /// Output sink manager — notified after each emulator feed.
     /// Sinks receive push notifications when the VTTY buffer changes,
     /// replacing the need for polling-based change detection.
@@ -144,17 +144,9 @@ impl CommandHandle {
     ///   2. Resize the in-memory VTTY buffer to match
     pub async fn resize_pty(&self, rows: u16, cols: u16) -> Result<()> {
         // Resize the PTY master first — this sends SIGWINCH to the child.
-        // The Mutex lock is very short-lived (just an ioctl syscall).
         {
             let master = self.pty_master.lock();
-            master.resize(portable_pty::PtySize {
-                rows,
-                cols,
-                pixel_width: 0,
-                pixel_height: 0,
-            }).map_err(|e| ProcessError::Io(
-                std::io::Error::new(std::io::ErrorKind::Other, format!("PTY resize failed: {}", e))
-            ))?;
+            master.resize(rows, cols)?;
         }
 
         // Then resize the in-memory VTTY buffer
