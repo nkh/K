@@ -81,7 +81,7 @@ impl CommandManager {
         // Use per-command exit config if provided, otherwise fall back to defaults
         let exit_config = exit_config.unwrap_or_else(|| self.config.default_exit.exit.clone());
 
-        let spawner = ProcessSpawner::new(&self.config.vtty);
+        let spawner = ProcessSpawner::new(&self.config.vtty, &self.config.web.rate_limit);
         let pty_raw_log = self.config.command_log.pty_raw_log.as_deref();
         let mut handle = spawner.spawn(
             cmd,

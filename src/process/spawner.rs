@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use std::collections::HashMap;
 
-use crate::config::schema::{VttyConfig, HandleConfig, ExitConfig};
+use crate::config::schema::{VttyConfig, HandleConfig, ExitConfig, RateLimitConfig};
 use crate::handles::{
     file_sink::FileSink,
     null_sink::NullSink,
@@ -16,13 +16,16 @@ use crate::handles::{
     sink::Sink,
     vtty_sink::VttySink,
 };
+use crate::vtty::buffer::Buffer;
 use crate::vtty::emulator::VttyEmulator;
+use crate::vtty::rate_limiter::RateLimiter;
 use crate::vtty::sink::{VttyOutput, BroadcastVttySink};
 use crate::process::manager::CommandManager;
 use super::handle::CommandHandle;
 
 pub struct ProcessSpawner {
     vtty_cfg: VttyConfig,
+    rate_limit_cfg: RateLimitConfig,
 }
 
 pub enum StdinMessage {
@@ -54,9 +57,10 @@ impl ExitStatus {
 }
 
 impl ProcessSpawner {
-    pub fn new(vtty_cfg: &VttyConfig) -> Self {
+    pub fn new(vtty_cfg: &VttyConfig, rate_limit_cfg: &RateLimitConfig) -> Self {
         Self {
             vtty_cfg: vtty_cfg.clone(),
+            rate_limit_cfg: rate_limit_cfg.clone(),
         }
     }
 
@@ -224,18 +228,76 @@ impl ProcessSpawner {
         ]));
 
         // Spawn async PTY output consumer — feeds data into the emulator
-        // and notifies all registered VttySinks.
-        // This is the single async task that writes to the emulator, avoiding
-        // the previous pattern of spawning a new task per 4KB chunk.
+        // and notifies all registered VttySinks, with rate limiting.
+        //
+        // The rate limiter throttles how often `notify_sinks` is called,
+        // preventing WebSocket client flood from high-output commands.
+        // When rate-limited, the latest buffer snapshot is held and flushed
+        // on a periodic timer, so clients always get the most recent state.
         let emu_writer = emulator.clone();
         let sink_output = vtty_output.clone();
+        let mut rate_limiter = RateLimiter::from_config(self.rate_limit_cfg.max_updates_per_sec);
+        let flush_interval = rate_limiter.interval();
         tokio::spawn(async move {
-            while let Some(PtyOutput(data)) = pty_out_rx.recv().await {
-                let mut emu = emu_writer.write().await;
-                emu.feed(&data);
-                let snapshot = emu.snapshot();
-                drop(emu);
-                sink_output.notify_sinks(&snapshot);
+            // State for rate-limited buffering.
+            // When the rate limiter denies a notification, we store the
+            // latest buffer snapshot here and flush it on the next tick.
+            let mut pending_snapshot: Option<Buffer> = None;
+            // If rate limiting is disabled, use a simple loop (no timer overhead).
+            if rate_limiter.is_disabled() {
+                while let Some(PtyOutput(data)) = pty_out_rx.recv().await {
+                    let mut emu = emu_writer.write().await;
+                    emu.feed(&data);
+                    let snapshot = emu.snapshot();
+                    drop(emu);
+                    sink_output.notify_sinks(&snapshot);
+                }
+            } else {
+                // Rate-limited path: use tokio::select! to combine PTY
+                // output reception with a periodic flush timer.
+                let mut tick = tokio::time::interval(flush_interval);
+                // The first tick completes immediately, skip it.
+                tick.tick().await;
+
+                loop {
+                    tokio::select! {
+                        result = pty_out_rx.recv() => {
+                            match result {
+                                Some(PtyOutput(data)) => {
+                                    let mut emu = emu_writer.write().await;
+                                    emu.feed(&data);
+                                    let snapshot = emu.snapshot();
+                                    drop(emu);
+
+                                    if rate_limiter.allow() {
+                                        sink_output.notify_sinks(&snapshot);
+                                        pending_snapshot = None;
+                                    } else {
+                                        // Buffer the latest snapshot — it will
+                                        // be flushed on the next timer tick.
+                                        pending_snapshot = Some(snapshot);
+                                    }
+                                }
+                                None => {
+                                    // PTY closed (channel dropped). Flush any
+                                    // pending snapshot before exiting.
+                                    if let Some(snapshot) = pending_snapshot.take() {
+                                        sink_output.notify_sinks(&snapshot);
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                        _ = tick.tick() => {
+                            // Periodic flush: send the latest buffered snapshot
+                            // (if any) so the client always sees the most
+                            // recent terminal state.
+                            if let Some(snapshot) = pending_snapshot.take() {
+                                sink_output.notify_sinks(&snapshot);
+                            }
+                        }
+                    }
+                }
             }
             // PTY closed (child exited / EOF). Flush any trailing bytes
             // that the parser may still be holding (e.g. incomplete UTF-8

@@ -524,6 +524,8 @@ pub struct ProfilesConfig {
 ///   update_mode: push       # or "poll"
 ///   dirty_check_ms: 200     # server check interval (push mode)
 ///   default_poll_ms: 500    # client poll interval (poll mode)
+///   rate_limit:
+///     max_updates_per_sec: 30
 /// ```
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct WebConfig {
@@ -542,6 +544,21 @@ pub struct WebConfig {
     /// The user can override this via the web UI controls.
     /// Default: 500 ms.
     pub default_poll_ms: u64,
+    /// Rate limiting for VTTY update notifications sent to WebSocket clients.
+    ///
+    /// When a command produces very high output (e.g., `find /`, build logs),
+    /// the server can flood clients with buffer-change notifications.  This
+    /// configures a token-bucket rate limiter that throttles how often
+    /// notifications are sent per command.
+    ///
+    /// When the rate is exceeded, intermediate buffer snapshots are buffered
+    /// and the **latest** state is sent on the next allowed tick, ensuring
+    /// the client always receives the most recent terminal content.
+    ///
+    /// Set `max_updates_per_sec` to `0` to disable rate limiting entirely
+    /// (every buffer change triggers an immediate notification).
+    #[serde(default)]
+    pub rate_limit: RateLimitConfig,
 }
 
 impl Default for WebConfig {
@@ -550,6 +567,64 @@ impl Default for WebConfig {
             update_mode: "push".to_string(),
             dirty_check_ms: 200,
             default_poll_ms: 500,
+            rate_limit: RateLimitConfig::default(),
+        }
+    }
+}
+
+/// Rate limiting configuration for VTTY output notifications.
+///
+/// Uses a token-bucket algorithm to throttle how often buffer-change
+/// notifications are sent to WebSocket clients per command.
+///
+/// # YAML Example
+///
+/// ```yaml
+/// web:
+///   rate_limit:
+///     max_updates_per_sec: 30
+/// ```
+///
+/// # How it works
+///
+/// 1. Each command has its own rate limiter instance.
+/// 2. When the PTY produces output, the emulator processes it and a
+///    notification would normally be sent immediately.
+/// 3. The rate limiter checks if a token is available:
+///    - **Yes**: notification is sent immediately.
+///    - **No**: the latest buffer snapshot is held in a pending buffer.
+/// 4. A periodic flush timer (at the configured interval) sends any
+///    pending buffered update, ensuring the client always receives the
+///    most recent terminal state — just not every intermediate one.
+///
+/// The default of 30 updates/sec is sufficient for smooth terminal
+/// rendering while preventing flood from high-output commands.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RateLimitConfig {
+    /// Maximum number of VTTY update notifications per second per command.
+    ///
+    /// Controls the sustained rate at which buffer-change notifications are
+    /// sent to WebSocket clients.  A small burst (up to 3 notifications)
+    /// is allowed when the system has been idle.
+    ///
+    /// - `30` (default): good balance of smoothness and bandwidth savings.
+    ///   Terminal output at 30fps is indistinguishable from 60fps for
+    ///   most text content.
+    /// - `0`: disable rate limiting entirely (every change is sent
+    ///   immediately).  Useful for latency-sensitive commands.
+    /// - `10`: aggressive throttling for bandwidth-constrained environments.
+    #[serde(default = "default_max_updates_per_sec")]
+    pub max_updates_per_sec: u32,
+}
+
+fn default_max_updates_per_sec() -> u32 {
+    30
+}
+
+impl Default for RateLimitConfig {
+    fn default() -> Self {
+        Self {
+            max_updates_per_sec: default_max_updates_per_sec(),
         }
     }
 }
