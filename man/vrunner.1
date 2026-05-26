@@ -52,6 +52,12 @@ vrunner \- virtual terminal runner and process orchestrator with web control pla
 .B vrunner
 \fBresize\fR \fITARGET\fR [\fB\-\-rows\fR \fIN\fR] [\fB\-\-cols\fR \fIN\fR]
 
+.B vrunner
+\fBpurge\fR [\fITARGET\fR]
+
+.B vrunner
+\fBconfig-check\fR
+
 .SH DESCRIPTION
 \fBvrunner\fR executes commands inside virtual TTYs (VTTYs), exposes their output through a web API, and provides a built-in administrative interface for remote control. By default, it runs silently with no terminal output, making it ideal for background development servers, CI pipelines, or headless environments.
 
@@ -68,10 +74,6 @@ Path to a configuration file. Supported formats: YAML (\fB.yaml\fR/\fB.yml\fR), 
 .TP
 .BR \-h ", " \-\-help
 Print help information and exit.
-
-.TP
-.BR \-V ", " \-\-version
-Print version information and exit.
 
 .SS Server Options
 
@@ -206,6 +208,14 @@ Run \fICMD\fR when a child process exits with a non-zero exit code. Same parsing
 .TP
 .B \-\-exit\-timeout \fISECS\fR
 Maximum seconds to wait for a child process to exit after SIGINT before sending SIGKILL (default: \fB10\fR). Applies when \fBPOST /api/commands/:id/kill\fR is called or when the server shuts down. This two-phase approach prevents data corruption in processes that need to flush buffers or close connections.
+
+.TP
+.B \-\-retain\-on\-exit
+Keep the VTTY buffer in memory after the child process exits. The command remains visible in the tab bar and web UI with an "exited" status, allowing inspection of final output. The buffer can be manually purged via the API (DELETE /api/commands/:id) or the \fBpurge\fR subcommand.
+
+.TP
+.B \-\-log\-pty\-raw \fIFILE\fR
+Log raw PTY output from child processes to a file. Each line records one read() call with an elapsed-time stamp and escaped bytes (printable ASCII as-is, non-printable as \fB\\xHH\fR). The resulting log can be replayed step-by-step with \fBansi-replay\fR.
 
 .SS Interactive Options
 
@@ -378,14 +388,38 @@ vrunner list-commands
 .RE
 .RE
 
-.SS stop-command
-Stop a running command in a vrunner instance. Sends a kill request to the specified command.
+.SS config-check
+Validate configuration files without starting the server. Reports validation errors and warnings with field paths. Checks all config sources (global, local, explicit) and reports type mismatches, unknown fields, and deprecation warnings.
 
 .RS
 .PP
 .B Usage:
 .RS
-vrunner stop-command \fITARGET\fR
+vrunner config-check
+.RE
+.RE
+
+.SS purge
+Purge a retained (exited) command from the manager. Permanently discards the VTTY buffer and all associated state.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner purge [\fITARGET\fR]
+.RE
+.PP
+If no target is given and exactly one exited command exists, it is purged automatically. If the target is numeric, it is treated as a command ID (first 8 chars). Otherwise it is matched against command names.
+.RE
+
+.SS stop-command
+Stop a running command in a vrunner instance. If no target is given and exactly one command is running, it is stopped automatically. If the target is numeric, it is treated as a PID. Otherwise it is matched against command names (and optionally args).
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner stop-command [\fITARGET\fR]
 .RE
 .RE
 
@@ -842,4 +876,4 @@ Child command exited with a non-zero status (when running a command directly).
 .BR kill (1),
 .BR lsof (8)
 
-Full documentation: \fBdocs/usage.md\fR, \fBdocs/configuration.md\fR, \fBdocs/certificates.md\fR, \fBdocs/architecture.md\fR
+Full documentation: \fBMANUAL.md\fR, \fBdocs/configuration.md\fR, \fBdocs/certificates.md\fR, \fBdocs/architecture.md\fR
