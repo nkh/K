@@ -228,6 +228,12 @@ Get the VTTY output as rendered HTML with inline styles. This is the primary end
 used by the web UI to display terminal content. Each cell is a `<span>` with per-cell
 color and style attributes.
 
+**Query parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `scrollback_offset` | number | 0 | Number of lines to scroll back into the scrollback buffer |
+
 **Response:**
 
 ```json
@@ -239,7 +245,8 @@ color and style attributes.
     "cursor": { "row": 0, "col": 0 },
     "dimensions": { "rows": 24, "cols": 80 },
     "scrollback_lines": 0,
-    "alternate_screen": false
+    "alternate_screen": false,
+    "mouse_tracking": false
   }
 }
 ```
@@ -693,3 +700,57 @@ and runtime:
 The `GET /api/commands` response now includes per-command `alive` status and
 `runtime_secs` fields, and the `status` field reflects the actual process
 state (`"running"` or `"exited"`) instead of always returning `"running"`.
+
+---
+
+### Purge (Delete Retained Commands)
+
+#### `DELETE /api/commands/:id`
+
+Permanently remove a retained (exited) command from the manager. This discards the VTTY buffer, scrollback, and all associated state. Only commands that have exited and were spawned with `retain_on_exit: true` can be purged.
+
+**Response:**
+
+```json
+{ "status": "ok", "data": { "id": "...", "purged": true } }
+```
+
+Error (command not found or not retained):
+
+```json
+{ "status": "error", "data": null, "error": "Command not found or not retained" }
+```
+
+---
+
+### Mouse Events
+
+#### `POST /api/commands/:id/mouse`
+
+Forward a mouse event to a command's PTY. Used by the web UI to send mouse clicks, drags, and wheel events to the child process.
+
+**Request body:**
+
+```json
+{
+  "kind": "press",
+  "button": "left",
+  "row": 10,
+  "col": 20,
+  "modifiers": []
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `kind` | string | Yes | Event kind: `press`, `release`, `motion`, `wheel_up`, `wheel_down`, `drag` |
+| `button` | string | Yes | Button name: `left`, `right`, `middle`, `none` |
+| `row` | number | Yes | Row position (0-based) |
+| `col` | number | Yes | Column position (0-based) |
+| `modifiers` | string[] | No | Active modifier keys: `shift`, `ctrl`, `alt` |
+
+**Response:**
+
+```json
+{ "status": "ok", "data": { "id": "...", "kind": "press", "button": "left", "row": 10, "col": 20 } }
+```
