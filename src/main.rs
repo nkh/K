@@ -112,6 +112,9 @@ fn pre_runtime() -> Result<Option<Cli>> {
         Some(Commands::StopCommand { target: _ }) => {
             // stop-command is async (needs HTTP), fall through to async phase
         }
+        Some(Commands::Purge { target: _ }) => {
+            // purge is async (needs HTTP), fall through to async phase
+        }
         Some(Commands::Resize { .. }) => {
             // resize is async (needs HTTP), fall through to async phase
         }
@@ -192,6 +195,22 @@ async fn async_main(cli: Cli) -> Result<()> {
             match target {
                 Some(t) => tracing::error!("No matching command found for '{}'. Use `vrunner list` to see running commands.", t),
                 None => tracing::error!("No command to stop. Use `vrunner list` to see running commands."),
+            }
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
+
+    // Handle purge subcommand
+    if let Some(Commands::Purge { ref target }) = cli.command {
+        let purged = match target {
+            Some(t) => subcommands::handle_purge_command(&cli, Some(t.as_str())).await?,
+            None => subcommands::handle_purge_command(&cli, None).await?,
+        };
+        if !purged {
+            match target {
+                Some(t) => tracing::error!("No matching exited command found for '{}'. Use `vrunner list` to see commands.", t),
+                None => tracing::error!("No exited command to purge. Use `vrunner list` to see commands."),
             }
             std::process::exit(1);
         }

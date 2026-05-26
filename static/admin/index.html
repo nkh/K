@@ -1323,6 +1323,38 @@ async function killCommand(instUrl, cmdId) {
     } catch (e) { /* ignore */ }
 }
 
+async function purgeCommand(instUrl, cmdId, cmdName) {
+    if (!confirm(`Purge "${cmdName || cmdId}"?\nThis permanently discards the VTTY buffer and all associated state.`)) return;
+    try {
+        const res = await fetch(apiUrl(`/api/commands/${cmdId}`, { url: instUrl }), {
+            method: 'DELETE',
+            headers: authHeadersForInstance({ url: instUrl }),
+        });
+        const json = await res.json();
+        if (json.status === 'ok') {
+            if (state.selectedInstUrl === instUrl && state.selectedCmdId === cmdId) {
+                state.selectedInstUrl = null;
+                state.selectedCmdId = null;
+            }
+            // Clear the VTTY display
+            const panel = getSelectedPanel();
+            if (panel) {
+                const pre = panel.querySelector('.vtty-container pre');
+                if (pre) pre.innerHTML = '';
+                const nameEl = panel.querySelector('.cmd-fullname');
+                if (nameEl) nameEl.textContent = '';
+                const argsEl = panel.querySelector('.cmd-args');
+                if (argsEl) argsEl.textContent = '';
+            }
+            loadCommands();
+        } else {
+            alert('Purge failed: ' + (json.error || 'Unknown error'));
+        }
+    } catch (e) {
+        alert('Purge failed: ' + e.message);
+    }
+}
+
 async function killAllCommands() {
     if (!confirm('Kill all running commands?')) return;
     const promises = [];
@@ -2411,6 +2443,9 @@ function showCmdContextMenu(e, instUrl, cmdId, cmdName, isAlive) {
         items += `<div class="ctx-menu-sep"></div>`;
         items += `<div class="ctx-menu-item" onclick="togglePauseCmd('${instUrl}','${cmdId}');closeContextMenu();">Pause/Resume</div>`;
         items += `<div class="ctx-menu-item danger" onclick="killCommand('${instUrl}','${cmdId}');closeContextMenu();">Kill</div>`;
+    } else {
+        items += `<div class="ctx-menu-sep"></div>`;
+        items += `<div class="ctx-menu-item danger" onclick="purgeCommand('${instUrl}','${cmdId}','${escHtml(cmdName)}');closeContextMenu();">Purge</div>`;
     }
     menu.innerHTML = items;
 

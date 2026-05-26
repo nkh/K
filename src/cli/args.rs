@@ -241,6 +241,16 @@ pub enum Commands {
         /// If omitted and exactly one command is running, that command is stopped.
         target: Option<String>,
     },
+    /// Purge a retained (exited) command from the manager.
+    /// Permanently discards the VTTY buffer and all associated state.
+    /// If no target is given and exactly one exited command exists, it is purged automatically.
+    /// If the target is numeric, it is treated as a command ID (first 8 chars).
+    /// Otherwise it is matched against command names.
+    Purge {
+        /// Command ID or name of the retained (exited) command to purge.
+        /// If omitted and exactly one exited command exists, it is purged automatically.
+        target: Option<String>,
+    },
     /// Resize the VTTY of a running command.
     /// Resizes both the in-memory buffer and the child PTY (sends SIGWINCH).
     Resize {
