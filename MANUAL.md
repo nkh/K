@@ -1285,6 +1285,11 @@ curl -X POST http://127.0.0.1:9090/api/commands \
 
 All fields except `cmd` are optional. Returns the command ID.
 
+Response:
+```json
+{"status": "ok", "data": {"id": "550e8400-e29b-41d4-a716-446655440000"}, "error": null}
+```
+
 ### `POST /api/commands/:id/keys`
 
 Send keystrokes to a command.
@@ -1295,14 +1300,24 @@ curl -X POST http://127.0.0.1:9090/api/commands/$ID/keys \
   -d '{"keys": "q"}'
 ```
 
+Response:
+```json
+{"status": "ok", "data": {"id": "550e8400-...", "sent": 1}, "error": null}
+```
+
 ### `POST /api/commands/:id/kill`
 
-Kill a running command.
+Kill a running command. Sends SIGINT first, then SIGKILL after `exit_timeout` seconds.
 
 ```bash
 curl -X POST http://127.0.0.1:9090/api/commands/$ID/kill \
   -H "Content-Type: application/json" \
   -d '{"signal": "SIGTERM"}'
+```
+
+Response:
+```json
+{"status": "ok", "data": {"id": "550e8400-..."}, "error": null}
 ```
 
 ### `POST /api/commands/:id/freeze`
@@ -1313,6 +1328,11 @@ Freeze (SIGSTOP) a running command.
 curl -X POST http://127.0.0.1:9090/api/commands/$ID/freeze
 ```
 
+Response:
+```json
+{"status": "ok", "data": {"id": "550e8400-...", "frozen": true}, "error": null}
+```
+
 ### `POST /api/commands/:id/thaw`
 
 Thaw (SIGCONT) a frozen command.
@@ -1321,15 +1341,27 @@ Thaw (SIGCONT) a frozen command.
 curl -X POST http://127.0.0.1:9090/api/commands/$ID/thaw
 ```
 
+Response:
+```json
+{"status": "ok", "data": {"id": "550e8400-...", "frozen": false}, "error": null}
+```
+
 ### `POST /api/commands/:id/resize`
 
-Resize a command's virtual terminal.
+Resize a command's virtual terminal. The child process receives a `SIGWINCH` signal.
 
 ```bash
 curl -X POST http://127.0.0.1:9090/api/commands/$ID/resize \
   -H "Content-Type: application/json" \
   -d '{"rows": 50, "cols": 160}'
 ```
+
+Response:
+```json
+{"status": "ok", "data": {"id": "550e8400-...", "rows": 50, "cols": 160}, "error": null}
+```
+
+Valid ranges: rows 1-200, cols 1-500.
 
 ### `POST /api/commands/kill-pid/:pid`
 
@@ -1339,12 +1371,22 @@ Kill a command by its OS process ID.
 curl -X POST http://127.0.0.1:9090/api/commands/kill-pid/12345
 ```
 
+Response:
+```json
+{"status": "ok", "data": {"pid": 12345}, "error": null}
+```
+
 ### `DELETE /api/commands/:id`
 
-Purge a retained (exited) command from the manager.
+Purge a retained (exited) command from the manager. Permanently discards the VTTY buffer and all associated state.
 
 ```bash
 curl -X DELETE http://127.0.0.1:9090/api/commands/$ID
+```
+
+Response:
+```json
+{"status": "ok", "data": {"id": "550e8400-...", "purged": true}, "error": null}
 ```
 
 ## 4.3 VTTY Endpoints
@@ -1357,6 +1399,11 @@ Get full VTTY contents as raw ANSI text.
 curl http://127.0.0.1:9090/api/commands/$ID/vtty
 ```
 
+Response:
+```json
+{"status": "ok", "data": {"id": "550e8400-...", "content": "\x1b[1mhello\x1b[0m\r\nworld"}, "error": null}
+```
+
 ### `GET /api/commands/:id/vtty/html`
 
 Get VTTY contents as rendered HTML. Supports optional `scrollback_offset` query parameter for browsing history.
@@ -1366,7 +1413,24 @@ curl http://127.0.0.1:9090/api/commands/$ID/vtty/html
 curl "http://127.0.0.1:9090/api/commands/$ID/vtty/html?scrollback_offset=10"
 ```
 
-Response includes: `html`, `cursor`, `dimensions`, `scrollback_lines`, `mouse_tracking`, `alternate_screen`.
+Response:
+```json
+{
+  "status": "ok",
+  "data": {
+    "id": "550e8400-...",
+    "html": "<span style=\"...\">...</span>",
+    "cursor": {"row": 5, "col": 12},
+    "dimensions": {"rows": 24, "cols": 80},
+    "scrollback_lines": 142,
+    "scrollback_offset": 0,
+    "alternate_screen": false,
+    "mouse_tracking": false,
+    "mouse_sgr": false
+  },
+  "error": null
+}
+```
 
 ### `GET /api/commands/:id/vtty/buffer?screen=current|main|alt`
 
@@ -1417,19 +1481,34 @@ Get paginated plain-text VTTY content.
 curl "http://127.0.0.1:9090/api/commands/$ID/vtty/partial?offset=0&limit=50"
 ```
 
+Response:
+```json
+{"status": "ok", "data": {"id": "550e8400-...", "offset": 0, "limit": 50, "content": "line 1\nline 2\n..."}, "error": null}
+```
+
 ## 4.4 Mouse Endpoints
 
 ### `POST /api/commands/:id/mouse`
 
-Forward a mouse event to a command.
+Forward a mouse event to a command. The event is encoded as an SGR sequence and written to the child PTY.
 
 ```bash
 curl -X POST http://127.0.0.1:9090/api/commands/$ID/mouse \
   -H "Content-Type: application/json" \
-  -d '{"kind": "press", "button": "left", "row": 10, "col": 20, "modifiers": []}'
+  -d '{"event": "press", "button": 0, "x": 20, "y": 10}'
 ```
 
-Mouse event kinds: `press`, `release`, `motion`, `wheel_up`, `wheel_down`, `drag`.
+| Field | Type | Description |
+|-------|------|-------------|
+| `event` | string | Event type: `press`, `release`, `motion`, `wheel_up`, `wheel_down` |
+| `button` | number | Button code: 0=left, 1=middle, 2=right |
+| `x` | number | Column position (1-based) |
+| `y` | number | Row position (1-based) |
+
+Response:
+```json
+{"status": "ok", "data": {"id": "550e8400-...", "forwarded": true}, "error": null}
+```
 
 ## 4.5 Snapshot Endpoints
 
@@ -1443,12 +1522,41 @@ curl -X POST http://127.0.0.1:9090/api/commands/$ID/snapshot \
   -d '{"name": "after-build"}'
 ```
 
+Response:
+```json
+{
+  "status": "ok",
+  "data": {
+    "id": "550e8400-...",
+    "name": "after-build",
+    "command_name": "cargo",
+    "command_args": ["test"],
+    "pid": 12345,
+    "rows": 24,
+    "cols": 80,
+    "timestamp": 1700000000
+  },
+  "error": null
+}
+```
+
 ### `GET /api/commands/:id/snapshots`
 
 List all snapshots for a command.
 
 ```bash
 curl http://127.0.0.1:9090/api/commands/$ID/snapshots
+```
+
+Response:
+```json
+{
+  "status": "ok",
+  "data": [
+    {"name": "after-build", "command_name": "cargo", "pid": 12345, "rows": 24, "cols": 80, "timestamp": 1700000000}
+  ],
+  "error": null
+}
 ```
 
 ### `POST /api/commands/:id/diff`
@@ -1461,12 +1569,35 @@ curl -X POST http://127.0.0.1:9090/api/commands/$ID/diff \
   -d '{"name": "after-build"}'
 ```
 
+Response:
+```json
+{
+  "status": "ok",
+  "data": {
+    "id": "550e8400-...",
+    "name": "after-build",
+    "width": 80,
+    "height": 24,
+    "changed_count": 3,
+    "cells": [
+      {"row": 5, "col": 10, "ch": "A", "fg": [255,255,255], "bg": [0,0,0], "bold": false}
+    ]
+  },
+  "error": null
+}
+```
+
 ### `DELETE /api/commands/:id/snapshots/:name`
 
 Delete a stored snapshot.
 
 ```bash
 curl -X DELETE http://127.0.0.1:9090/api/commands/$ID/snapshots/after-build
+```
+
+Response:
+```json
+{"status": "ok", "data": {"id": "550e8400-...", "name": "after-build"}, "error": null}
 ```
 
 ## 4.6 Instance Endpoints
@@ -1479,12 +1610,32 @@ Get instance info (command count, certificate count, auth status).
 curl http://127.0.0.1:9090/api/info
 ```
 
+Response:
+```json
+{
+  "status": "ok",
+  "data": {
+    "command_count": 3,
+    "certificate_count": 1,
+    "certificates": ["frontend-team"],
+    "auth_enabled": true,
+    "web": {"update_mode": "push", "dirty_check_ms": 200, "default_poll_ms": 500}
+  },
+  "error": null
+}
+```
+
 ### `POST /api/shutdown`
 
-Gracefully shut down the vrunner instance.
+Gracefully shut down the vrunner instance. Drains connections for 2 seconds, then terminates.
 
 ```bash
 curl -X POST http://127.0.0.1:9090/api/shutdown
+```
+
+Response:
+```json
+{"status": "ok", "data": {"shutting_down": true}, "error": null}
 ```
 
 ### `GET /api/commands/:id/ws` (WebSocket)
@@ -1495,10 +1646,21 @@ Upgrade to a WebSocket for real-time VTTY streaming. See [Section 3.14](#314-web
 
 ### `GET /api/certificates`
 
-List all certificates in the pool.
+List all certificates in the pool. Only the first 16 characters of each derived token are returned.
 
 ```bash
 curl http://127.0.0.1:9090/api/certificates
+```
+
+Response:
+```json
+{
+  "status": "ok",
+  "data": [
+    {"name": "frontend-team", "cert_file": "...", "key_file": "...", "token_preview": "a1b2c3d4e5f6g7h8"}
+  ],
+  "error": null
+}
 ```
 
 ## 4.8 Log Endpoints
@@ -1509,6 +1671,17 @@ Get command log entries with optional search and pagination.
 
 ```bash
 curl "http://127.0.0.1:9090/api/log?search=spawn&offset=0&limit=50"
+```
+
+Response:
+```json
+{
+  "status": "ok",
+  "data": [
+    {"timestamp": "2024-01-15T10:30:00Z", "action": "spawn", "command": "cargo test", "pid": 12345}
+  ],
+  "error": null
+}
 ```
 
 ### `GET /api/ws/logs` (WebSocket)
