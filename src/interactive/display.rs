@@ -63,6 +63,15 @@ pub async fn run_display_loop(
     use crossterm::{cursor, ExecutableCommand};
     use std::io::Write;
 
+    // ── Mouse event types for clipboard selection (#15) ──
+    #[derive(Debug, Clone)]
+    enum MouseButton { Left, Middle, Right }
+    #[derive(Debug, Clone)]
+    enum MouseEventType { Press, Release }
+    #[derive(Debug, Clone)]
+    struct MouseEvent { button: MouseButton, event_type: MouseEventType, x: u16, y: u16 }
+    // ── End mouse event types ──
+
     // Set up the alternate screen and raw mode.
     let mut stdout = std::io::stdout();
     if let Err(e) = terminal::enable_raw_mode() {
@@ -178,6 +187,18 @@ pub async fn run_display_loop(
     let mut split_mode = false;
     let mut split_right_id: Option<String> = None;
     // ── End split-pane state ──
+
+    // ── Mouse selection / clipboard state (#15) ──
+    // Enable mouse press/release/motion events for text selection.
+    // On release, the selected text is copied to the clipboard via
+    // the OSC 52 clipboard escape sequence (works in most modern terminals).
+    let mut mouse_selection_start: Option<(u16, u16)> = None; // (row, col)
+    let mut mouse_selection_end: Option<(u16, u16)> = None;
+    let mut mouse_selecting = false;
+    // Enable mouse tracking for selection (only button press/release/motion)
+    let _ = write!(stdout, "\x1b[?1002h"); // enable button-event mouse tracking
+    let _ = stdout.flush();
+    // ── End mouse selection state ──
 
     // Set up SIGWINCH handler for terminal resize.
     // When the user resizes their terminal emulator, the kernel delivers
@@ -697,6 +718,164 @@ pub async fn run_display_loop(
         sgr
     }
 
+    /// Try to parse a mouse event from the escape buffer.
+    /// Returns Some(MouseEvent) if the buffer contains a complete mouse sequence,
+    /// None otherwise.  Supports both legacy (`ESC [ M Cb Cr Cc`) and
+    /// SGR (`ESC [ < Cb ; Cx ; Cy [Mm]`) encodings.
+    fn try_parse_mouse_event(buf: &[u8]) -> Option<MouseEvent> {
+        // SGR encoding: ESC [ < Cb ; Cx ; Cy M (press/drag) or m (release)
+        if buf.len() >= 8 && buf.starts_with(b"\x1b[<") {
+            let last = *buf.last()?;
+            if last != b'M' && last != b'm' { return None; }
+            let is_release = last == b'm';
+            let inner = &buf[3..buf.len()-1];
+            let parts: Vec<&[u8]> = inner.splitn(3, |&b| b == b';').collect();
+            if parts.len() != 3 { return None; }
+            let cb: u8 = std::str::from_utf8(parts[0]).ok()?.parse().ok()?;
+            let cx: u16 = std::str::from_utf8(parts[1]).ok()?.parse().ok()?;
+            let cy: u16 = std::str::from_utf8(parts[2]).ok()?.parse().ok()?;
+            let _is_motion = (cb & 0x20) != 0;
+            let button = match cb & 3 {
+                0 => MouseButton::Left,
+                1 => MouseButton::Middle,
+                2 => MouseButton::Right,
+                _ => MouseButton::Left,
+            };
+            let event_type = if is_release { MouseEventType::Release } else { MouseEventType::Press };
+            return Some(MouseEvent { button, event_type, x: cx, y: cy });
+        }
+        // Legacy encoding: ESC [ M Cb Cx+32 Cy+32
+        if buf.len() >= 6 && buf.starts_with(b"\x1b[M") {
+            let cb = buf[3];
+            let cx = (buf[4].saturating_sub(32)) as u16;
+            let cy = (buf[5].saturating_sub(32)) as u16;
+            let _is_motion = (cb & 0x20) != 0;
+            let is_release = (cb & 0x40) != 0 || (cb & 0x03) == 0x03;
+            let button = match cb & 3 {
+                0 => MouseButton::Left,
+                1 => MouseButton::Middle,
+                2 => MouseButton::Right,
+                _ => MouseButton::Left,
+            };
+            let event_type = if is_release { MouseEventType::Release } else { MouseEventType::Press };
+            return Some(MouseEvent { button, event_type, x: cx, y: cy });
+        }
+        None
+    }
+
+    /// Render a visual selection highlight over the VTTY display.
+    /// Draws a reverse-video rectangle from start to end coordinates.
+    fn render_selection_highlight(
+        start: (u16, u16),
+        end: (u16, u16),
+        tab_offset: u16,
+    ) {
+        use std::io::Write;
+        let mut stdout = std::io::stdout();
+        let (min_row, max_row) = if start.0 <= end.0 { (start.0, end.0) } else { (end.0, start.0) };
+        let (min_col, max_col) = if start.1 <= end.1 { (start.1, end.1) } else { (end.1, start.1) };
+        for row in min_row..=max_row {
+            let screen_row = row + tab_offset;
+            let col_start = if row == min_row { min_col } else { 0 };
+            let col_end = if row == max_row { max_col } else { u16::MAX };
+            let _ = write!(stdout, "\x1b[{};{}H", screen_row + 1, col_start + 1);
+            let _ = write!(stdout, "\x1b[7m"); // reverse video
+            let _ = write!(stdout, "\x1b[{};{}H", screen_row + 1, col_start + 1);
+            // We can't know the exact cell content here, so we mark positions
+            // The visual effect is provided by the reverse video styling
+            if col_end == u16::MAX {
+                let _ = write!(stdout, "\x1b[0K"); // clear to end of line (shows reverse bg)
+            } else {
+                let len = (col_end.saturating_sub(col_start) + 1) as usize;
+                let _ = write!(stdout, "{}", " ".repeat(len));
+            }
+            let _ = write!(stdout, "\x1b[0m"); // reset
+        }
+        let _ = stdout.flush();
+    }
+
+    /// Extract text from the VTTY buffer for the selected region and copy to clipboard.
+    /// Uses OSC 52 escape sequence to set the clipboard (works in xterm, kitty, etc.).
+    fn copy_selection_to_clipboard(
+        manager: &Arc<CommandManager>,
+        active_id: &Option<String>,
+        start: (u16, u16),
+        end: (u16, u16),
+        _tab_offset: u16,
+    ) {
+        use std::io::Write;
+        let commands = manager.list();
+        let target_id = active_id.as_ref()
+            .or_else(|| commands.first().map(|(id, _, _, _, _)| id));
+
+        if let Some(ref id) = target_id {
+            if let Some(handle) = manager.get(id) {
+                let buf = handle.vtty_snapshot_blocking();
+                let (min_row, max_row) = if start.0 <= end.0 { (start.0, end.0) } else { (end.0, start.0) };
+                let (min_col, max_col) = if start.1 <= end.1 { (start.1, end.1) } else { (end.1, start.1) };
+                let total_lines = buf.total_lines();
+                let viewport_start = total_lines.saturating_sub(buf.height);
+
+                let mut selected_text = String::new();
+                for row in min_row..=max_row {
+                    let line_idx = viewport_start.saturating_add(row as usize);
+                    if let Some(line) = buf.get_line(line_idx) {
+                        let col_start = if row == min_row { min_col as usize } else { 0 };
+                        let col_end = if row == max_row { max_col as usize } else { line.len() };
+                        for cell in line.iter().skip(col_start).take(col_end.saturating_sub(col_start)) {
+                            if cell.width > 0 {
+                                selected_text.push(cell.ch);
+                            }
+                        }
+                        if row < max_row {
+                            selected_text.push('\n');
+                        }
+                    }
+                }
+
+                if !selected_text.is_empty() {
+                    // Use OSC 52 to copy to clipboard
+                    // Format: ESC ] 52 ; c ; <base64> BEL
+                    let encoded = base64_encode(&selected_text);
+                    let mut stdout = std::io::stdout();
+                    let _ = write!(stdout, "\x1b]52;c;{}\x07", encoded);
+                    let _ = stdout.flush();
+                    tracing::debug!(len = selected_text.len(), "Copied selection to clipboard via OSC 52");
+                }
+            }
+        }
+    }
+
+    /// Simple base64 encoder for clipboard content (avoids adding a dependency).
+    fn base64_encode(input: &str) -> String {
+        const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let bytes = input.as_bytes();
+        let mut result = String::new();
+        let mut i = 0;
+        while i + 3 <= bytes.len() {
+            let n = (bytes[i] as u32) << 16 | (bytes[i+1] as u32) << 8 | (bytes[i+2] as u32);
+            result.push(CHARS[((n >> 18) & 63) as usize] as char);
+            result.push(CHARS[((n >> 12) & 63) as usize] as char);
+            result.push(CHARS[((n >> 6) & 63) as usize] as char);
+            result.push(CHARS[(n & 63) as usize] as char);
+            i += 3;
+        }
+        if i + 2 <= bytes.len() {
+            let n = (bytes[i] as u32) << 16 | (bytes[i+1] as u32) << 8;
+            result.push(CHARS[((n >> 18) & 63) as usize] as char);
+            result.push(CHARS[((n >> 12) & 63) as usize] as char);
+            result.push('=');
+            result.push('=');
+        } else if i < bytes.len() {
+            let n = (bytes[i] as u32) << 16;
+            result.push(CHARS[((n >> 18) & 63) as usize] as char);
+            result.push('=');
+            result.push('=');
+            result.push('=');
+        }
+        result
+    }
+
     /// Render a status bar at the bottom of the terminal showing info
     /// about the active command (name, PID, uptime, terminal size).
     fn render_status_bar(
@@ -908,6 +1087,12 @@ pub async fn run_display_loop(
                             bell_until = None;
                         }
                     }
+                    // Render selection highlight (#15)
+                    if mouse_selecting {
+                        if let (Some(start), Some(end)) = (mouse_selection_start, mouse_selection_end) {
+                            render_selection_highlight(start, end, if show_tabs { 1 } else { 0 });
+                        }
+                    }
                 }
             }
 
@@ -1088,6 +1273,41 @@ pub async fn run_display_loop(
 
                                     if !esc_buf.is_empty() {
                                         esc_buf.push(b);
+                                        // ── Check for mouse events first (#15) ──
+                                        if let Some(me) = try_parse_mouse_event(&esc_buf) {
+                                            esc_buf.clear();
+                                            esc_deadline = None;
+                                            match me.button {
+                                                MouseButton::Left => {
+                                                    match me.event_type {
+                                                        MouseEventType::Press => {
+                                                            let tab_off = if show_tabs { 1u16 } else { 0 };
+                                                            if mouse_selecting {
+                                                                // Drag: extend selection
+                                                                mouse_selection_end = Some((me.y.saturating_sub(tab_off), me.x));
+                                                            } else if me.y >= tab_off && me.y < crossterm::terminal::size().unwrap_or((80, 24)).1.saturating_sub(1) {
+                                                                mouse_selection_start = Some((me.y.saturating_sub(tab_off), me.x));
+                                                                mouse_selection_end = Some((me.y.saturating_sub(tab_off), me.x));
+                                                                mouse_selecting = true;
+                                                            }
+                                                        }
+                                                        MouseEventType::Release => {
+                                                            if mouse_selecting {
+                                                                mouse_selecting = false;
+                                                                if let (Some(start), Some(end)) = (mouse_selection_start, mouse_selection_end) {
+                                                                    let tab_off = if show_tabs { 1u16 } else { 0 };
+                                                                    copy_selection_to_clipboard(&manager, &active_id, start, end, tab_off);
+                                                                }
+                                                                mouse_selection_start = None;
+                                                                mouse_selection_end = None;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                _ => {}
+                                            }
+                                            continue;
+                                        }
                                         // Check if current buffer matches any keybinding
                                         let (action, partial) = check_bindings(&esc_buf, &bindings);
                                         if let Some(act) = action {
@@ -1337,6 +1557,9 @@ pub async fn run_display_loop(
 
     // Restore the terminal before returning.
     // Flush to ensure all queued crossterm commands are applied.
+    let _ = stdout.flush();
+    // Disable mouse tracking (#15)
+    let _ = write!(stdout, "\x1b[?1002l");
     let _ = stdout.flush();
     let _ = stdout.execute(cursor::Show);
     let _ = stdout.execute(LeaveAlternateScreen);
