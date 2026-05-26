@@ -412,8 +412,26 @@ impl ProcessSpawner {
             }
 
             let _ = child_exit_tx.send(true);
-            manager_cmds.remove(&watch_id);
-            tracing::info!(id = %watch_id, "Command removed from manager after exit");
+
+            // Store exit metadata in the handle (if still in the manager)
+            if let Some(handle) = manager_cmds.get(&watch_id) {
+                let code = exit_status.code;
+                let now = std::time::Instant::now();
+                *handle.exit_code.lock().unwrap() = code;
+                *handle.exit_time.lock().unwrap() = Some(now);
+                drop(handle); // release DashMap guard
+            }
+
+            // Remove from manager unless retain_on_exit is set
+            let retain = manager_cmds.get(&watch_id)
+                .map(|h| h.exit_config.retain_on_exit)
+                .unwrap_or(false);
+            if retain {
+                tracing::info!(id = %watch_id, "Command retained after exit (retain_on_exit)");
+            } else {
+                manager_cmds.remove(&watch_id);
+                tracing::info!(id = %watch_id, "Command removed from manager after exit");
+            }
 
             let _ = exit_tx.send(exit_status);
         }
@@ -434,6 +452,8 @@ impl ProcessSpawner {
             pty_master,
             vtty_output,
             exit_rx: child_exit_rx,
+            exit_code: std::sync::Mutex::new(None),
+            exit_time: std::sync::Mutex::new(None),
         })
     }
 }

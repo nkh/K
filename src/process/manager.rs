@@ -446,6 +446,21 @@ impl CommandManager {
         }
     }
 
+    /// Remove a retained (exited) command from the manager.
+    /// This permanently discards the VTTY buffer and all associated state.
+    /// Use this to clean up commands that were kept alive via retain_on_exit.
+    pub fn purge(&self, id: &CommandId) -> Result<()> {
+        self.logger.log("purge", &format!("id={}", id));
+        if self.commands.remove(id).is_some() {
+            self.last_generation.remove(id);
+            self.snapshots.retain(|k, _| k.0 != *id);
+            tracing::info!(id = %id, "Purged retained command from manager");
+            Ok(())
+        } else {
+            Err(ProcessError::CommandNotFound(id.to_string()))
+        }
+    }
+
     /// Store a named snapshot of a command's current VTTY buffer.
     pub fn store_snapshot(&self, id: &CommandId, name: &str) -> Result<SnapshotMeta> {
         let entry = self.commands.get(id).ok_or_else(|| ProcessError::CommandNotFound(id.to_string()))?;

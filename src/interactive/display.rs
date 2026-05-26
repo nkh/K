@@ -64,10 +64,10 @@ pub async fn run_display_loop(
     use std::io::Write;
 
     // ── Mouse event types for clipboard selection (#15) ──
-    #[derive(Debug, Clone)]
-    enum MouseButton { Left, Middle, Right }
-    #[derive(Debug, Clone)]
-    enum MouseEventType { Press, Release }
+    #[derive(Debug, Clone, PartialEq)]
+    enum MouseButton { Left, Middle, Right, WheelUp, WheelDown }
+    #[derive(Debug, Clone, PartialEq)]
+    enum MouseEventType { Press, Release, #[allow(dead_code)] Motion }
     #[derive(Debug, Clone)]
     struct MouseEvent { button: MouseButton, event_type: MouseEventType, x: u16, y: u16 }
     // ── End mouse event types ──
@@ -195,10 +195,24 @@ pub async fn run_display_loop(
     let mut mouse_selection_start: Option<(u16, u16)> = None; // (row, col)
     let mut mouse_selection_end: Option<(u16, u16)> = None;
     let mut mouse_selecting = false;
-    // Enable mouse tracking for selection (only button press/release/motion)
-    let _ = write!(stdout, "\x1b[?1002h"); // enable button-event mouse tracking
+    // Enable mouse tracking for selection (any-event tracking for wheel too)
+    let _ = write!(stdout, "\x1b[?1003h"); // enable any-event mouse tracking (includes wheel)
     let _ = stdout.flush();
     // ── End mouse selection state ──
+
+    // ── Tab position tracking (for mouse hit-testing) ──
+    // Stores (id, start_col, end_col) for each visible tab.
+    let mut tab_positions: Vec<(String, u16, u16)> = Vec::new();
+    // ── End tab position tracking ──
+
+    // ── Context menu state (right-click on tabs) ──
+    let mut ctx_menu_visible = false;
+    let mut ctx_menu_x: u16 = 0;
+    let mut ctx_menu_y: u16 = 0;
+    let mut ctx_menu_items: Vec<(&'static str, &'static str)> = Vec::new(); // (label, action_id)
+    let mut ctx_menu_selected: usize = 0;
+    let mut ctx_menu_target_id: Option<String> = None;
+    // ── End context menu state ──
 
     // Set up SIGWINCH handler for terminal resize.
     // When the user resizes their terminal emulator, the kernel delivers
@@ -384,10 +398,12 @@ pub async fn run_display_loop(
 
     /// Render a tab bar at the top of the terminal listing all running commands.
     /// The active command is highlighted with reverse video.
+    /// Returns a vector of (id, start_col, end_col) for mouse hit-testing.
+    /// Exited commands (retain_on_exit) are shown with a dim style and [exit N] suffix.
     fn render_tab_bar(
         manager: &CommandManager,
         active_id: &Option<String>,
-    ) {
+    ) -> Vec<(String, u16, u16)> {
         use crossterm::{
             style::{self, Attribute, Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
             cursor::MoveTo,
@@ -408,29 +424,49 @@ pub async fn run_display_loop(
             stdout.queue(Print(" (no commands)")).ok();
             stdout.queue(ResetColor).ok();
             stdout.flush().ok();
-            return;
+            return Vec::new();
         }
 
         let mut col: u16 = 1;
+        let mut positions: Vec<(String, u16, u16)> = Vec::new();
         for (id, name, _args, _pid, _cert) in &commands {
             let is_active = active_id.as_ref().map_or(false, |a| a == id);
+            // Check if the command has exited (retain_on_exit)
+            let is_exited = manager.get(id).map(|h| !h.is_alive()).unwrap_or(false);
+            let exit_code_str = {
+                let ec_opt: Option<i32> = manager.get(id).and_then(|h| {
+                    let guard = h.exit_code.lock().ok()?;
+                    *guard
+                });
+                ec_opt.map(|c| format!(" [exit {}]", c)).unwrap_or_default()
+            };
             if is_active {
                 stdout.queue(SetBackgroundColor(Color::Rgb { r: 68, g: 71, b: 90 })).ok();
-                stdout.queue(SetForegroundColor(Color::Rgb { r: 255, g: 255, b: 255 })).ok();
+                if is_exited {
+                    stdout.queue(SetForegroundColor(Color::Rgb { r: 255, g: 120, b: 120 })).ok();
+                } else {
+                    stdout.queue(SetForegroundColor(Color::Rgb { r: 255, g: 255, b: 255 })).ok();
+                }
                 stdout.queue(style::SetAttribute(Attribute::Bold)).ok();
+            } else if is_exited {
+                stdout.queue(SetBackgroundColor(Color::Rgb { r: 40, g: 42, b: 54 })).ok();
+                stdout.queue(SetForegroundColor(Color::Rgb { r: 180, g: 100, b: 100 })).ok();
+                stdout.queue(style::SetAttribute(Attribute::NoBold)).ok();
             } else {
                 stdout.queue(SetBackgroundColor(Color::Rgb { r: 40, g: 42, b: 54 })).ok();
                 stdout.queue(SetForegroundColor(Color::Rgb { r: 140, g: 140, b: 140 })).ok();
                 stdout.queue(style::SetAttribute(Attribute::NoBold)).ok();
             }
 
-            // Truncate display name to fit
+            // Build display label with optional exit code
+            let tab_start = col;
             let label = if col == 1 { "" } else { " " };
+            let tab_text = format!("{}{}{}", label, name, exit_code_str);
             let max_width = (phys_cols.saturating_sub(col + 1)) as usize;
-            let display = if name.len() > max_width {
-                format!("{}{}", label, &name[..max_width])
+            let display = if tab_text.len() > max_width {
+                format!("{}...", &tab_text[..max_width.min(3)])
             } else {
-                format!("{}{}", label, name)
+                tab_text
             };
 
             if col + display.len() as u16 >= phys_cols {
@@ -441,6 +477,7 @@ pub async fn run_display_loop(
 
             stdout.queue(Print(&display)).ok();
             col += display.len() as u16;
+            positions.push((id.clone(), tab_start, col));
         }
 
         // Clear remaining space
@@ -452,6 +489,8 @@ pub async fn run_display_loop(
         }
         stdout.queue(ResetColor).ok();
         stdout.flush().ok();
+
+        positions
     }
 
     /// Find all regex matches in the VTTY buffer and return their positions.
@@ -722,6 +761,7 @@ pub async fn run_display_loop(
     /// Returns Some(MouseEvent) if the buffer contains a complete mouse sequence,
     /// None otherwise.  Supports both legacy (`ESC [ M Cb Cr Cc`) and
     /// SGR (`ESC [ < Cb ; Cx ; Cy [Mm]`) encodings.
+    /// Also detects mouse wheel events (SGR cb=64/65, legacy cb=32/33 without motion).
     fn try_parse_mouse_event(buf: &[u8]) -> Option<MouseEvent> {
         // SGR encoding: ESC [ < Cb ; Cx ; Cy M (press/drag) or m (release)
         if buf.len() >= 8 && buf.starts_with(b"\x1b[<") {
@@ -741,7 +781,14 @@ pub async fn run_display_loop(
                 2 => MouseButton::Right,
                 _ => MouseButton::Left,
             };
-            let event_type = if is_release { MouseEventType::Release } else { MouseEventType::Press };
+            // Check for wheel events (SGR encoding uses cb values 64-67)
+            let (button, event_type) = if cb >= 64 && cb <= 67 {
+                let wheel = if cb & 1 != 0 { MouseButton::WheelDown } else { MouseButton::WheelUp };
+                (wheel, MouseEventType::Press)
+            } else {
+                let et = if is_release { MouseEventType::Release } else { MouseEventType::Press };
+                (button, et)
+            };
             return Some(MouseEvent { button, event_type, x: cx, y: cy });
         }
         // Legacy encoding: ESC [ M Cb Cx+32 Cy+32
@@ -751,13 +798,21 @@ pub async fn run_display_loop(
             let cy = (buf[5].saturating_sub(32)) as u16;
             let _is_motion = (cb & 0x20) != 0;
             let is_release = (cb & 0x40) != 0 || (cb & 0x03) == 0x03;
-            let button = match cb & 3 {
-                0 => MouseButton::Left,
-                1 => MouseButton::Middle,
-                2 => MouseButton::Right,
-                _ => MouseButton::Left,
+            // Check for wheel events (legacy: cb & 0x43 gives 32/33 for wheel up/down)
+            let (button, event_type) = if !is_release && (cb & 0x40) != 0 {
+                // Bit 6 set without release means wheel (legacy encoding)
+                let wheel = if (cb & 0x01) != 0 { MouseButton::WheelDown } else { MouseButton::WheelUp };
+                (wheel, MouseEventType::Press)
+            } else {
+                let btn = match cb & 3 {
+                    0 => MouseButton::Left,
+                    1 => MouseButton::Middle,
+                    2 => MouseButton::Right,
+                    _ => MouseButton::Left,
+                };
+                let et = if is_release { MouseEventType::Release } else { MouseEventType::Press };
+                (btn, et)
             };
-            let event_type = if is_release { MouseEventType::Release } else { MouseEventType::Press };
             return Some(MouseEvent { button, event_type, x: cx, y: cy });
         }
         None
@@ -937,6 +992,78 @@ pub async fn run_display_loop(
         stdout.flush().ok();
     }
 
+    /// Render a right-click context menu at the given position.
+    /// Items: Kill, Purge, Copy ID.
+    fn render_context_menu(
+        x: u16,
+        y: u16,
+        items: &[(&str, &str)],
+        selected: usize,
+    ) {
+        use std::io::Write;
+        use crossterm::{
+            style::{Color, ResetColor, SetBackgroundColor, SetForegroundColor},
+            QueueableCommand,
+        };
+        let mut stdout = std::io::stdout();
+        let (phys_cols, phys_rows) = crossterm::terminal::size().unwrap_or((80, 24));
+
+        // Ensure menu stays within terminal bounds
+        let menu_width: u16 = 20;
+        let menu_height: u16 = items.len() as u16;
+        let mx = if x + menu_width > phys_cols { phys_cols.saturating_sub(menu_width) } else { x };
+        let my = if y + menu_height + 1 > phys_rows { y.saturating_sub(menu_height + 1) } else { y };
+
+        // Draw border
+        let _ = write!(stdout, "\x1b[{};{}H", my + 1, mx + 1);
+        let _ = write!(stdout, "\x1b[48;5;238m\x1b[38;5;240m");
+        // Top border
+        for _ in 0..menu_width {
+            let _ = write!(stdout, "\u{2500}");
+        }
+
+        // Items
+        for (i, (label, _action)) in items.iter().enumerate() {
+            let _ = write!(stdout, "\x1b[{};{}H", my + 2 + i as u16, mx + 1);
+            if i == selected {
+                let _ = write!(stdout, "\x1b[48;5;110m\x1b[38;5;235m"); // highlighted
+            } else {
+                let _ = write!(stdout, "\x1b[48;5;238m\x1b[38;5;255m"); // normal
+            }
+            let padded = format!(" {:<width$} ", label, width = (menu_width - 1) as usize);
+            let _ = write!(stdout, "{}", padded);
+        }
+
+        let _ = write!(stdout, "\x1b[0m");
+        let _ = stdout.flush();
+    }
+
+    /// Render an [EXITED] watermark on the VTTY display when viewing an exited command.
+    fn render_exited_watermark(
+        tab_offset: u16,
+        exit_code: Option<i32>,
+    ) {
+        use std::io::Write;
+        let mut stdout = std::io::stdout();
+        let (phys_cols, phys_rows) = crossterm::terminal::size().unwrap_or((80, 24));
+        let center_col = phys_cols / 2;
+        let center_row = (tab_offset + phys_rows) / 2;
+
+        let label: String = match exit_code {
+            Some(0) => "[EXITED]".to_string(),
+            Some(code) => format!("[EXITED code:{}]", code),
+            None => "[EXITED]".to_string(),
+        };
+        let label_len = label.len() as u16;
+        let start_col = center_col.saturating_sub(label_len / 2);
+
+        let _ = write!(stdout, "\x1b[{};{}H", center_row + 1, start_col + 1);
+        let _ = write!(stdout, "\x1b[48;5;52m\x1b[38;5;196m\x1b[1m");
+        let _ = write!(stdout, "{}", label);
+        let _ = write!(stdout, "\x1b[0m");
+        let _ = stdout.flush();
+    }
+
     'outer: loop {
         tokio::select! {
             biased;
@@ -1051,13 +1178,26 @@ pub async fn run_display_loop(
                         }
                     }
                     if show_tabs {
-                        render_tab_bar(&manager, &active_id);
+                        tab_positions = render_tab_bar(&manager, &active_id);
                     }
                     if split_mode {
                         // Split-pane mode: render two VTTYs side-by-side
                         render_split_pane(&manager, &active_id, &split_right_id, if show_tabs { 1 } else { 0 });
                     } else {
                         render_vtty(&manager, &active_id, if show_tabs { 1 } else { 0 }, scrollback_offset, display_all).await;
+                    }
+                    // Render [EXITED] watermark if active command has exited
+                    {
+                        let target = active_id.clone()
+                            .or_else(|| manager.list().first().map(|(id, _, _, _, _)| id.clone()));
+                        if let Some(ref tid) = target {
+                            if let Some(h) = manager.get(tid) {
+                                if !h.is_alive() {
+                                    let ec = h.exit_code.lock().ok().and_then(|c| *c);
+                                    render_exited_watermark(if show_tabs { 1 } else { 0 }, ec);
+                                }
+                            }
+                        }
                     }
                     if searching {
                         // Render search bar instead of status bar
@@ -1092,6 +1232,10 @@ pub async fn run_display_loop(
                         if let (Some(start), Some(end)) = (mouse_selection_start, mouse_selection_end) {
                             render_selection_highlight(start, end, if show_tabs { 1 } else { 0 });
                         }
+                    }
+                    // Render context menu if visible
+                    if ctx_menu_visible {
+                        render_context_menu(ctx_menu_x, ctx_menu_y, &ctx_menu_items, ctx_menu_selected);
                     }
                 }
             }
@@ -1176,6 +1320,70 @@ pub async fn run_display_loop(
                                     if showing_help {
                                         showing_help = false;
                                         continue;
+                                    }
+
+                                    // ── Context menu: Esc or Enter dismisses ──
+                                    if ctx_menu_visible {
+                                        match b {
+                                            0x1b => {
+                                                // Escape: close context menu
+                                                ctx_menu_visible = false;
+                                                ctx_menu_target_id = None;
+                                                continue;
+                                            }
+                                            0x0d => {
+                                                // Enter: execute selected context menu item
+                                                if let Some(ref tid) = ctx_menu_target_id {
+                                                    if let Some((_, action)) = ctx_menu_items.get(ctx_menu_selected) {
+                                                        match *action {
+                                                            "kill" => {
+                                                                manager.logger().log("ctx_kill", &format!("id={}", tid));
+                                                                let _ = manager.kill(tid, None).await;
+                                                                if active_id.as_deref() == Some(tid.as_str()) {
+                                                                    active_id = None;
+                                                                }
+                                                            }
+                                                            "purge" => {
+                                                                manager.logger().log("ctx_purge", &format!("id={}", tid));
+                                                                let _ = manager.purge(tid);
+                                                                if active_id.as_deref() == Some(tid.as_str()) {
+                                                                    active_id = None;
+                                                                }
+                                                            }
+                                                            "copy_id" => {
+                                                                let encoded = base64_encode(tid);
+                                                                let _ = write!(stdout, "\x1b]52;c;{}\x07", encoded);
+                                                                let _ = stdout.flush();
+                                                            }
+                                                            "restart" => {
+                                                                if let Some(h) = manager.get(tid) {
+                                                                    let cmd = h.name.clone();
+                                                                    let args = h.args.clone();
+                                                                    drop(h);
+                                                                    match manager.spawn(cmd, args, None, None, std::collections::HashMap::new(), None, None).await {
+                                                                        Ok(new_id) => {
+                                                                            manager.logger().log("ctx_restart", &format!("old={} new={}", tid, new_id));
+                                                                            let _ = manager.purge(tid);
+                                                                            active_id = Some(new_id);
+                                                                            scrollback_offset = 0;
+                                                                        }
+                                                                        Err(e) => {
+                                                                            tracing::warn!(error = %e, "Context menu restart failed");
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                            _ => {}
+                                                        }
+                                                    }
+                                                }
+                                                ctx_menu_visible = false;
+                                                ctx_menu_target_id = None;
+                                                continue;
+                                            }
+                                            // Arrow keys for navigation
+                                            _ => continue,
+                                        }
                                     }
 
                                     // If we're in the log overlay, handle navigation
@@ -1273,15 +1481,105 @@ pub async fn run_display_loop(
 
                                     if !esc_buf.is_empty() {
                                         esc_buf.push(b);
-                                        // ── Check for mouse events first (#15) ──
+                                        // ── Check for mouse events first ──
                                         if let Some(me) = try_parse_mouse_event(&esc_buf) {
                                             esc_buf.clear();
                                             esc_deadline = None;
+
+                                            // Dismiss context menu on any mouse event outside it
+                                            if ctx_menu_visible && me.event_type == MouseEventType::Press {
+                                                ctx_menu_visible = false;
+                                                ctx_menu_target_id = None;
+                                            }
+
+                                            // Handle context menu navigation
+                                            if ctx_menu_visible {
+                                                match me.button {
+                                                    MouseButton::WheelUp => {
+                                                        ctx_menu_selected = ctx_menu_selected.saturating_sub(1);
+                                                        continue;
+                                                    }
+                                                    MouseButton::WheelDown => {
+                                                        if ctx_menu_selected + 1 < ctx_menu_items.len() {
+                                                            ctx_menu_selected += 1;
+                                                        }
+                                                        continue;
+                                                    }
+                                                    MouseButton::Left if me.event_type == MouseEventType::Press => {
+                                                        // Execute selected context menu action
+                                                        if let Some(ref tid) = ctx_menu_target_id {
+                                                            if let Some((_, action)) = ctx_menu_items.get(ctx_menu_selected) {
+                                                                match *action {
+                                                                    "kill" => {
+                                                                        manager.logger().log("ctx_kill", &format!("id={}", tid));
+                                                                        let _ = manager.kill(tid, None).await;
+                                                                        if active_id.as_deref() == Some(tid.as_str()) {
+                                                                            active_id = None;
+                                                                        }
+                                                                    }
+                                                                    "purge" => {
+                                                                        manager.logger().log("ctx_purge", &format!("id={}", tid));
+                                                                        let _ = manager.purge(tid);
+                                                                        if active_id.as_deref() == Some(tid.as_str()) {
+                                                                            active_id = None;
+                                                                        }
+                                                                    }
+                                                                    "copy_id" => {
+                                                                        let encoded = base64_encode(tid);
+                                                                        let _ = write!(stdout, "\x1b]52;c;{}\x07", encoded);
+                                                                        let _ = stdout.flush();
+                                                                    }
+                                                                    "restart" => {
+                                                                        if let Some(h) = manager.get(tid) {
+                                                                            let cmd = h.name.clone();
+                                                                            let args = h.args.clone();
+                                                                            drop(h);
+                                                                            match manager.spawn(cmd, args, None, None, std::collections::HashMap::new(), None, None).await {
+                                                                                Ok(new_id) => {
+                                                                                    manager.logger().log("ctx_restart", &format!("old={} new={}", tid, new_id));
+                                                                                    let _ = manager.purge(tid);
+                                                                                    active_id = Some(new_id);
+                                                                                    scrollback_offset = 0;
+                                                                                }
+                                                                                Err(e) => {
+                                                                                    tracing::warn!(error = %e, "Context menu restart failed");
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    _ => {}
+                                                                }
+                                                            }
+                                                        }
+                                                        ctx_menu_visible = false;
+                                                        ctx_menu_target_id = None;
+                                                        continue;
+                                                    }
+                                                    _ => continue,
+                                                }
+                                            }
+
+                                            let tab_off = if show_tabs { 1u16 } else { 0 };
+
                                             match me.button {
+                                                // ── Left click in tabs area: switch tab ──
+                                                MouseButton::Left if me.event_type == MouseEventType::Press && show_tabs && me.y == 0 => {
+                                                    // Hit-test tabs
+                                                    for (id, start, end) in &tab_positions {
+                                                        if me.x >= *start && me.x < *end {
+                                                            active_id = Some(id.clone());
+                                                            scrollback_offset = 0;
+                                                            mouse_selecting = false;
+                                                            manager.logger().log("tab_click", &format!("id={}", id));
+                                                            break;
+                                                        }
+                                                    }
+                                                    continue;
+                                                }
+                                                // ── Left click outside tabs: selection or forward to terminal ──
                                                 MouseButton::Left => {
                                                     match me.event_type {
                                                         MouseEventType::Press => {
-                                                            let tab_off = if show_tabs { 1u16 } else { 0 };
                                                             if mouse_selecting {
                                                                 // Drag: extend selection
                                                                 mouse_selection_end = Some((me.y.saturating_sub(tab_off), me.x));
@@ -1302,11 +1600,86 @@ pub async fn run_display_loop(
                                                                 mouse_selection_end = None;
                                                             }
                                                         }
+                                                        MouseEventType::Motion => {
+                                                            if mouse_selecting {
+                                                                mouse_selection_end = Some((me.y.saturating_sub(tab_off), me.x));
+                                                            }
+                                                        }
                                                     }
+                                                    continue;
                                                 }
-                                                _ => {}
+                                                // ── Right click in tabs area: context menu ──
+                                                MouseButton::Right if me.event_type == MouseEventType::Press && show_tabs && me.y == 0 => {
+                                                    // Find which tab was right-clicked
+                                                    for (id, start, end) in &tab_positions {
+                                                        if me.x >= *start && me.x < *end {
+                                                            let is_exited = manager.get(id).map(|h| !h.is_alive()).unwrap_or(false);
+                                                            let mut items: Vec<(&'static str, &'static str)> = vec![
+                                                                ("Kill", "kill"),
+                                                                ("Copy ID", "copy_id"),
+                                                            ];
+                                                            if is_exited {
+                                                                items.insert(0, ("Restart", "restart"));
+                                                                items.insert(1, ("Purge", "purge"));
+                                                            }
+                                                            ctx_menu_items = items;
+                                                            ctx_menu_selected = 0;
+                                                            ctx_menu_x = me.x;
+                                                            ctx_menu_y = me.y + 1;
+                                                            ctx_menu_target_id = Some(id.clone());
+                                                            ctx_menu_visible = true;
+                                                            mouse_selecting = false;
+                                                            break;
+                                                        }
+                                                    }
+                                                    continue;
+                                                }
+                                                // ── Mouse wheel ──
+                                                MouseButton::WheelUp | MouseButton::WheelDown => {
+                                                    if show_tabs && me.y == 0 {
+                                                        // Wheel in tab bar: cycle through tabs
+                                                        let commands = manager.list();
+                                                        if commands.len() > 1 {
+                                                            let current = active_id.clone()
+                                                                .or_else(|| commands.first().map(|(id, _, _, _, _)| id.clone()));
+                                                            if let Some(ref cur) = current {
+                                                                let idx = commands.iter().position(|(id, _, _, _, _)| id == cur).unwrap_or(0);
+                                                                let new_idx = if me.button == MouseButton::WheelUp {
+                                                                    idx.wrapping_sub(1)
+                                                                } else {
+                                                                    (idx + 1) % commands.len()
+                                                                };
+                                                                let (new_id, _, _, _, _) = &commands[new_idx];
+                                                                active_id = Some(new_id.clone());
+                                                                scrollback_offset = 0;
+                                                            }
+                                                        }
+                                                    } else {
+                                                        // Wheel outside tabs: scrollback navigation
+                                                        if me.button == MouseButton::WheelUp {
+                                                            scrollback_offset = scrollback_offset.saturating_add(3);
+                                                        } else {
+                                                            scrollback_offset = scrollback_offset.saturating_sub(3);
+                                                        }
+                                                    }
+                                                    continue;
+                                                }
+                                                // ── Middle click: forward to terminal (paste support) ──
+                                                _ => {
+                                                    // Forward the raw escape sequence to the child
+                                                    // (applications that use mouse events, e.g. htop, vim)
+                                                    if !mouse_selecting && me.y >= tab_off {
+                                                        let target_id = active_id.clone()
+                                                            .or_else(|| manager.list().first().map(|(id, _, _, _, _)| id.clone()));
+                                                        if let Some(ref tid) = target_id {
+                                                            if let Some(handle) = manager.get(tid) {
+                                                                let _ = handle.send_bytes(esc_buf.clone()).await;
+                                                            }
+                                                        }
+                                                    }
+                                                    continue;
+                                                }
                                             }
-                                            continue;
                                         }
                                         // Check if current buffer matches any keybinding
                                         let (action, partial) = check_bindings(&esc_buf, &bindings);
@@ -1558,8 +1931,8 @@ pub async fn run_display_loop(
     // Restore the terminal before returning.
     // Flush to ensure all queued crossterm commands are applied.
     let _ = stdout.flush();
-    // Disable mouse tracking (#15)
-    let _ = write!(stdout, "\x1b[?1002l");
+    // Disable mouse tracking
+    let _ = write!(stdout, "\x1b[?1003l"); // disable any-event mouse tracking
     let _ = stdout.flush();
     let _ = stdout.execute(cursor::Show);
     let _ = stdout.execute(LeaveAlternateScreen);

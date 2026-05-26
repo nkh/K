@@ -51,6 +51,13 @@ pub struct ExitConfig {
     /// Applies when kill is called or when the server shuts down.
     #[serde(default = "default_exit_timeout")]
     pub timeout_secs: u64,
+    /// When true, the command's VTTY buffer is retained in memory after
+    /// the child process exits.  The command appears in the display tab
+    /// bar and web UI with an "exited" status, allowing inspection of
+    /// the final output.  The buffer can be manually purged via the API.
+    /// Default: false (commands are removed from the manager on exit).
+    #[serde(default)]
+    pub retain_on_exit: bool,
 }
 
 fn default_exit_timeout() -> u64 {
@@ -63,6 +70,7 @@ impl Default for ExitConfig {
             on_exit: None,
             on_error: None,
             timeout_secs: default_exit_timeout(),
+            retain_on_exit: false,
         }
     }
 }

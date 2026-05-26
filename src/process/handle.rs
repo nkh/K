@@ -43,6 +43,12 @@ pub struct CommandHandle {
     /// Receiver is Clone, so it can be extracted from the DashMap
     /// without needing mutable access.
     pub exit_rx: tokio::sync::watch::Receiver<bool>,
+    /// Exit code of the child process (set when the child terminates).
+    /// None while the process is still running.
+    pub exit_code: std::sync::Mutex<Option<i32>>,
+    /// Wall-clock time when the child process exited.
+    /// None while the process is still running.
+    pub exit_time: std::sync::Mutex<Option<std::time::Instant>>,
 }
 
 impl CommandHandle {

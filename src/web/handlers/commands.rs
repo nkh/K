@@ -20,12 +20,17 @@ pub async fn list_commands(
                     "on_exit": h.exit_config.on_exit.as_deref().unwrap_or(&String::new()),
                     "on_error": h.exit_config.on_error.as_deref().unwrap_or(&String::new()),
                     "exit_timeout": h.exit_config.timeout_secs,
+                    "retain_on_exit": h.exit_config.retain_on_exit,
                 })
             }).unwrap_or(serde_json::json!(null));
             // Check alive status and compute runtime
-            let (alive, runtime_secs) = state.manager.get(&id).map(|h| {
-                (h.is_alive(), h.runtime_secs())
-            }).unwrap_or((false, 0.0));
+            let (alive, runtime_secs, exit_code, exit_time) = state.manager.get(&id).map(|h| {
+                let ec = h.exit_code.lock().ok().and_then(|c| *c);
+                let et = h.exit_time.lock().ok()
+                    .and_then(|guard| *guard)
+                    .map(|t| t.elapsed().as_secs() as u64);
+                (h.is_alive(), h.runtime_secs(), ec, et)
+            }).unwrap_or((false, 0.0, None, None));
             serde_json::json!({
                 "id": id,
                 "name": name,
@@ -33,6 +38,8 @@ pub async fn list_commands(
                 "pid": pid,
                 "alive": alive,
                 "runtime_secs": runtime_secs,
+                "exit_code": exit_code,
+                "exit_time_secs": exit_time,
                 "status": if alive { "running" } else { "exited" },
                 "certificate": certificate,
                 "exit": exit_info,
@@ -126,6 +133,7 @@ pub async fn start_command(
         on_exit,
         on_error,
         timeout_secs: exit_timeout,
+        retain_on_exit: body.get("retain_on_exit").and_then(|v| v.as_bool()).unwrap_or(false),
     };
     match state.manager.spawn(cmd, args, certificate, Some(exit_config), merged_env, rows, cols).await {
         Ok(id) => {
@@ -399,4 +407,25 @@ pub async fn lookup_command(
         "data": matches,
         "error": null
     }))
+}
+
+/// DELETE /api/commands/:id
+/// Purge a retained (exited) command from the manager.
+/// This permanently discards the VTTY buffer and all associated state.
+pub async fn purge_command(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Json<Value> {
+    match state.manager.purge(&id) {
+        Ok(_) => Json(serde_json::json!({
+            "status": "ok",
+            "data": { "id": id, "purged": true },
+            "error": null
+        })),
+        Err(e) => Json(serde_json::json!({
+            "status": "error",
+            "data": null,
+            "error": e.to_string()
+        })),
+    }
 }
