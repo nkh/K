@@ -80,3 +80,76 @@ Task: Implement 5 remaining VTTY proposals (#2, #5, #6, #8, #9)
 3. `4f8df7f` feat(vtty): add DECSCUSR cursor style rendering (#8)
 
 Note: Tests for proposals #5, #6, #9 were included in the #2 commit since they all reside in `src/vtty/emulator.rs` alongside the #2 tests.
+
+---
+Task ID: 3
+Agent: main
+Task: Implement remaining VTTY proposals (#11, #14, #15, #20)
+
+## What was done
+
+### Proposal #11: Search/regex in local display (Ctrl+F)
+**Files changed:**
+- `src/interactive/display.rs` — Added search overlay mode with Ctrl+F toggle
+- `Cargo.toml` — Added `regex` dependency
+
+**Implementation:**
+- Ctrl+F opens a search bar at the bottom of the display
+- Supports regex patterns via the `regex` crate
+- `find_search_matches()` scans the entire VTTY buffer (scrollback + visible)
+- `render_search_bar()` shows query, match count, and navigation hints
+- `render_search_highlights()` draws colored highlights (yellow for current, blue for others)
+- Enter navigates to next match, auto-scrolls to keep it visible
+- Backspace edits query, Escape closes search
+- Status bar hint updated to show Ctrl+F shortcut
+
+### Proposal #14: Split-pane display mode (Ctrl+S)
+**Files changed:**
+- `src/interactive/display.rs` — Added split-pane rendering
+
+**Implementation:**
+- Ctrl+S toggles split-pane view when 2+ commands are running
+- `render_split_pane()` renders two VTTYs side-by-side with full SGR color support
+- Left pane shows active command, right pane shows the next command in the list
+- Vertical box-drawing divider separates the panes
+- `build_cell_sgr()` helper generates per-cell SGR escape sequences
+- Pane labels shown at the top of each side
+- Status bar hint updated to show Ctrl+S shortcut
+
+### Proposal #15: Copy/paste in local display (mouse selection)
+**Files changed:**
+- `src/interactive/display.rs` — Added mouse selection and clipboard support
+
+**Implementation:**
+- Enabled mouse button tracking (CSI ?1002h) on display entry
+- `try_parse_mouse_event()` handles both SGR and legacy mouse encodings
+- Left-click + drag selects text in the VTTY buffer
+- `render_selection_highlight()` draws reverse-video rectangle during drag
+- `copy_selection_to_clipboard()` extracts text from VTTY buffer cells
+- Uses OSC 52 escape sequence to copy to clipboard (works in xterm, kitty)
+- `base64_encode()` built-in encoder (no extra dependency)
+- Mouse tracking disabled on display exit (CSI ?1002l)
+
+### Proposal #20: Sixel inline image support
+**Files changed:**
+- `src/vtty/emulator.rs` — Added Sixel DCS detection and storage
+
+**Implementation:**
+- DCS sequences with final byte 'q' are inspected for sixel content
+- Sixel detection via intermediate byte '?' or all-zero params with non-empty data
+- `sixel_images` field stores inline images at cursor positions
+- `sixel_images()` and `clear_sixel_images()` public API methods
+- Kitty image protocol correctly distinguished from sixel
+- Sixel images cleared on RIS (full reset)
+- 6 new tests covering detection, storage, cursor position, reset, and disambiguation
+
+## Build & Test Results
+- `cargo build` — Clean build, no new warnings introduced
+- `cargo test` — 252 tests pass (246 unit + 4 integration + 2 doc-tests), 0 failures
+- All 4 proposals committed separately and pushed to origin/main
+
+## Commits pushed to origin/main
+1. `ef77730` feat(#11): Search/regex in local display (Ctrl+F)
+2. `fbb3968` feat(#14): Split-pane display mode (Ctrl+S)
+3. `13f0f5a` feat(#15): Copy/paste in local display (mouse selection)
+4. `d7871af` feat(#20): Sixel inline image support in VTTY emulator
