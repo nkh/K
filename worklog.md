@@ -184,3 +184,23 @@ Stage Summary:
 - Commit 5c92cbc pushed to main
 - 7 files changed, 484 insertions(+), 32 deletions(-)
 - Key files: display.rs, handle.rs, spawner.rs, manager.rs, hooks.rs, commands.rs, router.rs
+
+---
+Task ID: 1
+Agent: main
+Task: Fix compiler warnings and runtime panic in vrunner
+
+Work Log:
+- Analyzed user-reported warnings: unused imports `cursor::MoveTo`, `QueueableCommand` in `render_split_pane()` (display.rs)
+- Analyzed user-reported panic: "Cannot block the current thread from within a runtime" at handle.rs:82
+- Root cause of panic: `tokio::sync::RwLock::blocking_read()` panics when called from within an async context without `block_in_place` wrapper
+- Found 2 call sites using `blocking_read()`: `vtty_snapshot_blocking()` in handle.rs and `has_changed()` in manager.rs
+- Fixed unused imports in `render_split_pane()` by removing the unused `use crossterm::{cursor::MoveTo, QueueableCommand}` block
+- Fixed panic by wrapping both `blocking_read()` calls in `tokio::task::block_in_place()`
+- Committed as 2 separate commits and pushed to origin/main
+
+Stage Summary:
+- Commit 891b42d: fix: remove unused crossterm imports in render_split_pane
+- Commit 7e2f5b7: fix: wrap blocking_read() in block_in_place() to prevent runtime panic
+- Both commits pushed to origin/main successfully
+- Remaining working directory changes (from user's local uncommitted work) preserved via git stash/pop
