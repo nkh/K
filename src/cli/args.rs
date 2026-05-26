@@ -138,6 +138,13 @@ pub struct Cli {
     #[arg(long, value_name = "SECS")]
     pub exit_timeout: Option<u64>,
 
+    /// Keep the VTTY buffer in memory after the child process exits.
+    /// The command remains visible in the tab bar and web UI with an "exited"
+    /// status, allowing inspection of final output. The buffer can be
+    /// manually purged via the API (DELETE /api/commands/:id).
+    #[arg(long)]
+    pub retain_on_exit: bool,
+
     /// Show tab bar for command switching in interactive display.
     /// Requires --display-all for command navigation keybindings to work.
     /// Keybindings (Ctrl+Left/Right, Ctrl+L, F12) can be customized in the
@@ -411,6 +418,9 @@ impl Cli {
         }
         if let Some(timeout) = self.exit_timeout {
             cfg.default_exit.exit.timeout_secs = timeout;
+        }
+        if self.retain_on_exit {
+            cfg.default_exit.exit.retain_on_exit = true;
         }
 
         // Interactive display
