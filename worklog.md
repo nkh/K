@@ -153,3 +153,34 @@ Task: Implement remaining VTTY proposals (#11, #14, #15, #20)
 2. `fbb3968` feat(#14): Split-pane display mode (Ctrl+S)
 3. `13f0f5a` feat(#15): Copy/paste in local display (mouse selection)
 4. `d7871af` feat(#20): Sixel inline image support in VTTY emulator
+---
+Task ID: 1
+Agent: main
+Task: Implement mouse support in tabs area + retain_on_exit for exited commands
+
+Work Log:
+- Installed Rust toolchain (stable 1.95.0)
+- Cloned vrunner repo from https://github.com/nkh/K
+- Read and analyzed the full codebase (display.rs ~1900 lines, handle.rs, manager.rs, spawner.rs, commands.rs, router.rs)
+- Added retain_on_exit field to ExitConfig in config/hooks.rs
+- Added exit_code and exit_time Mutex fields to CommandHandle
+- Modified spawner.rs to conditionally retain commands on exit and store exit metadata
+- Added purge() method to CommandManager
+- Enhanced mouse event types (WheelUp, WheelDown, Motion with PartialEq)
+- Upgraded mouse tracking from ?1002h to ?1003h for wheel event support
+- Enhanced try_parse_mouse_event() for wheel detection (SGR cb=64-67, legacy bit 6)
+- Modified render_tab_bar() to return tab positions for hit-testing and show exit status
+- Added context menu overlay (render_context_menu) with Kill/Purge/Copy ID/Restart actions
+- Added [EXITED] watermark overlay (render_exited_watermark) for viewing exited commands
+- Added tab click handling (left click to switch, right click for context menu)
+- Added wheel scrollback in VTTY area, tab cycling with wheel in tab bar
+- Added mouse event forwarding to child terminal for middle/right clicks
+- Added context menu keyboard navigation (Esc dismiss, Enter execute, wheel navigate)
+- Added DELETE /api/commands/:id route for purging retained commands
+- Updated list_commands API to include exit_code, exit_time_secs, retain_on_exit
+- All 252 tests pass, no new clippy errors
+
+Stage Summary:
+- Commit 5c92cbc pushed to main
+- 7 files changed, 484 insertions(+), 32 deletions(-)
+- Key files: display.rs, handle.rs, spawner.rs, manager.rs, hooks.rs, commands.rs, router.rs
