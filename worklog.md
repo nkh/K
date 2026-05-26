@@ -204,3 +204,30 @@ Stage Summary:
 - Commit 7e2f5b7: fix: wrap blocking_read() in block_in_place() to prevent runtime panic
 - Both commits pushed to origin/main successfully
 - Remaining working directory changes (from user's local uncommitted work) preserved via git stash/pop
+---
+Task ID: 1
+Agent: main
+Task: Write 50+ regression tests for vrunner to prevent future breakage
+
+Work Log:
+- Analyzed the git history to understand what broke (commits 7222261 and 9ae866b)
+- Identified root causes: missing HTTP timeouts (spawn/stop blocked forever), wrong stop logic (tried to find command by instance PID)
+- Read all critical source files: main.rs, display.rs, subcommands.rs, registry.rs, commands handler, server.rs, manager.rs, handle.rs, hooks.rs
+- Wrote 62 regression tests in tests/regression_test.rs organized into 10 categories
+- Fixed a runtime nesting issue in the test code
+
+Stage Summary:
+- Created tests/regression_test.rs with 62 tests covering:
+  1. Command lifecycle (spawn, list, kill, purge) - 8 tests
+  2. IPC simulation (HTTP client timeouts) - 1 test
+  3. Exit behavior (retain, snapshot, removal) - 4 tests
+  4. Multi-command management (concurrent, kill-one, spawn-after-kill) - 4 tests
+  5. VTTY operations (snapshot, html, resize, diff, change detection) - 6 tests
+  6. Key encoding and delivery (send_keys, ctrl-c, all special keys) - 4 tests
+  7. Config and CLI overrides (validation, serialize, profiles, env) - 6 tests
+  8. Instance registry - 1 test
+  9. Broadcast/shutdown signals (propagation, watch channel) - 3 tests
+  10. Edge cases (not-found, env vars, custom size, logger, freeze/thaw, sinks) - 18 tests
+  + Bonus emulator-level unit tests - 6 tests
+- All tests are independent, no shared state, no ordering dependency
+- File is 1120 lines
