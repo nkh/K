@@ -117,6 +117,55 @@ impl VttyRenderer {
         html
     }
 
+    /// Serialize buffer (including scrollback) to HTML with inline styles.
+    ///
+    /// `scrollback_offset` shifts the viewport backward into the scrollback
+    /// buffer.  0 = normal (bottom of visible area), 1 = one line scrolled
+    /// back, etc.  The number of rows returned is `visible_rows`.
+    ///
+    /// This allows the web UI to render a scrollback view by setting the
+    /// offset and fetching the corresponding HTML slice.
+    pub fn to_html_scrollback(buffer: &Buffer, scrollback_offset: usize, visible_rows: usize) -> String {
+        let total_lines = buffer.total_lines(); // scrollback.len() + rows.len()
+        let max_offset = total_lines.saturating_sub(visible_rows);
+        let effective_offset = scrollback_offset.min(max_offset);
+
+        // Collect the visible slice from scrollback + rows
+        let mut html = String::new();
+        html.reserve(visible_rows * buffer.width * 60);
+
+        let all_lines: Vec<&Vec<super::cell::Cell>> = buffer.scrollback.iter()
+            .chain(buffer.rows.iter())
+            .skip(effective_offset)
+            .take(visible_rows)
+            .collect();
+
+        for row in &all_lines {
+            for cell in *row {
+                let mut style = String::from("display:inline-block;width:1ch;");
+                style.push_str(&format!("color:rgb({},{},{});", cell.fg[0], cell.fg[1], cell.fg[2]));
+                style.push_str(&format!("background:rgb({},{},{});", cell.bg[0], cell.bg[1], cell.bg[2]));
+
+                if cell.reverse {
+                    style.push_str(&format!("color:rgb({},{},{});background:rgb({},{},{});",
+                        cell.bg[0], cell.bg[1], cell.bg[2],
+                        cell.fg[0], cell.fg[1], cell.fg[2]));
+                }
+                if cell.bold { style.push_str("font-weight:bold;"); }
+                if cell.italic { style.push_str("font-style:italic;"); }
+                if cell.underline { style.push_str("text-decoration:underline;"); }
+                if cell.strikethrough { style.push_str("text-decoration:line-through;"); }
+                if cell.blink { style.push_str("animation:blink 1s step-end infinite;"); }
+
+                let ch = if cell.is_empty() { '\u{200b}' } else { cell.ch };
+                html.push_str(&format!("<span style='{}'>{}</span>", style, html_escape(ch)));
+            }
+            html.push('\n');
+        }
+
+        html
+    }
+
     /// Serialize buffer to plain text (no formatting).
     pub fn to_plain(buffer: &Buffer) -> String {
         buffer.rows.iter()

@@ -31,23 +31,46 @@ pub async fn get_vtty_full(
 pub async fn get_vtty_html(
     State(state): State<AppState>,
     Path(id): Path<String>,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Json<Value> {
+    let scrollback_offset = params.get("scrollback_offset").and_then(|v| v.parse::<usize>().ok()).unwrap_or(0);
+
     match state.manager.get(&id) {
         Some(handle) => {
-            let html = handle.vtty_html().await;
-            let (cursor_row, cursor_col) = handle.cursor_position().await;
+            let (html, cursor) = if scrollback_offset > 0 {
+                // When viewing scrollback, adjust cursor position to be relative
+                // to the scrollback viewport (may be out of visible range).
+                let (rows, _cols) = handle.dimensions().await;
+                let html = handle.vtty_html_scrollback(scrollback_offset, rows).await;
+                let (cursor_row, cursor_col) = handle.cursor_position().await;
+                // Adjust cursor row relative to scrollback offset
+                let total_lines = handle.scrollback_count().await + rows;
+                let adj_row = if cursor_row + scrollback_offset + rows >= total_lines {
+                    cursor_row + rows // cursor is still in visible area
+                } else {
+                    rows // cursor is off-screen (above visible area)
+                };
+                (html, (adj_row, cursor_col))
+            } else {
+                (handle.vtty_html().await, handle.cursor_position().await)
+            };
             let (rows, cols) = handle.dimensions().await;
             let scrollback = handle.scrollback_count().await;
             let alt_screen = handle.is_alternate_screen().await;
+            let mouse_tracking = handle.mouse_tracking_enabled().await;
+            let mouse_sgr = handle.mouse_sgr_enabled().await;
             Json(serde_json::json!({
                 "status": "ok",
                 "data": {
                     "id": id,
                     "html": html,
-                    "cursor": { "row": cursor_row, "col": cursor_col },
+                    "cursor": { "row": cursor.0, "col": cursor.1 },
                     "dimensions": { "rows": rows, "cols": cols },
                     "scrollback_lines": scrollback,
+                    "scrollback_offset": scrollback_offset,
                     "alternate_screen": alt_screen,
+                    "mouse_tracking": mouse_tracking,
+                    "mouse_sgr": mouse_sgr,
                 },
                 "error": null
             }))

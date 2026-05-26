@@ -19,6 +19,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/log", get(handlers::logs::get_log))
         .route("/api/commands/kill-pid/{pid}", post(handlers::commands::kill_command_by_pid))
         .route("/api/commands/:id/keys", post(handlers::keys::send_keys))
+        .route("/api/commands/:id/mouse", post(handlers::keys::send_mouse))
         .route("/api/commands/:id/kill", post(handlers::commands::kill_command))
         .route("/api/commands/:id", delete(handlers::commands::purge_command))
         .route("/api/commands/:id/freeze", post(handlers::commands::freeze_command))

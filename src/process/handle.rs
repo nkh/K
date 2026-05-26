@@ -103,6 +103,15 @@ impl CommandHandle {
         crate::vtty::renderer::VttyRenderer::to_html(&buf)
     }
 
+    /// Get the VTTY buffer as HTML including scrollback lines.
+    ///
+    /// `scrollback_offset` shifts the viewport backward (0 = normal bottom).
+    /// `visible_rows` is how many rows of HTML to return.
+    pub async fn vtty_html_scrollback(&self, scrollback_offset: usize, visible_rows: usize) -> String {
+        let buf = self.vtty_snapshot().await;
+        crate::vtty::renderer::VttyRenderer::to_html_scrollback(&buf, scrollback_offset, visible_rows)
+    }
+
     /// Whether the process is currently using the alternate screen buffer.
     pub async fn is_alternate_screen(&self) -> bool {
         let emu = self.emulator.read().await;
@@ -163,6 +172,18 @@ impl CommandHandle {
     pub async fn scrollback_count(&self) -> usize {
         let emu = self.emulator.read().await;
         emu.snapshot().scrollback.len()
+    }
+
+    /// Whether any mouse tracking mode is enabled (1002/1003).
+    pub async fn mouse_tracking_enabled(&self) -> bool {
+        let emu = self.emulator.read().await;
+        emu.mouse_tracking_enabled()
+    }
+
+    /// Whether SGR extended mouse coordinates (?1006) is enabled.
+    pub async fn mouse_sgr_enabled(&self) -> bool {
+        let emu = self.emulator.read().await;
+        emu.mouse_sgr_enabled()
     }
 
     pub async fn resize(&self, rows: u16, cols: u16) -> Result<()> {
