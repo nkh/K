@@ -644,7 +644,7 @@ mod tests {
 
     #[test]
     fn test_generation_does_not_change_on_read() {
-        let mut b = Buffer::new(10, 5, 100);
+        let b = Buffer::new(10, 5, 100);
         let gen = b.generation();
         let _ = b.get(0, 0);
         let _ = b.total_lines();

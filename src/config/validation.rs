@@ -228,14 +228,6 @@ mod tests {
         Config::default()
     }
 
-    fn make_issue(field: &str, level: ValidationLevel, msg: &str) -> ValidationIssue {
-        ValidationIssue {
-            field: field.into(),
-            level,
-            message: msg.into(),
-        }
-    }
-
     #[test]
     fn test_valid_config_produces_no_issues() {
         let config = default_config();

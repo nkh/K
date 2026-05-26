@@ -997,10 +997,6 @@ pub async fn run_display_loop(
         selected: usize,
     ) {
         use std::io::Write;
-        use crossterm::{
-            style::{Color, ResetColor, SetBackgroundColor, SetForegroundColor},
-            QueueableCommand,
-        };
         let mut stdout = std::io::stdout();
         let (phys_cols, phys_rows) = crossterm::terminal::size().unwrap_or((80, 24));
 
