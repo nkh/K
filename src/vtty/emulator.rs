@@ -122,6 +122,9 @@ pub struct VttyEmulator {
     response_buf: Vec<u8>,
     /// Mutable 256-color palette, modifiable at runtime via OSC 4.
     palette: ColorPalette,
+    /// Stored inline images from Sixel DCS sequences.
+    /// Each entry is (row, col, sixel_data_string).
+    sixel_images: Vec<(usize, usize, String)>,
 }
 
 impl VttyEmulator {
@@ -160,6 +163,7 @@ impl VttyEmulator {
             dcs_buffer: String::new(),
             response_buf: Vec::new(),
             palette: ColorPalette::new(),
+            sixel_images: Vec::new(),
         }
     }
 
@@ -804,8 +808,27 @@ impl VttyEmulator {
         }
     }
 
-    fn process_dcs(&mut self, params: &[Vec<u16>], _intermediate: &[u8], final_byte: u8, data: &str) {
+    fn process_dcs(&mut self, params: &[Vec<u16>], intermediate: &[u8], final_byte: u8, data: &str) {
         if final_byte == b'q' {
+            // DCS with final byte 'q' can be:
+            // 1. Sixel image protocol: intermediate contains '?' (or no intermediate but no params)
+            // 2. Kitty image protocol: params like "i=1;0;0" (first param = 1 with 'i')
+            //
+            // Sixel detection: intermediate byte '?' indicates sixel mode.
+            // Also: if params are all 0 and intermediate is empty and data is non-empty,
+            // it could be sixel (the introducer is part of data).
+            let is_sixel = intermediate.contains(&b'?')
+                || (intermediate.is_empty() && params.iter().all(|p| p.iter().all(|&v| v == 0)) && !data.is_empty());
+
+            if is_sixel {
+                // Sixel image data — store with "sixel:" prefix and record position
+                let pos = (self.cursor_row, self.cursor_col);
+                self.dcs_buffer = format!("sixel:{}:{}", data.len(), data);
+                self.sixel_images.push((pos.0, pos.1, data.to_string()));
+                tracing::debug!(row = pos.0, col = pos.1, len = data.len(), "Stored Sixel inline image");
+                return;
+            }
+
             // Kitty image protocol
             let ps = params.iter()
                 .map(|p| p.first().copied().unwrap_or(0).to_string())
@@ -838,6 +861,7 @@ impl VttyEmulator {
         self.cursor_style = CursorStyle::Block(true);
         self.dcs_buffer.clear();
         self.response_buf.clear();
+        self.sixel_images.clear();
         self.palette.reset();
         {
             let mut buf = self.buffer.write();
@@ -1020,6 +1044,18 @@ impl VttyEmulator {
     /// Most recent DCS data (e.g. kitty graphics protocol payload).
     pub fn dcs_buffer(&self) -> &str {
         &self.dcs_buffer
+    }
+
+    /// Get the list of stored inline Sixel images.
+    /// Each entry is (row, col, sixel_data_string) where row/col is the
+    /// cursor position when the image was received.
+    pub fn sixel_images(&self) -> &[(usize, usize, String)] {
+        &self.sixel_images
+    }
+
+    /// Clear all stored inline Sixel images.
+    pub fn clear_sixel_images(&mut self) {
+        self.sixel_images.clear();
     }
 
     /// Drain pending response bytes (e.g. DA1 replies) that should be
@@ -1663,6 +1699,7 @@ mod tests {
         // Minimal kitty graphics: DCS 1;0;0 q ST
         emu.feed(b"\x1bP1;0;0q\x1b\\");
         assert!(emu.dcs_buffer().starts_with("kitty:"));
+        assert!(emu.sixel_images().is_empty()); // not sixel
     }
 
     #[test]
@@ -1681,6 +1718,67 @@ mod tests {
         assert!(!emu.dcs_buffer().is_empty());
         emu.feed_str("\x1bc"); // RIS (full reset)
         assert!(emu.dcs_buffer().is_empty());
+    }
+
+    // ── Sixel tests (#20) ──
+
+    #[test]
+    fn test_sixel_dcs_detected() {
+        // Sixel data: the '?' is parsed as intermediate, params are [0;0;0;0]
+        // The '?' intermediate signals sixel mode
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed(b"\x1bP?0;0;0;0q...sixel data...\x1b\\");
+        assert!(emu.dcs_buffer().starts_with("sixel:"));
+        assert_eq!(emu.sixel_images().len(), 1);
+        // Image stored at cursor position (0, 0)
+        assert_eq!(emu.sixel_images()[0].0, 0);
+        assert_eq!(emu.sixel_images()[0].1, 0);
+    }
+
+    #[test]
+    fn test_sixel_dcs_digit_introducer() {
+        // Sixel without '?' intermediate but all params are 0 — also detected
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed(b"\x1bP0;0q...sixel data...\x1b\\");
+        assert!(emu.dcs_buffer().starts_with("sixel:"));
+        assert_eq!(emu.sixel_images().len(), 1);
+    }
+
+    #[test]
+    fn test_sixel_stored_at_cursor_position() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        // Move cursor to (3, 5)
+        emu.feed(b"\x1b[4;6H");
+        emu.feed(b"\x1bP?0;0;0;0q...sixel...\x1b\\");
+        assert_eq!(emu.sixel_images()[0].0, 3); // row
+        assert_eq!(emu.sixel_images()[0].1, 5); // col
+    }
+
+    #[test]
+    fn test_sixel_cleared_on_reset() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed(b"\x1bP?0;0;0;0q...sixel...\x1b\\");
+        assert!(!emu.sixel_images().is_empty());
+        emu.feed_str("\x1bc"); // RIS (full reset)
+        assert!(emu.sixel_images().is_empty());
+    }
+
+    #[test]
+    fn test_sixel_clears_explicitly() {
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed(b"\x1bP?0;0;0;0q...sixel...\x1b\\");
+        assert_eq!(emu.sixel_images().len(), 1);
+        emu.clear_sixel_images();
+        assert!(emu.sixel_images().is_empty());
+    }
+
+    #[test]
+    fn test_kitty_dcs_not_confused_with_sixel() {
+        // Kitty image protocol has params and doesn't start with ?/digit
+        let mut emu = VttyEmulator::new(10, 10, 100);
+        emu.feed(b"\x1bP1;0;0qi=1\x1b\\");
+        assert!(emu.dcs_buffer().starts_with("kitty:"));
+        assert!(emu.sixel_images().is_empty());
     }
 
     #[test]
