@@ -727,6 +727,51 @@ vrunner --display-all --tabs --mouse -- cargo test
 
 The display loop operates in these states:
 
+```
+                    ┌──────────────────────────────────────┐
+                    │          DISPLAY LOOP STATES          │
+                    └──────────────────────────────────────┘
+
+  ┌──────────┐    command      ┌──────────┐    command     ┌──────────┐
+  │  Active  │────exits───────>│ Monitor  │────exits──────>│   Exit   │
+  │          │<──selects───────│          │<──selects──────│   loop   │
+  │forward   │                 │read-only │                 │terminates│
+  │keystrokes│                 │display   │                 │          │
+  └────┬─────┘                 └────┬─────┘                 └──────────┘
+       │                            │
+       │ Ctrl+L                     │ Ctrl+L
+       ▼                            ▼
+  ┌──────────┐                 ┌──────────┐
+  │   Log    │                 │   Log    │
+  │ Overlay  │                 │ Overlay  │
+  └────┬─────┘                 └────┬─────┘
+       │ Ctrl+H / q/Esc            │ q/Esc
+       ▼                            │
+  ┌──────────┐                      │
+  │   Help   │                      │
+  │ Overlay  │                      │
+  └──────────┘                      │
+       │ any key                    │
+       ▼                            │
+  (returns to                       │
+   previous state)                  │
+                                    │
+  ┌──────────┐    Esc/Enter         │
+  │  Context │<─────────────────────┘
+  │   Menu   │   right-click
+  │(Kill/    │
+  │Purge/    │   Ctrl+F             ┌──────────┐
+  │Restart)  │────────────────────>│  Search  │
+  └──────────┘                      │ Overlay  │
+                                    └────┬─────┘
+                                         │ Esc
+                                         ▼
+                                    (returns to
+                                     previous state)
+```
+
+**State transitions:**
+
 1. **Active** — A command is selected; keystrokes are forwarded to the child process
 2. **Monitor** — No direct child; VTTY output is displayed read-only from other commands
 3. **Overlay** — A temporary overlay (log, help, spawn prompt) is shown on top of the VTTY
