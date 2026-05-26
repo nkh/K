@@ -1,0 +1,70 @@
+# Dev Server with Hot Reload
+
+Run multiple development services in a single vrunner instance, all visible from one web dashboard.
+
+## Scenario
+
+You are developing a web application with a frontend (React/Vue), backend API (Node/Go/Rust), and database migration watcher. You want to monitor all three simultaneously from your browser without opening multiple terminal tabs.
+
+## Setup
+
+### 1. Create a config file
+
+```yaml
+# vrunner.yaml
+server:
+  bind: "127.0.0.1"
+  port: 8080
+
+vtty:
+  rows: 30
+  cols: 120
+  scrollback: 2000
+
+web:
+  update_mode: "push"
+
+display:
+  refresh_ms: 80
+
+default_exit:
+  exit:
+    timeout_secs: 5
+```
+
+### 2. Start vrunner
+
+```bash
+vrunner --daemon
+```
+
+### 3. Spawn your services
+
+```bash
+# Frontend dev server
+vrunner spawn -- npm run dev:frontend
+
+# Backend API server
+vrunner spawn -- cargo run
+
+# Database migration watcher
+vrunner spawn -- npm run watch:migrations
+```
+
+### 4. Open the dashboard
+
+Open `http://127.0.0.1:8080/admin` in your browser.
+
+## Workflow
+
+- **Monitor** — Click between services in the sidebar to see their output in real time.
+- **Restart** — Kill a service and re-spawn it via the web UI or `vrunner spawn`.
+- **Debug** — Use the scrollback feature to review past output by scrolling up in the terminal viewer.
+- **Kill all** — Use the "Kill All" button in the top bar to stop everything at once.
+- **Shutdown** — `vrunner stop $(vrunner list | grep <PID>)` or `curl -X POST http://127.0.0.1:8080/api/shutdown`.
+
+## Tips
+
+- Use `--display-all --tabs` for a local terminal view with tab switching.
+- Use `--retain-on-exit` to keep output available after a service crashes for debugging.
+- Use `--log` to see API calls in the terminal when not running as a daemon.
