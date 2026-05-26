@@ -81,7 +81,7 @@ async fn spawn_echo(args: Vec<String>) -> String {
         .await
         .unwrap();
     sleep(Duration::from_millis(300)).await;
-    let plain = manager.get(&id).map(|h| async { h.vtty_plain().await });
+    let plain = manager.get(&id).map(|h| async move { h.vtty_plain().await });
     let text = match plain {
         Some(fut) => fut.await,
         None => String::new(),
@@ -148,7 +148,8 @@ async fn regression_kill_nonexistent_returns_error() {
     // Killing a command that doesn't exist must not panic.
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
-    let result = manager.kill("nonexistent-id", None).await;
+    let nonexistent = String::from("nonexistent-id");
+    let result = manager.kill(&nonexistent, None).await;
     // kill() removes from DashMap — if not found, it's a no-op Ok(())
     assert!(result.is_ok(), "kill() on nonexistent ID should not panic");
 }
@@ -157,11 +158,13 @@ async fn regression_kill_nonexistent_returns_error() {
 async fn regression_spawn_multiple_all_visible() {
     // Spawning 3 commands must show all 3 in list().
     // Regression: DashMap race condition lost commands.
+    // NOTE: use long-running commands (sleep) so they don't exit
+    // and get auto-removed before we can check list().
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
-    let id1 = manager.spawn("echo".into(), vec!["a".into()], None, None, HashMap::new(), None, None).await.unwrap();
-    let id2 = manager.spawn("echo".into(), vec!["b".into()], None, None, HashMap::new(), None, None).await.unwrap();
-    let id3 = manager.spawn("echo".into(), vec!["c".into()], None, None, HashMap::new(), None, None).await.unwrap();
+    let id1 = manager.spawn("sleep".into(), vec!["60".into()], None, None, HashMap::new(), None, None).await.unwrap();
+    let id2 = manager.spawn("sleep".into(), vec!["60".into()], None, None, HashMap::new(), None, None).await.unwrap();
+    let id3 = manager.spawn("sleep".into(), vec!["60".into()], None, None, HashMap::new(), None, None).await.unwrap();
     let list = manager.list();
     assert_eq!(list.len(), 3, "should have 3 commands");
     let ids: Vec<&str> = list.iter().map(|(id, _, _, _, _)| id.as_str()).collect();
@@ -196,7 +199,7 @@ async fn regression_find_by_pid_returns_correct_id() {
     let id = manager.spawn("echo".into(), vec!["pid_test".into()], None, None, HashMap::new(), None, None).await.unwrap();
     let pid = manager.get(&id).unwrap().pid;
     let found = manager.find_by_pid(pid);
-    assert_eq!(found, Some(id), "find_by_pid returned wrong ID");
+    assert_eq!(found, Some(id.clone()), "find_by_pid returned wrong ID");
     let _ = manager.kill(&id, None).await;
 }
 
@@ -216,7 +219,8 @@ async fn regression_kill_by_pid_works() {
 async fn regression_purge_nonexistent_returns_error() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
-    let result = manager.purge("nonexistent-id");
+    let nonexistent = String::from("nonexistent-id");
+    let result = manager.purge(&nonexistent);
     assert!(result.is_err(), "purge nonexistent ID should error");
 }
 
@@ -333,13 +337,15 @@ async fn regression_list_empty_after_all_killed() {
 #[tokio::test]
 async fn regression_concurrent_spawns() {
     // Spawning many commands concurrently must not lose any.
+    // NOTE: use long-running commands (sleep) so they don't exit
+    // and get auto-removed before we can count them.
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let mut handles = vec![];
     for _ in 0..10 {
         let mgr = manager.clone();
         handles.push(tokio::spawn(async move {
-            mgr.spawn("echo".into(), vec!["concurrent".into()], None, None, HashMap::new(), None, None).await
+            mgr.spawn("sleep".into(), vec!["60".into()], None, None, HashMap::new(), None, None).await
         }));
     }
     let mut ids = vec![];
@@ -428,15 +434,16 @@ async fn regression_resize_command() {
     let _ = manager.kill(&id, None).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn regression_snapshot_store_and_retrieve() {
+    // Use a long-running command so it stays in the manager for snapshot ops.
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("echo".into(), vec!["snap_me".into()], None, None, HashMap::new(), None, None)
+        .spawn("sleep".into(), vec!["60".into()], None, None, HashMap::new(), None, None)
         .await
         .unwrap();
-    sleep(Duration::from_millis(200)).await;
+    sleep(Duration::from_millis(100)).await;
 
     let meta = manager.store_snapshot(&id, "test_snap").unwrap();
     assert_eq!(meta.name, "test_snap");
@@ -454,43 +461,48 @@ async fn regression_snapshot_store_and_retrieve() {
     let _ = manager.kill(&id, None).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn regression_diff_snapshot() {
+    // Use a long-running command so it stays in the manager for snapshot ops.
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("echo".into(), vec!["before".into()], None, None, HashMap::new(), None, None)
+        .spawn("sleep".into(), vec!["60".into()], None, None, HashMap::new(), None, None)
         .await
         .unwrap();
-    sleep(Duration::from_millis(300)).await;
+    sleep(Duration::from_millis(100)).await;
 
     manager.store_snapshot(&id, "base").unwrap();
-    sleep(Duration::from_millis(200)).await;
+    sleep(Duration::from_millis(100)).await;
 
-    // After echo exits the buffer might be identical → diff should have 0 changes
+    // Buffer should be identical → diff should have 0 changes
     let diff = manager.diff_snapshot(&id, "base").unwrap();
-    // changed_count could be 0 or more, but diff() must not panic
-    let _ = diff.changed_count;
+    assert_eq!(diff.changed_count, 0, "diff against identical snapshot should have 0 changes");
 
     let _ = manager.kill(&id, None).await;
 }
 
-#[tokio::test]
+// NOTE: has_changed() uses block_in_place internally, which requires
+// a multi-threaded tokio runtime.  The default #[tokio::test] runtime is
+// current_thread, so we must specify multi_thread flavour here.
+#[tokio::test(flavor = "multi_thread")]
 async fn regression_has_changed_detection() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("echo".into(), vec!["change_detect".into()], None, None, HashMap::new(), None, None)
+        .spawn("sleep".into(), vec!["60".into()], None, None, HashMap::new(), None, None)
         .await
         .unwrap();
 
-    // First check always reports changed
+    // First check always reports changed (no previous generation stored)
     let result1 = manager.has_changed(&id);
-    assert!(result1.is_ok());
+    assert!(result1.is_ok(), "first has_changed should succeed");
+    assert!(result1.unwrap(), "first has_changed should report changed");
 
     // Second check should report not-changed (no new writes)
     let result2 = manager.has_changed(&id);
-    assert!(result2.is_ok());
+    assert!(result2.is_ok(), "second has_changed should succeed");
+    assert!(!result2.unwrap(), "second has_changed should report not-changed");
 
     let _ = manager.kill(&id, None).await;
 }
@@ -523,7 +535,8 @@ async fn regression_send_keys_to_running_command() {
 async fn regression_send_keys_nonexistent_errors() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
-    let result = manager.send_keys("nonexistent", "test").await;
+    let nonexistent = String::from("nonexistent");
+    let result = manager.send_keys(&nonexistent, "test").await;
     assert!(result.is_err(), "send_keys to nonexistent command should error");
 }
 
@@ -670,7 +683,7 @@ fn regression_merge_command_env() {
 
 #[test]
 fn regression_instance_registry_new() {
-    let reg = vrunner::instance::registry::InstanceRegistry::new();
+    let reg = vrunner::instance::registry::InstanceRegistry::new().expect("InstanceRegistry::new should succeed");
     assert!(reg.list_instances().is_empty());
 }
 
@@ -802,13 +815,24 @@ async fn regression_spawn_with_custom_vtty_size() {
 
 #[tokio::test]
 async fn regression_manager_logger_works() {
-    let cfg = test_config();
+    // The logger is only enabled when command_log.enabled = true.
+    // We need to enable it in the config, otherwise log() is a no-op.
+    let mut cfg = test_config();
+    cfg.command_log.enabled = true;
     let manager = Arc::new(CommandManager::new(cfg));
+
+    // Spawning a command logs a "spawn" entry automatically
+    let id = manager
+        .spawn("sleep".into(), vec!["60".into()], None, None, HashMap::new(), None, None)
+        .await
+        .unwrap();
+
     let logger = manager.logger();
     logger.log("test", "regression message");
     let buf = logger.read_memory_buffer();
     assert!(buf.len() >= 1, "logger should have at least 1 entry");
     assert!(buf.last().unwrap().contains("regression message"));
+    let _ = manager.kill(&id, None).await;
 }
 
 #[tokio::test]
@@ -1009,15 +1033,16 @@ async fn regression_exit_code_mutex() {
     let _ = manager.kill(&id, None).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn regression_multiple_snapshots_same_command() {
+    // Use a long-running command so it stays in the manager for snapshot ops.
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("echo".into(), vec!["multi_snap".into()], None, None, HashMap::new(), None, None)
+        .spawn("sleep".into(), vec!["60".into()], None, None, HashMap::new(), None, None)
         .await
         .unwrap();
-    sleep(Duration::from_millis(200)).await;
+    sleep(Duration::from_millis(100)).await;
 
     manager.store_snapshot(&id, "snap1").unwrap();
     manager.store_snapshot(&id, "snap2").unwrap();
@@ -1069,7 +1094,7 @@ fn regression_emulator_mouse_tracking_roundtrip() {
 
 #[test]
 fn regression_emulator_sgr_reset_clears_all_attributes() {
-    let mut emu = vrunner::vtty::emulator::VttyEmulator::new(3, 20);
+    let mut emu = vrunner::vtty::emulator::VttyEmulator::new(3, 20, 1000);
     emu.feed(b"\x1b[1;3;4;7m"); // bold, italic, underline, reverse
     emu.feed(b"\x1b[0m"); // reset
     emu.feed_str("X");
@@ -1083,7 +1108,7 @@ fn regression_emulator_sgr_reset_clears_all_attributes() {
 
 #[test]
 fn regression_emulator_alt_screen_preserves_main() {
-    let mut emu = vrunner::vtty::emulator::VttyEmulator::new(5, 10);
+    let mut emu = vrunner::vtty::emulator::VttyEmulator::new(5, 10, 1000);
     emu.feed_str("MAIN_DATA");
     emu.feed(b"\x1b[?1049h"); // enter alt
     emu.feed_str("ALT_DATA");
@@ -1095,7 +1120,7 @@ fn regression_emulator_alt_screen_preserves_main() {
 
 #[test]
 fn regression_emulator_cursor_position_after_scroll() {
-    let mut emu = vrunner::vtty::emulator::VttyEmulator::new(3, 10);
+    let mut emu = vrunner::vtty::emulator::VttyEmulator::new(3, 10, 1000);
     // Fill the buffer
     for i in 0..3 {
         emu.feed_str(&format!("line{}\n", i));
