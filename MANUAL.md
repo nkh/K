@@ -75,6 +75,7 @@ This manual is the comprehensive reference for vrunner. It covers every feature,
 - [C. Use Cases](#c-use-cases)
 - [D. Cookbook](#d-cookbook)
 - [E. Video Storyboard](#e-video-storyboard)
+- [F. Version Upgrade Guide](#f-version-upgrade-guide)
 
 ---
 
@@ -2131,6 +2132,66 @@ See [docs/cookbook/](docs/cookbook/) for step-by-step recipes:
 ## E. Video Storyboard
 
 See [docs/storyboard.md](docs/storyboard.md) for the vrunner introduction video storyboard.
+
+## F. Version Upgrade Guide
+
+vrunner follows semantic versioning. Upgrades are generally safe, but review these notes for breaking changes.
+
+### Upgrading from Source
+
+```bash
+cd K  # your clone directory
+git pull origin main
+cargo build --release
+```
+
+If you installed system-wide:
+```bash
+cargo install --path .
+```
+
+### Upgrade Checklist
+
+1. **Stop all running vrunner instances** before upgrading:
+   ```bash
+   vrunner list          # find all PIDs
+   vrunner stop <pid>    # stop each one
+   ```
+
+2. **Check for config changes**: Review the changelog for any configuration field renames or removals. If the config validation catches issues, run `vrunner config-check` before starting.
+
+3. **Reinstall man pages**: If the man pages changed, copy the new versions:
+   ```bash
+   cp man/vrunner.1 /usr/local/share/man/man1/
+   cp man/vrunnerctrl.1 /usr/local/share/man/man1/
+   mandb  # rebuild the man page index
+   ```
+
+4. **Test with a simple command**: After upgrading, verify basic functionality:
+   ```bash
+   vrunner -- echo "hello"
+   ```
+
+### Configuration Migration
+
+If a config field was renamed between versions, vrunner will log a warning at startup. The old field name is still accepted but deprecated. Update your config files to use the new names:
+
+```bash
+# Validate your config without starting the server
+vrunner config-check -c ./my-config.yaml
+```
+
+### Breaking Changes
+
+Breaking changes are documented in the commit history with the `BREAKING` prefix. As of the current version, there are no breaking changes from the initial release.
+
+### Rollback
+
+If you need to roll back to a previous version:
+```bash
+git checkout <previous-tag>
+cargo build --release
+```
 
 ---
 
