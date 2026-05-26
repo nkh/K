@@ -145,13 +145,13 @@ async fn async_main(cli: Cli) -> Result<()> {
         let instances = registry.list_instances();
 
         let pid = subcommands::resolve_stop_target(pid, &instances);
+        tracing::info!(instance_pid = pid, "Stopping vrunner instance");
 
-        let client = reqwest::Client::new();
-        let stopped = subcommands::handle_stop_command_by_pid_on_instances(&client, &instances, pid).await?;
-        if !stopped {
-            // Fall back to stopping the whole instance
-            registry.stop_instance(pid).await?;
-        }
+        // Stop the instance directly via the /api/shutdown endpoint.
+        // The old code tried handle_stop_command_by_pid_on_instances first
+        // (which looks for a COMMAND with the instance PID — always fails)
+        // then fell back to stop_instance.  Go straight to the instance.
+        registry.stop_instance(pid).await?;
         return Ok(());
     }
 

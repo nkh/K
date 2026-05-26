@@ -1,6 +1,7 @@
 use anyhow::Result;
 use crossterm::style::{Color, Stylize};
 use std::io::IsTerminal;
+use std::time::Duration;
 
 use crate::cli::args::{CertAction, Cli};
 use crate::config::loader::load_config;
@@ -9,6 +10,20 @@ use crate::instance::info::InstanceInfo;
 use crate::instance::registry::InstanceRegistry;
 use crate::interactive::display::detect_terminal_size;
 use crate::web::certs::{CertificateEntry, CertificateStore};
+
+/// Create a reqwest::Client with sensible timeouts.
+///
+/// Without explicit timeouts, reqwest defaults to NO timeout — HTTP
+/// requests hang indefinitely if the server is unreachable or unresponsive.
+/// This caused `vrunner spawn` and `vrunner stop` to block forever when
+/// the target instance's web server wasn't accepting connections.
+pub fn http_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(3))
+        .timeout(Duration::from_secs(10))
+        .build()
+        .expect("Failed to build HTTP client")
+}
 
 /// Colorize text using crossterm when stdout is a TTY, plain text otherwise.
 pub fn c(text: &str, color: Color, bold: bool) -> String {
@@ -96,7 +111,7 @@ pub async fn handle_spawn_command(cli: &Cli, cmd: &str, args: &[String], rows: O
     let info = resolve_instance(cli, &registry)?;
 
     let url = instance_url(&info, &None);
-    let client = reqwest::Client::new();
+    let client = http_client();
 
     let mut body = serde_json::json!({
         "cmd": cmd,
@@ -138,13 +153,17 @@ pub async fn handle_spawn_command(cli: &Cli, cmd: &str, args: &[String], rows: O
         body["cols"] = serde_json::json!(c_);
     }
 
-    tracing::info!(target_pid = info.pid, cmd = cmd, "Spawning command on remote instance");
+    tracing::info!(target_pid = info.pid, cmd = cmd, url = %url, "Spawning command on remote instance");
 
     let resp = client
         .post(format!("{}/api/commands", url))
         .json(&body)
         .send()
-        .await?;
+        .await
+        .map_err(|e| {
+            tracing::error!(url = %url, error = %e, "Failed to connect to vrunner instance");
+            anyhow::anyhow!("Cannot connect to vrunner instance at {} — is it running? Error: {}", url, e)
+        })?;
 
     let status = resp.status();
     let result: serde_json::Value = resp.json().await?;
@@ -169,7 +188,7 @@ pub async fn handle_freeze_command(cli: &Cli, pid: u32) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let info = resolve_instance(cli, &registry)?;
     let url = instance_url(&info, &None);
-    let client = reqwest::Client::new();
+    let client = http_client();
 
     // Look up the command ID by PID via the instance's API
     let cmd_id = resolve_pid_to_id(&client, &url, pid).await?;
@@ -198,7 +217,7 @@ pub async fn handle_thaw_command(cli: &Cli, pid: u32) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let info = resolve_instance(cli, &registry)?;
     let url = instance_url(&info, &None);
-    let client = reqwest::Client::new();
+    let client = http_client();
 
     // Look up the command ID by PID via the instance's API
     let cmd_id = resolve_pid_to_id(&client, &url, pid).await?;
@@ -253,7 +272,7 @@ pub async fn handle_resize_command(_cli: &Cli, target: &str, rows: u16, cols: u1
         (rows, cols)
     };
 
-    let client = reqwest::Client::new();
+    let client = http_client();
 
     // Fast path: if target is a pure number, treat as PID.
     if let Ok(pid) = target.parse::<u32>() {
@@ -454,6 +473,11 @@ pub async fn handle_list_command(cli: &Cli) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let all_instances = registry.list_instances();
 
+    if all_instances.is_empty() {
+        println!("No running vrunner instances.");
+        return Ok(());
+    }
+
     // Resolve target: filter to a single instance if --target is given.
     let instances: Vec<InstanceInfo> = if let Some(target_pid) = cli.target {
         match all_instances.iter().find(|i| i.pid == target_pid) {
@@ -478,9 +502,7 @@ pub async fn handle_list_command(cli: &Cli) -> Result<()> {
         return Ok(());
     }
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(2))
-        .build()?;
+    let client = http_client();
 
     for info in &instances {
         println!("{}", format_instance_header(info));
@@ -595,7 +617,7 @@ pub async fn handle_stop_command(_cli: &Cli, target: Option<&str>) -> Result<boo
         return Ok(false);
     }
 
-    let client = reqwest::Client::new();
+    let client = http_client();
 
     // If no target given, stop the only command if there is exactly one.
     let target = match target {
@@ -801,7 +823,7 @@ pub async fn handle_purge_command(_cli: &Cli, target: Option<&str>) -> Result<bo
         return Ok(false);
     }
 
-    let client = reqwest::Client::new();
+    let client = http_client();
 
     // Collect all *exited* commands from all instances.
     let all_commands: Vec<(u32, String, u32, String, String)> = {
@@ -1019,9 +1041,7 @@ pub async fn handle_list_commands_command(cli: &Cli) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let all_instances = registry.list_instances();
     let instances = resolve_targeted_instances(cli, &all_instances)?;
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(2))
-        .build()?;
+    let client = http_client();
 
     // Print TSV header
     println!("VRUNNER_PID\tCMD_PID\tNAME\tARGS\tCERT");

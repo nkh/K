@@ -2,6 +2,7 @@ use anyhow::Result;
 use serde_json;
 use std::fs;
 use std::path::PathBuf;
+use std::time::Duration;
 use sysinfo::{System, SystemExt};
 
 use super::info::InstanceInfo;
@@ -100,13 +101,22 @@ impl InstanceRegistry {
         match target {
             Some(info) => {
                 let url = format!("http://{}:{}/api/shutdown", info.bind, info.port);
-                let client = reqwest::Client::new();
+                let client = reqwest::Client::builder()
+                    .connect_timeout(Duration::from_secs(3))
+                    .timeout(Duration::from_secs(5))
+                    .build()?;
                 match client.post(&url).send().await {
                     Ok(resp) if resp.status().is_success() => {
                         println!("Instance {} stopped gracefully.", pid);
                     }
-                    _ => {
-                        println!("Failed to contact instance {}. You may need to run: kill {}", pid, pid);
+                    Ok(resp) => {
+                        let status = resp.status();
+                        tracing::error!("Shutdown request returned HTTP {}", status);
+                        println!("Failed to stop instance {} (HTTP {}). You may need to run: kill {}", pid, status, pid);
+                    }
+                    Err(e) => {
+                        tracing::error!(pid = pid, url = %url, error = %e, "Failed to contact instance");
+                        println!("Failed to contact instance {} ({}). Is the web server running? Try: kill {}", pid, e, pid);
                     }
                 }
             }
