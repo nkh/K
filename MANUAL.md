@@ -681,6 +681,16 @@ curl http://127.0.0.1:9090/api/log
 curl "http://127.0.0.1:9090/api/log?search=spawn&offset=0&limit=50"
 ```
 
+### Raw PTY Logging
+
+The `--log-pty-raw` flag records the raw bytes received from each child PTY read. This is useful for debugging terminal output issues or replaying sessions:
+
+```bash
+vrunner --log-pty-raw /tmp/pty-raw.log -- my-command
+```
+
+Each line records one `read()` call with an elapsed-time stamp and escaped bytes. Printable ASCII is shown as-is; non-printable bytes are escaped as `\xHH`. The resulting log can be replayed step-by-step with tools like `ansi-replay`.
+
 ### Real-Time Log Streaming
 
 ```javascript
@@ -1168,7 +1178,38 @@ Response:
 {
   "status": "ok",
   "data": [
-    {"id": "550e8400-...", "name": "htop", "args": [], "pid": 12345, "status": "running", "certificate": null}
+    {
+      "id": "550e8400-...",
+      "name": "htop",
+      "args": [],
+      "pid": 12345,
+      "alive": true,
+      "runtime_secs": 42.5,
+      "exit_code": null,
+      "exit_time_secs": null,
+      "status": "running",
+      "certificate": null,
+      "exit": {"on_exit": "", "on_error": "", "exit_timeout": 10, "retain_on_exit": false}
+    }
+  ],
+  "error": null
+}
+```
+
+### `GET /api/commands/lookup/:name`
+
+Look up commands by name. Matches both the full path and the basename.
+
+```bash
+curl http://127.0.0.1:9090/api/commands/lookup/htop
+```
+
+Response:
+```json
+{
+  "status": "ok",
+  "data": [
+    {"id": "550e8400-...", "name": "htop", "args": [], "pid": 12345, "alive": true, "runtime_secs": 42.5, "certificate": null}
   ],
   "error": null
 }
@@ -1281,6 +1322,47 @@ curl "http://127.0.0.1:9090/api/commands/$ID/vtty/html?scrollback_offset=10"
 ```
 
 Response includes: `html`, `cursor`, `dimensions`, `scrollback_lines`, `mouse_tracking`, `alternate_screen`.
+
+### `GET /api/commands/:id/vtty/buffer?screen=current|main|alt`
+
+Get VTTY buffer as HTML. The `screen` query parameter selects which buffer to render: `current` (auto-detects main or alternate), `main` (primary buffer), or `alt` (alternate screen buffer).
+
+```bash
+curl http://127.0.0.1:9090/api/commands/$ID/vtty/buffer
+curl "http://127.0.0.1:9090/api/commands/$ID/vtty/buffer?screen=alt"
+```
+
+Response:
+```json
+{
+  "status": "ok",
+  "data": {
+    "id": "550e8400-...",
+    "screen": "current",
+    "html": "<span>...</span>",
+    "alternate_screen": false,
+    "dimensions": {"rows": 24, "cols": 80}
+  },
+  "error": null
+}
+```
+
+### `GET /api/commands/:id/vtty/changed`
+
+Check if a VTTY has changed since the last poll. Used by clients implementing efficient polling to skip unnecessary full re-renders.
+
+```bash
+curl http://127.0.0.1:9090/api/commands/$ID/vtty/changed
+```
+
+Response:
+```json
+{
+  "status": "ok",
+  "data": {"id": "550e8400-...", "changed": true},
+  "error": null
+}
+```
 
 ### `GET /api/commands/:id/vtty/partial?offset=N&limit=N`
 
