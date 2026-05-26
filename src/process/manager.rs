@@ -589,7 +589,7 @@ impl CommandManager {
         &self.config
     }
 
-    /// Get a clone of the commands Arc<DashMap> for use in spawned tasks
+    /// Get a clone of the commands `Arc<DashMap>` for use in spawned tasks
     /// that need to remove commands after exit (e.g. the process waiter).
     pub fn commands_arc(&self) -> Arc<DashMap<CommandId, CommandHandle>> {
         self.commands.clone()

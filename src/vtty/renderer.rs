@@ -77,7 +77,7 @@ impl VttyRenderer {
     }
 
     /// Serialize buffer to HTML with inline styles.
-    /// Returns the inner content only (no outer <pre> wrapper) so that
+    /// Returns the inner content only (no outer `<pre>` wrapper) so that
     /// callers can control their own container element.
     ///
     /// Cell characters are HTML-escaped (`<`, `>`, `&`, `'`, `"`) to
