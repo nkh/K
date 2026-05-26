@@ -375,6 +375,7 @@
         <span class="cmd-label" id="cmdLabel"></span>
         <span class="cursor-pos" id="cursorPos">Cursor: --</span>
         <span class="dims" id="termDims">--</span>
+        <span class="cursor-pos" id="scrollbackIndicator" style="color:var(--yellow);display:none;">SCROLLBACK</span>
         <span class="spacer"></span>
         <label for="updateMode" style="font-size:0.7rem;color:var(--text-muted);">Update:</label>
         <select id="updateMode" onchange="switchUpdateMode(this.value)" title="How the web UI detects VTTY buffer changes" style="font-size:0.65rem;padding:0.1rem 0.2rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:3px;">
@@ -790,6 +791,8 @@ function selectCommand(instUrl, cmdId, name) {
     state.selectedCmdId = cmdId;
     state.bufferView = 'current';
     document.getElementById('bufferSelect').value = 'current';
+    // Reset scrollback offset when switching commands
+    state.panels.forEach(p => p.scrollbackOffset = 0);
     updatePanelCommandInfo();
     loadCommands(); // Re-render to update selection
     // Immediately load VTTY content via HTTP
@@ -1138,9 +1141,11 @@ function updateVttyDisplay(data) {
     document.getElementById('resizeRows').value = dims.rows || 24;
     document.getElementById('resizeCols').value = dims.cols || 80;
 
-    // Show cursor indicator
+    // Show cursor indicator (hide when in scrollback)
+    const panelObj = state.panels.find(p => p.id === panel.id);
+    const inScrollback = panelObj && panelObj.scrollbackOffset > 0;
     const cursorEl = vttyEl ? vttyEl.querySelector('.cursor-indicator') : null;
-    if (cursorEl && cursor.row !== undefined) {
+    if (cursorEl && cursor.row !== undefined && !inScrollback) {
         const charW = state.fontSize * 0.6;
         const charH = state.fontSize * 1.2;
         cursorEl.style.top = (cursor.row * charH) + 'px';
@@ -1148,6 +1153,14 @@ function updateVttyDisplay(data) {
         cursorEl.style.width = charW + 'px';
         cursorEl.style.height = charH + 'px';
         cursorEl.style.display = '';
+    } else if (cursorEl) {
+        cursorEl.style.display = 'none';
+    }
+
+    // Track mouse state from the server response
+    if (panelObj) {
+        panelObj.mouseTracking = !!data.mouse_tracking;
+        panelObj.mouseSgr = !!data.mouse_sgr;
     }
 
     state._termRows = dims.rows;
@@ -1170,11 +1183,20 @@ async function loadVttyHttp(instUrl, cmdId) {
     const panel = getSelectedPanel();
     if (!panel) return;
 
+    // Get panel state for scrollback offset
+    const panelObj = state.panels.find(p => p.id === panel.id);
+    const sbOffset = panelObj ? panelObj.scrollbackOffset : 0;
+
     // If viewing a specific buffer, use the buffer endpoint
-    const screenParam = state.bufferView !== 'current' ? `?screen=${state.bufferView}` : '';
-    const endpoint = state.bufferView !== 'current'
-        ? `/api/commands/${cmdId}/vtty/buffer${screenParam}`
-        : `/api/commands/${cmdId}/vtty/html`;
+    let endpoint;
+    if (state.bufferView !== 'current') {
+        const screenParam = `?screen=${state.bufferView}`;
+        endpoint = `/api/commands/${cmdId}/vtty/buffer${screenParam}`;
+    } else if (sbOffset > 0) {
+        endpoint = `/api/commands/${cmdId}/vtty/html?scrollback_offset=${sbOffset}`;
+    } else {
+        endpoint = `/api/commands/${cmdId}/vtty/html`;
+    }
 
     try {
         const res = await fetch(apiUrl(endpoint, { url: instUrl }), { headers: authHeadersForInstance({ url: instUrl }) });
@@ -1198,6 +1220,28 @@ async function loadVttyHttp(instUrl, cmdId) {
             // Update alt screen badge
             const badge = document.getElementById('altScreenBadge');
             if (badge) badge.style.display = json.data.alternate_screen ? '' : 'none';
+
+            // Update mouse state
+            if (panelObj) {
+                panelObj.mouseTracking = !!json.data.mouse_tracking;
+                panelObj.mouseSgr = !!json.data.mouse_sgr;
+            }
+
+            // Hide cursor when in scrollback view
+            const cursorEl = vttyEl ? vttyEl.querySelector('.cursor-indicator') : null;
+            if (cursorEl) {
+                if (sbOffset > 0) {
+                    cursorEl.style.display = 'none';
+                } else {
+                    cursorEl.style.display = '';
+                }
+            }
+
+            // Show/hide scrollback indicator in bottom bar
+            const sbIndicator = document.getElementById('scrollbackIndicator');
+            if (sbIndicator) {
+                sbIndicator.style.display = sbOffset > 0 ? '' : 'none';
+            }
         }
     } catch (e) {
         console.error('Failed to load VTTY:', e);
@@ -1207,6 +1251,9 @@ async function loadVttyHttp(instUrl, cmdId) {
 function switchBuffer(view) {
     state.bufferView = view;
     if (!state.selectedCmdId) return;
+
+    // Reset scrollback when switching buffer views
+    state.panels.forEach(p => p.scrollbackOffset = 0);
 
     if (view === 'current') {
         // Re-enable the active update mode for live updates
@@ -1379,7 +1426,7 @@ function updateInstanceDropdown() {
 // ─── Panels (Multi-view) ───
 function addPanelDirect(instUrl, label, token) {
     const id = 'panel-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
-    const panel = { id, instUrl, label, token };
+    const panel = { id, instUrl, label, token, scrollbackOffset: 0, mouseTracking: false, mouseSgr: false, focused: false };
     state.panels.push(panel);
     renderPanels();
     return panel;
@@ -1749,6 +1796,41 @@ function startRefresh() {
 
 // ─── Keyboard handling ───
 document.addEventListener('keydown', (e) => {
+    // Direct terminal keyboard input: when a panel is focused,
+    // capture keystrokes and send them to the PTY directly.
+    if (state.currentView === 'vtty') {
+        const panel = getSelectedPanel();
+        if (panel) {
+            const panelObj = state.panels.find(p => p.id === panel.id);
+            if (panelObj && panelObj.focused && state.selectedCmdId) {
+                // Skip if user is in a search input
+                const searchBar = document.getElementById('searchBar-' + panel.id);
+                if (searchBar && searchBar.classList.contains('visible') &&
+                    document.activeElement && document.activeElement.id === 'searchInput-' + panel.id) {
+                    // Let search input handle the key
+                } else if (e.key === 'Escape') {
+                    vttySearchClose(panel.id);
+                    closeContextMenu();
+                    closeShortcuts();
+                    return;
+                } else if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+                    e.preventDefault();
+                    const sb = document.getElementById('searchBar-' + panel.id);
+                    if (sb) {
+                        sb.classList.add('visible');
+                        const si = document.getElementById('searchInput-' + panel.id);
+                        if (si) { si.focus(); si.select(); }
+                    }
+                    return;
+                } else {
+                    e.preventDefault();
+                    sendDirectKey(e, panelObj);
+                    return;
+                }
+            }
+        }
+    }
+
     // Focus key input when not in an input field and a command is selected
     if (state.currentView === 'vtty' && state.selectedCmdId &&
         !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
@@ -1789,19 +1871,255 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+// ─── Direct key sending (when terminal is focused) ───
+// Encodes a KeyboardEvent into escape sequences and sends to the PTY.
+async function sendDirectKey(e, panelObj) {
+    if (!state.selectedCmdId || !panelObj.instUrl) return;
+
+    // Map common special keys to escape sequences
+    const keyMap = {
+        'Enter': '\r',
+        'Backspace': '\x7f',
+        'Tab': '\t',
+        'Escape': '\x1b',
+        'Home': '\x1b[H',
+        'End': '\x1b[F',
+        'Delete': '\x1b[3~',
+        'ArrowUp': '\x1b[A',
+        'ArrowDown': '\x1b[B',
+        'ArrowRight': '\x1b[C',
+        'ArrowLeft': '\x1b[D',
+        'PageUp': '\x1b[5~',
+        'PageDown': '\x1b[6~',
+        'Insert': '\x1b[2~',
+        'F1': '\x1bOP',
+        'F2': '\x1bOQ',
+        'F3': '\x1bOR',
+        'F4': '\x1bOS',
+        'F5': '\x1b[15~',
+        'F6': '\x1b[17~',
+        'F7': '\x1b[18~',
+        'F8': '\x1b[19~',
+        'F9': '\x1b[20~',
+        'F10': '\x1b[21~',
+        'F11': '\x1b[23~',
+        'F12': '\x1b[24~',
+    };
+
+    let seq = '';
+    if (e.ctrlKey && !e.altKey && !e.metaKey) {
+        // Ctrl+letter
+        if (e.key.length === 1 && e.key >= 'a' && e.key <= 'z') {
+            seq = String.fromCharCode(e.key.charCodeAt(0) - 96);
+        } else if (e.key === '[') seq = '\x1b'; // Ctrl+[ = ESC
+        else if (e.key === '\\') seq = '\x1c';
+        else if (e.key === ']') seq = '\x1d';
+        else if (e.key === '^') seq = '\x1e';
+        else if (e.key === '_') seq = '\x1f';
+    } else if (e.altKey && !e.ctrlKey && !e.metaKey) {
+        // Alt+letter = ESC + letter
+        if (e.key.length === 1) seq = '\x1b' + e.key;
+    } else if (keyMap[e.key]) {
+        seq = keyMap[e.key];
+    } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        // Regular printable character
+        seq = e.key;
+    }
+
+    if (!seq) return;
+
+    try {
+        const res = await fetch(apiUrl(`/api/commands/${state.selectedCmdId}/keys`, { url: panelObj.instUrl }), {
+            method: 'POST',
+            headers: authHeadersForInstance({ url: panelObj.instUrl }),
+            body: JSON.stringify({ keys: seq }),
+        });
+        const json = await res.json();
+        if (json.status === 'ok') {
+            // Trigger a refresh
+            scheduleVttyHttp(panelObj.instUrl, state.selectedCmdId, 50);
+        }
+    } catch (err) {
+        console.error('Direct key send error:', err);
+    }
+}
+
 // ─── Click-to-focus terminal ───
-// Clicking on the VTTY container focuses the key input for that panel,
-// so the user can immediately start typing keystrokes.
+// Clicking on the VTTY container focuses the terminal for direct keyboard input.
+// A second click on an already-focused terminal blurs it.
 document.addEventListener('click', (e) => {
     const vttyContainer = e.target.closest('.vtty-container');
     if (vttyContainer && state.currentView === 'vtty') {
-        const panel = vttyContainer.closest('.panel');
-        if (panel) {
-            const input = panel.querySelector('input[id^="keyInput-"]');
-            if (input) input.focus();
+        const panelEl = vttyContainer.closest('.panel');
+        if (panelEl) {
+            const panelObj = state.panels.find(p => p.id === panelEl.id);
+            if (panelObj) {
+                // Check if click is on a button inside the vtty container (search bar, scroll btn)
+                if (e.target.closest('button') || e.target.closest('input')) return;
+
+                if (panelObj.focused) {
+                    // Already focused — blur
+                    panelObj.focused = false;
+                    vttyContainer.style.outline = '';
+                } else {
+                    // Focus this panel's terminal
+                    state.panels.forEach(p => p.focused = false);
+                    document.querySelectorAll('.vtty-container').forEach(v => v.style.outline = '');
+                    panelObj.focused = true;
+                    vttyContainer.style.outline = '2px solid var(--accent)';
+                    vttyContainer.setAttribute('tabindex', '0');
+                    vttyContainer.focus();
+                }
+            }
         }
+    } else if (!vttyContainer) {
+        // Click outside any terminal — blur all
+        state.panels.forEach(p => p.focused = false);
+        document.querySelectorAll('.vtty-container').forEach(v => v.style.outline = '');
     }
 });
+
+// ─── Mouse wheel scrollback on terminal ───
+document.addEventListener('wheel', (e) => {
+    const vttyContainer = e.target.closest('.vtty-container');
+    if (!vttyContainer || state.currentView !== 'vtty') return;
+
+    const panelEl = vttyContainer.closest('.panel');
+    if (!panelEl) return;
+
+    const panelObj = state.panels.find(p => p.id === panelEl.id);
+    if (!panelObj || !state.selectedCmdId) return;
+
+    e.preventDefault();
+
+    // If the child has mouse tracking enabled, forward wheel events to the PTY
+    if (panelObj.mouseTracking) {
+        const wheelEvent = e.deltaY < 0 ? 'wheel_up' : 'wheel_down';
+        sendMouseEvent(panelObj, wheelEvent, 0, e);
+        return;
+    }
+
+    // Otherwise, use wheel for scrollback navigation
+    if (e.deltaY > 0) {
+        // Wheel down: decrease scrollback offset (move toward live view)
+        panelObj.scrollbackOffset = Math.max(0, panelObj.scrollbackOffset - 3);
+    } else {
+        // Wheel up: increase scrollback offset (move into history)
+        panelObj.scrollbackOffset += 3;
+    }
+
+    // Fetch updated HTML with new scrollback offset
+    loadVttyHttp(panelObj.instUrl, state.selectedCmdId);
+
+    // Update scroll-to-bottom button visibility and scrollback indicator
+    const btn = panelEl.querySelector('.scroll-bottom-btn');
+    if (btn) btn.classList.toggle('visible', panelObj.scrollbackOffset > 0);
+    const sbIndicator = document.getElementById('scrollbackIndicator');
+    if (sbIndicator) sbIndicator.style.display = panelObj.scrollbackOffset > 0 ? '' : 'none';
+}, { passive: false });
+
+// ─── Mouse event forwarding to PTY ───
+// Forwards mousedown, mouseup, mousemove events to the PTY when the child
+// has enabled mouse tracking mode. Events are sent as escape sequences via
+// POST /api/commands/:id/mouse.
+
+let _mouseDownButton = null; // Track which button is pressed
+
+document.addEventListener('mousedown', (e) => {
+    const vttyContainer = e.target.closest('.vtty-container');
+    if (!vttyContainer || state.currentView !== 'vtty') {
+        _mouseDownButton = null;
+        return;
+    }
+
+    const panelEl = vttyContainer.closest('.panel');
+    if (!panelEl) return;
+
+    const panelObj = state.panels.find(p => p.id === panelEl.id);
+    if (!panelObj || !state.selectedCmdId) return;
+
+    // Skip if clicking on buttons/inputs inside vtty container
+    if (e.target.closest('button') || e.target.closest('input')) return;
+
+    // If mouse tracking is enabled, forward the event to PTY
+    if (panelObj.mouseTracking) {
+        e.preventDefault();
+        _mouseDownButton = e.button; // 0=left, 1=middle, 2=right
+        sendMouseEvent(panelObj, 'down', e.button, e);
+    }
+});
+
+document.addEventListener('mouseup', (e) => {
+    const vttyContainer = e.target.closest('.vtty-container');
+    if (!vttyContainer || state.currentView !== 'vtty') {
+        _mouseDownButton = null;
+        return;
+    }
+
+    const panelEl = vttyContainer.closest('.panel');
+    if (!panelEl) return;
+
+    const panelObj = state.panels.find(p => p.id === panelEl.id);
+    if (!panelObj || !state.selectedCmdId) return;
+
+    if (panelObj.mouseTracking && _mouseDownButton !== null) {
+        e.preventDefault();
+        sendMouseEvent(panelObj, 'up', _mouseDownButton, e);
+        _mouseDownButton = null;
+    }
+});
+
+document.addEventListener('mousemove', (e) => {
+    if (_mouseDownButton === null) return; // Only track during drag
+
+    const vttyContainer = e.target.closest('.vtty-container');
+    if (!vttyContainer || state.currentView !== 'vtty') return;
+
+    const panelEl = vttyContainer.closest('.panel');
+    if (!panelEl) return;
+
+    const panelObj = state.panels.find(p => p.id === panelEl.id);
+    if (!panelObj || !state.selectedCmdId || !panelObj.mouseTracking) return;
+
+    // Throttle mouse move events to avoid flooding
+    if (!panelObj._lastMoveTime || Date.now() - panelObj._lastMoveTime > 16) {
+        panelObj._lastMoveTime = Date.now();
+        sendMouseEvent(panelObj, 'move', _mouseDownButton, e);
+    }
+});
+
+// Send a mouse event to the PTY via the API
+async function sendMouseEvent(panelObj, eventType, button, e) {
+    if (!state.selectedCmdId || !panelObj.instUrl) return;
+
+    // Calculate terminal cell coordinates from pixel position
+    const vttyEl = document.getElementById(panelObj.id)?.querySelector('.vtty-container');
+    if (!vttyEl) return;
+
+    const rect = vttyEl.getBoundingClientRect();
+    const charW = state.fontSize * 0.6;
+    const charH = state.fontSize * 1.2;
+
+    const x = Math.max(1, Math.floor((e.clientX - rect.left) / charW) + 1);
+    const y = Math.max(1, Math.floor((e.clientY - rect.top) / charH) + 1);
+
+    try {
+        await fetch(apiUrl(`/api/commands/${state.selectedCmdId}/mouse`, { url: panelObj.instUrl }), {
+            method: 'POST',
+            headers: authHeadersForInstance({ url: panelObj.instUrl }),
+            body: JSON.stringify({
+                event: eventType,
+                button: button,
+                x: x,
+                y: y,
+            }),
+        });
+        // Refresh display after mouse events (the child may have reacted)
+        scheduleVttyHttp(panelObj.instUrl, state.selectedCmdId, 30);
+    } catch (err) {
+        // Silently ignore — mouse events are best-effort
+    }
+}
 
 // ─── Terminal Search ───
 const vttySearchState = { matchIndex: 0, matches: [], panelId: null };
@@ -1944,11 +2262,21 @@ function vttySearchClose(panelId) {
 
 // ─── Scroll to Bottom ───
 function scrollTerminalBottom(panelId) {
-    const panel = document.getElementById(panelId);
-    if (!panel) return;
-    const vtty = panel.querySelector('.vtty-container');
+    const panelEl = document.getElementById(panelId);
+    if (!panelEl) return;
+    const vtty = panelEl.querySelector('.vtty-container');
     if (vtty) {
         vtty.scrollTop = vtty.scrollHeight;
+    }
+    // Reset scrollback offset and re-fetch
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (panelObj && panelObj.scrollbackOffset > 0) {
+        panelObj.scrollbackOffset = 0;
+        const sbIndicator = document.getElementById('scrollbackIndicator');
+        if (sbIndicator) sbIndicator.style.display = 'none';
+        if (state.selectedCmdId && panelObj.instUrl) {
+            loadVttyHttp(panelObj.instUrl, state.selectedCmdId);
+        }
     }
 }
 
