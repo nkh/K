@@ -173,6 +173,12 @@ pub async fn run_display_loop(
     let mut search_current_match: usize = 0;
     // ── End search overlay state ──
 
+    // ── Split-pane state (#14) ──
+    // Ctrl+S toggles split-pane view showing two commands side-by-side.
+    let mut split_mode = false;
+    let mut split_right_id: Option<String> = None;
+    // ── End split-pane state ──
+
     // Set up SIGWINCH handler for terminal resize.
     // When the user resizes their terminal emulator, the kernel delivers
     // SIGWINCH to the foreground process group.  We catch it here and
@@ -568,6 +574,129 @@ pub async fn run_display_loop(
         let _ = stdout.flush();
     }
 
+    /// Render a split-pane view with two VTTYs side-by-side.
+    /// The left pane shows `left_id`'s buffer, the right shows `right_id`'s.
+    /// A vertical divider line separates the two panes.
+    fn render_split_pane(
+        manager: &Arc<CommandManager>,
+        left_id: &Option<String>,
+        right_id: &Option<String>,
+        tab_offset: u16,
+    ) {
+        use crossterm::{
+            cursor::MoveTo,
+            QueueableCommand,
+        };
+        use std::io::Write;
+        let mut stdout = std::io::stdout();
+        let (phys_cols, phys_rows) = crossterm::terminal::size().unwrap_or((80, 24));
+        let available_rows = phys_rows.saturating_sub(tab_offset);
+        let half_col = (phys_cols / 2) as usize;
+
+        // Draw vertical divider
+        let div_col = half_col;
+        let _ = write!(stdout, "\x1b[38;5;240m"); // grey
+        for r in tab_offset..phys_rows {
+            let _ = write!(stdout, "\x1b[{};{}H", r + 1, div_col + 1);
+            let _ = write!(stdout, "\u{2502}"); // box drawing vertical line
+        }
+        let _ = write!(stdout, "\x1b[0m");
+
+        // Render left pane
+        if let Some(ref id) = left_id {
+            if let Some(handle) = manager.get(id) {
+                let buf = handle.vtty_snapshot_blocking();
+                let render_cols = (buf.width as u16).min(div_col as u16) as usize;
+                let total_lines = buf.total_lines();
+                let viewport_start = total_lines.saturating_sub(available_rows as usize);
+                let mut last_sgr = String::new();
+                for screen_row in 0..(available_rows as usize) {
+                    let line_idx = viewport_start + screen_row;
+                    let row: &[super::super::vtty::cell::Cell] = match buf.get_line(line_idx) {
+                        Some(r) => r,
+                        None => continue,
+                    };
+                    let _ = write!(stdout, "\x1b[{};1H", screen_row as u16 + tab_offset + 1);
+                    let visible_len = render_cols.min(row.len());
+                    for cell in &row[..visible_len] {
+                        let sgr = build_cell_sgr(cell);
+                        if sgr != last_sgr {
+                            let _ = write!(stdout, "{}", sgr);
+                            last_sgr = sgr;
+                        }
+                        let _ = write!(stdout, "{}", cell.ch);
+                    }
+                    // Clear to divider
+                    if (visible_len as u16) < div_col as u16 {
+                        let _ = write!(stdout, "\x1b[0m\x1b[K");
+                        last_sgr = String::new();
+                    }
+                }
+                // Show pane label
+                let label = format!(" {} ", id);
+                let _ = write!(stdout, "\x1b[1;1H\x1b[48;5;238m\x1b[38;5;255m{}\x1b[0m", label);
+            }
+        }
+
+        // Render right pane
+        if let Some(ref id) = right_id {
+            if let Some(handle) = manager.get(id) {
+                let buf = handle.vtty_snapshot_blocking();
+                let render_cols = ((phys_cols - half_col as u16 - 1) as usize).min(buf.width);
+                let total_lines = buf.total_lines();
+                let viewport_start = total_lines.saturating_sub(available_rows as usize);
+                let mut last_sgr = String::new();
+                let col_start = half_col + 1;
+                for screen_row in 0..(available_rows as usize) {
+                    let line_idx = viewport_start + screen_row;
+                    let row: &[super::super::vtty::cell::Cell] = match buf.get_line(line_idx) {
+                        Some(r) => r,
+                        None => continue,
+                    };
+                    let _ = write!(stdout, "\x1b[{};{}H", screen_row as u16 + tab_offset + 1, col_start + 1);
+                    let visible_len = render_cols.min(row.len());
+                    for cell in &row[..visible_len] {
+                        let sgr = build_cell_sgr(cell);
+                        if sgr != last_sgr {
+                            let _ = write!(stdout, "{}", sgr);
+                            last_sgr = sgr;
+                        }
+                        let _ = write!(stdout, "{}", cell.ch);
+                    }
+                    // Clear to end of line
+                    let _ = write!(stdout, "\x1b[0m\x1b[K");
+                    last_sgr = String::new();
+                }
+                // Show pane label
+                let label = format!(" {} ", id);
+                let _ = write!(stdout, "\x1b[1;{}H\x1b[48;5;238m\x1b[38;5;255m{}\x1b[0m", col_start + 1, label);
+            }
+        }
+
+        let _ = stdout.flush();
+    }
+
+    /// Build an SGR escape sequence string for a cell's styling.
+    fn build_cell_sgr(cell: &super::super::vtty::cell::Cell) -> String {
+        let mut sgr = String::new();
+        if cell.fg != [204, 204, 204] {
+            sgr.push_str(&format!("\x1b[38;2;{};{};{}m", cell.fg[0], cell.fg[1], cell.fg[2]));
+        } else {
+            sgr.push_str("\x1b[39m");
+        }
+        if cell.bg != [0, 0, 0] {
+            sgr.push_str(&format!("\x1b[48;2;{};{};{}m", cell.bg[0], cell.bg[1], cell.bg[2]));
+        } else {
+            sgr.push_str("\x1b[49m");
+        }
+        if cell.bold { sgr.push_str("\x1b[1m"); }
+        if cell.italic { sgr.push_str("\x1b[3m"); }
+        if cell.underline { sgr.push_str("\x1b[4m"); }
+        if cell.reverse { sgr.push_str("\x1b[7m"); }
+        if sgr == "\x1b[39m\x1b[49m" { sgr = "\x1b[0m".to_string(); }
+        sgr
+    }
+
     /// Render a status bar at the bottom of the terminal showing info
     /// about the active command (name, PID, uptime, terminal size).
     fn render_status_bar(
@@ -613,7 +742,7 @@ pub async fn run_display_loop(
         };
 
         // Right-align hint
-        let hint = " [Shift+Arrows] scroll [PgUp/PgDn] page [Ctrl+F] search [Ctrl+\\] quit";
+        let hint = " [Shift+Arrows] scroll [Ctrl+F] search [Ctrl+S] split [Ctrl+\\] quit";
         let total = info.len() + hint.len();
         let info = if total <= phys_cols as usize {
             info
@@ -745,7 +874,12 @@ pub async fn run_display_loop(
                     if show_tabs {
                         render_tab_bar(&manager, &active_id);
                     }
-                    render_vtty(&manager, &active_id, if show_tabs { 1 } else { 0 }, scrollback_offset, display_all).await;
+                    if split_mode {
+                        // Split-pane mode: render two VTTYs side-by-side
+                        render_split_pane(&manager, &active_id, &split_right_id, if show_tabs { 1 } else { 0 });
+                    } else {
+                        render_vtty(&manager, &active_id, if show_tabs { 1 } else { 0 }, scrollback_offset, display_all).await;
+                    }
                     if searching {
                         // Render search bar instead of status bar
                         let is_error = search_regex.is_none() && !search_query.is_empty();
@@ -828,6 +962,28 @@ pub async fn run_display_loop(
                                             search_regex = None;
                                             search_match_positions.clear();
                                             search_current_match = 0;
+                                        }
+                                        continue;
+                                    }
+                                    // ── Ctrl+S: toggle split-pane (#14) ──
+                                    if b == 0x13 && esc_buf.is_empty() && !showing_log && !showing_help && !searching {
+                                        let commands = manager.list();
+                                        if commands.len() >= 2 {
+                                            split_mode = !split_mode;
+                                            if split_mode {
+                                                // Pick the next command for the right pane
+                                                let current = active_id.clone()
+                                                    .or_else(|| commands.first().map(|(id, _, _, _, _)| id.clone()));
+                                                if let Some(ref cur) = current {
+                                                    let idx = commands.iter().position(|(id, _, _, _, _)| id == cur).unwrap_or(0);
+                                                    let next_idx = (idx + 1) % commands.len();
+                                                    split_right_id = Some(commands[next_idx].0.clone());
+                                                } else {
+                                                    split_right_id = commands.get(1).map(|(id, _, _, _, _)| id.clone());
+                                                }
+                                            } else {
+                                                split_right_id = None;
+                                            }
                                         }
                                         continue;
                                     }
