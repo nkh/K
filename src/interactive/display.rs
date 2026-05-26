@@ -162,6 +162,17 @@ pub async fn run_display_loop(
     let mut showing_help = false;
     let mut log_scroll_offset: usize = 0;
 
+    // ── Search overlay state (#11) ──
+    // Ctrl+F enters search mode. The user types a regex; matching cells
+    // in the visible VTTY buffer are highlighted.  Enter jumps to next
+    // match, Shift+Enter to previous, Escape closes search.
+    let mut searching = false;
+    let mut search_query: String = String::new();
+    let mut search_regex: Option<regex::Regex> = None;
+    let mut search_match_positions: Vec<(usize, usize, usize)> = Vec::new(); // (row, col, len)
+    let mut search_current_match: usize = 0;
+    // ── End search overlay state ──
+
     // Set up SIGWINCH handler for terminal resize.
     // When the user resizes their terminal emulator, the kernel delivers
     // SIGWINCH to the foreground process group.  We catch it here and
@@ -416,6 +427,147 @@ pub async fn run_display_loop(
         stdout.flush().ok();
     }
 
+    /// Find all regex matches in the VTTY buffer and return their positions.
+    /// Each match is (row, col, length) in the scrollback+visible coordinate space.
+    fn find_search_matches(
+        manager: &Arc<CommandManager>,
+        active_id: &Option<String>,
+        regex: &regex::Regex,
+    ) -> Vec<(usize, usize, usize)> {
+        let commands = manager.list();
+        let target_id = active_id.as_ref()
+            .or_else(|| commands.first().map(|(id, _, _, _, _)| id));
+        let mut positions = Vec::new();
+
+        if let Some(ref id) = target_id {
+            if let Some(handle) = manager.get(id) {
+                let buf = handle.vtty_snapshot_blocking();
+                let total = buf.total_lines();
+                // Search from scrollback through visible rows
+                for line_idx in 0..total {
+                    if let Some(line) = buf.get_line(line_idx) {
+                        // Build a string from the cell characters in this line
+                        let line_str: String = line.iter()
+                            .map(|c| if c.width == 0 { '\0' } else { c.ch })
+                            .collect();
+                        for mat in regex.find_iter(&line_str) {
+                            // Convert char-index to cell-index (skip zero-width cells)
+                            let char_start = mat.start();
+                            let char_end = mat.end();
+                            let mut col: usize = 0;
+                            let mut chars_seen: usize = 0;
+                            let mut start_col: usize = 0;
+                            let mut end_col: usize = 0;
+                            for cell in line.iter() {
+                                if cell.width == 0 { continue; }
+                                if chars_seen == char_start { start_col = col; }
+                                if chars_seen == char_end { end_col = col; break; }
+                                chars_seen += 1;
+                                col += 1;
+                            }
+                            if chars_seen == char_end { end_col = col; }
+                            let len = end_col.saturating_sub(start_col);
+                            if len > 0 {
+                                positions.push((line_idx, start_col, len));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        positions
+    }
+
+    /// Render the search bar at the bottom of the terminal.
+    /// Shows the current query, match count, and navigation hint.
+    fn render_search_bar(
+        query: &str,
+        match_count: usize,
+        current_match: usize,
+        is_error: bool,
+    ) {
+        use std::io::Write;
+        use crossterm::{
+            style::{Color, ResetColor, SetBackgroundColor, SetForegroundColor},
+            cursor::MoveTo,
+            terminal::ClearType,
+            QueueableCommand,
+        };
+        let mut stdout = std::io::stdout();
+        let (_, phys_rows) = crossterm::terminal::size().unwrap_or((80, 24));
+        let bottom = phys_rows.saturating_sub(1);
+
+        stdout.queue(SetBackgroundColor(Color::Rgb { r: 30, g: 30, b: 50 })).ok();
+        stdout.queue(SetForegroundColor(Color::Rgb { r: 200, g: 200, b: 255 })).ok();
+        stdout.queue(MoveTo(0, bottom)).ok();
+        stdout.queue(crossterm::terminal::Clear(ClearType::UntilNewLine)).ok();
+
+        // Search label
+        if is_error {
+            let _ = write!(stdout, "\x1b[1;31mSearch:\x1b[0m ");
+        } else {
+            let _ = write!(stdout, "\x1b[1;36mSearch:\x1b[0m ");
+        }
+
+        // Query text
+        let _ = write!(stdout, "{}", query);
+
+        // Match indicator on the right
+        if match_count > 0 {
+            let indicator = format!(" [{} of {}]", current_match + 1, match_count);
+            let _ = write!(stdout, "{}", indicator);
+        } else if !query.is_empty() {
+            let _ = write!(stdout, " \x1b[2m[no matches]\x1b[0m");
+        }
+
+        // Key hints
+        let _ = write!(stdout, "\x1b[2m [Esc]close [Enter]next [S+Enter]prev\x1b[0m");
+
+        stdout.queue(ResetColor).ok();
+        stdout.flush().ok();
+    }
+
+    /// Render search match highlights on top of the VTTY display.
+    /// Uses reverse-video with a yellow tint to highlight matched cells.
+    fn render_search_highlights(
+        matches: &[(usize, usize, usize)],
+        current_match_idx: usize,
+        scrollback_offset: usize,
+        tab_offset: u16,
+    ) {
+        use std::io::Write;
+        let mut stdout = std::io::stdout();
+        let (_, phys_rows) = crossterm::terminal::size().unwrap_or((80, 24));
+        let visible_start = scrollback_offset;
+        let visible_end = scrollback_offset + (phys_rows as usize);
+
+        for (i, &(row, col, len)) in matches.iter().enumerate() {
+            // Only highlight if this match is in the visible area
+            if row < visible_start || row >= visible_end { continue; }
+
+            let screen_row = row - visible_start + (tab_offset as usize);
+            // Highlight current match differently
+            if i == current_match_idx {
+                let _ = write!(stdout, "\x1b[{};{}H", screen_row + 1, col + 1);
+                let _ = write!(stdout, "\x1b[7;38;5;11m"); // reverse + bright yellow fg
+                // Read the actual characters and re-print them
+                // We just mark the background here; the chars are already rendered
+                for _ in 0..len {
+                    let _ = write!(stdout, " ");
+                }
+                let _ = write!(stdout, "\x1b[0m");
+            } else {
+                let _ = write!(stdout, "\x1b[{};{}H", screen_row + 1, col + 1);
+                let _ = write!(stdout, "\x1b[48;5;58m"); // dim blue bg
+                for _ in 0..len {
+                    let _ = write!(stdout, " ");
+                }
+                let _ = write!(stdout, "\x1b[0m");
+            }
+        }
+        let _ = stdout.flush();
+    }
+
     /// Render a status bar at the bottom of the terminal showing info
     /// about the active command (name, PID, uptime, terminal size).
     fn render_status_bar(
@@ -461,7 +613,7 @@ pub async fn run_display_loop(
         };
 
         // Right-align hint
-        let hint = " [Shift+Arrows] scroll [PgUp/PgDn] page [Ctrl+\\] quit";
+        let hint = " [Shift+Arrows] scroll [PgUp/PgDn] page [Ctrl+F] search [Ctrl+\\] quit";
         let total = info.len() + hint.len();
         let info = if total <= phys_cols as usize {
             info
@@ -594,7 +746,17 @@ pub async fn run_display_loop(
                         render_tab_bar(&manager, &active_id);
                     }
                     render_vtty(&manager, &active_id, if show_tabs { 1 } else { 0 }, scrollback_offset, display_all).await;
-                    render_status_bar(&manager, &active_id);
+                    if searching {
+                        // Render search bar instead of status bar
+                        let is_error = search_regex.is_none() && !search_query.is_empty();
+                        render_search_bar(&search_query, search_match_positions.len(), search_current_match, is_error);
+                        // Highlight matches on top of VTTY
+                        if !search_match_positions.is_empty() {
+                            render_search_highlights(&search_match_positions, search_current_match, scrollback_offset, if show_tabs { 1 } else { 0 });
+                        }
+                    } else {
+                        render_status_bar(&manager, &active_id);
+                    }
                     // Render visual bell flash overlay if active.
                     // Uses reverse-video on the entire visible area for 150ms.
                     if let Some(until) = bell_until {
@@ -658,6 +820,17 @@ pub async fn run_display_loop(
                                     if b == 0x1c {
                                         break 'outer;  // Ctrl+\ — quit display
                                     }
+                                    // ── Ctrl+F: toggle search mode ──
+                                    if b == 0x06 && esc_buf.is_empty() && !showing_log && !showing_help {
+                                        searching = !searching;
+                                        if searching {
+                                            search_query.clear();
+                                            search_regex = None;
+                                            search_match_positions.clear();
+                                            search_current_match = 0;
+                                        }
+                                        continue;
+                                    }
                                     // ── Help overlay: any key dismisses ──
                                     if showing_help {
                                         showing_help = false;
@@ -691,6 +864,59 @@ pub async fn run_display_loop(
                                                 continue;
                                             }
                                             _ => continue,
+                                        }
+                                    }
+
+                                    // ── Search mode input handling ──
+                                    if searching {
+                                        match b {
+                                            0x1b => {
+                                                // Escape: close search
+                                                searching = false;
+                                                continue;
+                                            }
+                                            0x0d => {
+                                                // Enter: next match
+                                                if !search_match_positions.is_empty() {
+                                                    search_current_match = (search_current_match + 1)
+                                                        % search_match_positions.len();
+                                                    // Scroll to make the match visible
+                                                    let (row, _, _) = search_match_positions[search_current_match];
+                                                    let (_, phys_rows) = crossterm::terminal::size().unwrap_or((80, 24));
+                                                    let visible_start = scrollback_offset;
+                                                    let visible_end = scrollback_offset + (phys_rows as usize);
+                                                    if row < visible_start || row >= visible_end {
+                                                        scrollback_offset = row.saturating_sub(phys_rows as usize / 3);
+                                                    }
+                                                }
+                                                continue;
+                                            }
+                                            0x7f | 0x08 => {
+                                                // Backspace: delete last char
+                                                search_query.pop();
+                                                // Re-compile regex
+                                                search_regex = regex::Regex::new(&search_query).ok();
+                                                search_match_positions = if let Some(ref re) = search_regex {
+                                                    find_search_matches(&manager, &active_id, re)
+                                                } else {
+                                                    Vec::new()
+                                                };
+                                                search_current_match = 0;
+                                                continue;
+                                            }
+                                            _ => {
+                                                // Regular printable char: append to query
+                                                search_query.push(b as char);
+                                                // Re-compile and search
+                                                search_regex = regex::Regex::new(&search_query).ok();
+                                                search_match_positions = if let Some(ref re) = search_regex {
+                                                    find_search_matches(&manager, &active_id, re)
+                                                } else {
+                                                    Vec::new()
+                                                };
+                                                search_current_match = 0;
+                                                continue;
+                                            }
                                         }
                                     }
 
