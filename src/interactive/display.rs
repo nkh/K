@@ -643,10 +643,6 @@ pub async fn run_display_loop(
         right_id: &Option<String>,
         tab_offset: u16,
     ) {
-        use crossterm::{
-            cursor::MoveTo,
-            QueueableCommand,
-        };
         use std::io::Write;
         let mut stdout = std::io::stdout();
         let (phys_cols, phys_rows) = crossterm::terminal::size().unwrap_or((80, 24));
