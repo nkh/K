@@ -75,7 +75,9 @@ List all running commands.
       "exit": {
         "on_exit": "",
         "on_error": "",
-        "exit_timeout": 10
+        "exit_timeout": 10,
+        "retain_on_exit": false,
+        "snapshot_on_exit": null
       }
     }
   ]
@@ -95,9 +97,11 @@ Spawn a new command.
 | `cmd` | string | Yes | Command path to execute |
 | `args` | string[] | No | Arguments to pass to the command |
 | `certificate` | string | No | Name of a certificate from the certificate store to bind |
-| `on_exit` | string | No | Command to run when the process exits |
+| `on_exit` | string | No | Command to run when the process exits cleanly |
 | `on_error` | string | No | Command to run when the process exits with non-zero status |
 | `exit_timeout` | number | No | Timeout in seconds for exit handlers (default: 10) |
+| `retain_on_exit` | boolean | No | Keep the VTTY buffer in memory after the process exits (default: `false`). The command appears in the tab bar and web UI with an "exited" status until purged. |
+| `snapshot_on_exit` | string | No | File path to save the VTTY buffer as plain text when the command exits. Includes scrollback content followed by visible screen rows. |
 | `rows` | number | No | VTTY rows (1-200, overrides config default) |
 | `cols` | number | No | VTTY columns (1-500, overrides config default) |
 | `env` | object | No | Per-command environment variables (merged with config-level env) |

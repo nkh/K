@@ -13,7 +13,7 @@ A virtual terminal runner and process orchestrator with a web-first control plan
 - **Multi-Instance** — Run multiple vrunner servers, discover and manage them from the CLI
 - **Configuration** — YAML/TOML/JSON with 3-layer precedence, named profiles, environment variable control
 - **Advanced VTTY** — Scrollback, search, mouse support, sixel images, alternate screen, 256/truecolor
-- **Process Control** — Freeze/thaw (SIGSTOP/SIGCONT), graceful shutdown with timeouts, exit handlers
+- **Process Control** — Freeze/thaw (SIGSTOP/SIGCONT), graceful shutdown with timeouts, exit handlers, per-command retain/snapshot on exit, initial keystroke injection
 
 ## Quick Start
 
@@ -26,6 +26,12 @@ vrunner
 
 # Run a command with web dashboard
 vrunner -- htop
+
+# Run with local terminal display and snapshot output on exit
+vrunner --display --snapshot-on-exit /tmp/htop-output.txt -- htop
+
+# Send initial keystrokes and retain buffer after exit
+vrunner --retain-on-exit --send-keys "ls<Enter>" -- bash
 
 # Run as a background daemon
 vrunner --daemon -- npm run dev

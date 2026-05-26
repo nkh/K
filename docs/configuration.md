@@ -164,7 +164,7 @@ Controls local terminal display of the VTTY output.
 | Key | Type | Default | CLI Flag | Description |
 |-----|------|---------|----------|-------------|
 | `enabled` | `bool` | `false` | `--display` / `--no-display` | When `true`, the VTTY output is mirrored to the local terminal screen in real time. This is useful for interactive programs when you want to see the output directly. When `false` (default), vrunner operates silently with no terminal output. Automatically disabled in daemon mode. |
-| `display_all` | `bool` | `false` | `--display-all` | When `true`, the local display stays active after the initial CLI command exits, switching to show the next available command (monitor mode). When `false` (default), the display is dismissed when the direct CLI command finishes but the server continues running. |
+| `display_all` | `bool` | `false` | `--display-all` | When `true`, the local display stays active after the initial CLI command exits, switching to show the next available command (monitor mode). When `false` (default), the display is dismissed when the direct CLI command finishes but the server continues running. Note: when all commands have exited (no retained commands remain), vrunner exits even in `display_all` mode. |
 | `refresh_ms` | `u64` | `100` | `--refresh-ms <MS>` | Refresh interval in milliseconds when local display is enabled. Lower values provide smoother rendering at the cost of higher CPU usage. Recommended range: 50–200ms. |
 
 **Example:**
@@ -275,6 +275,8 @@ Default exit configuration applied to all commands unless overridden per-command
 | `exit.on_exit` | `string?` | `null` | `--on-exit <CMD>` | Command to run when the child exits cleanly (exit code 0). The string is split on whitespace into a binary and arguments. Set to `null` to disable. |
 | `exit.on_error` | `string?` | `null` | `--on-error <CMD>` | Command to run when the child exits with a non-zero code. Same parsing rules as `on_exit`. Set to `null` to disable. |
 | `exit.timeout_secs` | `u64` | `10` | `--exit-timeout <SECS>` | Maximum seconds to wait for a child process to exit after SIGTERM before sending SIGKILL. Applies when kill is called or when the server shuts down. |
+| `exit.retain_on_exit` | `bool` | `false` | — | When `true`, the command's VTTY buffer is kept in memory after the child exits. The command appears in the tab bar and web UI with an "exited" status. Default: `false` (commands are removed on exit). This can also be set per-command via the CLI `--retain-on-exit` flag or the API `retain_on_exit` field. |
+| `exit.snapshot_on_exit` | `string?` | `null` | — | When set to a file path, the VTTY buffer (including scrollback) is saved as plain text to that file when the child exits. This is a per-command option set via the CLI `--snapshot-on-exit` flag or the API `snapshot_on_exit` field; it cannot be set in the config file's `default_exit` section. |
 
 **Example:**
 ```yaml
@@ -464,6 +466,9 @@ vrunner [OPTIONS] [-- <COMMAND> [ARGS...]]
 | `--on-exit` | `<CMD>` | `default_exit.exit.on_exit` | Run this command when a child exits cleanly (exit code 0) |
 | `--on-error` | `<CMD>` | `default_exit.exit.on_error` | Run this command when a child exits with an error (non-zero) |
 | `--exit-timeout` | `<SECS>` | `default_exit.exit.timeout_secs` | Seconds to wait for graceful exit before SIGKILL (default: 10) |
+| `--retain-on-exit` | — | — | Keep the VTTY buffer in memory after the CLI command exits. **Per-command only** — applies to the command specified on the CLI, not to future API-spawned commands. |
+| `--snapshot-on-exit` | `<FILE>` | — | Save the VTTY buffer to a file as plain text when the CLI command exits. **Per-command only.** |
+| `--send-keys` | `<KEYS>` | — | Send keystrokes to the command after it starts. Supports the same notation as the API's `send_keys` endpoint (e.g., `"ls<Enter>"`, `"<C-c>quit<Enter>"`). |
 
 ### Interactive Options
 
@@ -534,6 +539,9 @@ Every configuration file entry has a corresponding CLI flag. This table summariz
 |------|--------|
 | `--remote` | Sets `server.bind = "0.0.0.0"` and `security.require_auth = true`. A convenience shorthand for enabling secure remote access. |
 | `--config <FILE>` | Specifies which config file to load. |
+| `--retain-on-exit` | Keep the VTTY buffer in memory after the CLI command exits (per-command). |
+| `--snapshot-on-exit <FILE>` | Save VTTY buffer to file on exit (per-command). |
+| `--send-keys <KEYS>` | Send initial keystrokes to the command after it starts. |
 
 ---
 
@@ -703,4 +711,6 @@ default_exit:
     on_exit: null             # command to run on clean exit (exit code 0)
     on_error: null            # command to run on error exit (non-zero)
     timeout_secs: 10          # grace period before SIGKILL
+    retain_on_exit: false     # keep buffer after exit (per-command via --retain-on-exit)
+    # snapshot_on_exit: null  # save buffer to file on exit (per-command via --snapshot-on-exit)
 ```

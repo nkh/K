@@ -27,3 +27,18 @@ hooks:
 Per-command on_exit/on_error (set via API or CLI `--on-exit`/`--on-error`)
 take precedence over global hooks. If both are set, the per-command handler
 runs first, then the global hook runs.
+
+## Per-Command Exit Options
+
+Several options can be set per-command (via CLI flags or API fields), applying only to that specific command:
+
+| Option | CLI Flag | API Field | Description |
+|--------|----------|-----------|-------------|
+| Retain buffer | `--retain-on-exit` | `retain_on_exit` | Keep VTTY in memory after exit |
+| Snapshot on exit | `--snapshot-on-exit <FILE>` | `snapshot_on_exit` | Save buffer to file on exit |
+| Send initial keys | `--send-keys <KEYS>` | — | Send keystrokes after spawn |
+| Exit handler (clean) | `--on-exit <CMD>` | `on_exit` | Run on exit code 0 |
+| Exit handler (error) | `--on-error <CMD>` | `on_error` | Run on non-zero exit |
+| Exit timeout | `--exit-timeout <SECS>` | `exit_timeout` | Grace period before SIGKILL |
+
+These per-command options do NOT modify the global `default_exit` configuration. API-spawned commands specify them individually in the `POST /api/commands` request body.

@@ -393,11 +393,12 @@ CLI: vrunner stop 12345
 - **Web Handlers**: Stateless, borrow `State<AppState>` from Axum.
 - **Command Logger**: `Arc<CommandLogger>` shared between web handlers and process manager.
 - **Shutdown**: `broadcast::Sender<()>` distributed via `AppState`. Signal handler sends on the channel; server listens and triggers graceful shutdown.
-- **Lifecycle Policy**: "Last-command-standing" — vrunner remains alive as long as at least one command is running in the `CommandManager`, regardless of whether it was started via CLI or spawned via the API. Shutdown only occurs at the 1 → 0 command count transition. When the initial CLI command exits but API-spawned commands remain, the process transitions to idle/monitor mode instead of shutting down.
+- **Lifecycle Policy**: "Last-command-standing" — vrunner remains alive as long as at least one command exists in the `CommandManager`, whether running or retained (`retain_on_exit`). Shutdown occurs only when the command count reaches zero. When the initial CLI command exits, retained commands keep the display and server alive; non-retained commands are removed, and if the resulting list is empty, vrunner exits even in `display_all` mode.
 
-  - **Headless mode**: After `wait_for_child` returns, `manager.list().is_empty()` is checked. If empty, shutdown is broadcast. If commands remain, the process drops into the idle-wait path (listening on the shutdown channel).
-  - **Display mode**: When the direct child exits (via `exit_rx` or tick fallback), `manager.list().is_empty()` is checked. If empty, the display loop breaks and restores the terminal. If commands remain, `active_id` and `exit_rx` are cleared and the loop continues in "monitor mode," rendering the first available command from the manager.
+  - **Headless mode**: After `wait_for_child` returns, `manager.list().is_empty()` is checked. If empty, shutdown is broadcast. If commands remain (retained or API-spawned), the process drops into the idle-wait path (listening on the shutdown channel).
+  - **Display mode**: When the direct child exits (via `exit_rx` or tick fallback), `manager.list().is_empty()` is checked. If empty, the display loop breaks and restores the terminal. If commands remain (including retained exited commands), `active_id` and `exit_rx` are cleared and the loop continues in "monitor mode," rendering the first available command from the manager. The display exits when no commands remain at all.
   - **Monitor mode**: In display mode with no direct child, keystrokes are not forwarded (read-only observation). The idle tick check (`exit_rx.is_none() && manager.list().is_empty()`) detects when the last remaining command exits.
+  - **Per-command options**: `--retain-on-exit`, `--snapshot-on-exit`, and `--send-keys` are per-command options applied only to the CLI-spawned command via an explicit `ExitConfig` passed to `manager.spawn()`. They do not modify the global `default_exit` config. API-spawned commands set these options individually in the POST request body.
 
 ---
 

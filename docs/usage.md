@@ -154,6 +154,12 @@ vrunner --display -- vim notes.txt
 
 # Run in the background as a daemon
 vrunner --daemon -- my-long-running-script.sh
+
+# Run with per-command exit options
+vrunner --retain-on-exit --snapshot-on-exit /tmp/build.log -- cargo build
+
+# Send initial keystrokes to the command
+vrunner --send-keys "ls<Enter>" -- bash
 ```
 
 The command runs inside a virtual TTY with full terminal capabilities. Programs like `vim`, `htop`, `ncurses` applications, and anything that reads from `/dev/tty` will work correctly.
@@ -954,6 +960,42 @@ default_exit:
 ```
 
 When a command is spawned via `POST /api/commands` without `on_exit`/`on_error` fields, the defaults from the config are used. When per-command values are provided in the API request, they override the defaults entirely.
+
+### Per-Command Exit Options
+
+In addition to exit handlers, several options control what happens when a specific command exits. These are set per-command (via CLI or API) and do NOT modify the global defaults:
+
+| Option | CLI Flag | API Field | Description |
+|--------|----------|-----------|-------------|
+| Retain buffer | `--retain-on-exit` | `retain_on_exit` | Keep VTTY in memory after exit for inspection |
+| Snapshot on exit | `--snapshot-on-exit <FILE>` | `snapshot_on_exit` | Save VTTY buffer to file as plain text on exit |
+| Send initial keys | `--send-keys <KEYS>` | — | Send keystrokes to the command after it starts |
+
+**Examples:**
+```bash
+# Retain the buffer and save a snapshot after tests finish
+vrunner --retain-on-exit --snapshot-on-exit /tmp/test-output.txt -- cargo test
+
+# Send initial commands to a shell and save output when done
+vrunner --send-keys "ls -la<Enter>whoami<Enter>" --snapshot-on-exit /tmp/shell.txt -- bash
+
+# Capture htop's final screen and exit when htop quits
+vrunner --snapshot-on-exit /tmp/htop.txt --display -- htop
+```
+
+**Via API:**
+```bash
+curl -s -X POST http://127.0.0.1:9090/api/commands \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cmd": "cargo",
+    "args": ["test"],
+    "retain_on_exit": true,
+    "snapshot_on_exit": "/tmp/test-output.txt"
+  }'
+```
+
+When `--retain-on-exit` is set, the command stays in the manager after exiting (visible in the tab bar with an `[EXITED]` status). This prevents vrunner from exiting even in `--display-all` mode — it waits until all retained commands are purged. When `--snapshot-on-exit` is set, the VTTY buffer (including scrollback) is saved to the specified file as plain text before the command is removed.
 
 ### Graceful Shutdown with Timeout
 

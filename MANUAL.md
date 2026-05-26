@@ -189,7 +189,7 @@ A VTTY is an in-memory terminal emulator that receives raw PTY output from a chi
 
 ### Command Manager
 
-The `CommandManager` is the central registry of all running commands. It stores `CommandHandle` objects in a concurrent `DashMap`, keyed by UUID. When a command exits, its handle is either removed (default) or retained (with `--retain-on-exit`).
+The `CommandManager` is the central registry of all running commands. It stores `CommandHandle` objects in a concurrent `DashMap`, keyed by UUID. When a command exits, its handle is either removed (default) or retained (with `--retain-on-exit` or the API `retain_on_exit` field). When the last command is removed from the manager, vrunner exits (in display and headless mode). Retained commands keep the display and server alive.
 
 ### Display Modes
 
@@ -254,6 +254,15 @@ vrunner --daemon -- my-long-running-script.sh
 
 # Run with a custom terminal size
 vrunner --vtty-cols 120 -- python -m http.server 8000
+
+# Send initial keystrokes after the command starts
+vrunner --send-keys "ls<Enter>" -- bash
+
+# Run with per-command exit options
+vrunner --retain-on-exit --snapshot-on-exit /tmp/build.log -- cargo build --release
+
+# Capture a command's output and exit when it finishes
+vrunner --snapshot-on-exit /tmp/htop-output.txt --display -- htop
 ```
 
 ### Via the Web UI
@@ -778,7 +787,7 @@ The display loop operates in these states:
 3. **Overlay** — A temporary overlay (log, help, spawn prompt) is shown on top of the VTTY
 4. **Context Menu** — Right-click context menu for command management actions
 
-When a command exits in active mode, the display automatically transitions to monitor mode (if other commands exist) or exits (if no commands remain).
+When a command exits in active mode, the display automatically transitions to monitor mode (if other commands exist) or exits (if no commands remain). If `--retain-on-exit` was used on a command, that command stays in the manager after exiting, which keeps the display alive even in `display_all` mode. When all commands have been removed (none retained), vrunner exits regardless of `display_all`.
 
 ### Status Bar
 
@@ -885,16 +894,34 @@ vrunner --display-all -- cargo test
 
 ## 3.6 Retain on Exit and Purge
 
-By default, when a command exits its VTTY buffer is discarded. The `--retain-on-exit` flag keeps the buffer in memory, allowing you to inspect the final output:
+By default, when a command exits its VTTY buffer is discarded and vrunner exits (in display mode). The `--retain-on-exit` flag is a **per-command option** that keeps the buffer in memory, allowing you to inspect the final output:
 
 ```bash
+# Keep the VTTY buffer after cargo test finishes
 vrunner --retain-on-exit --display-all -- cargo test
+
+# Different commands can have different retain settings
+vrunner --retain-on-exit --snapshot-on-exit /tmp/test-output.txt -- cargo test
 ```
 
-When a command with retain-on-exit finishes:
+When a command with `--retain-on-exit` finishes:
 - It remains visible in the tab bar with an `[EXITED]` status
 - The VTTY buffer stays in memory for inspection
 - In the web UI, exited commands show a purge button in the sidebar
+- The display loop stays active (does not exit) because the retained command is still in the manager
+
+**Important:** `--retain-on-exit` is per-command. It only affects the command specified on the CLI. Future commands spawned via the API or F12 use their own `retain_on_exit` setting (passed in the spawn request body).
+
+### Snapshot on Exit
+
+The `--snapshot-on-exit <FILE>` flag saves the VTTY buffer (including scrollback) to a file as plain text when the command exits. This is useful for capturing test output, build logs, or any command's final state:
+
+```bash
+# Save htop's final screen to a file
+vrunner --snapshot-on-exit /tmp/htop-output.txt --display -- htop
+```
+
+The output includes all scrollback lines followed by the visible screen rows, with each line trimmed of trailing whitespace. The snapshot is taken after the process exits but before the command is removed from the manager.
 
 ### Purging Retained Commands
 
@@ -1235,7 +1262,7 @@ Response:
       "exit_time_secs": null,
       "status": "running",
       "certificate": null,
-      "exit": {"on_exit": "", "on_error": "", "exit_timeout": 10, "retain_on_exit": false}
+      "exit": {"on_exit": "", "on_error": "", "exit_timeout": 10, "retain_on_exit": false, "snapshot_on_exit": null}
     }
   ],
   "error": null
@@ -1280,6 +1307,7 @@ curl -X POST http://127.0.0.1:9090/api/commands \
     "exit_timeout": 10,
     "certificate": null,
     "retain_on_exit": false,
+    "snapshot_on_exit": null,
     "profile": null
   }'
 ```
