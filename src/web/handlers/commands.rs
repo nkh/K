@@ -21,6 +21,7 @@ pub async fn list_commands(
                     "on_error": h.exit_config.on_error.as_deref().unwrap_or(&String::new()),
                     "exit_timeout": h.exit_config.timeout_secs,
                     "retain_on_exit": h.exit_config.retain_on_exit,
+                    "snapshot_on_exit": h.exit_config.snapshot_on_exit,
                 })
             }).unwrap_or(serde_json::json!(null));
             // Check alive status and compute runtime
@@ -129,11 +130,16 @@ pub async fn start_command(
     };
     let merged_env = merge_command_env(&config_env, command_env);
 
+    let snapshot_on_exit: Option<String> = body.get("snapshot_on_exit")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
     let exit_config = crate::config::schema::ExitConfig {
         on_exit,
         on_error,
         timeout_secs: exit_timeout,
         retain_on_exit: body.get("retain_on_exit").and_then(|v| v.as_bool()).unwrap_or(false),
+        snapshot_on_exit,
     };
     match state.manager.spawn(cmd, args, certificate, Some(exit_config), merged_env, rows, cols).await {
         Ok(id) => {

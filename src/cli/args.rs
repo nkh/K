@@ -139,11 +139,31 @@ pub struct Cli {
     pub exit_timeout: Option<u64>,
 
     /// Keep the VTTY buffer in memory after the child process exits.
+    /// This is a per-command option: it only affects the command specified
+    /// on the CLI, not future commands spawned via the API.
     /// The command remains visible in the tab bar and web UI with an "exited"
     /// status, allowing inspection of final output. The buffer can be
     /// manually purged via the API (DELETE /api/commands/:id).
     #[arg(long)]
     pub retain_on_exit: bool,
+
+    /// Save the VTTY buffer to a file as plain text when the command exits.
+    /// This is a per-command option.  The output includes scrollback content
+    /// followed by the visible screen rows, with each line trimmed of trailing
+    /// whitespace.  The snapshot is taken after the process exits but before
+    /// the command is removed from the manager.
+    #[arg(long, value_name = "FILE")]
+    pub snapshot_on_exit: Option<String>,
+
+    /// Send keystrokes to the command after it starts.
+    /// Uses the same key notation as the API's send_keys endpoint.
+    /// Plain text is sent as-is; special keys use <...> notation:
+    ///   <Enter>, <Tab>, <Esc>, <Up>, <Down>, <Left>, <Right>,
+    ///   <F1>-<F12>, <C-c>, <C-d>, <A-x> (Alt+x).
+    /// Example: --send-keys "ls<Enter>"
+    /// Example: --send-keys "<C-c>quit<Enter>"
+    #[arg(long, value_name = "KEYS")]
+    pub send_keys: Option<String>,
 
     /// Show tab bar for command switching in interactive display.
     /// Requires --display-all for command navigation keybindings to work.
@@ -429,9 +449,9 @@ impl Cli {
         if let Some(timeout) = self.exit_timeout {
             cfg.default_exit.exit.timeout_secs = timeout;
         }
-        if self.retain_on_exit {
-            cfg.default_exit.exit.retain_on_exit = true;
-        }
+        // Note: --retain-on-exit is NOT applied to the global default here.
+        // It is a per-command option applied only to the CLI-spawned command
+        // in main.rs.  Similarly, --snapshot-on-exit is per-command.
 
         // Interactive display
         if self.tabs {

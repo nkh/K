@@ -1071,8 +1071,14 @@ pub async fn run_display_loop(
                 tracing::info!("Direct child process exited (channel)");
                 // Check if other commands remain before deciding to shut down.
                 if display_all {
-                    // Stay in display even when no commands exist — wait for
-                    // new commands to be spawned via web UI, API, or F12.
+                    // In display_all/tabs mode, transition to monitor mode only
+                    // if retained commands remain.  If all commands have been
+                    // removed (no retain_on_exit), exit immediately.
+                    if direct_child_owned.is_some() && manager.list().is_empty() {
+                        tracing::info!("Display-all mode: all commands exited, shutting down");
+                        let _ = TerminalDisplay::clear();
+                        break 'outer;
+                    }
                     tracing::info!("Display-all mode: entering monitor mode");
                     active_id = None;
                     exit_rx = None;
@@ -1109,6 +1115,7 @@ pub async fn run_display_loop(
                         // another running command instead.
                         let is_direct_child = direct_child_owned.as_deref() == Some(id);
                         if manager.list().is_empty() {
+                            // All commands gone — exit regardless of display_all
                             let _ = TerminalDisplay::clear();
                             break 'outer;
                         } else if is_direct_child && !display_all {
@@ -1130,10 +1137,12 @@ pub async fn run_display_loop(
                     }
                 }
                 // For API-spawned commands (no direct child), check if all
-                // commands have been removed.
-                // When display_all is active, keep the display alive waiting
-                // for new commands instead of breaking.
-                if !display_all && exit_rx.is_none() && manager.list().is_empty() {
+                // commands have been removed.  When a direct child was
+                // originally spawned (CLI), also exit if all commands are
+                // gone — regardless of display_all mode.  Retained commands
+                // (retain_on_exit=true) stay in the list, so an empty list
+                // means nothing is left to display.
+                if direct_child_owned.is_some() && exit_rx.is_none() && manager.list().is_empty() {
                     break;
                 }
 

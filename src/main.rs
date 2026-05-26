@@ -269,12 +269,54 @@ async fn async_main(cli: Cli) -> Result<()> {
     // Initialize command manager
     let manager = Arc::new(CommandManager::new(cfg.clone()));
 
-    // If a child command was provided, spawn it immediately
+    // If a child command was provided, spawn it immediately.
+    // Per-command options (--retain-on-exit, --snapshot-on-exit) are applied
+    // to this specific command via ExitConfig, NOT to the global defaults.
     let spawned_id = if let Some(cmd_args) = cli.cmd_args {
         if !cmd_args.is_empty() {
             let cmd = cmd_args[0].clone();
             let args = cmd_args[1..].to_vec();
-            let id = manager.spawn(cmd, args, None, None, cfg.environment.variables.clone(), None, None).await?;
+
+            // Build per-command exit configuration from CLI flags.
+            // These override the global config defaults for this command only.
+            let per_command_exit = if cli.retain_on_exit
+                || cli.snapshot_on_exit.is_some()
+                || cli.on_exit.is_some()
+                || cli.on_error.is_some()
+                || cli.exit_timeout.is_some()
+            {
+                let mut ec = cfg.default_exit.exit.clone();
+                if cli.retain_on_exit {
+                    ec.retain_on_exit = true;
+                }
+                if let Some(ref path) = cli.snapshot_on_exit {
+                    ec.snapshot_on_exit = Some(path.clone());
+                }
+                // on_exit, on_error, and exit_timeout are already applied to
+                // the global default by apply_overrides, so they'll be
+                // inherited. But we still build an explicit Some() so the
+                // per-command path is taken consistently.
+                Some(ec)
+            } else {
+                None
+            };
+
+            let id = manager.spawn(
+                cmd, args, None,
+                per_command_exit,
+                cfg.environment.variables.clone(),
+                None, None,
+            ).await?;
+
+            // Send initial keystrokes if --send-keys was specified.
+            if let Some(ref keys) = cli.send_keys {
+                if let Err(e) = manager.send_keys(&id, keys).await {
+                    tracing::warn!(error = %e, "Failed to send initial keys");
+                } else {
+                    tracing::info!(keys = %keys, "Sent initial keystrokes");
+                }
+            }
+
             Some(id)
         } else {
             None

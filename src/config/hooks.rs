@@ -58,6 +58,17 @@ pub struct ExitConfig {
     /// Default: false (commands are removed from the manager on exit).
     #[serde(default)]
     pub retain_on_exit: bool,
+    /// When set to a file path, the VTTY buffer is saved to that file
+    /// as plain text when the child process exits.  The snapshot is taken
+    /// after the process exits but before the command is removed from the
+    /// manager.  This is a per-command option (set via CLI or API).
+    ///
+    /// The output includes scrollback content followed by the visible
+    /// screen rows.  Each line is trimmed of trailing whitespace.
+    ///
+    /// Example: --snapshot-on-exit /tmp/htop-output.txt
+    #[serde(default)]
+    pub snapshot_on_exit: Option<String>,
 }
 
 fn default_exit_timeout() -> u64 {
@@ -71,6 +82,7 @@ impl Default for ExitConfig {
             on_error: None,
             timeout_secs: default_exit_timeout(),
             retain_on_exit: false,
+            snapshot_on_exit: None,
         }
     }
 }

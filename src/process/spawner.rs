@@ -340,6 +340,8 @@ impl ProcessSpawner {
         let global_on_error = hooks.on_error.clone();
         let manager_cmds = manager.commands_arc();
         let (child_exit_tx, child_exit_rx) = tokio::sync::watch::channel(false);
+        let snapshot_on_exit = exit_config.snapshot_on_exit.clone();
+        let snapshot_emulator = emulator.clone();
 
         tokio::task::spawn_blocking({
             let child_exit_tx = child_exit_tx.clone();
@@ -412,6 +414,66 @@ impl ProcessSpawner {
             }
 
             let _ = child_exit_tx.send(true);
+
+            // Save snapshot to file if snapshot_on_exit is configured.
+            // This must happen before the command is removed from the manager
+            // (which drops the handle and its emulator).
+            if let Some(ref snapshot_path) = snapshot_on_exit {
+                // Use block_in_place to safely acquire the async RwLock from
+                // a blocking context.
+                let snapshot_result = tokio::task::block_in_place(|| {
+                    let emu = snapshot_emulator.blocking_read();
+                    let buf = emu.snapshot();
+                    let mut text = String::new();
+                    // Write scrollback lines first
+                    for line in &buf.scrollback {
+                        let line_str: String = line.iter()
+                            .map(|c| if c.width > 0 { c.ch } else { '\0' })
+                            .collect();
+                        text.push_str(line_str.trim_end());
+                        text.push('\n');
+                    }
+                    // Write visible screen rows
+                    for line in &buf.rows {
+                        let line_str: String = line.iter()
+                            .map(|c| if c.width > 0 { c.ch } else { '\0' })
+                            .collect();
+                        text.push_str(line_str.trim_end());
+                        text.push('\n');
+                    }
+                    Ok::<String, std::io::Error>(text)
+                });
+
+                match snapshot_result {
+                    Ok(snapshot_text) => {
+                        match std::fs::write(snapshot_path, &snapshot_text) {
+                            Ok(_) => {
+                                tracing::info!(
+                                    id = %watch_id,
+                                    path = %snapshot_path,
+                                    bytes = snapshot_text.len(),
+                                    "Saved snapshot on exit"
+                                );
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    id = %watch_id,
+                                    path = %snapshot_path,
+                                    error = %e,
+                                    "Failed to save snapshot on exit"
+                                );
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            id = %watch_id,
+                            error = %e,
+                            "Failed to acquire emulator for snapshot"
+                        );
+                    }
+                }
+            }
 
             // Store exit metadata in the handle (if still in the manager)
             if let Some(handle) = manager_cmds.get(&watch_id) {
