@@ -1,0 +1,42 @@
+# vrunner — Production Configuration
+# Secure remote access with TLS and authentication
+
+server:
+  bind: "0.0.0.0"
+  port: 443
+
+# Enable authentication for all API requests
+security:
+  require_auth: true
+  token_file: "~/.config/vrunner/token"
+
+# TLS encryption
+tls:
+  enabled: true
+  cert_file: "/etc/ssl/certs/vrunner.crt"
+  key_file: "/etc/ssl/private/vrunner.key"
+
+# Daemon mode for background operation
+daemon:
+  enabled: true
+  stdout_file: "/var/log/vrunner/stdout"
+  stderr_file: "/var/log/vrunner/stderr"
+
+# Logging
+# Note: --log and --log-file are CLI-only flags
+
+# Virtual terminal settings
+vtty:
+  rows: 24
+  cols: 80
+  term: "xterm-256color"
+  scrollback: 5000
+  truecolor: false  # Disable for compatibility with older terminals
+
+# Disable local display in production
+display:
+  enabled: false
+
+# No tabs needed without display
+interactive:
+  tabs: false

@@ -1,0 +1,72 @@
+# vrunner — Multi-Service Configuration
+# Run and manage multiple services from a single vrunner instance
+
+server:
+  bind: "127.0.0.1"
+  port: 9090
+
+vtty:
+  rows: 24
+  cols: 80
+  term: "xterm-256color"
+  scrollback: 5000
+  truecolor: true
+
+# Enable the interactive display with tab bar
+display:
+  enabled: true
+  refresh_ms: 100
+
+interactive:
+  tabs: true
+
+# Per-service profiles
+profiles:
+  # Frontend development server
+  frontend:
+    vtty:
+      rows: 30
+      cols: 100
+    environment:
+      variables:
+        NODE_ENV: "development"
+        PORT: "3000"
+
+  # Backend API server
+  backend:
+    vtty:
+      rows: 30
+      cols: 100
+    environment:
+      variables:
+        RUST_LOG: "info"
+        DATABASE_URL: "postgres://localhost/app_dev"
+        PORT: "8080"
+
+  # Database (PostgreSQL)
+  database:
+    vtty:
+      rows: 20
+      cols: 100
+    environment:
+      variables:
+        PGDATA: "/var/lib/postgresql/data"
+
+  # Redis cache
+  redis:
+    vtty:
+      rows: 20
+      cols: 100
+
+# Default exit behavior for all services
+default_exit:
+  exit:
+    on_exit: null
+    on_error: "notify-send 'vrunner' 'Command failed'"
+    timeout_secs: 15
+
+# Capture stdout from all commands
+handles:
+  - name: "combined-log"
+    type: "file"
+    path: "/tmp/vrunner-services.log"

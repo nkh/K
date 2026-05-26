@@ -1,0 +1,14 @@
+# vrunner — Minimal Configuration
+# Place as ~/.config/vrunner/config.yaml or ./vrunner.yaml
+
+# Server settings
+server:
+  bind: "127.0.0.1"
+  port: 9090
+
+# Virtual terminal defaults
+vtty:
+  rows: 24
+  cols: 80
+  term: "xterm-256color"
+  scrollback: 5000
