@@ -557,7 +557,7 @@ impl CommandManager {
         // This replaces the old approach that cloned the entire buffer
         // (O(rows * cols)) on every poll request.
         let current_gen = {
-            let emu = emulator.blocking_read();
+            let emu = tokio::task::block_in_place(|| emulator.blocking_read());
             emu.buffer_generation()
         };
 

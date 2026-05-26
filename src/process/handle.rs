@@ -72,15 +72,18 @@ impl CommandHandle {
         emu.snapshot()
     }
 
-    /// Blocking snapshot — used in sync contexts (e.g. inside DashMap iterations).
-    /// Uses parking_lot's blocking_read when inside an async context.
-    /// Since we're typically called from within a DashMap guard scope,
-    /// we use tokio::task::block_in_place to avoid deadlocks.
+    /// Blocking snapshot — used in sync contexts (e.g. inside DashMap iterations,
+    /// display rendering) that are called from within the async runtime.
+    ///
+    /// Uses `tokio::task::block_in_place` to safely call `blocking_read()` from
+    /// an async context. Without this wrapper, `blocking_read()` on a
+    /// `tokio::sync::RwLock` panics with "Cannot block the current thread from
+    /// within a runtime".
     pub fn vtty_snapshot_blocking(&self) -> crate::vtty::buffer::Buffer {
-        // We are typically already in an async context. Use block_in_place
-        // to avoid issues with the tokio runtime.
-        let emu = self.emulator.blocking_read();
-        emu.snapshot()
+        tokio::task::block_in_place(|| {
+            let emu = self.emulator.blocking_read();
+            emu.snapshot()
+        })
     }
 
     pub async fn vtty_plain(&self) -> String {
