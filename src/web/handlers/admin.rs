@@ -4,12 +4,9 @@ use axum::{
     http::{header, StatusCode},
     response::{Html, Response},
 };
-use rust_embed::RustEmbed;
 use std::path::PathBuf;
 
-#[derive(RustEmbed)]
-#[folder = "static/admin/"]
-struct AdminAssets;
+use crate::web::static_assets::AdminAssets;
 
 pub async fn admin_page() -> Html<String> {
     match AdminAssets::get("index.html") {
@@ -43,9 +40,15 @@ pub async fn admin_assets(Path(path): Path<String>) -> Response {
     match AdminAssets::get(asset_path) {
         Some(content) => {
             let mime_type = guess_mime_type(asset_path);
+            // Disable caching so browsers always get the latest embedded assets.
+            // This is critical because rust_embed bakes files at compile time and
+            // stale browser caches can mask updates after a rebuild.
             Response::builder()
                 .status(StatusCode::OK)
                 .header(header::CONTENT_TYPE, mime_type)
+                .header(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate")
+                .header(header::PRAGMA, "no-cache")
+                .header(header::EXPIRES, "0")
                 .body(Body::from(content.data.to_vec()))
                 .unwrap()
         }
