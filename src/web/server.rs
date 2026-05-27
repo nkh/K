@@ -50,7 +50,7 @@ pub async fn start_server(
     let vtty_events = manager.vtty_change_sender();
     let log_events = manager.logger().log_sender();
     let state = AppState::new(manager, shutdown_tx.clone(), auth_token, cert_store, vtty_events, log_events);
-    let router = create_router(state);
+    let router = create_router(state, &config.security.cors);
     let app = router.into_make_service();
 
     let addr_str = format!("{}:{}", bind, port);

@@ -181,6 +181,48 @@ pub fn validate_config(config: &Config) -> Vec<ValidationIssue> {
         }
     }
 
+    // ── security.cors.policy ─────────────────────────────────────
+    match config.security.cors.policy.as_str() {
+        "any" | "none" => {}
+        custom => {
+            // Validate each comma-separated origin parses as a valid HTTP header value
+            let origins: Vec<_> = custom.split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .collect();
+            if origins.is_empty() {
+                issues.push(ValidationIssue {
+                    field: "security.cors.policy".into(),
+                    level: ValidationLevel::Error,
+                    message: "CORS policy must be \"any\", \"none\", or a non-empty comma-separated list of origins".into(),
+                });
+            } else {
+                let mut valid_count = 0;
+                for origin in &origins {
+                    if origin.parse::<axum::http::HeaderValue>().is_ok() {
+                        valid_count += 1;
+                    } else {
+                        issues.push(ValidationIssue {
+                            field: "security.cors.policy".into(),
+                            level: ValidationLevel::Warning,
+                            message: format!(
+                                "CORS origin '{}' is not a valid HTTP header value and will be ignored",
+                                origin
+                            ),
+                        });
+                    }
+                }
+                if valid_count == 0 {
+                    issues.push(ValidationIssue {
+                        field: "security.cors.policy".into(),
+                        level: ValidationLevel::Warning,
+                        message: "No valid CORS origins found; falling back to permissive CORS".into(),
+                    });
+                }
+            }
+        }
+    }
+
     // ── command_log.file parent dir ──────────────────────────────
     if let Some(ref log_file) = config.command_log.file {
         if !log_file.is_empty() {
@@ -395,5 +437,68 @@ mod tests {
             .collect();
         assert_eq!(daemon_issues.len(), 1);
         assert_eq!(daemon_issues[0].level, ValidationLevel::Warning);
+    }
+
+    #[test]
+    fn test_cors_policy_any_is_valid() {
+        let config = default_config();
+        let issues = validate_config(&config);
+        let cors_issues: Vec<_> = issues
+            .iter()
+            .filter(|i| i.field == "security.cors.policy")
+            .collect();
+        assert!(cors_issues.is_empty(), "Policy 'any' should be valid");
+    }
+
+    #[test]
+    fn test_cors_policy_none_is_valid() {
+        let mut config = default_config();
+        config.security.cors.policy = "none".into();
+        let issues = validate_config(&config);
+        let cors_issues: Vec<_> = issues
+            .iter()
+            .filter(|i| i.field == "security.cors.policy")
+            .collect();
+        assert!(cors_issues.is_empty(), "Policy 'none' should be valid");
+    }
+
+    #[test]
+    fn test_cors_policy_custom_origins_valid() {
+        let mut config = default_config();
+        config.security.cors.policy = "https://myapp.example.com,https://admin.example.com".into();
+        let issues = validate_config(&config);
+        let cors_issues: Vec<_> = issues
+            .iter()
+            .filter(|i| i.field == "security.cors.policy")
+            .collect();
+        assert!(cors_issues.is_empty(), "Valid custom origins should produce no issues");
+    }
+
+    #[test]
+    fn test_cors_policy_empty_custom_is_error() {
+        let mut config = default_config();
+        config.security.cors.policy = ",".into();
+        let issues = validate_config(&config);
+        let cors_issues: Vec<_> = issues
+            .iter()
+            .filter(|i| i.field == "security.cors.policy" && i.level == ValidationLevel::Error)
+            .collect();
+        assert_eq!(cors_issues.len(), 1, "Empty custom policy should be an error");
+    }
+
+    #[test]
+    fn test_cors_policy_invalid_origin_warns() {
+        let mut config = default_config();
+        // Control characters make an invalid header value
+        config.security.cors.policy = "https://valid.example.com,\x00invalid".into();
+        let issues = validate_config(&config);
+        let cors_warnings: Vec<_> = issues
+            .iter()
+            .filter(|i| i.field == "security.cors.policy" && i.level == ValidationLevel::Warning)
+            .collect();
+        assert!(
+            !cors_warnings.is_empty(),
+            "Invalid origin in custom policy should produce a warning"
+        );
     }
 }

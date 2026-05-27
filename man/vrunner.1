@@ -609,7 +609,18 @@ Controls HTTP server binding (\fBbind\fR, \fBport\fR).
 
 .TP
 .B security
-Controls authentication (\fBrequire_auth\fR, \fBtoken_file\fR).
+Controls authentication (\fBrequire_auth\fR, \fBtoken_file\fR) and CORS (\fBcors.policy\fR).
+
+.RS
+.PP
+The \fBcors\fR sub-section configures Cross-Origin Resource Sharing:
+.PP
+.RS
+\fBpolicy\fR \fI\("any" | "none" | ORIGINS\)\fR
+.br
+Controls which origins are allowed for cross-origin requests. \fB"any"\fR allows all origins (default, backward compatible). \fB"none"\fR blocks all cross-origin requests. ORIGINS is a comma-separated list of allowed origins, e.g. \fB"https://myapp.example.com,https://admin.example.com"\fR.
+.RE
+.RE
 
 .TP
 .B tls

@@ -8,8 +8,9 @@ use axum::{
 use super::state::AppState;
 use super::handlers;
 use super::middleware::{cors_layer, request_logger, error_handler, auth_middleware};
+use crate::config::security::CorsConfig;
 
-pub fn create_router(state: AppState) -> Router {
+pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
     // API routes — protected by auth middleware when auth is enabled
     let api_routes = Router::new()
         .route("/api/commands", get(handlers::commands::list_commands).post(handlers::commands::start_command))
@@ -66,7 +67,7 @@ pub fn create_router(state: AppState) -> Router {
     Router::new()
         .merge(api_routes)
         .merge(public_routes)
-        .layer(cors_layer())
+        .layer(cors_layer(cors_config))
         .layer(middleware::from_fn(request_logger))
         .layer(middleware::from_fn(error_handler))
         .with_state(state)

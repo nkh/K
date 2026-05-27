@@ -7,7 +7,7 @@ pub use super::display::{DisplayConfig, InteractiveConfig, KeybindingsConfig};
 pub use super::environment::EnvironmentConfig;
 pub use super::handles::HandleConfig;
 pub use super::hooks::{CommandLogConfig, DefaultExitConfig, ExitConfig, HooksConfig};
-pub use super::security::{CertificateEntryConfig, CertificatesConfig, SecurityConfig, TlsConfig};
+pub use super::security::{CertificateEntryConfig, CertificatesConfig, CorsConfig, SecurityConfig, TlsConfig};
 pub use super::server::ServerConfig;
 pub use super::vtty::VttyConfig;
 pub use super::web::{RateLimitConfig, WebConfig};

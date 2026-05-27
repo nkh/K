@@ -1,5 +1,42 @@
 use serde::{Deserialize, Serialize};
 
+/// Cross-Origin Resource Sharing (CORS) configuration.
+///
+/// Controls which origins are allowed to make cross-origin requests to the
+/// vrunner API and admin interface.
+///
+/// # Example (YAML)
+///
+/// ```yaml
+/// security:
+///   cors:
+///     policy: "https://myapp.example.com,https://admin.example.com"
+/// ```
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CorsConfig {
+    /// CORS policy. Determines which origins are allowed for cross-origin requests.
+    ///
+    /// - `"any"` — allow all origins (default, backward compatible).
+    /// - `"none"` — block all cross-origin requests by not setting any
+    ///   `Access-Control-Allow-Origin` header.
+    /// - A comma-separated list of allowed origins for fine-grained control.
+    ///   Example: `"https://myapp.example.com,https://admin.example.com"`
+    #[serde(default = "default_cors_policy")]
+    pub policy: String,
+}
+
+fn default_cors_policy() -> String {
+    "any".to_string()
+}
+
+impl Default for CorsConfig {
+    fn default() -> Self {
+        Self {
+            policy: default_cors_policy(),
+        }
+    }
+}
+
 /// Authentication and authorization settings.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SecurityConfig {
@@ -11,6 +48,11 @@ pub struct SecurityConfig {
     /// when auth is required, a random 256-bit token is generated and saved.
     /// Default: ~/.config/vrunner/token
     pub token_file: String,
+    /// CORS (Cross-Origin Resource Sharing) configuration.
+    /// Controls which origins may make cross-origin requests.
+    /// Default: allow all origins.
+    #[serde(default)]
+    pub cors: CorsConfig,
 }
 
 impl Default for SecurityConfig {
@@ -23,6 +65,7 @@ impl Default for SecurityConfig {
                 .join("token")
                 .to_string_lossy()
                 .to_string(),
+            cors: CorsConfig::default(),
         }
     }
 }
