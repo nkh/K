@@ -369,36 +369,92 @@ Navigate to `http://localhost:9090/<command_name>` to jump straight to a command
 
 ## 2.3 Web Admin Interface
 
-The admin dashboard is a single-page application embedded in the vrunner binary and served at `/admin`. It communicates with the REST API and WebSocket endpoints.
+The admin dashboard is a single-page application embedded in the vrunner binary and served at `/admin`. It is split into three files — `index.html`, `style.css`, and `app.js` — and communicates with the REST API and WebSocket endpoints. All static assets are embedded at compile time via `rust-embed`; no external CDN or build step is required.
 
 ### Layout
 
-- **Top bar** — spawn input, pause/run toggle, kill all button, keyboard shortcuts (`?`)
-- **Sidebar** — command list with name, PID, status, runtime, and actions
-- **Main pane** — VTTY terminal viewer with real-time output
-- **Bottom bar** — connection status, scrollback indicator
+The top bar is organized into three button groups:
+
+- **Left group** — Add Panel (spawn), Pause/Run toggle, Kill All
+- **Center group** — Font size controls (A-/A+), resize to fit, alternate screen buffer selector
+- **Right group** — Auth token input, documentation link, keyboard shortcuts (`?`), theme toggle (sun/moon)
+
+The layout uses a consistent button sizing system with four variants: `btn-xs` (compact toolbars), `btn-sm` (secondary actions), `btn` (default primary), and `btn-primary`/`btn-danger` (color variants). The center group collapses on mobile viewports.
+
+- **Top bar** — grouped button layout (left/center/right), theme toggle, shortcuts
+- **Sidebar** — command list with name, PID, status, runtime, and context menu actions
+- **Panel tab bar** — tab strip for multi-panel layouts; right-click for context menu
+- **Main pane** — VTTY terminal viewer with per-panel font size, copy, export, and selection mode
+- **Bottom bar** — connection quality indicator (latency + reconnect count), scrollback indicator
 
 ### Features
+
+#### Terminal Interaction
 
 | Feature | Description |
 |---------|-------------|
 | Real-time VTTY viewer | Incremental diff WebSocket protocol, 1-second HTTP polling fallback |
+| Direct keyboard input | Click terminal to focus, type to send keystrokes |
+| Mouse event forwarding | Clicks, drags, and wheel events forwarded to child process |
+| Mouse wheel scrollback | Scroll through command history; smart routing to app or scrollback |
+| Terminal search | `Ctrl+F` to search within the output buffer |
+| Scroll-to-Bottom | Floating button when scrolled up |
+| Selection mode | Toggle to enable native text selection when mouse tracking is active (`Ctrl+Shift+S`, `Alt+S`) |
+| Copy to clipboard | `Ctrl+Shift+C` copies selected text; falls back to full buffer when no selection |
+| Per-panel font size | A-/A+ buttons in each panel header; persisted to localStorage |
+| Persistent scrollback | Scrollback offset saved to sessionStorage; restored on re-select |
+| Export output | Download terminal buffer as `.txt` |
+
+#### Command Management
+
+| Feature | Description |
+|---------|-------------|
 | Command sidebar | Name, arguments, PID, status, runtime with search/filter |
 | Batch Kill All | One-click terminate all running commands |
 | Pause / Run | Freeze/thaw current command (SIGSTOP/SIGCONT) |
-| Terminal search | `Ctrl+F` to search within the output buffer |
-| Scroll-to-Bottom | Floating button when scrolled up |
-| Mouse wheel scrollback | Scroll through command history; smart routing to app or scrollback |
-| Direct keyboard input | Click terminal to focus, type to send keystrokes |
-| Mouse event forwarding | Clicks, drags, and wheel events forwarded to child process |
-| Export output | Download terminal buffer as `.txt` |
-| Context menu | Right-click commands for kill, freeze/thaw, copy URL, new tab |
-| Browser notifications | Desktop notification on command exit |
-| Keyboard shortcuts | Press `?` for the shortcuts panel |
-| Auto-reconnect | WebSocket re-establishes after network interruptions |
-| Responsive layout | Collapsible sidebar on narrow viewports |
 | Retained VTTY display | Exited commands shown with status and purge option |
 | Delete retained VTTYs | Purge button on exited commands in the sidebar |
+| Incremental DOM updates | Command list polling skips redundant DOM rebuilds when state is unchanged |
+
+#### Context Menu and Accessibility
+
+| Feature | Description |
+|---------|-------------|
+| Context menu (sidebar) | Right-click commands for kill, freeze/thaw, copy URL, new tab |
+| Context menu (panels) | Right-click panel headers for Copy URL, Pause/Resume, Kill, Remove Panel |
+| Keyboard-accessible menu | `Shift+F10` opens menu, arrow keys navigate, Enter activates, Escape closes |
+| ARIA roles | `role=menu` and `role=menuitem` on context menu elements |
+| XSS-safe handlers | All context menu actions use `addEventListener` — no inline `onclick` injection |
+
+#### Focus and Keyboard
+
+| Feature | Description |
+|---------|-------------|
+| Focus management | Modals trap focus (Tab/Shift+Tab wrap around), restore focus on close |
+| Escape to dismiss | Consistent Escape key dismissal for all modals and overlays |
+| Keyboard shortcuts | Press `?` for the shortcuts panel showing all keybindings |
+
+#### Connection and Theming
+
+| Feature | Description |
+|---------|-------------|
+| Connection quality | Bottom bar shows WebSocket latency (color-coded green/yellow/red) and reconnect count |
+| Auto-reconnect | WebSocket re-establishes after network interruptions |
+| Light theme | Toggle between dark and light themes; respects `prefers-color-scheme` by default |
+| Theme persistence | Theme choice saved to localStorage |
+| VTTY theme-aware | Terminal background adapts to active theme |
+| Responsive layout | Collapsible sidebar on narrow viewports |
+| Browser notifications | Desktop notification on command exit |
+
+#### Real-Time Log Streaming
+
+| Feature | Description |
+|---------|-------------|
+| WebSocket log stream | Connects to `/api/ws/logs` when log view is active; appends entries in real-time |
+| HTTP fallback | Initial log load and search filtering use HTTP endpoint |
+| Transport indicator | Log toolbar shows current transport (ws/http) |
+| Auto-scroll | Automatically scrolls to bottom when already at the bottom |
+| Exponential backoff | Reconnects with 1s–30s backoff on disconnect |
 
 ## 2.4 Sending Keystrokes
 
