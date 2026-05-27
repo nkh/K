@@ -1008,10 +1008,14 @@ function updateVttyDisplay(data) {
     // Cursor position
     const cursor = data.cursor || {};
     const dims = data.dimensions || {};
-    document.getElementById('cursorPos').textContent = `Cursor: ${cursor.row + 1},${cursor.col + 1}`;
-    document.getElementById('termDims').textContent = `${dims.rows}x${dims.cols}`;
-    document.getElementById('resizeRows').value = dims.rows || 24;
-    document.getElementById('resizeCols').value = dims.cols || 80;
+    const cursorPosEl = document.getElementById('cursorPos');
+    if (cursorPosEl) cursorPosEl.textContent = `Cursor: ${cursor.row + 1},${cursor.col + 1}`;
+    const termDimsEl = document.getElementById('termDims');
+    if (termDimsEl) termDimsEl.textContent = `${dims.rows}x${dims.cols}`;
+    const resizeRowsEl = document.getElementById('resizeRows');
+    if (resizeRowsEl) resizeRowsEl.value = dims.rows || 24;
+    const resizeColsEl = document.getElementById('resizeCols');
+    if (resizeColsEl) resizeColsEl.value = dims.cols || 80;
 
     // Show cursor indicator (hide when in scrollback)
     const panelObj = state.panels.find(p => p.id === panel.id);
@@ -1092,8 +1096,10 @@ async function loadVttyHttp(instUrl, cmdId) {
 
             const cursor = json.data.cursor || {};
             const dims = json.data.dimensions || {};
-            document.getElementById('cursorPos').textContent = `Cursor: ${(cursor.row + 1) || '-'},${(cursor.col + 1) || '-'}`;
-            document.getElementById('termDims').textContent = `${dims.rows || '-'}x${dims.cols || '-'}`;
+            const cursorPosEl2 = document.getElementById('cursorPos');
+            if (cursorPosEl2) cursorPosEl2.textContent = `Cursor: ${(cursor.row + 1) || '-'},${(cursor.col + 1) || '-'}`;
+            const termDimsEl2 = document.getElementById('termDims');
+            if (termDimsEl2) termDimsEl2.textContent = `${dims.rows || '-'}x${dims.cols || '-'}`;
 
             // Update alt screen badge
             const badge = document.getElementById('altScreenBadge');
@@ -1420,17 +1426,21 @@ function renderPanels() {
                         <span class="cmd-fullname" id="cmdName-${panel.id}"></span>
                         <span class="cmd-args" id="cmdArgs-${panel.id}"></span>
                     </div>
-                    <span class="instance-url">${escHtml(panel.instUrl.replace(/^https?:\/\//, ''))}</span>
-                    <span class="panel-font-size-ctrl">
-                        <button class="btn btn-xs" onclick="changePanelFontSize('${panel.id}', -1)" title="Decrease font size">A-</button>
-                        <span class="panel-font-size">${panel.fontSize}px</span>
-                        <button class="btn btn-xs" onclick="changePanelFontSize('${panel.id}', 1)" title="Increase font size">A+</button>
-                    </span>
-                        <!-- Key input available via direct terminal typing or modal (Ctrl+K) -->
-                    ${state.panels.length > 1 ? `<button class="btn btn-xs btn-danger" onclick="removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
-                    <button class="btn btn-xs" onclick="copyTerminalSelection('${panel.id}')" title="Copy selected text to clipboard">Copy</button>
-                    <button class="btn btn-xs" onclick="exportTerminal('${panel.id}')" title="Export terminal as text">&#x2913;</button>
-                    <button class="btn btn-xs" id="selectBtn-${panel.id}" onclick="toggleSelectionMode('${panel.id}')" title="Toggle selection mode (Ctrl+Shift+S)">Select</button>
+                    <div class="panel-actions">
+                        <span class="panel-font-size-ctrl">
+                            <button class="btn btn-xxs" onclick="changePanelFontSize('${panel.id}', -1)" title="Font size -">A-</button>
+                            <span class="panel-font-size">${panel.fontSize}px</span>
+                            <button class="btn btn-xxs" onclick="changePanelFontSize('${panel.id}', 1)" title="Font size +">A+</button>
+                        </span>
+                        <button class="btn btn-xxs" onclick="copyTerminalSelection('${panel.id}')" title="Copy selection">&#x2398;</button>
+                        <button class="btn btn-xxs" id="selectBtn-${panel.id}" onclick="toggleSelectionMode('${panel.id}')" title="Toggle selection mode">&#x270e;</button>
+                        ${state.panels.length > 1 ? `<button class="btn btn-xxs btn-danger" onclick="removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
+                    </div>
+                </div>
+                <div class="panel-keys-bar" id="keysBar-${panel.id}">
+                    <input type="text" id="keyInput-${panel.id}" class="key-input" placeholder="Send keys (e.g. q, &lt;Enter&gt;, &lt;C-c&gt;) — or click terminal to type directly" onkeydown="if(event.key==='Enter'){event.preventDefault();sendKeysToPanel('${panel.id}')}">
+                    <button class="btn btn-xxs" onclick="sendKeysToPanel('${panel.id}')" title="Send keys">&#x27A4;</button>
+                    <button class="btn btn-xxs" onclick="exportTerminal('${panel.id}')" title="Export as text">&#x2913;</button>
                 </div>
                 <div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" style="font-size: ${panel.fontSize}px;">
                     <div class="search-bar" id="searchBar-${panel.id}">

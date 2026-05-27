@@ -57,8 +57,8 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 
 /* Layout */
 .app { display: flex; flex-direction: column; height: 100vh; }
-.topbar { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.75rem; background: var(--bg-secondary); border-bottom: 1px solid var(--border); flex-shrink: 0; z-index: 10; flex-wrap: wrap; }
-.topbar h1 { font-size: 0.9rem; color: var(--accent); white-space: nowrap; margin-right: 0.25rem; }
+.topbar { display: flex; align-items: center; gap: 0.35rem; padding: 0.2rem 0.5rem; background: var(--bg-secondary); border-bottom: 1px solid var(--border); flex-shrink: 0; z-index: 10; flex-wrap: wrap; }
+.topbar h1 { font-size: 0.8rem; color: var(--accent); white-space: nowrap; margin-right: 0.15rem; }
 .topbar .spacer { flex: 1; }
 .topbar-group { display: flex; align-items: center; gap: 0.35rem; }
 .topbar-group-left { flex-shrink: 0; }
@@ -79,12 +79,21 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .panel-container { flex: 1; display: flex; overflow: hidden; }
 .panel { flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--border); min-width: 200px; }
 .panel:last-child { border-right: none; }
-.panel-header { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem; background: var(--bg-tertiary); border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; }
-.panel-header .title { font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; }
+.panel-header { display: flex; align-items: center; gap: 0.35rem; padding: 0.2rem 0.4rem; background: var(--bg-tertiary); border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; }
+.panel-header .title { font-size: 0.7rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; }
 .panel-header .cmd-info { display: flex; flex-direction: column; min-width: 0; flex-shrink: 1; gap: 0; overflow: hidden; max-width: 100%; }
-.panel-header .cmd-fullname { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.panel-header .cmd-args { font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.panel-header .cmd-fullname { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.panel-header .cmd-args { font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .panel-header .instance-url { font-size: 0.65rem; color: var(--text-muted); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
+
+/* Panel header actions — grouped compact buttons */
+.panel-actions { display: flex; align-items: center; gap: 0.25rem; flex-shrink: 0; margin-left: auto; }
+
+/* Panel keys bar — send-keys input row below panel header */
+.panel-keys-bar { display: flex; align-items: center; gap: 0.25rem; padding: 0.15rem 0.4rem; background: var(--bg-secondary); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.panel-keys-bar .key-input { flex: 1; font-family: var(--font-mono); font-size: 0.65rem; padding: 0.1rem 0.35rem; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 3px; min-width: 0; }
+.panel-keys-bar .key-input:focus { outline: none; border-color: var(--accent); }
+.panel-keys-bar .key-input::placeholder { color: var(--text-muted); font-family: var(--font-sans); font-size: 0.6rem; }
 
 /* VTTY */
 .vtty-container { flex: 1; overflow: auto; background: var(--vtty-bg, #000); position: relative; cursor: text; }
@@ -128,6 +137,7 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .btn { display: inline-flex; align-items: center; justify-content: center; padding: 0.3rem 0.6rem; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 0.75rem; line-height: 1.2; white-space: nowrap; transition: background 0.1s; }
 .btn:hover { background: #30363d; }
 .btn-xs { padding: 0.1rem 0.35rem; font-size: 0.65rem; border-radius: 3px; }
+.btn-xxs { padding: 0.05rem 0.25rem; font-size: 0.6rem; border-radius: 2px; line-height: 1; }
 .btn-sm { padding: 0.2rem 0.45rem; font-size: 0.7rem; }
 .btn-primary { background: #238636; border-color: #2ea043; color: #fff; }
 .btn-primary:hover { background: #2ea043; }
@@ -204,8 +214,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .cert-badge.empty { background: var(--bg-tertiary); color: var(--text-muted); border-color: var(--text-muted); }
 
 /* Bottom bar */
-.bottombar { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.75rem; background: var(--bg-secondary); border-top: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; }
-.bottombar .cursor-pos { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); }
+.bottombar { display: flex; align-items: center; gap: 0.35rem; padding: 0.25rem 0.5rem; background: var(--bg-secondary); border-top: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; }
+.bottombar .cursor-pos { font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-muted); }
+.bottombar-sep { color: var(--text-muted); font-size: 0.55rem; opacity: 0.4; }
 .bottombar .dims { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); }
 .bottombar .cmd-label { font-family: var(--font-mono); font-size: 0.7rem; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw; }
 .bottombar .cmd-label .cmd-label-name { color: var(--text-primary); }
@@ -241,7 +252,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 
 /* Per-panel font size controls */
 .panel-font-size-ctrl { display: flex; align-items: center; gap: 0.15rem; flex-shrink: 0; }
-.panel-font-size-ctrl .panel-font-size { font-size: 0.65rem; color: var(--text-muted); min-width: 28px; text-align: center; font-family: var(--font-mono); }
+.panel-font-size-ctrl .panel-font-size { font-size: 0.6rem; color: var(--text-muted); min-width: 24px; text-align: center; font-family: var(--font-mono); }
 
 /* Selection mode: when active, mouse events are not forwarded to PTY */
 .vtty-container.selection-mode { cursor: text; outline: 2px solid var(--accent); outline-offset: -2px; }
