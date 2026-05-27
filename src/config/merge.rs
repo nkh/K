@@ -20,6 +20,7 @@ pub fn merge_configs(global: Config, local: Config) -> Config {
         environment: merge_env(global.environment, local.environment),
         web: local.web,
         hooks: local.hooks,
+        templates: if local.templates.is_empty() { global.templates } else { local.templates },
         profiles: merge_profiles(global.profiles, local.profiles),
     }
 }
@@ -62,6 +63,7 @@ pub fn apply_profile(base: Config, profile: &PartialConfig) -> Config {
         environment: profile.environment.clone().unwrap_or(base.environment),
         web: profile.web.clone().unwrap_or(base.web),
         hooks: profile.hooks.clone().unwrap_or(base.hooks),
+        templates: profile.templates.clone().unwrap_or(base.templates),
         profiles: base.profiles,
     }
 }

@@ -9,6 +9,7 @@ pub mod profiles;
 pub mod schema;
 pub mod security;
 pub mod server;
+pub mod templates;
 pub mod vtty;
 pub mod validation;
 pub mod web;

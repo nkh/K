@@ -21,6 +21,7 @@ Complete reference for all configuration entries, CLI flags, and their relations
    - [daemon](#daemon)
    - [web](#web)
    - [handles](#handles)
+   - [templates](#templates)
 4. [CLI Flag Reference](#cli-flag-reference)
 5. [Config-to-CLI Mapping](#config-to-cli-mapping)
 6. [Security Model](#security-model)
@@ -354,6 +355,120 @@ handles:
     sink: "null"
 ```
 
+### `templates`
+
+Pre-defined command templates that appear in the web UI's Templates sidebar tab. Templates let you save frequently-used commands with their arguments, environment variables, working directory, certificate binding, and terminal size — all in one clickable entry.
+
+Templates are defined as `[[templates]]` entries in the config file (YAML/TOML array of tables syntax). There is no CLI equivalent — templates are config-file-only.
+
+#### Template Fields
+
+| Key | Type | Required | Description |
+|-----|------|----------|-------------|
+| `name` | `string` | Yes | Display name shown in the Templates panel. This is the label the user sees and clicks on. |
+| `cmd` | `string` | Yes | The command executable to run. Can be a bare name (looked up in `$PATH`) or an absolute path. |
+| `args` | `string?` | No | Space-separated arguments passed to the command. Omit or leave empty for no arguments. |
+| `env` | `array<string>?` | No | Environment variables to set when spawning. Each entry is a `KEY=VALUE` string. These override the global `[environment]` defaults but can be overridden per-spawn via the API `env` field. |
+| `workdir` | `string?` | No | Working directory for the spawned command. Defaults to vrunner's own working directory. |
+| `certificate` | `string?` | No | Certificate name to bind (from the `[certificates]` section). When set, only clients presenting the matching certificate token can interact with the spawned command. |
+| `rows` | `u16?` | No | VTTY rows for the terminal. Defaults to the global `[vtty].rows` setting. |
+| `cols` | `u16?` | No | VTTY columns for the terminal. Defaults to the global `[vtty].cols` setting. |
+
+#### YAML Syntax
+
+YAML uses `[[templates]]` (double-bracket) for each array entry:
+
+```yaml
+templates:
+  - name: "Dev Server"
+    cmd: "npm"
+    args: "run dev"
+    workdir: "/home/user/myproject"
+    env:
+      - "NODE_ENV=development"
+      - "PORT=3000"
+    rows: 40
+    cols: 120
+
+  - name: "Run Tests"
+    cmd: "python"
+    args: "-m pytest -v"
+    workdir: "/home/user/myproject"
+
+  - name: "System Monitor"
+    cmd: "/usr/bin/htop"
+
+  - name: "Docker Compose"
+    cmd: "docker-compose"
+    args: "up"
+    workdir: "/home/user/myproject"
+
+  - name: "Production API"
+    cmd: "node"
+    args: "src/server.js"
+    workdir: "/opt/myapp"
+    env:
+      - "NODE_ENV=production"
+      - "DATABASE_URL=postgres://db:5432/myapp"
+    certificate: "prod-cert"
+    rows: 50
+    cols: 160
+```
+
+#### TOML Syntax
+
+TOML uses the same `[[templates]]` syntax:
+
+```toml
+[[templates]]
+name = "Dev Server"
+cmd = "npm"
+args = "run dev"
+workdir = "/home/user/myproject"
+env = ["NODE_ENV=development", "PORT=3000"]
+rows = 40
+cols = 120
+
+[[templates]]
+name = "System Monitor"
+cmd = "/usr/bin/htop"
+```
+
+#### Web UI Behavior
+
+Server-side templates are loaded at startup from the config file and exposed via `GET /api/templates`. In the web UI:
+
+- **Config templates** appear at the top of the Templates sidebar tab, each marked with a "config" badge. They cannot be edited or deleted from the web UI — changes require editing the config file and restarting vrunner.
+- **Custom templates** are stored in the browser's localStorage and appear below the config templates. These can be created and deleted from the web UI using the "+ Add" button.
+- Clicking any template (config or custom) spawns the command with the pre-configured settings, auto-selects it in the command list, and switches to the terminal view.
+
+#### API
+
+```
+GET /api/templates
+```
+
+Returns the list of templates defined in the server configuration:
+
+```json
+{
+  "status": "ok",
+  "data": [
+    {
+      "name": "Dev Server",
+      "cmd": "npm",
+      "args": "run dev",
+      "env": ["NODE_ENV=development", "PORT=3000"],
+      "workdir": "/home/user/myproject",
+      "certificate": null,
+      "rows": 40,
+      "cols": 120
+    }
+  ],
+  "error": null
+}
+```
+
 ### `environment`
 
 Default environment variables passed to all spawned commands unless overridden per-command or disabled with `--no-env`.
@@ -546,6 +661,7 @@ Every configuration file entry has a corresponding CLI flag. This table summariz
 | `daemon` | `stdout_file` | `--stdout-file <FILE>` |
 | `daemon` | `stderr_file` | `--stderr-file <FILE>` |
 | `handles` | *(array)* | Config only — no CLI equivalent |
+| `templates` | *(array)* | Config only — no CLI equivalent |
 | `certificates` | `directory` | Config only — no CLI equivalent |
 | `certificates` | `entries` | `--certificate NAME:CERT:KEY` |
 | `web` | *(all fields)* | Config only — no CLI equivalent |
@@ -709,6 +825,17 @@ handles: []
   # - name: "debug"       # sink identifier
   #   sink: "file"         # "file", "vtty", or "null"
   #   path: "./logs/{name}-{id}.log"  # with placeholder expansion
+
+# Pre-defined command templates (appear in web UI Templates tab)
+templates: []
+  # - name: "Dev Server"   # display name in the web UI
+  #   cmd: "npm"            # command to run
+  #   args: "run dev"      # space-separated arguments (optional)
+  #   workdir: "/home/user/myproject"   # working directory (optional)
+  #   env: ["NODE_ENV=development"]     # extra env vars (optional)
+  #   certificate: "my-cert"            # cert binding (optional)
+  #   rows: 40              # VTTY rows (optional)
+  #   cols: 120             # VTTY cols (optional)
 
 # Web admin panel options
 web:

@@ -6,5 +6,6 @@ pub mod keys;
 pub mod logs;
 pub mod resources;
 pub mod share;
+pub mod templates;
 pub mod vtty;
 pub mod ws;

@@ -69,6 +69,7 @@ fn test_config() -> Config {
         web: Default::default(),
         profiles: Default::default(),
         hooks: Default::default(),
+        templates: Default::default(),
     }
 }
 

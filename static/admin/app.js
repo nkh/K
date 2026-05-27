@@ -225,6 +225,7 @@ function releaseCurrentFocusTrap() {
     // Start refresh
     startRefresh();
     loadCertificates();
+    fetchServerTemplates();
     // Fetch server config and apply update mode defaults
     fetchServerConfig();
     applyUpdateModeUI();
@@ -1624,6 +1625,7 @@ function confirmAddPanel() {
     closePanelModal();
     loadCommands();
     loadCertificates();
+    fetchServerTemplates();
 }
 
 function removePanel(id) {
@@ -3341,52 +3343,99 @@ function rearrangePinnedCommands(container) {
 }
 
 // ─── Command Templates ───
-const DEFAULT_TEMPLATES = [
-    { name: 'Node Dev', cmd: 'npm', args: 'run dev' },
-    { name: 'Python Tests', cmd: 'python', args: '-m pytest -v' },
-    { name: 'Docker Compose', cmd: 'docker-compose', args: 'up' },
-];
+// Server-side templates are loaded from the vrunner config file ([[templates]]).
+// User templates are stored in localStorage and are editable in the web UI.
+let _serverTemplates = []; // cached from /api/templates
 
-function getTemplates() {
-    try {
-        const saved = JSON.parse(localStorage.getItem('vrunner_templates') || 'null');
-        if (saved && saved.length > 0) return saved;
-    } catch { /* ignore */ }
-    return [...DEFAULT_TEMPLATES];
+function getServerTemplates() {
+    return _serverTemplates;
 }
 
-function saveTemplates(templates) {
+async function fetchServerTemplates() {
+    try {
+        const res = await fetch(apiUrl('/api/templates'), { headers: authHeaders() });
+        const json = await res.json();
+        if (json.status === 'ok') {
+            _serverTemplates = json.data || [];
+        }
+    } catch { /* ignore — use cached */ }
+}
+
+function getUserTemplates() {
+    try {
+        return JSON.parse(localStorage.getItem('vrunner_templates') || '[]');
+    } catch { return []; }
+}
+
+function saveUserTemplates(templates) {
     localStorage.setItem('vrunner_templates', JSON.stringify(templates));
 }
 
 function renderTemplates() {
     const container = document.getElementById('templateList');
     if (!container) return;
-    const templates = getTemplates();
-    if (templates.length === 0) {
-        container.innerHTML = '<div style="padding:0.5rem;color:var(--text-muted);font-size:0.7rem;text-align:center;">No templates saved</div>';
+
+    const server = getServerTemplates();
+    const user = getUserTemplates();
+    const hasAny = server.length > 0 || user.length > 0;
+
+    if (!hasAny) {
+        container.innerHTML = '<div style="padding:0.5rem;color:var(--text-muted);font-size:0.7rem;text-align:center;">No templates configured. Add templates in your config file under [[templates]].</div>';
         return;
     }
-    container.innerHTML = templates.map((t, i) => `
-        <div class="template-card" onclick="spawnTemplate(${i})" title="Click to spawn this command">
-            <div class="template-name">${escHtml(t.name)}</div>
-            <div class="template-cmd">${escHtml(t.cmd)}${t.args ? ' ' + escHtml(t.args) : ''}</div>
-            <div class="template-actions">
-                <button class="btn btn-xs btn-danger" onclick="event.stopPropagation();deleteTemplate(${i})" title="Delete">&#x2715;</button>
+
+    let html = '';
+
+    // Server templates section
+    if (server.length > 0) {
+        html += '<div style="font-size:0.6rem;color:var(--text-muted);padding:0.2rem 0.3rem;text-transform:uppercase;letter-spacing:0.05em;">From config</div>';
+        html += server.map((t, i) => {
+            const detail = [t.cmd, t.args].filter(Boolean).join(' ');
+            const extras = [];
+            if (t.workdir) extras.push('dir: ' + t.workdir);
+            if (t.certificate) extras.push('cert: ' + t.certificate);
+            if (t.rows || t.cols) extras.push((t.rows || '?') + 'x' + (t.cols || '?'));
+            const extraStr = extras.length > 0 ? extras.join(' | ') : '';
+            return `<div class="template-card" onclick="spawnServerTemplate(${i})" title="Click to spawn this command">
+                <div style="display:flex;align-items:center;gap:0.3rem;">
+                    <div class="template-name">${escHtml(t.name)}</div>
+                    <span style="font-size:0.5rem;background:var(--accent);color:#fff;padding:0 0.25rem;border-radius:2px;">config</span>
+                </div>
+                <div class="template-cmd">${escHtml(detail)}</div>
+                ${extraStr ? `<div style="font-size:0.6rem;color:var(--text-muted);padding-left:0.2rem;">${escHtml(extraStr)}</div>` : ''}
+            </div>`;
+        }).join('');
+    }
+
+    // User templates section
+    if (user.length > 0) {
+        html += '<div style="font-size:0.6rem;color:var(--text-muted);padding:0.3rem 0.3rem 0.1rem;text-transform:uppercase;letter-spacing:0.05em;">Custom</div>';
+        html += user.map((t, i) => `
+            <div class="template-card" onclick="spawnUserTemplate(${i})" title="Click to spawn this command">
+                <div class="template-name">${escHtml(t.name)}</div>
+                <div class="template-cmd">${escHtml(t.cmd)}${t.args ? ' ' + escHtml(t.args) : ''}</div>
+                <div class="template-actions">
+                    <button class="btn btn-xs btn-danger" onclick="event.stopPropagation();deleteUserTemplate(${i})" title="Delete">&#x2715;</button>
+                </div>
             </div>
-        </div>
-    `).join('');
+        `).join('');
+    }
+
+    container.innerHTML = html;
 }
 
-function spawnTemplate(index) {
-    const templates = getTemplates();
-    const t = templates[index];
+function spawnServerTemplate(index) {
+    const t = getServerTemplates()[index];
     if (!t) return;
     const instSelect = document.getElementById('spawnInstance');
     const instUrl = instSelect ? instSelect.value : getBaseUrl();
     const args = t.args ? t.args.split(/\s+/) : [];
     const body = { cmd: t.cmd, args };
-    // Auto-switch to the spawn tab's target instance
+    if (t.env && t.env.length > 0) body.env = t.env;
+    if (t.workdir) body.workdir = t.workdir;
+    if (t.certificate) body.certificate = t.certificate;
+    if (t.rows) body.rows = t.rows;
+    if (t.cols) body.cols = t.cols;
     fetch(apiUrl('/api/commands', { url: instUrl }), {
         method: 'POST',
         headers: authHeadersForInstance({ url: instUrl }),
@@ -3399,7 +3448,6 @@ function spawnTemplate(index) {
                 state.selectedCmdId = newId;
             }
             loadCommands();
-            // Switch to commands view
             const cmdTab = document.querySelector('.sidebar-tab');
             if (cmdTab) switchSidebarTab('commands', cmdTab);
         } else {
@@ -3408,10 +3456,38 @@ function spawnTemplate(index) {
     }).catch(e => alert('Spawn failed: ' + e.message));
 }
 
-function deleteTemplate(index) {
-    const templates = getTemplates();
+function spawnUserTemplate(index) {
+    const user = getUserTemplates();
+    const t = user[index];
+    if (!t) return;
+    const instSelect = document.getElementById('spawnInstance');
+    const instUrl = instSelect ? instSelect.value : getBaseUrl();
+    const args = t.args ? t.args.split(/\s+/) : [];
+    const body = { cmd: t.cmd, args };
+    fetch(apiUrl('/api/commands', { url: instUrl }), {
+        method: 'POST',
+        headers: authHeadersForInstance({ url: instUrl }),
+        body: JSON.stringify(body),
+    }).then(res => res.json()).then(json => {
+        if (json.status === 'ok') {
+            const newId = json.data && json.data.id ? json.data.id : null;
+            if (newId) {
+                state.selectedInstUrl = instUrl;
+                state.selectedCmdId = newId;
+            }
+            loadCommands();
+            const cmdTab = document.querySelector('.sidebar-tab');
+            if (cmdTab) switchSidebarTab('commands', cmdTab);
+        } else {
+            alert('Spawn failed: ' + (json.error || 'unknown'));
+        }
+    }).catch(e => alert('Spawn failed: ' + e.message));
+}
+
+function deleteUserTemplate(index) {
+    const templates = getUserTemplates();
     templates.splice(index, 1);
-    saveTemplates(templates);
+    saveUserTemplates(templates);
     renderTemplates();
 }
 
@@ -3433,9 +3509,9 @@ function saveTemplate() {
     const cmd = document.getElementById('templateCmd').value.trim();
     const args = document.getElementById('templateArgs').value.trim();
     if (!name || !cmd) { alert('Name and command are required'); return; }
-    const templates = getTemplates();
+    const templates = getUserTemplates();
     templates.push({ name, cmd, args });
-    saveTemplates(templates);
+    saveUserTemplates(templates);
     hideAddTemplateForm();
     renderTemplates();
 }

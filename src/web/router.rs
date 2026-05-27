@@ -17,6 +17,7 @@ pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
         .route("/api/commands/lookup/{name}", get(handlers::commands::lookup_command))
         .route("/api/certificates", get(handlers::certificates::list_certificates))
         .route("/api/info", get(handlers::commands::get_info))
+        .route("/api/templates", get(handlers::templates::list_templates))
         .route("/api/log", get(handlers::logs::get_log))
         .route("/api/commands/kill-pid/{pid}", post(handlers::commands::kill_command_by_pid))
         .route("/api/commands/:id/keys", post(handlers::keys::send_keys))

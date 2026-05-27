@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 // Re-export all domain modules so that `config::schema::*` still works
 // for every existing import site.
 pub use super::daemon::DaemonConfig;
+pub use super::templates::{TemplateConfig, TemplatesConfig};
 pub use super::display::{DisplayConfig, InteractiveConfig, KeybindingsConfig};
 pub use super::environment::EnvironmentConfig;
 pub use super::handles::HandleConfig;
@@ -72,6 +73,13 @@ pub struct Config {
     /// interval for clients that use poll mode.
     #[serde(default)]
     pub web: WebConfig,
+    /// Pre-defined command templates.
+    /// Templates appear in the web UI and allow one-click spawning of
+    /// frequently-used commands with pre-configured arguments, environment,
+    /// working directory, and terminal size.
+    /// Defined as `[[templates]]` entries in YAML/TOML config.
+    #[serde(default)]
+    pub templates: TemplatesConfig,
     /// Named configuration presets.
     /// Each named config is a partial Config that can be referenced by name
     /// via --profile NAME (CLI) or "profile": "NAME" (API).
@@ -111,4 +119,6 @@ pub struct PartialConfig {
     pub web: Option<WebConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hooks: Option<HooksConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub templates: Option<TemplatesConfig>,
 }
