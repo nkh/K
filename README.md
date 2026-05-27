@@ -4,7 +4,7 @@ A virtual terminal runner and process orchestrator with a web-first control plan
 
 ## Features
 
-- **Web Admin Dashboard** — Built-in SPA at `/admin` with real-time VTTY streaming, keyboard/mouse input, and command management
+- **Web Admin Dashboard** — Built-in SPA at `/admin` with real-time VTTY streaming, keyboard/mouse input, command management, light/dark theme, keyboard-accessible context menus, and connection quality indicator
 - **Interactive Display** — Full terminal UI with tab bar, search, copy/paste, split-pane, and scrollback navigation
 - **REST API** — 30+ endpoints for spawning, killing, resizing, snapshotting, and inspecting commands
 - **WebSocket Streaming** — Incremental diff protocol for low-bandwidth terminal output push
