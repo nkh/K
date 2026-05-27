@@ -243,6 +243,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .panel-font-size-ctrl { display: flex; align-items: center; gap: 0.15rem; flex-shrink: 0; }
 .panel-font-size-ctrl .panel-font-size { font-size: 0.65rem; color: var(--text-muted); min-width: 28px; text-align: center; font-family: var(--font-mono); }
 
+/* Selection mode: when active, mouse events are not forwarded to PTY */
+.vtty-container.selection-mode { cursor: text; outline: 2px solid var(--accent); outline-offset: -2px; }
+.vtty-container.selection-mode pre { user-select: text; }
+
 /* Tooltip */
 [title] { position: relative; }
 

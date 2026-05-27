@@ -361,6 +361,22 @@ function changePanelFontSize(panelId, delta) {
     if (label) label.textContent = panelObj.fontSize + 'px';
 }
 
+// ─── Selection Mode ───
+// When active, mouse events are NOT forwarded to PTY, enabling native text selection.
+function toggleSelectionMode(panelId) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj) return;
+    panelObj.selectionMode = !panelObj.selectionMode;
+    localStorage.setItem('vrunner_panel_sel_' + panelId, panelObj.selectionMode.toString());
+    const vttyEl = document.getElementById('vtty-' + panelId);
+    if (vttyEl) vttyEl.classList.toggle('selection-mode', panelObj.selectionMode);
+    const btn = document.getElementById('selectBtn-' + panelId);
+    if (btn) {
+        btn.classList.toggle('btn-primary', panelObj.selectionMode);
+        btn.textContent = panelObj.selectionMode ? '✓ Select' : 'Select';
+    }
+}
+
 // ─── Sidebar ───
 function toggleSidebar() {
     document.getElementById('sidebar').classList.toggle('collapsed');
@@ -1334,7 +1350,9 @@ function addPanelDirect(instUrl, label, token) {
     const id = 'panel-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
     const savedFontSize = parseInt(localStorage.getItem('vrunner_panel_font_' + id));
     const fontSize = (savedFontSize >= 8 && savedFontSize <= 28) ? savedFontSize : state.fontSize;
-    const panel = { id, instUrl, label, token, scrollbackOffset: 0, mouseTracking: false, mouseSgr: false, focused: false, fontSize };
+    const savedSelMode = localStorage.getItem('vrunner_panel_sel_' + id);
+    const selectionMode = savedSelMode === 'true';
+    const panel = { id, instUrl, label, token, scrollbackOffset: 0, mouseTracking: false, mouseSgr: false, focused: false, fontSize, selectionMode };
     state.panels.push(panel);
     renderPanels();
     return panel;
@@ -1413,8 +1431,9 @@ function renderPanels() {
                     ${state.panels.length > 1 ? `<button class="btn btn-xs btn-danger" onclick="removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
                     <button class="btn btn-xs" onclick="copyTerminalSelection('${panel.id}')" title="Copy selected text to clipboard">Copy</button>
                     <button class="btn btn-xs" onclick="exportTerminal('${panel.id}')" title="Export terminal as text">&#x2913;</button>
+                    <button class="btn btn-xs" id="selectBtn-${panel.id}" onclick="toggleSelectionMode('${panel.id}')" title="Toggle selection mode (Ctrl+Shift+S)">Select</button>
                 </div>
-                <div class="vtty-container" id="vtty-${panel.id}" style="font-size: ${panel.fontSize}px;">
+                <div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" style="font-size: ${panel.fontSize}px;">
                     <div class="search-bar" id="searchBar-${panel.id}">
                         <input type="text" id="searchInput-${panel.id}" placeholder="Search terminal..." oninput="vttySearch('${panel.id}')">
                         <span class="search-count" id="searchCount-${panel.id}"></span>
@@ -2003,6 +2022,24 @@ document.addEventListener('keydown', (e) => {
             return;
         }
     }
+    // Ctrl+Shift+S — toggle selection mode
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'S' || e.key === 's')) {
+        const panel = getSelectedPanel();
+        if (panel) {
+            e.preventDefault();
+            toggleSelectionMode(panel.id);
+            return;
+        }
+    }
+    // Alt+S — toggle selection mode (alternative shortcut)
+    if (e.altKey && (e.key === 's' || e.key === 'S') && !e.ctrlKey && !e.metaKey) {
+        const panel = getSelectedPanel();
+        if (panel) {
+            e.preventDefault();
+            toggleSelectionMode(panel.id);
+            return;
+        }
+    }
     // ? — show keyboard shortcuts
     if (e.key === '?' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
         showShortcuts();
@@ -2130,6 +2167,9 @@ document.addEventListener('wheel', (e) => {
 
     e.preventDefault();
 
+    // If selection mode is active, let browser handle wheel natively (no scrollback, no PTY)
+    if (panelObj.selectionMode) return;
+
     // If the child has mouse tracking enabled, forward wheel events to the PTY
     if (panelObj.mouseTracking) {
         const wheelEvent = e.deltaY < 0 ? 'wheel_up' : 'wheel_down';
@@ -2184,6 +2224,9 @@ document.addEventListener('mousedown', (e) => {
     // Skip if clicking on buttons/inputs inside vtty container
     if (e.target.closest('button') || e.target.closest('input')) return;
 
+    // If selection mode is active, skip PTY forwarding — let browser handle selection
+    if (panelObj.selectionMode) return;
+
     // If mouse tracking is enabled, forward the event to PTY
     if (panelObj.mouseTracking) {
         e.preventDefault();
@@ -2205,6 +2248,12 @@ document.addEventListener('mouseup', (e) => {
     const panelObj = state.panels.find(p => p.id === panelEl.id);
     if (!panelObj || !state.selectedCmdId) return;
 
+    // If selection mode is active, skip PTY forwarding
+    if (panelObj.selectionMode) {
+        _mouseDownButton = null;
+        return;
+    }
+
     if (panelObj.mouseTracking && _mouseDownButton !== null) {
         e.preventDefault();
         sendMouseEvent(panelObj, 'up', _mouseDownButton, e);
@@ -2223,6 +2272,9 @@ document.addEventListener('mousemove', (e) => {
 
     const panelObj = state.panels.find(p => p.id === panelEl.id);
     if (!panelObj || !state.selectedCmdId || !panelObj.mouseTracking) return;
+
+    // If selection mode is active, skip PTY forwarding
+    if (panelObj.selectionMode) return;
 
     // Throttle mouse move events to avoid flooding
     if (!panelObj._lastMoveTime || Date.now() - panelObj._lastMoveTime > 16) {
@@ -2810,6 +2862,8 @@ function showShortcuts() {
         <table>
             <tr><td>?</td><td>Show this help</td></tr>
             <tr><td>Ctrl+F</td><td>Search in terminal</td></tr>
+            <tr><td>Ctrl+Shift+C</td><td>Copy terminal selection</td></tr>
+            <tr><td>Ctrl+Shift+S / Alt+S</td><td>Toggle selection mode</td></tr>
             <tr><td>Escape</td><td>Close search / menu</td></tr>
             <tr><td>Any key</td><td>Focus key input (when not in a field)</td></tr>
             <tr><td>Enter</td><td>Send keystrokes to terminal</td></tr>
