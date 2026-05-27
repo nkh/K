@@ -109,4 +109,4 @@ The **[User Manual](MANUAL.md)** is the comprehensive guide covering all feature
 
 ## License
 
-MIT OR Apache-2.0
+Dual-licensed under **GPL-3.0-or-later** or **Artistic-2.0** — see [LICENSE](LICENSE) for the full text.

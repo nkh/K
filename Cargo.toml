@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Your Name <you@example.com>"]
 description = "A virtual terminal runner with web control plane"
-license = "MIT OR Apache-2.0"
+license = "GPL-3.0-or-later OR Artistic-2.0"
 repository = "https://github.com/yourusername/vrunner"
 
 [dependencies]
