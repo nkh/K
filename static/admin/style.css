@@ -90,6 +90,12 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .vtty-container { flex: 1; overflow: auto; background: var(--vtty-bg, #000); position: relative; cursor: text; }
 .vtty-container pre { margin: 0; padding: 0; font-family: var(--font-mono); font-size: var(--font-size); line-height: 1.2; min-width: 100%; min-height: 100%; user-select: none; }
 .vtty-container.selectable pre { user-select: text; }
+
+/* Per-panel theme: overrides the terminal background when a panel-specific
+   theme is set via data-panel-theme="light" or "dark" on the vtty-container.
+   When no data-panel-theme is set, the global CSS custom properties apply. */
+.vtty-container[data-panel-theme="light"] { --vtty-bg: #ffffff; --panel-bg: #ffffff; }
+.vtty-container[data-panel-theme="dark"] { --vtty-bg: #0d1117; --panel-bg: #0d1117; }
 .vtty-container .cursor-indicator { position: absolute; width: 8px; height: 14px; background: rgba(88, 166, 255, 0.6); border: 1px solid var(--accent); pointer-events: none; transition: top 0.05s, left 0.05s; z-index: 5; }
 .vtty-container .search-bar { position: absolute; top: 4px; right: 4px; z-index: 10; display: none; gap: 4px; align-items: center; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; }
 .vtty-container .search-bar.visible { display: flex; }

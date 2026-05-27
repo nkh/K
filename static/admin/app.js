@@ -166,6 +166,15 @@ function releaseCurrentFocusTrap() {
     applyFontSize();
     initBottombar();
 
+    // Event delegation for command list — handles kill buttons without inline onclick
+    document.getElementById('commandList').addEventListener('click', (e) => {
+        const killBtn = e.target.closest('.cmd-kill-btn');
+        if (killBtn) {
+            e.stopPropagation();
+            killCommand(killBtn.dataset.instUrl, killBtn.dataset.cmdId);
+        }
+    });
+
     // Parse URL arguments for multi-instance
     const params = new URLSearchParams(window.location.search);
     const instances = params.getAll('instance');
@@ -267,7 +276,7 @@ function showCommandPicker(matches) {
         const aliveBadge = m.alive
             ? '<span style="color:var(--green);font-size:0.65rem;">● running ' + formatRuntime(m.runtime_secs) + '</span>'
             : '<span style="color:var(--red);font-size:0.65rem;">● exited</span>';
-        return `<div class="cmd-item" onclick="pickCommand('${m.id}','${escHtml(m.name)}')" style="cursor:pointer;">
+        return `<div class="cmd-item" data-cmd-id="${escHtml(m.id)}" data-cmd-name="${escHtml(m.name)}" style="cursor:pointer;">
             <div class="cmd-item-row">
                 <div style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-mono);font-size:0.75rem;color:var(--text-primary);">${escHtml(m.name)}</div>
                 ${aliveBadge}
@@ -290,6 +299,13 @@ function showCommandPicker(matches) {
         </div>
     </div>`;
     document.body.appendChild(overlay);
+    // Event delegation for command picker items (no inline onclick to avoid XSS)
+    overlay.addEventListener('click', (e) => {
+        const item = e.target.closest('.cmd-item[data-cmd-id]');
+        if (item) {
+            pickCommand(item.dataset.cmdId, item.dataset.cmdName);
+        }
+    });
     // Trap focus inside the picker and focus the first command item
     const panel = overlay.querySelector('div[style*="background:var(--bg-secondary)"]');
     if (panel) trapFocus(panel);
@@ -359,6 +375,33 @@ function changePanelFontSize(panelId, delta) {
     // Update the label in the panel header
     const label = document.querySelector(`#${panelId} .panel-font-size`);
     if (label) label.textContent = panelObj.fontSize + 'px';
+}
+
+// Per-panel theme toggle: cycles through '' (inherit global) → 'light' → 'dark' → ''.
+// Only affects the VTTY terminal area, not the surrounding UI chrome.
+function togglePanelTheme(panelId) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj) return;
+    const next = panelObj.theme === '' ? 'light' : panelObj.theme === 'light' ? 'dark' : '';
+    panelObj.theme = next;
+    localStorage.setItem('vrunner_panel_theme_' + panelId, next);
+    applyPanelTheme(panelId, next);
+}
+
+function applyPanelTheme(panelId, theme) {
+    const vttyEl = document.getElementById('vtty-' + panelId);
+    if (!vttyEl) return;
+    if (theme) {
+        vttyEl.setAttribute('data-panel-theme', theme);
+    } else {
+        vttyEl.removeAttribute('data-panel-theme');
+    }
+    // Update the button label
+    const btn = document.getElementById('panelThemeBtn-' + panelId);
+    if (btn) {
+        btn.textContent = theme === 'light' ? '\u263E' : theme === 'dark' ? '\u2600' : '\u25D0';
+        btn.title = theme === 'light' ? 'Panel theme: light (click to toggle)' : theme === 'dark' ? 'Panel theme: dark (click to toggle)' : 'Panel theme: inherit (click to toggle)';
+    }
 }
 
 // ─── Selection Mode ───
@@ -538,7 +581,7 @@ async function loadCommands() {
                         ${runtimeStr}
                         ${certBadge}
                         <span class="pid">${cmd.pid}</span>
-                        <button class="btn btn-xs btn-danger" onclick="event.stopPropagation();killCommand('${inst.url}','${cmd.id}')" title="Kill">&#x2715;</button>
+                        <button class="btn btn-xs btn-danger cmd-kill-btn" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" title="Kill">&#x2715;</button>
                     </div>
                     <div class="cmd-detail">${escHtml(detail)}</div>
                 </div>`;
@@ -1352,7 +1395,10 @@ function addPanelDirect(instUrl, label, token) {
     const fontSize = (savedFontSize >= 8 && savedFontSize <= 28) ? savedFontSize : state.fontSize;
     const savedSelMode = localStorage.getItem('vrunner_panel_sel_' + id);
     const selectionMode = savedSelMode === 'true';
-    const panel = { id, instUrl, label, token, scrollbackOffset: 0, mouseTracking: false, mouseSgr: false, focused: false, fontSize, selectionMode };
+    const savedTheme = localStorage.getItem('vrunner_panel_theme_' + id);
+    // Per-panel theme: 'light', 'dark', or '' (inherit global). Default is inherit.
+    const theme = (savedTheme === 'light' || savedTheme === 'dark') ? savedTheme : '';
+    const panel = { id, instUrl, label, token, scrollbackOffset: 0, mouseTracking: false, mouseSgr: false, focused: false, fontSize, selectionMode, theme };
     state.panels.push(panel);
     renderPanels();
     return panel;
@@ -1431,9 +1477,10 @@ function renderPanels() {
                     ${state.panels.length > 1 ? `<button class="btn btn-xs btn-danger" onclick="removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
                     <button class="btn btn-xs" onclick="copyTerminalSelection('${panel.id}')" title="Copy selected text to clipboard">Copy</button>
                     <button class="btn btn-xs" onclick="exportTerminal('${panel.id}')" title="Export terminal as text">&#x2913;</button>
+                    <button class="btn btn-xs" id="panelThemeBtn-${panel.id}" onclick="togglePanelTheme('${panel.id}')" title="Panel theme: inherit (click to toggle)">${panel.theme === 'light' ? '\u263E' : panel.theme === 'dark' ? '\u2600' : '\u25D0'}</button>
                     <button class="btn btn-xs" id="selectBtn-${panel.id}" onclick="toggleSelectionMode('${panel.id}')" title="Toggle selection mode (Ctrl+Shift+S)">Select</button>
                 </div>
-                <div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" style="font-size: ${panel.fontSize}px;">
+                <div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px;">
                     <div class="search-bar" id="searchBar-${panel.id}">
                         <input type="text" id="searchInput-${panel.id}" placeholder="Search terminal..." oninput="vttySearch('${panel.id}')">
                         <span class="search-count" id="searchCount-${panel.id}"></span>
