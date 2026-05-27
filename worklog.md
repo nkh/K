@@ -231,3 +231,35 @@ Stage Summary:
   + Bonus emulator-level unit tests - 6 tests
 - All tests are independent, no shared state, no ordering dependency
 - File is 1120 lines
+
+---
+Task ID: clippy-fix-55
+Agent: main
+Task: Fix 55 pre-existing clippy warnings across 12 files, write tests, commit and push
+
+Work Log:
+- Ran `cargo clippy` and identified 55 warnings (53 lib + 2 bin) across 12 source files
+- Categorized warnings into 15 distinct clippy lint types
+- Fixed all 55 warnings with the following changes per file:
+  - `src/cli/subcommands.rs` (3): doc_lazy_continuation, print_literal, needless_borrow
+  - `src/config/display.rs` (1): derive Default for InteractiveConfig, serde(default) for DisplayConfig
+  - `src/interactive/display.rs` (17): needless_borrow (15), unnecessary_map_or, unnecessary_cast, manual_range_contains, too_many_arguments (allow)
+  - `src/interactive/keybinding.rs` (1): needless_borrow
+  - `src/main.rs` (2): needless_borrow
+  - `src/process/manager.rs` (4): too_many_arguments (allow), map_flatten→and_then, type_complexity→CommandEntry alias
+  - `src/process/pty.rs` (4): io_other_error→Error::other (4 instances)
+  - `src/process/spawner.rs` (4): too_many_arguments (allow), needless_borrow (2)
+  - `src/vtty/color.rs` (4): needless_range_loop→enumerate, manual_strip→strip_prefix
+  - `src/vtty/emulator.rs` (1): collapsible_match→match guard
+  - `src/web/handlers/commands.rs` (4): unnecessary_owned_empty_strings (2), unnecessary_cast
+  - `src/web/handlers/ws.rs` (12): useless_conversion→remove .into()
+- Wrote 10 new tests covering: color parsing (rgb prefix, hex prefix, empty), palette operations (apply_osc4, set/reset), config defaults (DisplayConfig, InteractiveConfig, KeybindingsConfig), deserialization, and CommandEntry type alias
+- Verified: 448 tests pass (256 lib + 121 integration + 4 cli + 65 regression + 2 doc)
+- Verified: 0 clippy warnings
+- Committed as `aa9e9d2` and pushed to origin/main
+
+Stage Summary:
+- 55 clippy warnings → 0 warnings
+- 438 → 448 tests (+10 new)
+- 12 files modified, 187 insertions, 73 deletions
+- No behavioral changes — all fixes are internal code hygiene improvements
