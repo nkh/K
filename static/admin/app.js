@@ -232,7 +232,9 @@ function releaseCurrentFocusTrap() {
 
     // Auto-collapse sidebar on small screens
     if (window.innerWidth <= 768) {
-        document.getElementById('sidebar').classList.add('collapsed');
+        const sidebar = document.getElementById('sidebar');
+        sidebar.classList.add('collapsed');
+        sidebar.style.width = '';
     }
 
     // Auto-fit terminal on window resize (debounced)
@@ -244,6 +246,7 @@ function releaseCurrentFocusTrap() {
             const sidebar = document.getElementById('sidebar');
             if (window.innerWidth <= 768) {
                 sidebar.classList.add('collapsed');
+                sidebar.style.width = '';
             }
             // Auto-fit terminal to panel size
             autoFitActiveTerminal();
@@ -476,7 +479,13 @@ function toggleSelectionMode(panelId) {
 
 // ─── Sidebar ───
 function toggleSidebar() {
-    document.getElementById('sidebar').classList.toggle('collapsed');
+    const sidebar = document.getElementById('sidebar');
+    sidebar.classList.toggle('collapsed');
+    // Clear inline width set by the drag handle so the CSS class takes effect.
+    // Without this, an inline style.width from dragging overrides .collapsed { width: 0 }.
+    if (sidebar.classList.contains('collapsed')) {
+        sidebar.style.width = '';
+    }
 }
 
 // ─── Bottom bar toggle ───
@@ -704,8 +713,9 @@ async function loadCommands() {
             const pinnedNames = getPinnedNames();
             const isPinned = pinnedNames.includes(cmdName);
             const frozenClass = isFrozen ? ' frozen' : '';
+            const exitedClass = (!isAlive && !isFrozen) ? ' exited' : '';
             html += `
-                <div class="cmd-item${selected}${frozenClass}" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" onclick="selectCommand(this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)} ${escHtml(argsStr)}" style="${(isAlive || isFrozen) ? '' : 'opacity:0.6;'}">
+                <div class="cmd-item${selected}${frozenClass}${exitedClass}" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" onclick="selectCommand(this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)} ${escHtml(argsStr)}" style="${(isAlive || isFrozen) ? '' : 'opacity:0.6;'}">
                     <div class="cmd-item-row">
                         ${statusDotHtml}
                         <button class="pin-btn${isPinned ? ' active' : ''}" onclick="event.stopPropagation();togglePinCmd('${escHtml(cmdName)}')" title="${isPinned ? 'Unpin' : 'Pin'}">&#9734;</button>
