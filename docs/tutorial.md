@@ -54,12 +54,11 @@ The web UI shows:
 - A sidebar with all running commands (with alive status and runtime)
 - A terminal view with live output
 - A spawn form to launch new commands
-- A status bar at the bottom with the full command name
 
 **Exercise 2.1**: Spawn a second command (`ls -la`) from the web UI spawn form.
 Switch between the two commands using the sidebar.
 
-**Exercise 2.2**: Try the status bar toggle. Hide it, then show it again.
+**Exercise 2.2**: Resize the terminal view to see how the VTTY adapts.
 (Your preference is saved in the browser's localStorage.)
 
 **Exercise 2.3**: In the spawn form, click "Auto-fit" to match the terminal size

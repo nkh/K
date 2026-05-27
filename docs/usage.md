@@ -1445,7 +1445,7 @@ vrunner --tabs --display-all -- htop
 
 ### Tab Bar
 
-The `--tabs` flag enables a tab bar at the top of the display that lists all running commands and allows you to switch between them. When tabs are disabled (the default), only the active command name is shown in the status bar. This is similar to tools like `mprocs` but the tab bar is optional.
+The `--tabs` flag enables a tab bar at the top of the display that lists all running commands and allows you to switch between them. When tabs are disabled (the default), only the active command is shown. This is similar to tools like `mprocs` but the tab bar is optional.
 
 ### Keyboard Shortcuts (Keybindings)
 

@@ -789,18 +789,6 @@ The display loop operates in these states:
 
 When a command exits in active mode, the display automatically transitions to monitor mode (if other commands exist) or exits (if no commands remain). If `--retain-on-exit` was used on a command, that command stays in the manager after exiting, which keeps the display alive even in `display_all` mode. When all commands have been removed (none retained), vrunner exits regardless of `display_all`.
 
-### Status Bar
-
-The bottom status bar shows:
-
-| Element | Description |
-|---------|-------------|
-| Command name | The currently selected command |
-| `[RUNNING]` / `[FROZEN]` / `[EXITED]` | Command status |
-| `N×M` | Current VTTY dimensions |
-| `scroll: N` | Scrollback offset (when scrolled up) |
-| Runtime | Elapsed wall-clock time since spawn |
-
 ## 3.2 Keyboard Shortcuts Reference
 
 ### Default Keybindings

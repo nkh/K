@@ -216,7 +216,7 @@ Controls the interactive terminal display behavior when `--display` is enabled, 
 
 | Key | Type | Default | CLI Flag | Description |
 |-----|------|---------|----------|-------------|
-| `tabs` | `bool` | `false` | `--tabs` | When `true`, shows a tab bar listing all running commands at the top of the interactive display. When `false` (default), only the active command name is shown in the status bar. This is similar to `mprocs`-style display but the tab bar is optional. |
+| `tabs` | `bool` | `false` | `--tabs` | When `true`, shows a tab bar listing all running commands at the top of the interactive display. When `false` (default), only the active command is shown. This is similar to `mprocs`-style display but the tab bar is optional. |
 | `keybindings.next_command` | `string?` | `"ctrl+right"` | — | Key sequence to switch to the next running command. Only active when `display.display_all` is enabled and multiple commands are running. Set to `null` to disable. |
 | `keybindings.prev_command` | `string?` | `"ctrl+left"` | — | Key sequence to switch to the previous running command. Wraps around to the last command. Only active when `display.display_all` is enabled. Set to `null` to disable. |
 | `keybindings.toggle_log` | `string?` | `"ctrl+l"` | — | Key sequence to show or hide the command log overlay. When the log is visible, recent log entries are displayed over the VTTY output. Press the same key again to dismiss. Set to `null` to disable. |
