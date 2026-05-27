@@ -1892,6 +1892,9 @@ pub async fn run_display_loop(
                                         esc_buf.push(b);
                                         // ── Check for mouse events first ──
                                         if let Some(me) = try_parse_mouse_event(&esc_buf) {
+                                            // Save raw bytes before clearing — needed
+                                            // for forwarding middle/right clicks to child
+                                            let raw_mouse_bytes = esc_buf.clone();
                                             esc_buf.clear();
                                             esc_deadline = None;
 
@@ -2040,7 +2043,7 @@ pub async fn run_display_loop(
                                                     }
                                                     continue;
                                                 }
-                                                // ── Middle click: forward to terminal (paste support) ──
+                                                // ── Middle/right click: forward to terminal ──
                                                 _ => {
                                                     // Forward the raw escape sequence to the child
                                                     // (applications that use mouse events, e.g. htop, vim)
@@ -2049,13 +2052,24 @@ pub async fn run_display_loop(
                                                             .or_else(|| manager.list().first().map(|(id, _, _, _, _)| id.clone()));
                                                         if let Some(ref tid) = target_id {
                                                             if let Some(handle) = manager.get(tid) {
-                                                                let _ = handle.send_bytes(esc_buf.clone()).await;
+                                                                let _ = handle.send_bytes(raw_mouse_bytes).await;
                                                             }
                                                         }
                                                     }
                                                     continue;
                                                 }
                                             }
+                                        }
+                                        // ── Partial mouse event detection ──
+                                        // When mouse tracking is active, the terminal sends
+                                        // SGR (\x1b[<...) or legacy (\x1b[M...) mouse sequences.
+                                        // These are NOT prefixes of any keybinding, so
+                                        // check_bindings returns (None, false) for partial
+                                        // mouse sequences like \x1b[<.  Without this guard,
+                                        // partial mouse bytes are forwarded to the child
+                                        // command, causing display artifacts and blinking.
+                                        if esc_buf.starts_with(b"\x1b[<") || esc_buf.starts_with(b"\x1b[M") {
+                                            continue; // keep buffering — mouse event incomplete
                                         }
                                         // Check if current buffer matches any keybinding
                                         let (action, partial) = check_bindings(&esc_buf, &bindings);
