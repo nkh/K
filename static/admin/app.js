@@ -347,6 +347,20 @@ function applyFontSize() {
     localStorage.setItem('vrunner_font_size', state.fontSize.toString());
 }
 
+// Per-panel font size: changes only the specified panel's font size.
+function changePanelFontSize(panelId, delta) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj) return;
+    panelObj.fontSize = Math.max(8, Math.min(28, panelObj.fontSize + delta));
+    localStorage.setItem('vrunner_panel_font_' + panelId, panelObj.fontSize.toString());
+    // Apply inline style on the VTTY container
+    const vttyEl = document.getElementById('vtty-' + panelId);
+    if (vttyEl) vttyEl.style.fontSize = panelObj.fontSize + 'px';
+    // Update the label in the panel header
+    const label = document.querySelector(`#${panelId} .panel-font-size`);
+    if (label) label.textContent = panelObj.fontSize + 'px';
+}
+
 // ─── Sidebar ───
 function toggleSidebar() {
     document.getElementById('sidebar').classList.toggle('collapsed');
@@ -1318,7 +1332,9 @@ function updateInstanceDropdown() {
 // ─── Panels (Multi-view) ───
 function addPanelDirect(instUrl, label, token) {
     const id = 'panel-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
-    const panel = { id, instUrl, label, token, scrollbackOffset: 0, mouseTracking: false, mouseSgr: false, focused: false };
+    const savedFontSize = parseInt(localStorage.getItem('vrunner_panel_font_' + id));
+    const fontSize = (savedFontSize >= 8 && savedFontSize <= 28) ? savedFontSize : state.fontSize;
+    const panel = { id, instUrl, label, token, scrollbackOffset: 0, mouseTracking: false, mouseSgr: false, focused: false, fontSize };
     state.panels.push(panel);
     renderPanels();
     return panel;
@@ -1385,6 +1401,11 @@ function renderPanels() {
                         <span class="cmd-args" id="cmdArgs-${panel.id}"></span>
                     </div>
                     <span class="instance-url">${escHtml(panel.instUrl.replace(/^https?:\/\//, ''))}</span>
+                    <span class="panel-font-size-ctrl">
+                        <button class="btn btn-xs" onclick="changePanelFontSize('${panel.id}', -1)" title="Decrease font size">A-</button>
+                        <span class="panel-font-size">${panel.fontSize}px</span>
+                        <button class="btn btn-xs" onclick="changePanelFontSize('${panel.id}', 1)" title="Increase font size">A+</button>
+                    </span>
                     <div class="input-row" style="flex:1;min-width:120px;">
                         <input type="text" id="keyInput-${panel.id}" placeholder="Send keys... (e.g. q, <Enter>, <C-c>)" style="font-size:0.7rem;" onkeydown="if(event.key==='Enter'){event.preventDefault();sendKeysToPanel('${panel.id}')}">
                         <button class="btn btn-xs" onclick="sendKeysToPanel('${panel.id}')">Send</button>
@@ -1393,7 +1414,7 @@ function renderPanels() {
                     <button class="btn btn-xs" onclick="copyTerminalSelection('${panel.id}')" title="Copy selected text to clipboard">Copy</button>
                     <button class="btn btn-xs" onclick="exportTerminal('${panel.id}')" title="Export terminal as text">&#x2913;</button>
                 </div>
-                <div class="vtty-container" id="vtty-${panel.id}">
+                <div class="vtty-container" id="vtty-${panel.id}" style="font-size: ${panel.fontSize}px;">
                     <div class="search-bar" id="searchBar-${panel.id}">
                         <input type="text" id="searchInput-${panel.id}" placeholder="Search terminal..." oninput="vttySearch('${panel.id}')">
                         <span class="search-count" id="searchCount-${panel.id}"></span>

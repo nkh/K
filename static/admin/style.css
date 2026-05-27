@@ -239,6 +239,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .font-size-ctrl { display: flex; align-items: center; gap: 0.3rem; }
 .font-size-ctrl span { font-size: 0.7rem; color: var(--text-muted); min-width: 32px; text-align: center; }
 
+/* Per-panel font size controls */
+.panel-font-size-ctrl { display: flex; align-items: center; gap: 0.15rem; flex-shrink: 0; }
+.panel-font-size-ctrl .panel-font-size { font-size: 0.65rem; color: var(--text-muted); min-width: 28px; text-align: center; font-family: var(--font-mono); }
+
 /* Tooltip */
 [title] { position: relative; }
 
