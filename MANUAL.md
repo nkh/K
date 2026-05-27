@@ -377,15 +377,15 @@ The top bar is organized into three button groups:
 
 - **Left group** — Add Panel (spawn), Pause/Run toggle, Kill All
 - **Center group** — Font size controls (A-/A+), resize to fit, alternate screen buffer selector
-- **Right group** — Documentation link, keyboard shortcuts (`?`), theme toggle (sun/moon)
+- **Right group** — Auth token input, documentation link, keyboard shortcuts (`?`), theme toggle (sun/moon)
 
-The layout uses a consistent button sizing system with five variants: `btn-xxs` (ultra-compact actions), `btn-xs` (compact toolbars), `btn-sm` (secondary actions), `btn` (default primary), and `btn-primary`/`btn-danger` (color variants). The center group collapses on mobile viewports.
+The layout uses a consistent button sizing system with four variants: `btn-xs` (compact toolbars), `btn-sm` (secondary actions), `btn` (default primary), and `btn-primary`/`btn-danger` (color variants). The center group collapses on mobile viewports.
 
 - **Top bar** — grouped button layout (left/center/right), theme toggle, shortcuts
-- **Sidebar** — command list with name, PID, status, runtime, and context menu actions; auth token input in footer
-- **Panel header** — tab strip for multi-panel layouts; compact action button group; send-keys input bar for special key sequences; right-click for context menu
-- **Main pane** — VTTY terminal viewer with direct keyboard input, per-panel font size, copy, export, and selection mode
-- **Bottom bar** — cursor position, resize controls, connection quality indicator (latency + reconnect count), scrollback indicator
+- **Sidebar** — command list with name, PID, status, runtime, and context menu actions
+- **Panel tab bar** — tab strip for multi-panel layouts; right-click for context menu
+- **Main pane** — VTTY terminal viewer with per-panel font size, copy, export, and selection mode
+- **Bottom bar** — connection quality indicator (latency + reconnect count), scrollback indicator
 
 ### Features
 
@@ -394,15 +394,14 @@ The layout uses a consistent button sizing system with five variants: `btn-xxs` 
 | Feature | Description |
 |---------|-------------|
 | Real-time VTTY viewer | Incremental diff WebSocket protocol, 1-second HTTP polling fallback |
-| Direct keyboard input | Click terminal to focus and type directly; click again to unfocus |
-| Send-keys input bar | Input field below panel header for special key sequences (e.g. `<C-c>`, `<Up>`, `<Esc>`) |
+| Direct keyboard input | Click terminal to focus, type to send keystrokes |
 | Mouse event forwarding | Clicks, drags, and wheel events forwarded to child process |
 | Mouse wheel scrollback | Scroll through command history; smart routing to app or scrollback |
 | Terminal search | `Ctrl+F` to search within the output buffer |
 | Scroll-to-Bottom | Floating button when scrolled up |
 | Selection mode | Toggle to enable native text selection when mouse tracking is active (`Ctrl+Shift+S`, `Alt+S`) |
 | Copy to clipboard | `Ctrl+Shift+C` copies selected text; falls back to full buffer when no selection |
-| Per-panel font size | A-/A+ buttons in each panel header alongside compact action group; persisted to localStorage |
+| Per-panel font size | A-/A+ buttons in each panel header; persisted to localStorage |
 | Persistent scrollback | Scrollback offset saved to sessionStorage; restored on re-select |
 | Export output | Download terminal buffer as `.txt` |
 
@@ -499,7 +498,7 @@ ws.send(JSON.stringify({ type: 'keys', keys: ':q!\r' }));  // quit vim
 
 ### Via Web UI
 
-Click the terminal pane to capture keyboard focus, then type directly — keystrokes are forwarded to the child process in real time. Click again to unfocus. For special key sequences (Ctrl+C, arrow keys, function keys), use the send-keys input bar below the panel header, which supports the same notation as the API endpoint.
+Click the terminal pane to capture keyboard focus, then type normally. The keystrokes are forwarded to the child process in real time.
 
 ## 2.5 Managing Commands
 

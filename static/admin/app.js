@@ -606,8 +606,6 @@ function selectCommand(instUrl, cmdId, name) {
     loadVttyHttp(instUrl, cmdId);
     // Start the active update mode (push or poll)
     startUpdateMode();
-    // Auto-focus the terminal for direct keyboard input
-    autoFocusTerminal();
 }
 
 // Update the panel header with the selected command's full name and args.
@@ -1008,14 +1006,10 @@ function updateVttyDisplay(data) {
     // Cursor position
     const cursor = data.cursor || {};
     const dims = data.dimensions || {};
-    const cursorPosEl = document.getElementById('cursorPos');
-    if (cursorPosEl) cursorPosEl.textContent = `Cursor: ${cursor.row + 1},${cursor.col + 1}`;
-    const termDimsEl = document.getElementById('termDims');
-    if (termDimsEl) termDimsEl.textContent = `${dims.rows}x${dims.cols}`;
-    const resizeRowsEl = document.getElementById('resizeRows');
-    if (resizeRowsEl) resizeRowsEl.value = dims.rows || 24;
-    const resizeColsEl = document.getElementById('resizeCols');
-    if (resizeColsEl) resizeColsEl.value = dims.cols || 80;
+    document.getElementById('cursorPos').textContent = `Cursor: ${cursor.row + 1},${cursor.col + 1}`;
+    document.getElementById('termDims').textContent = `${dims.rows}x${dims.cols}`;
+    document.getElementById('resizeRows').value = dims.rows || 24;
+    document.getElementById('resizeCols').value = dims.cols || 80;
 
     // Show cursor indicator (hide when in scrollback)
     const panelObj = state.panels.find(p => p.id === panel.id);
@@ -1096,10 +1090,8 @@ async function loadVttyHttp(instUrl, cmdId) {
 
             const cursor = json.data.cursor || {};
             const dims = json.data.dimensions || {};
-            const cursorPosEl2 = document.getElementById('cursorPos');
-            if (cursorPosEl2) cursorPosEl2.textContent = `Cursor: ${(cursor.row + 1) || '-'},${(cursor.col + 1) || '-'}`;
-            const termDimsEl2 = document.getElementById('termDims');
-            if (termDimsEl2) termDimsEl2.textContent = `${dims.rows || '-'}x${dims.cols || '-'}`;
+            document.getElementById('cursorPos').textContent = `Cursor: ${(cursor.row + 1) || '-'},${(cursor.col + 1) || '-'}`;
+            document.getElementById('termDims').textContent = `${dims.rows || '-'}x${dims.cols || '-'}`;
 
             // Update alt screen badge
             const badge = document.getElementById('altScreenBadge');
@@ -1426,21 +1418,20 @@ function renderPanels() {
                         <span class="cmd-fullname" id="cmdName-${panel.id}"></span>
                         <span class="cmd-args" id="cmdArgs-${panel.id}"></span>
                     </div>
-                    <div class="panel-actions">
-                        <span class="panel-font-size-ctrl">
-                            <button class="btn btn-xxs" onclick="changePanelFontSize('${panel.id}', -1)" title="Font size -">A-</button>
-                            <span class="panel-font-size">${panel.fontSize}px</span>
-                            <button class="btn btn-xxs" onclick="changePanelFontSize('${panel.id}', 1)" title="Font size +">A+</button>
-                        </span>
-                        <button class="btn btn-xxs" onclick="copyTerminalSelection('${panel.id}')" title="Copy selection">&#x2398;</button>
-                        <button class="btn btn-xxs" id="selectBtn-${panel.id}" onclick="toggleSelectionMode('${panel.id}')" title="Toggle selection mode">&#x270e;</button>
-                        ${state.panels.length > 1 ? `<button class="btn btn-xxs btn-danger" onclick="removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
+                    <span class="instance-url">${escHtml(panel.instUrl.replace(/^https?:\/\//, ''))}</span>
+                    <span class="panel-font-size-ctrl">
+                        <button class="btn btn-xs" onclick="changePanelFontSize('${panel.id}', -1)" title="Decrease font size">A-</button>
+                        <span class="panel-font-size">${panel.fontSize}px</span>
+                        <button class="btn btn-xs" onclick="changePanelFontSize('${panel.id}', 1)" title="Increase font size">A+</button>
+                    </span>
+                    <div class="input-row" style="flex:1;min-width:120px;">
+                        <input type="text" id="keyInput-${panel.id}" placeholder="Send keys... (e.g. q, <Enter>, <C-c>)" style="font-size:0.7rem;" onkeydown="if(event.key==='Enter'){event.preventDefault();sendKeysToPanel('${panel.id}')}">
+                        <button class="btn btn-xs" onclick="sendKeysToPanel('${panel.id}')">Send</button>
                     </div>
-                </div>
-                <div class="panel-keys-bar" id="keysBar-${panel.id}">
-                    <input type="text" id="keyInput-${panel.id}" class="key-input" placeholder="Send keys (e.g. q, &lt;Enter&gt;, &lt;C-c&gt;) — or click terminal to type directly" onkeydown="if(event.key==='Enter'){event.preventDefault();sendKeysToPanel('${panel.id}')}">
-                    <button class="btn btn-xxs" onclick="sendKeysToPanel('${panel.id}')" title="Send keys">&#x27A4;</button>
-                    <button class="btn btn-xxs" onclick="exportTerminal('${panel.id}')" title="Export as text">&#x2913;</button>
+                    ${state.panels.length > 1 ? `<button class="btn btn-xs btn-danger" onclick="removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
+                    <button class="btn btn-xs" onclick="copyTerminalSelection('${panel.id}')" title="Copy selected text to clipboard">Copy</button>
+                    <button class="btn btn-xs" onclick="exportTerminal('${panel.id}')" title="Export terminal as text">&#x2913;</button>
+                    <button class="btn btn-xs" id="selectBtn-${panel.id}" onclick="toggleSelectionMode('${panel.id}')" title="Toggle selection mode (Ctrl+Shift+S)">Select</button>
                 </div>
                 <div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" style="font-size: ${panel.fontSize}px;">
                     <div class="search-bar" id="searchBar-${panel.id}">
@@ -1956,6 +1947,15 @@ document.addEventListener('keydown', (e) => {
         }
     }
 
+    // Focus key input when not in an input field and a command is selected
+    if (state.currentView === 'vtty' && state.selectedCmdId &&
+        !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
+        const panel = getSelectedPanel();
+        if (panel) {
+            const input = document.getElementById('keyInput-' + panel.id);
+            if (input) input.focus();
+        }
+    }
     // Ctrl+F — open terminal search bar
     if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         const vttyContainer = e.target.closest && e.target.closest('.vtty-container');
@@ -2117,24 +2117,6 @@ async function sendDirectKey(e, panelObj) {
     } catch (err) {
         console.error('Direct key send error:', err);
     }
-}
-
-// ─── Auto-focus terminal ───
-// When a command is selected, focus its terminal for direct keyboard input.
-function autoFocusTerminal() {
-    const panel = getSelectedPanel();
-    if (!panel) return;
-    const panelObj = state.panels.find(p => p.id === panel.id);
-    if (!panelObj) return;
-    const vtty = panel.querySelector('.vtty-container');
-    if (!vtty) return;
-    // Mark as focused
-    state.panels.forEach(p => p.focused = false);
-    document.querySelectorAll('.vtty-container').forEach(v => v.style.outline = '');
-    panelObj.focused = true;
-    vtty.style.outline = '2px solid var(--accent)';
-    vtty.setAttribute('tabindex', '0');
-    vtty.focus();
 }
 
 // ─── Click-to-focus terminal ───
@@ -2882,11 +2864,11 @@ function showShortcuts() {
             <tr><td>Ctrl+F</td><td>Search in terminal</td></tr>
             <tr><td>Ctrl+Shift+C</td><td>Copy terminal selection</td></tr>
             <tr><td>Ctrl+Shift+S / Alt+S</td><td>Toggle selection mode</td></tr>
-            <tr><td>Escape</td><td>Close search / menu / unfocus</td></tr>
-            <tr><td>Click terminal</td><td>Focus for direct keyboard input</td></tr>
-            <tr><td>Any printable key</td><td>Type directly to terminal</td></tr>
+            <tr><td>Escape</td><td>Close search / menu</td></tr>
+            <tr><td>Any key</td><td>Focus key input (when not in a field)</td></tr>
+            <tr><td>Enter</td><td>Send keystrokes to terminal</td></tr>
         </table>
-        <p style="font-size:0.7rem;color:var(--text-muted);margin-bottom:0.5rem;">Click the terminal to focus it, then type directly as if you were in a real terminal. Click again to unfocus.</p>
+        <p style="font-size:0.7rem;color:var(--text-muted);margin-bottom:0.5rem;">Click on the terminal to focus the key input field.</p>
         <div style="text-align:right;margin-top:0.75rem;">
             <button onclick="closeShortcuts()" style="font-size:0.8rem;">Close</button>
         </div>
