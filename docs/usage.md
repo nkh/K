@@ -293,16 +293,16 @@ The top bar is organized into three button groups:
 
 - **Left group** — Add Panel (spawn), Pause/Run toggle, Kill All
 - **Center group** — Font size controls (A-/A+), resize to fit, alternate screen buffer selector
-- **Right group** — Auth token input, documentation link, keyboard shortcuts (`?`), theme toggle (sun/moon)
+- **Right group** — Documentation link, keyboard shortcuts (`?`), theme toggle (sun/moon)
 
-The layout uses a consistent button sizing system: `btn-xs` (compact), `btn-sm` (small), `btn` (default), and `btn-primary`/`btn-danger` (color variants). The center group collapses on mobile viewports.
+The layout uses a consistent button sizing system: `btn-xxs` (ultra-compact), `btn-xs` (compact), `btn-sm` (small), `btn` (default), and `btn-primary`/`btn-danger` (color variants). The center group collapses on mobile viewports.
 
 #### Dashboard Features
 
 **Terminal Interaction:**
 
 - **Real-time VTTY Viewer** — Streams terminal output via the incremental diff WebSocket protocol (`GET /api/commands/:id/ws`). Falls back to 1-second HTTP polling if WebSocket is unavailable. Automatically selects the first running command on load.
-- **Click to Focus** — Click anywhere on the terminal pane to immediately capture keyboard input for sending keystrokes.
+- **Click to Focus** — Click anywhere on the terminal pane to immediately capture keyboard input for sending keystrokes. Click again to unfocus.
 - **Mouse Event Forwarding** — Clicks, drags, and wheel events are forwarded to the child process via `POST /api/commands/:id/mouse` when mouse tracking is enabled by the child application.
 - **Mouse Wheel Scrollback** — Scroll through command history; when the child application has mouse tracking enabled, wheel events are forwarded to it, otherwise they scroll the view.
 - **Terminal Search** — Press `Ctrl+F` to open a search bar inside the terminal viewer. Matches are highlighted in the output buffer.
@@ -310,13 +310,14 @@ The layout uses a consistent button sizing system: `btn-xs` (compact), `btn-sm` 
 - **Selection Mode** — Toggle with `Ctrl+Shift+S` or `Alt+S` to enable native text selection on the terminal. When active, mouse events are not forwarded to the PTY, allowing you to select and copy text. The panel shows an accent border as a visual indicator.
 - **Copy to Clipboard** — `Ctrl+Shift+C` copies the selected terminal text to the clipboard. If no text is selected, the full VTTY buffer content is copied instead. A "Copied!" toast confirms the action.
 - **Per-Panel Font Size** — Each panel has A-/A+ buttons in its header for independent font sizing (8–28px). The size is persisted to `localStorage` and restored on page load. The global font size buttons in the top bar set the default for new panels only.
+- **Send-Keys Input Bar** — A text input below each panel header for sending special key sequences (e.g. `<C-c>`, `<Up>`, `<Esc>`). Uses the same notation as the `POST /api/commands/:id/keys` endpoint. Useful for sequences that cannot be typed directly.
 - **Persistent Scrollback** — The scrollback offset is saved to `sessionStorage` when scrolling. Re-selecting a command restores the previous scroll position. Uses session storage to avoid stale data across sessions.
 - **Auto-Fit Terminal** — The terminal automatically resizes to fill the available panel space when the browser window is resized.
 - **Export Output** — Download the current terminal buffer contents as a `.txt` file via the toolbar or context menu.
 
 **Command Management:**
 
-- **Command Sidebar** — Lists all commands with name, arguments, PID, status, and runtime. Running commands show elapsed uptime and are visually highlighted. Use the search/filter box at the top to narrow the list by command name.
+- **Command Sidebar** — Lists all commands with name, arguments, PID, status, and runtime. Running commands show elapsed uptime and are visually highlighted. Use the search/filter box at the top to narrow the list by command name. The sidebar footer contains the auth token input bar.
 - **Batch Kill All** — A button in the top bar terminates every running command on the instance in one click.
 - **Pause / Run** — Toggle freeze/thaw on the currently selected command from the top bar using SIGSTOP/SIGCONT.
 - **Incremental DOM Updates** — The command list is polled every second, but DOM updates are skipped when the command state fingerprint has not changed. This reduces unnecessary DOM thrashing from polling.
@@ -336,7 +337,7 @@ The layout uses a consistent button sizing system: `btn-xs` (compact), `btn-sm` 
 
 **Connection and Theming:**
 
-- **Connection Quality Indicator** — The bottom bar displays WebSocket round-trip latency (measured via ping/pong every 10 seconds) with color coding: green (< 100ms), yellow (100–500ms), red (> 500ms). A tooltip shows the reconnect count. Latency resets on disconnect and reconnects are tracked across the connection lifecycle.
+- **Bottom Status Bar** — The bottom bar displays cursor position (row, col), resize controls (row/column inputs), and WebSocket round-trip latency (measured via ping/pong every 10 seconds) with color coding: green (< 100ms), yellow (100–500ms), red (> 500ms). A tooltip shows the reconnect count. Latency resets on disconnect and reconnects are tracked across the connection lifecycle.
 - **Auto-Reconnect** — WebSocket connections automatically re-establish after network interruptions or server restarts, with no manual refresh needed.
 - **Light Theme** — Toggle between dark and light themes via the sun/moon button in the top bar. The light theme uses a GitHub-inspired palette. When no explicit choice has been made, the theme follows the operating system's `prefers-color-scheme` media query. The active theme is persisted to `localStorage`.
 - **VTTY Theme-Aware** — The terminal background adapts to the active theme (dark or light) for a seamless visual experience.
