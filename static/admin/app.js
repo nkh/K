@@ -1,6 +1,8 @@
 // ─── State ───
 // Fingerprint of last command list state to avoid redundant DOM updates
 let _lastCommandState = '';
+// Whether the welcome panel is currently displayed
+let _showingWelcome = true;
 
 const state = {
     panels: [],
@@ -574,6 +576,19 @@ async function loadCommands() {
         }
     }
 
+    // Check if welcome-panel state changed and re-render panels if so
+    let hasAnyCommands = false;
+    for (const inst of state.instanceUrls) {
+        if (inst._commands && inst._commands.length > 0) {
+            hasAnyCommands = true;
+            break;
+        }
+    }
+    const shouldShowWelcome = (state.panels.length === 1 && !hasAnyCommands && !state.selectedCmdId);
+    if (shouldShowWelcome !== _showingWelcome) {
+        renderPanels();
+    }
+
     // Build a lightweight fingerprint from command data to skip redundant DOM updates
     const filter = (document.getElementById('cmdFilter') || {}).value || '';
     const filterLower = filter.toLowerCase();
@@ -691,7 +706,7 @@ async function loadCommands() {
             html += `
                 <div class="cmd-item${selected}${frozenClass}" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" onclick="selectCommand(this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)} ${escHtml(argsStr)}" style="${(isAlive || isFrozen) ? '' : 'opacity:0.6;'}">
                     <div class="cmd-item-row">
-                        ${statusDot}
+                        ${statusDotHtml}
                         <button class="pin-btn${isPinned ? ' active' : ''}" onclick="event.stopPropagation();togglePinCmd('${escHtml(cmdName)}')" title="${isPinned ? 'Unpin' : 'Pin'}">&#9734;</button>
                         <span class="name">${escHtml(cmdName)}</span>
                         ${frozenBadge}
@@ -1635,6 +1650,7 @@ function renderPanels() {
 
     if (state.panels.length === 1 && !hasAnyCommands && !state.selectedCmdId) {
         // Show welcome panel
+        _showingWelcome = true;
         html += `
             <div class="welcome-panel">
                 <div class="welcome-card">
@@ -1653,6 +1669,7 @@ function renderPanels() {
                 </div>
             </div>`;
     } else {
+        _showingWelcome = false;
         for (const panel of state.panels) {
             const inst = state.instanceUrls.find(i => i.url === panel.instUrl);
             const resizeHandle = hasMultiplePanels ? `<div class="panel-resize-handle" data-panel="${panel.id}"></div>` : '';
