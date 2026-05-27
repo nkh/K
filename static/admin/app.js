@@ -1,4 +1,7 @@
 // ─── State ───
+// Fingerprint of last command list state to avoid redundant DOM updates
+let _lastCommandState = '';
+
 const state = {
     panels: [],
     // Store instUrl and cmdId separately to avoid ':' conflicts in URLs.
@@ -417,11 +420,48 @@ async function loadCommands() {
         }
     }
 
+    // Build a lightweight fingerprint from command data to skip redundant DOM updates
+    const filter = (document.getElementById('cmdFilter') || {}).value || '';
+    const filterLower = filter.toLowerCase();
+    let fingerprint = '';
+    for (const inst of state.instanceUrls) {
+        for (const cmd of (inst._commands || [])) {
+            const cmdName = cmd.name || cmd.id;
+            if (filterLower && !cmdName.toLowerCase().includes(filterLower) &&
+                !(cmd.args || []).join(' ').toLowerCase().includes(filterLower) &&
+                !String(cmd.pid).includes(filterLower)) continue;
+            const isAlive = cmd.alive !== false;
+            fingerprint += inst.url + ':' + cmd.id + ':' + isAlive + ':' + (cmd.runtime_secs || 0) + '|';
+        }
+    }
+
+    // If nothing changed, skip DOM rebuild entirely
+    if (fingerprint === _lastCommandState) {
+        // Still check for pending select and update panel info
+        if (state._pendingSelectId) {
+            const pendingId = state._pendingSelectId;
+            state._pendingSelectId = null;
+            for (const inst of state.instanceUrls) {
+                if (inst._commands && inst._commands.find(c => c.id === pendingId)) {
+                    const cmd = inst._commands.find(c => c.id === pendingId);
+                    selectCommand(inst.url, cmd.id, cmd.name || cmd.id);
+                    return;
+                }
+            }
+        }
+        if (state.selectedInstUrl && state.selectedCmdId) {
+            updatePanelCommandInfo();
+            if (state.updateMode === 'poll' || state.bufferView !== 'current') {
+                scheduleVttyHttp(state.selectedInstUrl, state.selectedCmdId, 500);
+            }
+        }
+        return;
+    }
+    _lastCommandState = fingerprint;
+
     // Render command list (merge all instances)
     const container = document.getElementById('commandList');
     let html = '';
-    const filter = (document.getElementById('cmdFilter') || {}).value || '';
-    const filterLower = filter.toLowerCase();
 
     function formatRuntime(secs) {
         if (!secs || secs < 0) return '';
@@ -1123,6 +1163,8 @@ async function spawnCommand() {
 }
 
 async function killCommand(instUrl, cmdId) {
+    // Force full rebuild on state transition
+    _lastCommandState = '';
     try {
         await fetch(apiUrl(`/api/commands/${cmdId}/kill`, { url: instUrl }), {
             method: 'POST',
@@ -1138,6 +1180,8 @@ async function killCommand(instUrl, cmdId) {
 }
 
 async function purgeCommand(instUrl, cmdId, cmdName) {
+    // Force full rebuild on state transition
+    _lastCommandState = '';
     if (!confirm(`Purge "${cmdName || cmdId}"?\nThis permanently discards the VTTY buffer and all associated state.`)) return;
     try {
         const res = await fetch(apiUrl(`/api/commands/${cmdId}`, { url: instUrl }), {
@@ -1171,6 +1215,8 @@ async function purgeCommand(instUrl, cmdId, cmdName) {
 
 async function killAllCommands() {
     if (!confirm('Kill all running commands?')) return;
+    // Force full rebuild on state transition
+    _lastCommandState = '';
     const promises = [];
     for (const inst of state.instanceUrls) {
         for (const cmd of (inst._commands || [])) {
