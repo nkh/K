@@ -963,6 +963,12 @@ function updateVttyDisplay(data) {
         panelObj.mouseSgr = !!data.mouse_sgr;
     }
 
+    // Toggle selectable class on vtty container (enable text selection when mouse tracking is off)
+    if (vttyEl) {
+        const mt = panelObj ? panelObj.mouseTracking : false;
+        vttyEl.classList.toggle('selectable', !mt);
+    }
+
     state._termRows = dims.rows;
     state._termCols = dims.cols;
 }
@@ -1025,6 +1031,12 @@ async function loadVttyHttp(instUrl, cmdId) {
             if (panelObj) {
                 panelObj.mouseTracking = !!json.data.mouse_tracking;
                 panelObj.mouseSgr = !!json.data.mouse_sgr;
+            }
+
+            // Toggle selectable class on vtty container (enable text selection when mouse tracking is off)
+            if (vttyEl) {
+                const mt = panelObj ? panelObj.mouseTracking : false;
+                vttyEl.classList.toggle('selectable', !mt);
             }
 
             // Hide cursor when in scrollback view
@@ -1332,6 +1344,7 @@ function renderPanels() {
                         <button class="btn btn-xs" onclick="sendKeysToPanel('${panel.id}')">Send</button>
                     </div>
                     ${state.panels.length > 1 ? `<button class="btn btn-xs btn-danger" onclick="removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
+                    <button class="btn btn-xs" onclick="copyTerminalSelection('${panel.id}')" title="Copy selected text to clipboard">Copy</button>
                     <button class="btn btn-xs" onclick="exportTerminal('${panel.id}')" title="Export terminal as text">&#x2913;</button>
                 </div>
                 <div class="vtty-container" id="vtty-${panel.id}">
@@ -1344,6 +1357,7 @@ function renderPanels() {
                     </div>
                     <pre style="color:#484f58;">No command selected — spawn or select a command to view its output</pre>
                     <div class="cursor-indicator" style="display:none;"></div>
+                    <div class="copy-feedback" id="copyFeedback-${panel.id}">Copied!</div>
                     <button class="scroll-bottom-btn" id="scrollBtn-${panel.id}" onclick="scrollTerminalBottom('${panel.id}')" title="Scroll to bottom">&#x25BC;</button>
                 </div>
             </div>
@@ -1912,6 +1926,15 @@ document.addEventListener('keydown', (e) => {
         }
         closeContextMenu();
         closeShortcuts();
+    }
+    // Ctrl+Shift+C — copy terminal selection
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'C' || e.key === 'c')) {
+        const panel = getSelectedPanel();
+        if (panel) {
+            e.preventDefault();
+            copyTerminalSelection(panel.id);
+            return;
+        }
     }
     // ? — show keyboard shortcuts
     if (e.key === '?' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
