@@ -72,14 +72,13 @@ pub async fn get_share(
     State(state): State<AppState>,
     Path(token): Path<String>,
 ) -> Json<Value> {
-    let entry = state.share_tokens.get(&token);
-    if entry.is_none() {
+    let Some(entry) = state.share_tokens.get(&token) else {
         return Json(serde_json::json!({
             "status": "error",
             "data": null,
             "error": "Invalid or expired share token"
         }));
-    }
+    };
 
     let share = entry.value().clone();
 
@@ -103,13 +102,10 @@ pub async fn get_share(
     let html = state
         .manager
         .get(&cmd_id)
-        .map(|h| async { h.vtty_html().await })
+        .map(|h| async move { h.vtty_html().await })
         .map(|f| tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(f)));
 
-    let html_str = match html {
-        Some(Ok(h)) => h,
-        _ => String::new(),
-    };
+    let html_str = html.unwrap_or_default();
 
     Json(serde_json::json!({
         "status": "ok",

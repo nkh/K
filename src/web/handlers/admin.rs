@@ -93,8 +93,7 @@ pub async fn share_page(
     Path(token): Path<String>,
 ) -> Response {
     // Validate token
-    let entry = state.share_tokens.get(&token);
-    if entry.is_none() {
+    let Some(entry) = state.share_tokens.get(&token) else {
         return Response::builder()
             .status(StatusCode::NOT_FOUND)
             .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
@@ -107,7 +106,7 @@ pub async fn share_page(
 </div>
 </body></html>"#))
             .unwrap();
-    }
+    };
 
     let share = entry.value().clone();
 
