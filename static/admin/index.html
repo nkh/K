@@ -278,6 +278,39 @@
             .token-bar input { width: 80px; }
             .vtty-container .search-bar input { width: 120px; }
         }
+        /* Pin button */
+        .pin-btn { opacity: 0.4; font-size: 0.7rem !important; padding: 0.15rem 0.3rem !important; }
+        .pin-btn.active { opacity: 1; color: var(--yellow); }
+        .pin-btn:hover { opacity: 1; }
+        .cmd-item.pinned-highlight { border-left: 2px solid var(--yellow); background: rgba(210, 153, 34, 0.06); }
+        .pinned-section-header { padding: 0.3rem 0.5rem; font-size: 0.7rem; color: var(--yellow); border-bottom: 1px solid var(--border); }
+
+        /* Templates */
+        .template-card { padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 0.4rem; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; transition: background 0.1s; }
+        .template-card:hover { background: var(--bg-tertiary); }
+        .template-card .tpl-name { font-size: 0.8rem; color: var(--text-primary); flex: 1; font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .template-card .tpl-cmd { font-size: 0.65rem; color: var(--text-muted); font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .template-card .tpl-delete { font-size: 0.7rem; padding: 0.1rem 0.3rem; opacity: 0.5; flex-shrink: 0; }
+        .template-card .tpl-delete:hover { opacity: 1; }
+
+        /* Drag handle for panels */
+        .drag-handle { cursor: grab; font-size: 0.9rem; color: var(--text-muted); user-select: none; padding: 0 0.2rem; flex-shrink: 0; }
+        .drag-handle:active { cursor: grabbing; }
+        .panel.dragging { opacity: 0.4; }
+        .panel.drag-over-left { box-shadow: inset 3px 0 0 var(--accent); }
+        .panel.drag-over-right { box-shadow: inset -3px 0 0 var(--accent); }
+
+        /* Global search modal */
+        .search-modal { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; min-width: 500px; max-width: 90vw; max-height: 80vh; display: flex; flex-direction: column; }
+        .search-modal h2 { font-size: 1rem; color: var(--accent); margin-bottom: 0.75rem; flex-shrink: 0; }
+        .search-result-group { border: 1px solid var(--border); border-radius: 4px; margin-bottom: 0.5rem; overflow: hidden; }
+        .search-result-header { padding: 0.4rem 0.6rem; background: var(--bg-tertiary); cursor: pointer; display: flex; align-items: center; gap: 0.5rem; }
+        .search-result-header:hover { background: var(--accent-dim); }
+        .search-result-line { padding: 0.2rem 0.6rem; font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-secondary); border-top: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .search-result-line .line-num { color: var(--text-muted); margin-right: 0.5rem; flex-shrink: 0; }
+
+        /* Sound button */
+        .sound-btn-active { color: var(--yellow) !important; background: rgba(210, 153, 34, 0.15) !important; border-color: rgba(210, 153, 34, 0.3) !important; }
     </style>
 </head>
 <body>
@@ -312,6 +345,8 @@
         <button class="small" onclick="addPanel()" title="Add panel (multi-view)">+ Panel</button>
         <button class="small" onclick="showDocs()" title="Documentation">Docs</button>
         <button class="small" onclick="showShortcuts()" title="Keyboard shortcuts">?</button>
+        <button class="small" id="globalSearchBtn" onclick="openGlobalSearch()" title="Search all command output">\u{1F50D}</button>
+        <button class="small" id="soundToggleBtn" onclick="toggleSoundNotifications()" title="Toggle sound notifications">\u{1F514}</button>
         <div class="token-bar">
             <label for="authToken">Token:</label>
             <input type="password" id="authToken" placeholder="Bearer token" title="Authorization token">
@@ -326,6 +361,7 @@
                 <div class="sidebar-tab active" onclick="switchSidebarTab('commands', this)">Commands</div>
                 <div class="sidebar-tab" onclick="switchSidebarTab('spawn', this)">Spawn</div>
                 <div class="sidebar-tab" onclick="switchSidebarTab('certs', this)">Certs</div>
+                <div class="sidebar-tab" onclick="switchSidebarTab('templates', this)">Templates</div>
             </div>
             <div class="sidebar-content" id="sidebarContent">
                 <!-- Commands tab (default) -->
@@ -370,11 +406,20 @@
                             <select id="spawnInstance"></select>
                         </div>
                         <button class="primary" onclick="spawnCommand()" style="width:100%;margin-top:0.5rem;">Spawn Command</button>
+                        <button onclick="addTemplateFromForm()" style="width:100%;margin-top:0.3rem;font-size:0.75rem;" title="Save current command as a reusable template">+ Save as Template</button>
                     </div>
                 </div>
                 <!-- Certs tab -->
                 <div id="tab-certs" style="display:none;">
                     <div id="certList"></div>
+                </div>
+                <!-- Templates tab -->
+                <div id="tab-templates" style="display:none;">
+                    <div style="padding:0.3rem 0.5rem;border-bottom:1px solid var(--border);display:flex;gap:0.3rem;align-items:center;justify-content:space-between;">
+                        <span style="font-size:0.75rem;color:var(--text-secondary);">Quick-spawn templates</span>
+                        <button class="small" onclick="addTemplateFromForm()" title="Save current spawn form as template">+ Save Current</button>
+                    </div>
+                    <div id="templateList"></div>
                 </div>
             </div>
         </div>
@@ -454,6 +499,20 @@
     </div>
 </div>
 
+<!-- Global search overlay -->
+<div class="modal-overlay" id="globalSearchOverlay" style="display:none;" onclick="if(event.target===this)closeGlobalSearch()">
+    <div class="search-modal" onclick="event.stopPropagation()">
+        <h2>&#128269; Search All Command Output</h2>
+        <div style="display:flex;gap:0.5rem;margin-bottom:1rem;flex-shrink:0;">
+            <input type="text" id="globalSearchInput" placeholder="Search query..." onkeydown="if(event.key==='Enter'){event.preventDefault();executeGlobalSearch()}" style="flex:1;">
+            <button class="primary" onclick="executeGlobalSearch()">Search</button>
+            <button onclick="closeGlobalSearch()">Close</button>
+        </div>
+        <div id="globalSearchResults" style="max-height:50vh;overflow-y:auto;flex:1;"></div>
+        <div id="globalSearchStatus" style="font-size:0.7rem;color:var(--text-muted);margin-top:0.5rem;flex-shrink:0;"></div>
+    </div>
+</div>
+
 <script>
 // ─── State ───
 const state = {
@@ -496,6 +555,7 @@ const state = {
     applyFontSize();
     initBottombar();
     initTheme();
+    initSoundToggle();
 
     // Parse URL arguments for multi-instance
     const params = new URLSearchParams(window.location.search);
@@ -717,6 +777,8 @@ function switchSidebarTab(tab, el) {
     document.getElementById('tab-commands').style.display = tab === 'commands' ? '' : 'none';
     document.getElementById('tab-spawn').style.display = tab === 'spawn' ? '' : 'none';
     document.getElementById('tab-certs').style.display = tab === 'certs' ? '' : 'none';
+    document.getElementById('tab-templates').style.display = tab === 'templates' ? '' : 'none';
+    if (tab === 'templates') renderTemplates();
 }
 
 // ─── View Tabs ───
@@ -760,6 +822,9 @@ async function loadCommands() {
         return h + 'h ' + m + 'm';
     }
 
+    // Read pinned command names from localStorage
+    const pinnedNames = getPinnedNames();
+
     for (const inst of state.instanceUrls) {
         if (inst._lastError) {
             html += `<div style="padding:0.5rem;color:var(--red);font-size:0.75rem;">${escHtml(inst.label)}: ${escHtml(inst._lastError)}</div>`;
@@ -782,6 +847,8 @@ async function loadCommands() {
             const argsStr = (cmd.args || []).join(' ');
             const isAlive = cmd.alive !== false;
             const isFrozen = cmd.frozen === true;
+            const baseName = cmdName.replace(/.*\//, '');
+            const isPinned = pinnedNames.includes(baseName);
             let statusDot;
             if (isFrozen) {
                 statusDot = '<div class="status-dot status-frozen"></div>';
@@ -829,6 +896,7 @@ async function loadCommands() {
                         ${certBadge}
                         <span class="pid">${cmd.pid}</span>
                         <button class="small danger" onclick="event.stopPropagation();killCommand('${inst.url}','${cmd.id}')" title="Kill">&#x2715;</button>
+                        <button class="small pin-btn${isPinned ? ' active' : ''}" data-cmd-name="${escHtml(baseName)}" onclick="event.stopPropagation();togglePinCmd(this)" title="${isPinned ? 'Unpin from top' : 'Pin to top'}">${isPinned ? '★' : '☆'}</button>
                     </div>
                     <div class="cmd-detail">${escHtml(detailStr)}</div>
                 </div>`;
@@ -836,6 +904,11 @@ async function loadCommands() {
     }
 
     container.innerHTML = html || '<div style="padding:1rem;color:var(--text-muted);text-align:center;">No running commands</div>';
+
+    // Rearrange pinned commands to the top
+    if (!filterLower) {
+        rearrangePinnedCommands(container, pinnedNames);
+    }
 
     // Update spawn instance dropdown
     updateInstanceDropdown();
@@ -1721,6 +1794,7 @@ function renderPanels() {
         html += `
             <div class="panel" id="${panel.id}" style="flex: 1 1 0;">
                 <div class="panel-header">
+                    ${state.panels.length > 1 ? `<span class="drag-handle" draggable="true" data-panel-id="${panel.id}" title="Drag to reorder">\u2807</span>` : ''}
                     <div class="cmd-info" id="cmdInfo-${panel.id}">
                         <span class="cmd-fullname" id="cmdName-${panel.id}"></span>
                         <span class="cmd-args" id="cmdArgs-${panel.id}"></span>
@@ -2577,14 +2651,18 @@ function notifyCommandEnded(cmdId) {
     if (!cmdId || _notifiedExits.has(cmdId)) return;
     _notifiedExits.add(cmdId);
 
-    // Find command name
+    // Find command name and exit code
     let cmdName = cmdId;
+    let exitCode = null;
     for (const inst of state.instanceUrls) {
         if (inst._commands) {
             const cmd = inst._commands.find(c => c.id === cmdId);
-            if (cmd) { cmdName = cmd.name || cmdId; break; }
+            if (cmd) { cmdName = cmd.name || cmdId; exitCode = cmd.exit_code; break; }
         }
     }
+
+    // Play sound notification if enabled
+    playExitSound(exitCode);
 
     if ('Notification' in window) {
         if (Notification.permission === 'granted') {
@@ -2842,6 +2920,448 @@ function showShortcuts() {
 function closeShortcuts() {
     const el = document.getElementById('shortcutsOverlay');
     if (el) el.remove();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Task 1: Command Favorites/Pinning
+// ═══════════════════════════════════════════════════════════════════
+
+function getPinnedNames() {
+    try {
+        const raw = localStorage.getItem('vrunner_pinned_cmds');
+        return raw ? JSON.parse(raw) : [];
+    } catch (e) { return []; }
+}
+
+function setPinnedNames(names) {
+    try {
+        localStorage.setItem('vrunner_pinned_cmds', JSON.stringify(names));
+    } catch (e) { /* ignore */ }
+}
+
+function togglePinCmd(btn) {
+    const name = btn.dataset.cmdName;
+    if (!name) return;
+    const pinned = getPinnedNames();
+    const idx = pinned.indexOf(name);
+    if (idx >= 0) {
+        pinned.splice(idx, 1);
+    } else {
+        pinned.push(name);
+    }
+    setPinnedNames(pinned);
+    loadCommands();
+}
+
+function rearrangePinnedCommands(container, pinnedNames) {
+    if (!pinnedNames || pinnedNames.length === 0) return;
+
+    const allItems = Array.from(container.children);
+    const pinnedItems = [];
+
+    for (const item of allItems) {
+        if (item.classList && item.classList.contains('cmd-item')) {
+            const pinBtn = item.querySelector('[data-cmd-name]');
+            if (pinBtn && pinnedNames.includes(pinBtn.dataset.cmdName)) {
+                pinnedItems.push(item);
+            }
+        }
+    }
+
+    if (pinnedItems.length === 0) return;
+
+    // Remove pinned items from current positions
+    for (const item of pinnedItems) {
+        container.removeChild(item);
+    }
+
+    // Create pinned section header
+    const header = document.createElement('div');
+    header.className = 'pinned-section-header';
+    header.textContent = '\u{1F4CC} Pinned';
+
+    // Insert at top: header, then items, then separator
+    container.insertBefore(header, container.firstChild);
+    for (const item of pinnedItems) {
+        item.classList.add('pinned-highlight');
+        // Update pin button to show active state
+        const pinBtn = item.querySelector('.pin-btn');
+        if (pinBtn) {
+            pinBtn.classList.add('active');
+            pinBtn.textContent = '\u2605';
+            pinBtn.title = 'Unpin from top';
+        }
+        container.insertBefore(item, header.nextSibling);
+    }
+
+    // Separator
+    const sep = document.createElement('div');
+    sep.style.cssText = 'border-bottom:1px solid var(--border);margin:0.2rem 0;';
+    const lastPinned = pinnedItems[pinnedItems.length - 1];
+    container.insertBefore(sep, lastPinned.nextSibling);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Task 2: Command Templates System
+// ═══════════════════════════════════════════════════════════════════
+
+function getTemplates() {
+    try {
+        const raw = localStorage.getItem('vrunner_templates');
+        return raw ? JSON.parse(raw) : [
+            { name: "Node dev", cmd: "npm", args: ["run", "dev"] },
+            { name: "Python tests", cmd: "pytest", args: [] },
+            { name: "Docker compose", cmd: "docker-compose", args: ["up"] },
+        ];
+    } catch (e) {
+        return [
+            { name: "Node dev", cmd: "npm", args: ["run", "dev"] },
+            { name: "Python tests", cmd: "pytest", args: [] },
+            { name: "Docker compose", cmd: "docker-compose", args: ["up"] },
+        ];
+    }
+}
+
+function saveTemplates(templates) {
+    try {
+        localStorage.setItem('vrunner_templates', JSON.stringify(templates));
+    } catch (e) { /* ignore */ }
+}
+
+function renderTemplates() {
+    const container = document.getElementById('templateList');
+    if (!container) return;
+    const templates = getTemplates();
+
+    if (templates.length === 0) {
+        container.innerHTML = '<div style="padding:1rem;color:var(--text-muted);text-align:center;font-size:0.75rem;">No templates saved.<br>Use <strong>+ Save Current</strong> in the Spawn tab to create one.</div>';
+        return;
+    }
+
+    let html = '';
+    for (let i = 0; i < templates.length; i++) {
+        const t = templates[i];
+        const cmdDisplay = t.args && t.args.length > 0 ? t.cmd + ' ' + t.args.join(' ') : t.cmd;
+        html += `<div class="template-card" onclick="spawnFromTemplate(${i})">
+            <div style="flex:1;min-width:0;">
+                <div class="tpl-name" title="${escHtml(t.name)}">${escHtml(t.name)}</div>
+                <div class="tpl-cmd" title="${escHtml(cmdDisplay)}">${escHtml(cmdDisplay)}</div>
+            </div>
+            <button class="tpl-delete danger" onclick="event.stopPropagation();deleteTemplate(${i})" title="Delete template">&#x2715;</button>
+        </div>`;
+    }
+    container.innerHTML = html;
+}
+
+function addTemplateFromForm() {
+    const cmd = document.getElementById('spawnCmd').value.trim();
+    if (!cmd) {
+        // Switch to spawn tab first
+        switchSidebarTab('spawn', document.querySelectorAll('.sidebar-tab')[1]);
+        alert('Enter a command first in the Spawn tab.');
+        return;
+    }
+
+    const argsStr = document.getElementById('spawnArgs').value.trim();
+    const args = argsStr ? argsStr.split(/\s+/) : [];
+
+    const name = prompt('Template name:', cmd + (args.length > 0 ? ' ' + args.join(' ') : ''));
+    if (!name || !name.trim()) return;
+
+    const templates = getTemplates();
+    templates.push({ name: name.trim(), cmd, args });
+    saveTemplates(templates);
+    renderTemplates();
+
+    // Switch to templates tab to show the result
+    switchSidebarTab('templates', document.querySelectorAll('.sidebar-tab')[3]);
+}
+
+function deleteTemplate(index) {
+    const templates = getTemplates();
+    if (index < 0 || index >= templates.length) return;
+    if (!confirm(`Delete template "${templates[index].name}"?`)) return;
+    templates.splice(index, 1);
+    saveTemplates(templates);
+    renderTemplates();
+}
+
+async function spawnFromTemplate(index) {
+    const templates = getTemplates();
+    if (index < 0 || index >= templates.length) return;
+    const t = templates[index];
+
+    const instSelect = document.getElementById('spawnInstance');
+    const instUrl = instSelect ? instSelect.value : getBaseUrl();
+
+    const body = { cmd: t.cmd, args: t.args || [] };
+
+    try {
+        const res = await fetch(apiUrl('/api/commands', { url: instUrl }), {
+            method: 'POST',
+            headers: authHeadersForInstance({ url: instUrl }),
+            body: JSON.stringify(body),
+        });
+        const json = await res.json();
+        if (json.status === 'ok') {
+            const newId = json.data && json.data.id ? json.data.id : null;
+            if (newId) {
+                state.selectedInstUrl = instUrl;
+                state.selectedCmdId = newId;
+            }
+            loadCommands();
+        } else {
+            alert('Spawn failed: ' + (json.error || 'unknown'));
+        }
+    } catch (e) {
+        alert('Spawn failed: ' + e.message);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Task 3: Drag-and-Drop to Reorder Panels
+// ═══════════════════════════════════════════════════════════════════
+
+let _dragPanelId = null;
+
+(function() {
+    // Drag start
+    document.addEventListener('dragstart', (e) => {
+        const handle = e.target.closest('.drag-handle');
+        if (!handle) return;
+        _dragPanelId = handle.dataset.panelId;
+        e.dataTransfer.effectAllowed = 'move';
+        // Set a transparent drag image
+        try { e.dataTransfer.setData('text/plain', _dragPanelId); } catch(err) {}
+        const panel = handle.closest('.panel');
+        if (panel) panel.classList.add('dragging');
+    });
+
+    // Drag over - show indicator
+    document.addEventListener('dragover', (e) => {
+        const panel = e.target.closest('.panel');
+        if (!panel || !_dragPanelId) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+
+        // Clear previous indicators
+        document.querySelectorAll('.panel.drag-over-left,.panel.drag-over-right').forEach(p => {
+            p.classList.remove('drag-over-left', 'drag-over-right');
+        });
+
+        if (panel.id === _dragPanelId) return;
+        const rect = panel.getBoundingClientRect();
+        const midX = rect.left + rect.width / 2;
+        panel.classList.add(e.clientX < midX ? 'drag-over-left' : 'drag-over-right');
+    });
+
+    // Drag leave - clear indicators
+    document.addEventListener('dragleave', (e) => {
+        const panel = e.target.closest('.panel');
+        if (panel) panel.classList.remove('drag-over-left', 'drag-over-right');
+    });
+
+    // Drop - reorder panels
+    document.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const panel = e.target.closest('.panel');
+        if (!panel || !_dragPanelId || panel.id === _dragPanelId) return;
+
+        const fromIdx = state.panels.findIndex(p => p.id === _dragPanelId);
+        const toIdx = state.panels.findIndex(p => p.id === panel.id);
+        if (fromIdx < 0 || toIdx < 0) return;
+
+        // Determine insert position
+        const rect = panel.getBoundingClientRect();
+        const midX = rect.left + rect.width / 2;
+        const insertBefore = e.clientX < midX;
+
+        const [moved] = state.panels.splice(fromIdx, 1);
+        const newIdx = state.panels.findIndex(p => p.id === panel.id);
+        state.panels.splice(insertBefore ? newIdx : newIdx + 1, 0, moved);
+
+        // Persist panel order
+        try {
+            localStorage.setItem('vrunner_panel_order', JSON.stringify(state.panels.map(p => p.id)));
+        } catch (err) { /* ignore */ }
+
+        renderPanels();
+        _dragPanelId = null;
+    });
+
+    // Drag end - cleanup
+    document.addEventListener('dragend', () => {
+        _dragPanelId = null;
+        document.querySelectorAll('.panel').forEach(p => {
+            p.classList.remove('dragging', 'drag-over-left', 'drag-over-right');
+        });
+    });
+})();
+
+// ═══════════════════════════════════════════════════════════════════
+// Task 4: Global Command Output Search
+// ═══════════════════════════════════════════════════════════════════
+
+function openGlobalSearch() {
+    document.getElementById('globalSearchOverlay').style.display = '';
+    const input = document.getElementById('globalSearchInput');
+    input.value = '';
+    input.focus();
+    document.getElementById('globalSearchResults').innerHTML = '<div style="padding:1rem;color:var(--text-muted);text-align:center;font-size:0.75rem;">Enter a search query and press Search or Enter.</div>';
+    document.getElementById('globalSearchStatus').textContent = '';
+}
+
+function closeGlobalSearch() {
+    document.getElementById('globalSearchOverlay').style.display = 'none';
+}
+
+async function executeGlobalSearch() {
+    const query = document.getElementById('globalSearchInput').value.trim();
+    if (!query) return;
+
+    const resultsDiv = document.getElementById('globalSearchResults');
+    const statusDiv = document.getElementById('globalSearchStatus');
+    resultsDiv.innerHTML = '<div style="padding:1rem;color:var(--text-muted);text-align:center;font-size:0.75rem;">Searching all commands...</div>';
+    statusDiv.textContent = '';
+
+    const results = [];
+
+    for (const inst of state.instanceUrls) {
+        if (!inst._commands) continue;
+        for (const cmd of inst._commands) {
+            try {
+                const res = await fetch(apiUrl(`/api/commands/${cmd.id}/vtty/html`, inst), {
+                    headers: authHeadersForInstance(inst),
+                });
+                const json = await res.json();
+                if (json.status !== 'ok' || !json.data || !json.data.html) continue;
+
+                // Extract plain text from HTML
+                const temp = document.createElement('div');
+                temp.innerHTML = json.data.html;
+                const text = temp.textContent || '';
+
+                // Search through text lines
+                const lines = text.split('\n');
+                const matches = [];
+                const lowerQuery = query.toLowerCase();
+
+                for (let i = 0; i < lines.length; i++) {
+                    if (lines[i].toLowerCase().includes(lowerQuery)) {
+                        matches.push({ lineNum: i + 1, text: lines[i].trim() });
+                    }
+                }
+
+                if (matches.length > 0) {
+                    results.push({
+                        instUrl: inst.url,
+                        instLabel: inst.label,
+                        cmdId: cmd.id,
+                        cmdName: cmd.name || cmd.id,
+                        matchCount: matches.length,
+                        matches: matches.slice(0, 5),
+                    });
+                }
+            } catch (e) { /* skip this command */ }
+        }
+    }
+
+    if (results.length === 0) {
+        resultsDiv.innerHTML = '<div style="padding:1rem;color:var(--text-muted);text-align:center;font-size:0.75rem;">No matches found across any command output.</div>';
+        statusDiv.textContent = '0 matches';
+        return;
+    }
+
+    const totalMatches = results.reduce((sum, r) => sum + r.matchCount, 0);
+    statusDiv.textContent = `Found ${totalMatches} match${totalMatches !== 1 ? 'es' : ''} in ${results.length} command${results.length !== 1 ? 's' : ''}`;
+
+    const escapedForRegex = escHtml(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    let html = '';
+    for (const r of results) {
+        html += `<div class="search-result-group">
+            <div class="search-result-header" onclick="selectCommand('${r.instUrl}','${r.cmdId}','${escHtml(r.cmdName)}');closeGlobalSearch();">
+                <span style="font-family:var(--font-mono);font-size:0.75rem;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(r.cmdName)}</span>
+                <span style="font-size:0.65rem;color:var(--text-muted);">${escHtml(r.instLabel)}</span>
+                <span style="font-size:0.65rem;color:var(--yellow);">${r.matchCount} match${r.matchCount !== 1 ? 'es' : ''}</span>
+            </div>`;
+        for (const m of r.matches) {
+            const highlighted = escHtml(m.text).replace(
+                new RegExp('(' + escapedForRegex + ')', 'gi'),
+                '<span style="background:rgba(210,153,34,0.4);border-radius:2px;">$1</span>'
+            );
+            html += `<div class="search-result-line">
+                <span class="line-num">${m.lineNum}</span>${highlighted}
+            </div>`;
+        }
+        html += '</div>';
+    }
+
+    resultsDiv.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Task 5: Sound Notifications (Web Audio API)
+// ═══════════════════════════════════════════════════════════════════
+
+function initSoundToggle() {
+    try {
+        if (localStorage.getItem('vrunner_sound_enabled') === 'true') {
+            const btn = document.getElementById('soundToggleBtn');
+            if (btn) btn.classList.add('sound-btn-active');
+        }
+    } catch (e) { /* ignore */ }
+}
+
+function toggleSoundNotifications() {
+    const btn = document.getElementById('soundToggleBtn');
+    let enabled = false;
+    try {
+        enabled = localStorage.getItem('vrunner_sound_enabled') === 'true';
+        enabled = !enabled;
+        localStorage.setItem('vrunner_sound_enabled', enabled ? 'true' : 'false');
+    } catch (e) {
+        enabled = !btn.classList.contains('sound-btn-active');
+    }
+    if (btn) btn.classList.toggle('sound-btn-active', enabled);
+}
+
+function playExitSound(exitCode) {
+    try {
+        if (localStorage.getItem('vrunner_sound_enabled') !== 'true') return;
+    } catch (e) { return; }
+
+    try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        gain.gain.value = 0.2;
+
+        const isSuccess = exitCode === 0 || exitCode === null || exitCode === undefined;
+        if (isSuccess) {
+            // Success: short high-pitched beep
+            osc.frequency.value = 880;
+            osc.type = 'sine';
+            gain.gain.setValueAtTime(0.2, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.15);
+        } else {
+            // Failure: short low-pitched beep (longer)
+            osc.frequency.value = 350;
+            osc.type = 'square';
+            gain.gain.setValueAtTime(0.15, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.3);
+        }
+        // Auto-close audio context after sound
+        setTimeout(() => { try { ctx.close(); } catch(e) {} }, 1000);
+    } catch (e) { /* ignore audio errors */ }
 }
 </script>
 </body>
