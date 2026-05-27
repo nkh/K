@@ -1553,6 +1553,19 @@ document.addEventListener('keydown', (e) => {
                     document.activeElement && document.activeElement.id === 'searchInput-' + panel.id) {
                     // Let search input handle the key
                 } else if (e.key === 'Escape') {
+                    // Close Add Panel modal if open
+                    const panelModal = document.getElementById('panelModal');
+                    if (panelModal && panelModal.style.display !== 'none') {
+                        closePanelModal();
+                        return;
+                    }
+                    // Close Command Picker if open
+                    const cmdPicker = document.getElementById('cmdPicker');
+                    if (cmdPicker) {
+                        releaseCurrentFocusTrap();
+                        cmdPicker.remove();
+                        return;
+                    }
                     vttySearchClose(panel.id);
                     closeContextMenu();
                     closeShortcuts();
