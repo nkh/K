@@ -161,6 +161,318 @@ impl AnsiParser {
         }
     }
 
+    // ── Shared parameter parsing ──
+
+    /// Parse a CSI/DCS parameter digit, sub-parameter separator, or
+    /// parameter separator.  Returns true if the byte was consumed
+    /// as a parameter byte (digit, ';', or ':').
+    fn parse_param_digit_or_separator(&mut self, byte: u8) -> bool {
+        match byte {
+            0x30..=0x39 => {
+                if let Some(last) = self.current_param.last_mut() {
+                    *last = (*last * 10) + ((byte - b'0') as u16);
+                } else {
+                    self.current_param.push((byte - b'0') as u16);
+                }
+                true
+            }
+            b';' => {
+                if self.current_param.is_empty() {
+                    self.csi_params.push(vec![0]);
+                } else {
+                    self.csi_params.push(self.current_param.clone());
+                    self.current_param.clear();
+                }
+                true
+            }
+            b':' => {
+                self.current_param.push(0);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    // ── State handlers (extracted from parse()) ──
+
+    /// Handle a byte in the Escape state (after receiving ESC).
+    /// Returns false if the byte should be reprocessed from Ground.
+    fn handle_escape_byte(&mut self, byte: u8, tokens: &mut Vec<AnsiToken>) -> bool {
+        self.buffer.push(byte);
+        match byte {
+            b'[' => {
+                self.state = ParseState::CsiParam;
+                self.csi_params.clear();
+                self.current_param.clear();
+                self.intermediate.clear();
+            }
+            b']' => {
+                self.state = ParseState::OscString;
+                self.string_content.clear();
+            }
+            b'P' => {
+                self.state = ParseState::DcsEntry;
+                self.csi_params.clear();
+                self.current_param.clear();
+                self.intermediate.clear();
+                self.string_content.clear();
+                self.dcs_final_byte = 0;
+            }
+            b'X' | b'^' | b'_' => {
+                self.state = ParseState::String;
+            }
+            0x20..=0x2f => {
+                // Intermediate byte after ESC — this begins
+                // an independent escape sequence (charset
+                // designation, DECDHL, etc.), NOT a CSI.
+                self.intermediate.clear();
+                self.intermediate.push(byte);
+                self.state = ParseState::EscapeIntermediate;
+            }
+            0x30..=0x7e => {
+                tokens.push(AnsiToken::Escape(byte));
+                self.reset_to_ground();
+            }
+            _ => {
+                // Unknown byte after ESC — abort the escape.
+                // The ESC is silently dropped (non-printable),
+                // but the aborting byte must be reprocessed.
+                self.reset_to_ground();
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Handle a byte in the EscapeIntermediate state (ESC + intermediate bytes).
+    /// Returns false if the byte should be reprocessed from Ground.
+    fn handle_escape_intermediate_byte(&mut self, byte: u8, tokens: &mut Vec<AnsiToken>) -> bool {
+        match byte {
+            0x20..=0x2f => {
+                self.intermediate.push(byte);
+            }
+            0x30..=0x7e => {
+                // Final byte — emit the complete escape sequence.
+                tokens.push(AnsiToken::EscSequence {
+                    intermediate: self.intermediate.clone(),
+                    final_byte: byte,
+                });
+                self.reset_to_ground();
+            }
+            _ => {
+                // Aborted escape-with-intermediate sequence.
+                // ESC is non-printable, so silently drop
+                // everything and reprocess the aborting byte.
+                self.reset_to_ground();
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Handle a byte in the CsiParam state (after ESC [).
+    /// Returns false if the byte should be reprocessed from Ground.
+    fn handle_csi_param_byte(&mut self, byte: u8, tokens: &mut Vec<AnsiToken>) -> bool {
+        if self.parse_param_digit_or_separator(byte) {
+            return true;
+        }
+        match byte {
+            0x3c..=0x3f => {
+                // Private mode indicator bytes: '<', '=', '>', '?'
+                // Per ECMA-48 these are parameter bytes (0x30-0x3f).
+                // Store in intermediate so the emulator can detect
+                // DEC private modes (e.g. CSI ?25h, CSI ?1049h).
+                self.intermediate.push(byte);
+            }
+            0x20..=0x2f => {
+                self.flush_csi_param();
+                self.intermediate.push(byte);
+                self.state = ParseState::CsiIntermediate;
+            }
+            0x40..=0x7e => {
+                self.flush_csi_param();
+                tokens.push(AnsiToken::Csi {
+                    params: self.csi_params.clone(),
+                    intermediate: self.intermediate.clone(),
+                    final_byte: byte,
+                });
+                self.reset_to_ground();
+            }
+            _ => {
+                // CSI sequence aborted by an unexpected byte.
+                // Emit the consumed '[' as text (so it is visible),
+                // then reprocess the aborting byte from Ground.
+                self.text_bytes.push(b'[');
+                self.reset_to_ground();
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Handle a byte in the CsiIntermediate state (CSI + intermediate bytes).
+    /// Returns false if the byte should be reprocessed from Ground.
+    fn handle_csi_intermediate_byte(&mut self, byte: u8, tokens: &mut Vec<AnsiToken>) -> bool {
+        match byte {
+            0x20..=0x2f => { self.intermediate.push(byte); }
+            0x40..=0x7e => {
+                tokens.push(AnsiToken::Csi {
+                    params: self.csi_params.clone(),
+                    intermediate: self.intermediate.clone(),
+                    final_byte: byte,
+                });
+                self.reset_to_ground();
+            }
+            _ => {
+                // CSI intermediate sequence aborted.
+                // Emit the consumed '[' and intermediate bytes as text.
+                self.text_bytes.push(b'[');
+                for &ib in &self.intermediate {
+                    self.text_bytes.push(ib);
+                }
+                self.reset_to_ground();
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Handle a byte in the OscString state (after ESC ]).
+    fn handle_osc_string_byte(&mut self, byte: u8, tokens: &mut Vec<AnsiToken>) -> bool {
+        match byte {
+            0x07 => {
+                // BEL terminates OSC.
+                let content = self.decode_string_content();
+                tokens.push(AnsiToken::Osc(content));
+                self.reset_to_ground();
+            }
+            0x1b => {
+                // Potential ST (String Terminator) start — ESC.
+                // Buffer it so the next byte can detect ESC + "\\".
+                self.buffer.push(byte);
+            }
+            _ => {
+                // If the previous byte was a buffered ESC, check
+                // whether this byte completes an ST.
+                if self.buffer.ends_with(&[0x1b]) {
+                    self.buffer.pop(); // remove buffered ESC
+                    if byte == b'\\' {
+                        // ST — terminate OSC.
+                        let content = self.decode_string_content();
+                        tokens.push(AnsiToken::Osc(content));
+                        self.reset_to_ground();
+                    } else {
+                        // ESC not followed by "\\" — treat the
+                        // ESC as raw string data and continue.
+                        self.push_string_byte(0x1b);
+                        self.push_string_byte(byte);
+                    }
+                } else {
+                    self.push_string_byte(byte);
+                }
+            }
+        }
+        true
+    }
+
+    /// Handle a byte in the DcsEntry state (after ESC P).
+    /// Returns false if the byte should be reprocessed from Ground.
+    fn handle_dcs_entry_byte(&mut self, byte: u8, _tokens: &mut Vec<AnsiToken>) -> bool {
+        match byte {
+            0x30..=0x39 | b';' | b':' => {
+                // Parse the first parameter byte before transitioning.
+                self.parse_param_digit_or_separator(byte);
+                self.state = ParseState::DcsParam;
+            }
+            0x20..=0x2f => {
+                self.state = ParseState::DcsIntermediate;
+            }
+            0x40..=0x7e => {
+                // Final byte — record it and transition to
+                // DcsString to collect the data payload that
+                // follows the final byte.
+                self.dcs_final_byte = byte;
+                self.state = ParseState::DcsString;
+            }
+            0x3c..=0x3f => {
+                self.intermediate.push(byte);
+            }
+            _ => {
+                self.reset_to_ground();
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Handle a byte in the DcsParam or DcsIntermediate state.
+    /// Returns false if the byte should be reprocessed from Ground.
+    fn handle_dcs_param_byte(&mut self, byte: u8, _tokens: &mut Vec<AnsiToken>) -> bool {
+        if self.parse_param_digit_or_separator(byte) {
+            return true;
+        }
+        match byte {
+            0x20..=0x2f => {
+                self.intermediate.push(byte);
+            }
+            0x40..=0x7e => {
+                // Final byte — record it and transition to
+                // DcsString to collect the data payload.
+                self.flush_csi_param();
+                self.dcs_final_byte = byte;
+                self.state = ParseState::DcsString;
+            }
+            _ => {
+                self.reset_to_ground();
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Handle a byte in the DcsString state (collecting DCS data payload).
+    fn handle_dcs_string_byte(&mut self, byte: u8, tokens: &mut Vec<AnsiToken>) -> bool {
+        if byte == 0x1b {
+            // Potential ST start — buffer for detection.
+            self.buffer.push(byte);
+        } else if self.buffer.ends_with(&[0x1b]) {
+            self.buffer.pop(); // remove buffered ESC
+            if byte == b'\\' {
+                // ST — emit the complete DCS token.
+                let content = self.decode_string_content();
+                tokens.push(AnsiToken::Dcs {
+                    params: self.csi_params.clone(),
+                    intermediate: self.intermediate.clone(),
+                    final_byte: self.dcs_final_byte,
+                    data: content,
+                });
+                self.reset_to_ground();
+            } else {
+                // ESC not followed by "\\" — treat ESC as data.
+                self.push_string_byte(0x1b);
+                self.push_string_byte(byte);
+            }
+        } else {
+            self.push_string_byte(byte);
+        }
+        true
+    }
+
+    /// Handle a byte in the String state (SOS, PM, APC — content discarded).
+    fn handle_string_byte(&mut self, byte: u8) -> bool {
+        if byte == 0x1b {
+            self.buffer.push(byte);
+        } else if self.buffer.ends_with(&[0x1b]) && byte == b'\\' {
+            self.reset_to_ground();
+        }
+        true
+    }
+
+    // ── Main parser ──
+
+    // State-machine parser: dispatches input bytes by current state.
+    // States: Ground, Escape, CSI params, OSC, DCS, etc.
+    // Extracted handlers: handle_* methods for each state transition.
     pub fn parse(&mut self, input: &[u8]) -> Vec<AnsiToken> {
         let mut tokens = Vec::new();
 
@@ -178,306 +490,39 @@ impl AnsiParser {
                 self.reset_to_ground();
                 tokens.push(AnsiToken::Control(byte));
             } else {
-                match self.state {
+                advance = match self.state {
                     ParseState::Ground => {
                         self.process_ground_byte(byte, &mut tokens);
+                        true
                     }
-
                     ParseState::Escape => {
-                        self.buffer.push(byte);
-                        match byte {
-                            b'[' => {
-                                self.state = ParseState::CsiParam;
-                                self.csi_params.clear();
-                                self.current_param.clear();
-                                self.intermediate.clear();
-                            }
-                            b']' => {
-                                self.state = ParseState::OscString;
-                                self.string_content.clear();
-                            }
-                            b'P' => {
-                                self.state = ParseState::DcsEntry;
-                                self.csi_params.clear();
-                                self.current_param.clear();
-                                self.intermediate.clear();
-                                self.string_content.clear();
-                                self.dcs_final_byte = 0;
-                            }
-                            b'X' | b'^' | b'_' => {
-                                self.state = ParseState::String;
-                            }
-                            0x20..=0x2f => {
-                                // Intermediate byte after ESC — this begins
-                                // an independent escape sequence (charset
-                                // designation, DECDHL, etc.), NOT a CSI.
-                                self.intermediate.clear();
-                                self.intermediate.push(byte);
-                                self.state = ParseState::EscapeIntermediate;
-                            }
-                            0x30..=0x7e => {
-                                tokens.push(AnsiToken::Escape(byte));
-                                self.reset_to_ground();
-                            }
-                            _ => {
-                                // Unknown byte after ESC — abort the escape.
-                                // The ESC is silently dropped (non-printable),
-                                // but the aborting byte must be reprocessed.
-                                self.reset_to_ground();
-                                advance = false;
-                            }
-                        }
+                        self.handle_escape_byte(byte, &mut tokens)
                     }
-
                     ParseState::EscapeIntermediate => {
-                        match byte {
-                            0x20..=0x2f => {
-                                self.intermediate.push(byte);
-                            }
-                            0x30..=0x7e => {
-                                // Final byte — emit the complete escape sequence.
-                                tokens.push(AnsiToken::EscSequence {
-                                    intermediate: self.intermediate.clone(),
-                                    final_byte: byte,
-                                });
-                                self.reset_to_ground();
-                            }
-                            _ => {
-                                // Aborted escape-with-intermediate sequence.
-                                // ESC is non-printable, so silently drop
-                                // everything and reprocess the aborting byte.
-                                self.reset_to_ground();
-                                advance = false;
-                            }
-                        }
+                        self.handle_escape_intermediate_byte(byte, &mut tokens)
                     }
-
                     ParseState::CsiParam => {
-                        match byte {
-                            0x30..=0x39 => {
-                                if let Some(last) = self.current_param.last_mut() {
-                                    *last = (*last * 10) + ((byte - b'0') as u16);
-                                } else {
-                                    self.current_param.push((byte - b'0') as u16);
-                                }
-                            }
-                            b';' => {
-                                if self.current_param.is_empty() {
-                                    self.csi_params.push(vec![0]);
-                                } else {
-                                    self.csi_params.push(self.current_param.clone());
-                                    self.current_param.clear();
-                                }
-                            }
-                            b':' => {
-                                self.current_param.push(0);
-                            }
-                            0x3c..=0x3f => {
-                                // Private mode indicator bytes: '<', '=', '>', '?'
-                                // Per ECMA-48 these are parameter bytes (0x30-0x3f).
-                                // Store in intermediate so the emulator can detect
-                                // DEC private modes (e.g. CSI ?25h, CSI ?1049h).
-                                self.intermediate.push(byte);
-                            }
-                            0x20..=0x2f => {
-                                self.flush_csi_param();
-                                self.intermediate.push(byte);
-                                self.state = ParseState::CsiIntermediate;
-                            }
-                            0x40..=0x7e => {
-                                self.flush_csi_param();
-                                tokens.push(AnsiToken::Csi {
-                                    params: self.csi_params.clone(),
-                                    intermediate: self.intermediate.clone(),
-                                    final_byte: byte,
-                                });
-                                self.reset_to_ground();
-                            }
-                            _ => {
-                                // CSI sequence aborted by an unexpected byte.
-                                // Emit the consumed '[' as text (so it is visible),
-                                // then reprocess the aborting byte from Ground.
-                                self.text_bytes.push(b'[');
-                                self.reset_to_ground();
-                                advance = false;
-                            }
-                        }
+                        self.handle_csi_param_byte(byte, &mut tokens)
                     }
-
                     ParseState::CsiIntermediate => {
-                        match byte {
-                            0x20..=0x2f => { self.intermediate.push(byte); }
-                            0x40..=0x7e => {
-                                tokens.push(AnsiToken::Csi {
-                                    params: self.csi_params.clone(),
-                                    intermediate: self.intermediate.clone(),
-                                    final_byte: byte,
-                                });
-                                self.reset_to_ground();
-                            }
-                            _ => {
-                                // CSI intermediate sequence aborted.
-                                // Emit the consumed '[' and intermediate bytes as text.
-                                self.text_bytes.push(b'[');
-                                for &ib in &self.intermediate {
-                                    self.text_bytes.push(ib);
-                                }
-                                self.reset_to_ground();
-                                advance = false;
-                            }
-                        }
+                        self.handle_csi_intermediate_byte(byte, &mut tokens)
                     }
-
                     ParseState::OscString => {
-                        match byte {
-                            0x07 => {
-                                // BEL terminates OSC.
-                                let content = self.decode_string_content();
-                                tokens.push(AnsiToken::Osc(content));
-                                self.reset_to_ground();
-                            }
-                            0x1b => {
-                                // Potential ST (String Terminator) start — ESC.
-                                // Buffer it so the next byte can detect ESC + "\\".
-                                self.buffer.push(byte);
-                            }
-                            _ => {
-                                // If the previous byte was a buffered ESC, check
-                                // whether this byte completes an ST.
-                                if self.buffer.ends_with(&[0x1b]) {
-                                    self.buffer.pop(); // remove buffered ESC
-                                    if byte == b'\\' {
-                                        // ST — terminate OSC.
-                                        let content = self.decode_string_content();
-                                        tokens.push(AnsiToken::Osc(content));
-                                        self.reset_to_ground();
-                                    } else {
-                                        // ESC not followed by "\\" — treat the
-                                        // ESC as raw string data and continue.
-                                        self.push_string_byte(0x1b);
-                                        self.push_string_byte(byte);
-                                    }
-                                } else {
-                                    self.push_string_byte(byte);
-                                }
-                            }
-                        }
+                        self.handle_osc_string_byte(byte, &mut tokens)
                     }
-
                     ParseState::DcsEntry => {
-                        match byte {
-                            0x30..=0x39 | b';' | b':' => {
-                                // Parse the first parameter byte before transitioning.
-                                if byte.is_ascii_digit() {
-                                    if let Some(last) = self.current_param.last_mut() {
-                                        *last = (*last * 10) + ((byte - b'0') as u16);
-                                    } else {
-                                        self.current_param.push((byte - b'0') as u16);
-                                    }
-                                } else if byte == b';' {
-                                    if self.current_param.is_empty() {
-                                        self.csi_params.push(vec![0]);
-                                    } else {
-                                        self.csi_params.push(self.current_param.clone());
-                                        self.current_param.clear();
-                                    }
-                                } else if byte == b':' {
-                                    self.current_param.push(0);
-                                }
-                                self.state = ParseState::DcsParam;
-                            }
-                            0x20..=0x2f => {
-                                self.state = ParseState::DcsIntermediate;
-                            }
-                            0x40..=0x7e => {
-                                // Final byte — record it and transition to
-                                // DcsString to collect the data payload that
-                                // follows the final byte.
-                                self.dcs_final_byte = byte;
-                                self.state = ParseState::DcsString;
-                            }
-                            0x3c..=0x3f => {
-                                self.intermediate.push(byte);
-                            }
-                            _ => {
-                                self.reset_to_ground();
-                                advance = false;
-                            }
-                        }
+                        self.handle_dcs_entry_byte(byte, &mut tokens)
                     }
-
                     ParseState::DcsParam | ParseState::DcsIntermediate => {
-                        match byte {
-                            0x30..=0x39 => {
-                                if let Some(last) = self.current_param.last_mut() {
-                                    *last = (*last * 10) + ((byte - b'0') as u16);
-                                } else {
-                                    self.current_param.push((byte - b'0') as u16);
-                                }
-                            }
-                            b';' => {
-                                if self.current_param.is_empty() {
-                                    self.csi_params.push(vec![0]);
-                                } else {
-                                    self.csi_params.push(self.current_param.clone());
-                                    self.current_param.clear();
-                                }
-                            }
-                            b':' => {
-                                self.current_param.push(0);
-                            }
-                            0x20..=0x2f => {
-                                self.intermediate.push(byte);
-                            }
-                            0x40..=0x7e => {
-                                // Final byte — record it and transition to
-                                // DcsString to collect the data payload.
-                                self.flush_csi_param();
-                                self.dcs_final_byte = byte;
-                                self.state = ParseState::DcsString;
-                            }
-                            _ => {
-                                self.reset_to_ground();
-                                advance = false;
-                            }
-                        }
+                        self.handle_dcs_param_byte(byte, &mut tokens)
                     }
-
                     ParseState::DcsString => {
-                        if byte == 0x1b {
-                            // Potential ST start — buffer for detection.
-                            self.buffer.push(byte);
-                        } else if self.buffer.ends_with(&[0x1b]) {
-                            self.buffer.pop(); // remove buffered ESC
-                            if byte == b'\\' {
-                                // ST — emit the complete DCS token.
-                                let content = self.decode_string_content();
-                                tokens.push(AnsiToken::Dcs {
-                                    params: self.csi_params.clone(),
-                                    intermediate: self.intermediate.clone(),
-                                    final_byte: self.dcs_final_byte,
-                                    data: content,
-                                });
-                                self.reset_to_ground();
-                            } else {
-                                // ESC not followed by "\\" — treat ESC as data.
-                                self.push_string_byte(0x1b);
-                                self.push_string_byte(byte);
-                            }
-                        } else {
-                            self.push_string_byte(byte);
-                        }
+                        self.handle_dcs_string_byte(byte, &mut tokens)
                     }
-
                     ParseState::String => {
-                        // SOS, PM, APC — content is discarded.
-                        if byte == 0x1b {
-                            self.buffer.push(byte);
-                        } else if self.buffer.ends_with(&[0x1b]) && byte == b'\\' {
-                            self.reset_to_ground();
-                        }
+                        self.handle_string_byte(byte)
                     }
-                }
+                };
             }
 
             if advance {
@@ -488,7 +533,6 @@ impl AnsiParser {
         self.flush_text_bytes_preserve_incomplete(&mut tokens);
         tokens
     }
-
     /// Flush any remaining buffered text and discard incomplete sequences.
     /// Call this when the input stream ends (e.g., PTY closed) to ensure
     /// no trailing text is lost.

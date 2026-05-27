@@ -128,132 +128,191 @@ fn pre_runtime() -> Result<Option<Cli>> {
     Ok(Some(cli))
 }
 
-/// Async runtime phase: start the server and manage the application lifecycle.
+/// Dispatch async subcommands.  Returns `Ok(true)` if a subcommand was
+/// handled (the caller should return), or `Ok(false)` if no subcommand
+/// matched (the caller should continue to the main server path).
+async fn handle_subcommands(cli: &Cli) -> Result<bool> {
+    match &cli.command {
+        Some(Commands::List) => {
+            subcommands::handle_list_command(cli).await?;
+            Ok(true)
+        }
+        Some(Commands::Stop { pid }) => {
+            let registry = InstanceRegistry::new()?;
+            let instances = registry.list_instances();
+            let pid = subcommands::resolve_stop_target(*pid, &instances);
+            tracing::info!(instance_pid = pid, "Stopping vrunner instance");
+            registry.stop_instance(pid).await?;
+            Ok(true)
+        }
+        Some(Commands::Spawn { cmd, args, rows, cols }) => {
+            subcommands::handle_spawn_command(cli, cmd, args, *rows, *cols).await?;
+            Ok(true)
+        }
+        Some(Commands::Freeze { pid }) => {
+            subcommands::handle_freeze_command(cli, *pid).await?;
+            Ok(true)
+        }
+        Some(Commands::Thaw { pid }) => {
+            subcommands::handle_thaw_command(cli, *pid).await?;
+            Ok(true)
+        }
+        Some(Commands::ListVrunner) => {
+            subcommands::handle_list_vrunner_command(cli).await?;
+            Ok(true)
+        }
+        Some(Commands::ListCommands) => {
+            subcommands::handle_list_commands_command(cli).await?;
+            Ok(true)
+        }
+        Some(Commands::StopCommand { target }) => {
+            let stopped = subcommands::handle_stop_command(
+                cli, target.as_deref(),
+            ).await?;
+            if !stopped {
+                match target {
+                    Some(t) => tracing::error!(
+                        "No matching command found for '{}'. Use `vrunner list` to see running commands.", t
+                    ),
+                    None => tracing::error!(
+                        "No command to stop. Use `vrunner list` to see running commands."
+                    ),
+                }
+                std::process::exit(1);
+            }
+            Ok(true)
+        }
+        Some(Commands::Purge { target }) => {
+            let purged = subcommands::handle_purge_command(
+                cli, target.as_deref(),
+            ).await?;
+            if !purged {
+                match target {
+                    Some(t) => tracing::error!(
+                        "No matching exited command found for '{}'. Use `vrunner list` to see commands.", t
+                    ),
+                    None => tracing::error!(
+                        "No exited command to purge. Use `vrunner list` to see commands."
+                    ),
+                }
+                std::process::exit(1);
+            }
+            Ok(true)
+        }
+        Some(Commands::Resize { target, rows, cols }) => {
+            subcommands::handle_resize_command(cli, target, *rows, *cols).await?;
+            Ok(true)
+        }
+        // Cert and ConfigCheck are handled synchronously in pre_runtime()
+        // and never reach the async phase.
+        Some(Commands::Cert { .. }) | Some(Commands::ConfigCheck) => unreachable!(),
+        None => Ok(false),
+    }
+}
+
+/// Detect the terminal size and apply it to the VTTY config when
+/// --display is enabled.  CLI flags --vtty-rows / --vtty-cols take
+/// precedence over detection.
+fn apply_detected_terminal_size(cli: &Cli, cfg: &mut Config) {
+    if !cfg.display.enabled {
+        return;
+    }
+    let detected = detect_terminal_size();
+    if let Some((rows, cols)) = detected {
+        // When the tab bar is shown, subtract 1 row so the VTTY
+        // content fits in the remaining lines.  Without this the
+        // last line of terminal output (e.g. btop status bar,
+        // vim status line) is clipped.
+        let effective_rows = if cli.tabs { rows.saturating_sub(1) } else { rows };
+        tracing::info!(rows, cols, effective_rows, tabs = cli.tabs, method = "multi", "Detected terminal size for display mode");
+        if cli.vtty_rows.is_none() {
+            cfg.vtty.rows = effective_rows;
+        }
+        if cli.vtty_cols.is_none() {
+            cfg.vtty.cols = cols;
+        }
+    } else {
+        tracing::warn!("Failed to detect terminal size, using config defaults");
+    }
+}
+
+/// Spawn a child command from the CLI positional args, if provided.
+/// Returns the spawned command ID, or None if no command was given.
+async fn spawn_initial_command(
+    cli: &Cli,
+    manager: &Arc<CommandManager>,
+    cfg: &Config,
+) -> Result<Option<String>> {
+    let cmd_args = match &cli.cmd_args {
+        Some(args) if !args.is_empty() => args,
+        _ => return Ok(None),
+    };
+
+    let cmd = cmd_args[0].clone();
+    let args = cmd_args[1..].to_vec();
+
+    // Build per-command exit configuration from CLI flags.
+    // These override the global config defaults for this command only.
+    let per_command_exit = if cli.retain_on_exit
+        || cli.snapshot_on_exit.is_some()
+        || cli.on_exit.is_some()
+        || cli.on_error.is_some()
+        || cli.exit_timeout.is_some()
+    {
+        let mut ec = cfg.default_exit.exit.clone();
+        if cli.retain_on_exit {
+            ec.retain_on_exit = true;
+        }
+        if let Some(ref path) = cli.snapshot_on_exit {
+            ec.snapshot_on_exit = Some(path.clone());
+        }
+        // on_exit, on_error, and exit_timeout are already applied to
+        // the global default by apply_overrides, so they'll be
+        // inherited. But we still build an explicit Some() so the
+        // per-command path is taken consistently.
+        Some(ec)
+    } else {
+        None
+    };
+
+    let id = manager.spawn(
+        cmd, args, None,
+        per_command_exit,
+        cfg.environment.variables.clone(),
+        None, None,
+    ).await?;
+
+    // Send initial keystrokes if --send-keys was specified.
+    if let Some(ref keys) = cli.send_keys {
+        if let Err(e) = manager.send_keys(&id, keys).await {
+            tracing::warn!(error = %e, "Failed to send initial keys");
+        } else {
+            tracing::info!(keys = %keys, "Sent initial keystrokes");
+        }
+    }
+
+    Ok(Some(id))
+}
+
+// ── Application entry point ──
+
+// Application entry point: parses args, loads config, sets up
+// manager/spawner, then either starts web server, display loop,
+// or runs a single command based on CLI flags.
 async fn async_main(cli: Cli) -> Result<()> {
     // Initialize tracing (after daemonize, so logs go to the right place)
     tracing_subscriber::fmt::init();
 
-    // Handle list subcommand — query running instances and show their commands
-    if let Some(Commands::List) = cli.command {
-        subcommands::handle_list_command(&cli).await?;
-        return Ok(());
-    }
-
-    // Handle stop subcommand (needs async for HTTP request)
-    if let Some(Commands::Stop { pid }) = cli.command {
-        let registry = InstanceRegistry::new()?;
-        let instances = registry.list_instances();
-
-        let pid = subcommands::resolve_stop_target(pid, &instances);
-        tracing::info!(instance_pid = pid, "Stopping vrunner instance");
-
-        // Stop the instance directly via the /api/shutdown endpoint.
-        // The old code tried handle_stop_command_by_pid_on_instances first
-        // (which looks for a COMMAND with the instance PID — always fails)
-        // then fell back to stop_instance.  Go straight to the instance.
-        registry.stop_instance(pid).await?;
-        return Ok(());
-    }
-
-    // Handle spawn subcommand — send to a running vrunner instance
-    if let Some(Commands::Spawn { ref cmd, ref args, rows, cols }) = cli.command {
-        subcommands::handle_spawn_command(&cli, cmd, args, rows, cols).await?;
-        return Ok(());
-    }
-
-    // Handle freeze subcommand
-    if let Some(Commands::Freeze { pid }) = cli.command {
-        subcommands::handle_freeze_command(&cli, pid).await?;
-        return Ok(());
-    }
-
-    // Handle thaw subcommand
-    if let Some(Commands::Thaw { pid }) = cli.command {
-        subcommands::handle_thaw_command(&cli, pid).await?;
-        return Ok(());
-    }
-
-    // Handle list-vrunner subcommand
-    if let Some(Commands::ListVrunner) = cli.command {
-        subcommands::handle_list_vrunner_command(&cli).await?;
-        return Ok(());
-    }
-
-    // Handle list-commands subcommand
-    if let Some(Commands::ListCommands) = cli.command {
-        subcommands::handle_list_commands_command(&cli).await?;
-        return Ok(());
-    }
-
-    // Handle stop-command subcommand
-    if let Some(Commands::StopCommand { ref target }) = cli.command {
-        let stopped = match target {
-            Some(t) => subcommands::handle_stop_command(&cli, Some(t.as_str())).await?,
-            None => subcommands::handle_stop_command(&cli, None).await?,
-        };
-        if !stopped {
-            match target {
-                Some(t) => tracing::error!("No matching command found for '{}'. Use `vrunner list` to see running commands.", t),
-                None => tracing::error!("No command to stop. Use `vrunner list` to see running commands."),
-            }
-            std::process::exit(1);
-        }
-        return Ok(());
-    }
-
-    // Handle purge subcommand
-    if let Some(Commands::Purge { ref target }) = cli.command {
-        let purged = match target {
-            Some(t) => subcommands::handle_purge_command(&cli, Some(t.as_str())).await?,
-            None => subcommands::handle_purge_command(&cli, None).await?,
-        };
-        if !purged {
-            match target {
-                Some(t) => tracing::error!("No matching exited command found for '{}'. Use `vrunner list` to see commands.", t),
-                None => tracing::error!("No exited command to purge. Use `vrunner list` to see commands."),
-            }
-            std::process::exit(1);
-        }
-        return Ok(());
-    }
-
-    // Handle resize subcommand
-    if let Some(Commands::Resize { ref target, rows, cols }) = cli.command {
-        subcommands::handle_resize_command(&cli, target, rows, cols).await?;
+    // Dispatch async subcommands (list, stop, spawn, etc.)
+    if handle_subcommands(&cli).await? {
         return Ok(());
     }
 
     // Load and merge configuration (lazy — only reached if no subcommand handled)
     let mut cfg = resolve_config(&cli)?;
 
-    // When --display is enabled, detect the real terminal size and use it
-    // for the VTTY so that the child process (e.g. htop) formats its output
-    // for the actual visible area.  However, if the user explicitly set
-    // --vtty-rows or --vtty-cols on the command line, those take precedence.
-    //
-    // We use a robust multi-method detection:
-    //   1. ioctl(TIOCGWINSZ) on /dev/tty (most reliable on Unix)
-    //   2. ioctl(TIOCGWINSZ) on stdout (crossterm's approach)
-    //   3. COLUMNS/LINES env vars as last resort
-    if cfg.display.enabled {
-        let detected = detect_terminal_size();
-        if let Some((rows, cols)) = detected {
-            // When the tab bar is shown, subtract 1 row so the VTTY
-            // content fits in the remaining lines.  Without this the
-            // last line of terminal output (e.g. btop status bar,
-            // vim status line) is clipped.
-            let effective_rows = if cli.tabs { rows.saturating_sub(1) } else { rows };
-            tracing::info!(rows, cols, effective_rows, tabs = cli.tabs, method = "multi", "Detected terminal size for display mode");
-            if cli.vtty_rows.is_none() {
-                cfg.vtty.rows = effective_rows;
-            }
-            if cli.vtty_cols.is_none() {
-                cfg.vtty.cols = cols;
-            }
-        } else {
-            tracing::warn!("Failed to detect terminal size, using config defaults");
-        }
-    }
+    // Detect terminal size for display mode (no-op unless --display)
+    apply_detected_terminal_size(&cli, &mut cfg);
 
     // Initialize instance registry
     let registry = InstanceRegistry::new()?;
@@ -269,61 +328,8 @@ async fn async_main(cli: Cli) -> Result<()> {
     // Initialize command manager
     let manager = Arc::new(CommandManager::new(cfg.clone()));
 
-    // If a child command was provided, spawn it immediately.
-    // Per-command options (--retain-on-exit, --snapshot-on-exit) are applied
-    // to this specific command via ExitConfig, NOT to the global defaults.
-    let spawned_id = if let Some(cmd_args) = cli.cmd_args {
-        if !cmd_args.is_empty() {
-            let cmd = cmd_args[0].clone();
-            let args = cmd_args[1..].to_vec();
-
-            // Build per-command exit configuration from CLI flags.
-            // These override the global config defaults for this command only.
-            let per_command_exit = if cli.retain_on_exit
-                || cli.snapshot_on_exit.is_some()
-                || cli.on_exit.is_some()
-                || cli.on_error.is_some()
-                || cli.exit_timeout.is_some()
-            {
-                let mut ec = cfg.default_exit.exit.clone();
-                if cli.retain_on_exit {
-                    ec.retain_on_exit = true;
-                }
-                if let Some(ref path) = cli.snapshot_on_exit {
-                    ec.snapshot_on_exit = Some(path.clone());
-                }
-                // on_exit, on_error, and exit_timeout are already applied to
-                // the global default by apply_overrides, so they'll be
-                // inherited. But we still build an explicit Some() so the
-                // per-command path is taken consistently.
-                Some(ec)
-            } else {
-                None
-            };
-
-            let id = manager.spawn(
-                cmd, args, None,
-                per_command_exit,
-                cfg.environment.variables.clone(),
-                None, None,
-            ).await?;
-
-            // Send initial keystrokes if --send-keys was specified.
-            if let Some(ref keys) = cli.send_keys {
-                if let Err(e) = manager.send_keys(&id, keys).await {
-                    tracing::warn!(error = %e, "Failed to send initial keys");
-                } else {
-                    tracing::info!(keys = %keys, "Sent initial keystrokes");
-                }
-            }
-
-            Some(id)
-        } else {
-            None
-        }
-    } else {
-        None
-    };
+    // Spawn child command from CLI positional args, if provided.
+    let spawned_id = spawn_initial_command(&cli, &manager, &cfg).await?;
 
     // Create shutdown channel — passed explicitly, no globals
     let (shutdown_tx, _shutdown_rx) = broadcast::channel::<()>(1);
