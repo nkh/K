@@ -39,6 +39,11 @@ const state = {
     _wsPingInterval: null,
     _wsReconnectCount: 0,
     _wsPingSendTime: 0,
+    // Resource usage cache: { cmdId: { cpu, memory_mb } }
+    _resourceCache: {},
+    _resourceInterval: null,
+    // Sound notifications
+    soundEnabled: localStorage.getItem('vrunner_sound') !== 'false',
 };
 
 // ─── Theme ───
@@ -47,6 +52,9 @@ function initTheme() {
     if (saved) {
         document.documentElement.setAttribute('data-theme', saved);
     }
+    // Sync the theme select dropdown
+    const select = document.getElementById('themeSelect');
+    if (select) select.value = saved || '';
     // If no saved preference, leave data-theme unset so the CSS
     // prefers-color-scheme media query can handle it automatically.
     updateThemeButton();
@@ -57,6 +65,20 @@ function toggleTheme() {
     const next = current === 'light' ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('vrunner_theme', next);
+    updateThemeButton();
+    // Sync select dropdown
+    const select = document.getElementById('themeSelect');
+    if (select) select.value = next;
+}
+
+function applyThemeSelect(value) {
+    if (value) {
+        document.documentElement.setAttribute('data-theme', value);
+        localStorage.setItem('vrunner_theme', value);
+    } else {
+        document.documentElement.removeAttribute('data-theme');
+        localStorage.removeItem('vrunner_theme');
+    }
     updateThemeButton();
 }
 
@@ -69,7 +91,7 @@ function updateThemeButton() {
         const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
         btn.textContent = prefersLight ? '☾' : '☀';
     } else {
-        btn.textContent = theme === 'light' ? '☾' : '☀';
+        btn.textContent = theme === 'light' ? '☾' : theme === 'grey' ? '◼' : '☀';
     }
 }
 
@@ -165,6 +187,7 @@ function releaseCurrentFocusTrap() {
     document.getElementById('authToken').value = state.authToken;
     applyFontSize();
     initBottombar();
+    initSoundToggle();
 
     // Event delegation for command list — handles kill buttons without inline onclick
     document.getElementById('commandList').addEventListener('click', (e) => {
@@ -509,7 +532,9 @@ function switchSidebarTab(tab, el) {
     el.classList.add('active');
     document.getElementById('tab-commands').style.display = tab === 'commands' ? '' : 'none';
     document.getElementById('tab-spawn').style.display = tab === 'spawn' ? '' : 'none';
+    document.getElementById('tab-templates').style.display = tab === 'templates' ? '' : 'none';
     document.getElementById('tab-certs').style.display = tab === 'certs' ? '' : 'none';
+    if (tab === 'templates') renderTemplates();
 }
 
 // ─── View Tabs ───
@@ -621,21 +646,59 @@ async function loadCommands() {
             const key = inst.url + ':' + cmd.id;
             const selected = (state.selectedInstUrl === inst.url && state.selectedCmdId === cmd.id) ? ' selected' : '';
             const argsStr = (cmd.args || []).join(' ');
-            const detail = argsStr ? `${argsStr}  (pid ${cmd.pid})` : `pid ${cmd.pid}`;
             const isAlive = cmd.alive !== false;
-            const statusDot = isAlive
-                ? '<div class="status-dot status-running"></div>'
-                : '<div class="status-dot status-exited"></div>';
-            const runtimeStr = isAlive && cmd.runtime_secs > 0
+            const isFrozen = cmd.frozen === true;
+            // Build detail line: args + pid + exit info
+            let detailParts = [];
+            if (argsStr) detailParts.push(argsStr);
+            detailParts.push(`pid ${cmd.pid}`);
+            if (cmd.exit_code != null) detailParts.push(`exit ${cmd.exit_code}`);
+            if (cmd.exit) {
+                if (cmd.exit.on_exit) detailParts.push(`on_exit: ${cmd.exit.on_exit}`);
+                if (cmd.exit.on_error) detailParts.push(`on_error: ${cmd.exit.on_error}`);
+            }
+            const detail = detailParts.join('  ');
+            // Status dot: running, frozen, or exited
+            let statusDotHtml;
+            if (isFrozen) {
+                statusDotHtml = '<div class="status-dot status-frozen"></div>';
+            } else if (isAlive) {
+                statusDotHtml = '<div class="status-dot status-running"></div>';
+            } else {
+                statusDotHtml = '<div class="status-dot status-exited"></div>';
+            }
+            // Runtime badge
+            const runtimeStr = (isAlive || isFrozen) && cmd.runtime_secs > 0
                 ? `<span style="color:var(--text-muted);font-size:0.6rem;flex-shrink:0;">${formatRuntime(cmd.runtime_secs)}</span>`
                 : '';
+            // Frozen badge
+            const frozenBadge = isFrozen
+                ? `<span style="color:var(--yellow);font-size:0.55rem;font-weight:600;flex-shrink:0;">PAUSED</span>`
+                : '';
+            // Exit code badge
+            const exitBadge = (cmd.exit_code != null)
+                ? `<span class="exit-badge ${cmd.exit_code === 0 ? 'success' : 'failure'}">exit ${cmd.exit_code}</span>`
+                : '';
+            // Resource badge
+            const res = state._resourceCache[cmd.id];
+            const resourceBadge = (res && (res.cpu_percent != null || res.memory_mb != null))
+                ? `<span class="resource-badge">${res.cpu_percent != null ? 'CPU ' + res.cpu_percent.toFixed(1) + '%' : ''}${res.cpu_percent != null && res.memory_mb != null ? ' | ' : ''}${res.memory_mb != null ? res.memory_mb.toFixed(1) + 'MB' : ''}</span>`
+                : '';
+            // Pin button
+            const pinnedNames = getPinnedNames();
+            const isPinned = pinnedNames.includes(cmdName);
+            const frozenClass = isFrozen ? ' frozen' : '';
             html += `
-                <div class="cmd-item${selected}" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" onclick="selectCommand(this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)} ${escHtml(argsStr)}" style="${isAlive ? '' : 'opacity:0.6;'}">
+                <div class="cmd-item${selected}${frozenClass}" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" onclick="selectCommand(this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)} ${escHtml(argsStr)}" style="${(isAlive || isFrozen) ? '' : 'opacity:0.6;'}">
                     <div class="cmd-item-row">
                         ${statusDot}
+                        <button class="pin-btn${isPinned ? ' active' : ''}" onclick="event.stopPropagation();togglePinCmd('${escHtml(cmdName)}')" title="${isPinned ? 'Unpin' : 'Pin'}">&#9734;</button>
                         <span class="name">${escHtml(cmdName)}</span>
+                        ${frozenBadge}
                         ${runtimeStr}
+                        ${resourceBadge}
                         ${certBadge}
+                        ${exitBadge}
                         <span class="pid">${cmd.pid}</span>
                         <button class="btn btn-xs btn-danger cmd-kill-btn" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" title="Kill">&#x2715;</button>
                     </div>
@@ -643,6 +706,9 @@ async function loadCommands() {
                 </div>`;
         }
     }
+
+    // Rearrange pinned commands to top
+    rearrangePinnedCommands(container);
 
     container.innerHTML = html || '<div style="padding:1rem;color:var(--text-muted);text-align:center;">No running commands</div>';
 
@@ -733,10 +799,40 @@ function updatePanelCommandInfo() {
         }
         // Update bottom bar command label
         updateBottomBarLabel(cmd);
+
+        // Update per-panel pause button
+        const pauseBtn = panel.querySelector(`[id^="pauseRunBtn-"]`);
+        if (pauseBtn) {
+            const isAlive = cmd.alive !== false;
+            const isFrozen = cmd.frozen === true;
+            if (isAlive) {
+                pauseBtn.style.display = '';
+                pauseBtn.textContent = isFrozen ? '\u25B6 Run' : '\u23F8 Pause';
+                pauseBtn.className = 'btn btn-xs' + (isFrozen ? ' btn-primary' : '');
+            } else {
+                pauseBtn.style.display = 'none';
+            }
+        }
+
+        // Update resource badge in panel header
+        const resourceBadgeEl = panel.querySelector(`[id^="resourceBadge-"]`);
+        if (resourceBadgeEl) {
+            const res = state._resourceCache[cmd.id];
+            if (res && (res.cpu_percent != null || res.memory_mb != null)) {
+                resourceBadgeEl.textContent = (res.cpu_percent != null ? 'CPU ' + res.cpu_percent.toFixed(1) + '%' : '') +
+                    (res.cpu_percent != null && res.memory_mb != null ? ' | ' : '') +
+                    (res.memory_mb != null ? res.memory_mb.toFixed(1) + 'MB' : '');
+            } else {
+                resourceBadgeEl.textContent = '';
+            }
+        }
     } else if (nameEl) {
         nameEl.textContent = '';
         if (argsEl) argsEl.textContent = '';
         updateBottomBarLabel(null);
+        // Hide pause button
+        const pauseBtn = panel.querySelector(`[id^="pauseRunBtn-"]`);
+        if (pauseBtn) pauseBtn.style.display = 'none';
     }
 }
 
@@ -804,22 +900,38 @@ function getSelectedPanel() {
 // ─── Pause/Run Toggle ───
 async function togglePauseRun() {
     if (!state.selectedCmdId) return;
-    const cmdId = state.selectedCmdId;
-    const instUrl = state.selectedInstUrl;
-
-    const btn = document.getElementById('pauseRunBtn');
-    const isFrozen = btn.dataset.frozen === 'true';
-
+    const inst = state.instanceUrls.find(i => i.url === state.selectedInstUrl);
+    const cmd = inst && inst._commands ? inst._commands.find(c => c.id === state.selectedCmdId) : null;
+    const isFrozen = cmd && cmd.frozen;
     const endpoint = isFrozen ? 'thaw' : 'freeze';
     try {
-        await fetch(apiUrl(`/api/commands/${cmdId}/${endpoint}`, { url: instUrl }), {
+        await fetch(apiUrl(`/api/commands/${state.selectedCmdId}/${endpoint}`, { url: state.selectedInstUrl }), {
             method: 'POST',
-            headers: authHeadersForInstance({ url: instUrl }),
+            headers: authHeadersForInstance({ url: state.selectedInstUrl }),
             body: JSON.stringify({}),
         });
-        btn.dataset.frozen = isFrozen ? 'false' : 'true';
-        btn.textContent = isFrozen ? '\u23F8 Pause' : '\u25B6 Run';
-        btn.className = 'btn btn-xs' + (isFrozen ? '' : ' btn-primary');
+        loadCommands();
+    } catch (e) { /* ignore */ }
+}
+
+async function togglePauseRunPanel(panelId) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj) return;
+    const inst = state.instanceUrls.find(i => i.url === panelObj.instUrl);
+    if (!inst || !inst._commands) return;
+    // Find the command shown in this panel
+    const isForSelected = (panelObj.instUrl === state.selectedInstUrl);
+    const cmdId = isForSelected ? state.selectedCmdId : null;
+    if (!cmdId) return;
+    const cmd = inst._commands.find(c => c.id === cmdId);
+    const isFrozen = cmd && cmd.frozen;
+    const endpoint = isFrozen ? 'thaw' : 'freeze';
+    try {
+        await fetch(apiUrl(`/api/commands/${cmdId}/${endpoint}`, { url: panelObj.instUrl }), {
+            method: 'POST',
+            headers: authHeadersForInstance({ url: panelObj.instUrl, token: panelObj.token }),
+            body: JSON.stringify({}),
+        });
         loadCommands();
     } catch (e) { /* ignore */ }
 }
@@ -1510,46 +1622,83 @@ function removePanel(id) {
 function renderPanels() {
     const container = document.getElementById('view-vtty');
     let html = '';
-    for (const panel of state.panels) {
-        const inst = state.instanceUrls.find(i => i.url === panel.instUrl);
-        const resizeHandle = state.panels.length > 1 ? `<div class="panel-resize-handle" data-panel="${panel.id}"></div>` : '';
+    const hasMultiplePanels = state.panels.length > 1;
+
+    // Check if there are any commands at all for the welcome state
+    let hasAnyCommands = false;
+    for (const inst of state.instanceUrls) {
+        if (inst._commands && inst._commands.length > 0) {
+            hasAnyCommands = true;
+            break;
+        }
+    }
+
+    if (state.panels.length === 1 && !hasAnyCommands && !state.selectedCmdId) {
+        // Show welcome panel
         html += `
-            <div class="panel" id="${panel.id}" style="flex: 1 1 0;">
-                <div class="panel-header" data-panel-id="${panel.id}" oncontextmenu="showPanelContextMenu(event,'${panel.id}')" tabindex="0" role="button" aria-label="Panel options for ${escHtml(inst ? inst.label : panel.instUrl)}">
-                    <div class="cmd-info" id="cmdInfo-${panel.id}">
-                        <span class="cmd-fullname" id="cmdName-${panel.id}"></span>
-                        <span class="cmd-args" id="cmdArgs-${panel.id}"></span>
+            <div class="welcome-panel">
+                <div class="welcome-card">
+                    <h2>vrunner</h2>
+                    <p>Spawn a command to get started. Your terminal output will appear here.</p>
+                    <div class="welcome-form">
+                        <input type="text" id="welcomeCmd" placeholder="/usr/bin/htop" onkeydown="if(event.key==='Enter'){event.preventDefault();spawnFromWelcome()}">
+                        <button class="btn btn-primary" onclick="spawnFromWelcome()">Spawn Command</button>
                     </div>
-                    <span class="instance-url">${escHtml(panel.instUrl.replace(/^https?:\/\//, ''))}</span>
-                    <span class="panel-font-size-ctrl">
-                        <button class="btn btn-xs" onclick="changePanelFontSize('${panel.id}', -1)" title="Decrease font size">A-</button>
-                        <span class="panel-font-size">${panel.fontSize}px</span>
-                        <button class="btn btn-xs" onclick="changePanelFontSize('${panel.id}', 1)" title="Increase font size">A+</button>
-                    </span>
-                    <div class="input-row" style="flex:1;min-width:120px;">
-                        <input type="text" id="keyInput-${panel.id}" placeholder="Send keys... (e.g. q, <Enter>, <C-c>)" style="font-size:0.7rem;" onkeydown="if(event.key==='Enter'){event.preventDefault();sendKeysToPanel('${panel.id}')}">
-                        <button class="btn btn-xs" onclick="sendKeysToPanel('${panel.id}')">Send</button>
-                    </div>
-                    ${state.panels.length > 1 ? `<button class="btn btn-xs btn-danger" onclick="removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
-                    <button class="btn btn-xs" onclick="copyTerminalSelection('${panel.id}')" title="Copy selected text to clipboard">Copy</button>
-                    <button class="btn btn-xs" onclick="exportTerminal('${panel.id}')" title="Export terminal as text">&#x2913;</button>
-                    <button class="btn btn-xs" id="panelThemeBtn-${panel.id}" onclick="togglePanelTheme('${panel.id}')" title="Panel theme: inherit (click to toggle)">${panel.theme === 'light' ? '\u263E' : panel.theme === 'dark' ? '\u2600' : '\u25D0'}</button>
+                    <ul class="welcome-tips">
+                        <li>Use the <strong>Spawn</strong> tab in the sidebar to configure advanced options</li>
+                        <li>Use <strong>Templates</strong> to save and reuse common commands</li>
+                        <li>Click on a command in the sidebar to view its terminal output</li>
+                        <li>Press <strong>?</strong> to see keyboard shortcuts</li>
+                    </ul>
                 </div>
-                <div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px;">
-                    <div class="search-bar" id="searchBar-${panel.id}">
-                        <input type="text" id="searchInput-${panel.id}" placeholder="Search terminal..." oninput="vttySearch('${panel.id}')">
-                        <span class="search-count" id="searchCount-${panel.id}"></span>
-                        <button onclick="vttySearchNext('${panel.id}')" title="Next match">&#x25BC;</button>
-                        <button onclick="vttySearchPrev('${panel.id}')" title="Previous match">&#x25B2;</button>
-                        <button onclick="vttySearchClose('${panel.id}')" title="Close search">&#x2715;</button>
+            </div>`;
+    } else {
+        for (const panel of state.panels) {
+            const inst = state.instanceUrls.find(i => i.url === panel.instUrl);
+            const resizeHandle = hasMultiplePanels ? `<div class="panel-resize-handle" data-panel="${panel.id}"></div>` : '';
+            const dragHandle = hasMultiplePanels ? `<span class="drag-handle" draggable="true" ondragstart="onPanelDragStart(event,'${panel.id}')" title="Drag to reorder">&#x2840;</span>` : '';
+            html += `
+                <div class="panel" id="${panel.id}" draggable="${hasMultiplePanels}" ondragover="onPanelDragOver(event)" ondrop="onPanelDrop(event,'${panel.id}')" ondragend="onPanelDragEnd(event)" ondragleave="onPanelDragLeave(event)" style="flex: 1 1 0;">
+                    <div class="panel-header" data-panel-id="${panel.id}" oncontextmenu="showPanelContextMenu(event,'${panel.id}')" tabindex="0" role="button" aria-label="Panel options for ${escHtml(inst ? inst.label : panel.instUrl)}">
+                        ${dragHandle}
+                        <div class="cmd-info" id="cmdInfo-${panel.id}">
+                            <span class="cmd-fullname" id="cmdName-${panel.id}"></span>
+                            <span class="cmd-args" id="cmdArgs-${panel.id}"></span>
+                        </div>
+                        <span class="resource-badge" id="resourceBadge-${panel.id}"></span>
+                        <span class="instance-url">${escHtml(panel.instUrl.replace(/^https?:\/\//, ''))}</span>
+                        <span class="panel-font-size-ctrl">
+                            <button class="btn btn-xs" onclick="changePanelFontSize('${panel.id}', -1)" title="Decrease font size">A-</button>
+                            <span class="panel-font-size">${panel.fontSize}px</span>
+                            <button class="btn btn-xs" onclick="changePanelFontSize('${panel.id}', 1)" title="Increase font size">A+</button>
+                        </span>
+                        <button id="pauseRunBtn-${panel.id}" class="btn btn-xs" onclick="togglePauseRunPanel('${panel.id}')" title="Pause/Resume" style="display:none;">&#9208; Pause</button>
+                        <button class="btn btn-xs" onclick="restartCommand('${panel.id}')" title="Restart command">&#x21BB;</button>
+                        <div class="input-row" style="min-width:140px;max-width:220px;flex:0 1 auto;">
+                            <input type="text" id="keyInput-${panel.id}" placeholder="Send keys..." style="font-size:0.7rem;" onkeydown="if(event.key==='Enter'){event.preventDefault();sendKeysToPanel('${panel.id}')}">
+                            <button class="btn btn-xs" onclick="sendKeysToPanel('${panel.id}')">Send</button>
+                        </div>
+                        ${hasMultiplePanels ? `<button class="btn btn-xs btn-danger" onclick="removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
+                        <button class="btn btn-xs" onclick="copyTerminalSelection('${panel.id}')" title="Copy selected text to clipboard">Copy</button>
+                        <button class="btn btn-xs" onclick="exportTerminal('${panel.id}')" title="Export terminal as text">&#x2913;</button>
+                        <button class="btn btn-xs" id="panelThemeBtn-${panel.id}" onclick="togglePanelTheme('${panel.id}')" title="Panel theme: inherit (click to toggle)">${panel.theme === 'light' ? '\u263E' : panel.theme === 'dark' ? '\u2600' : '\u25D0'}</button>
                     </div>
-                    <pre style="color:#484f58;">No command selected — spawn or select a command to view its output</pre>
-                    <div class="cursor-indicator" style="display:none;"></div>
-                    <div class="copy-feedback" id="copyFeedback-${panel.id}">Copied!</div>
-                    <button class="scroll-bottom-btn" id="scrollBtn-${panel.id}" onclick="scrollTerminalBottom('${panel.id}')" title="Scroll to bottom">&#x25BC;</button>
+                    <div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px;">
+                        <div class="search-bar" id="searchBar-${panel.id}">
+                            <input type="text" id="searchInput-${panel.id}" placeholder="Search terminal..." oninput="vttySearch('${panel.id}')">
+                            <span class="search-count" id="searchCount-${panel.id}"></span>
+                            <button onclick="vttySearchNext('${panel.id}')" title="Next match">&#x25BC;</button>
+                            <button onclick="vttySearchPrev('${panel.id}')" title="Previous match">&#x25B2;</button>
+                            <button onclick="vttySearchClose('${panel.id}')" title="Close search">&#x2715;</button>
+                        </div>
+                        <pre style="color:#484f58;">No command selected — spawn or select a command to view its output</pre>
+                        <div class="cursor-indicator" style="display:none;"></div>
+                        <div class="copy-feedback" id="copyFeedback-${panel.id}">Copied!</div>
+                        <button class="scroll-bottom-btn" id="scrollBtn-${panel.id}" onclick="scrollTerminalBottom('${panel.id}')" title="Scroll to bottom">&#x25BC;</button>
+                    </div>
                 </div>
-            </div>
-            ${resizeHandle}`;
+                ${resizeHandle}`;
+        }
     }
     container.innerHTML = html;
     // Attach scroll listeners for scroll-to-bottom button visibility
@@ -1994,6 +2143,10 @@ function startRefresh() {
         loadCommands();
         checkForExitedCommands();
     }, 1000);
+
+    // Start resource polling (every 2 seconds)
+    if (state._resourceInterval) clearInterval(state._resourceInterval);
+    state._resourceInterval = setInterval(pollResources, 2000);
 }
 
 // ─── Keyboard handling ───
@@ -2594,13 +2747,19 @@ function notifyCommandEnded(cmdId) {
     if (!cmdId || _notifiedExits.has(cmdId)) return;
     _notifiedExits.add(cmdId);
 
-    // Find command name
+    // Find command name and exit code
     let cmdName = cmdId;
+    let exitCode = null;
     for (const inst of state.instanceUrls) {
         if (inst._commands) {
             const cmd = inst._commands.find(c => c.id === cmdId);
-            if (cmd) { cmdName = cmd.name || cmdId; break; }
+            if (cmd) { cmdName = cmd.name || cmdId; exitCode = cmd.exit_code; break; }
         }
+    }
+
+    // Play sound notification
+    if (state.soundEnabled) {
+        playExitSound(exitCode === 0);
     }
 
     if ('Notification' in window) {
@@ -2841,6 +3000,8 @@ function showCmdContextMenu(e, instUrl, cmdId, cmdName, isAlive) {
         menu.appendChild(sep1);
         // Pause/Resume
         menu.appendChild(_createCtxMenuItem('Pause/Resume', () => togglePauseCmd(instUrl, cmdId), false));
+        // Restart
+        menu.appendChild(_createCtxMenuItem('Restart', () => restartCommandById(instUrl, cmdId), false));
         // Kill
         menu.appendChild(_createCtxMenuItem('Kill', () => killCommand(instUrl, cmdId), true));
     } else {
@@ -2890,6 +3051,8 @@ function showPanelContextMenu(e, panelId) {
     if (cmdId) {
         // Pause/Resume
         menu.appendChild(_createCtxMenuItem('Pause/Resume', () => togglePauseCmd(instUrl, cmdId), false));
+        // Restart
+        menu.appendChild(_createCtxMenuItem('Restart', () => restartCommandById(instUrl, cmdId), false));
         // Kill
         menu.appendChild(_createCtxMenuItem('Kill', () => killCommand(instUrl, cmdId), true));
     }
@@ -2987,4 +3150,449 @@ function closeShortcuts() {
     releaseCurrentFocusTrap();
     const el = document.getElementById('shortcutsOverlay');
     if (el) el.remove();
+}
+
+// ─── Resource Polling ───
+async function pollResources() {
+    for (const inst of state.instanceUrls) {
+        if (!inst._commands) continue;
+        for (const cmd of inst._commands) {
+            if (cmd.alive === false) continue;
+            try {
+                const res = await fetch(apiUrl(`/api/commands/${cmd.id}/resources`, { url: inst.url }), {
+                    headers: authHeadersForInstance(inst),
+                });
+                const json = await res.json();
+                if (json.status === 'ok' && json.data) {
+                    state._resourceCache[cmd.id] = json.data;
+                }
+            } catch (e) {
+                // Silently ignore — resources are optional
+            }
+        }
+    }
+}
+
+// ─── Restart Command ───
+async function restartCommand(panelId) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj) return;
+    const inst = state.instanceUrls.find(i => i.url === panelObj.instUrl);
+    if (!inst || !inst._commands) return;
+    const isForSelected = (panelObj.instUrl === state.selectedInstUrl);
+    const cmdId = isForSelected ? state.selectedCmdId : null;
+    if (!cmdId) return;
+    await restartCommandById(panelObj.instUrl, cmdId);
+}
+
+async function restartCommandById(instUrl, cmdId) {
+    const inst = state.instanceUrls.find(i => i.url === instUrl);
+    if (!inst || !inst._commands) return;
+    const cmd = inst._commands.find(c => c.id === cmdId);
+    if (!cmd) return;
+    const cmdName = cmd.name || cmd.id;
+    const cmdArgs = cmd.args || [];
+    const cert = cmd.certificate || null;
+    // Kill the existing command
+    _lastCommandState = '';
+    try {
+        await fetch(apiUrl(`/api/commands/${cmdId}/kill`, { url: instUrl }), {
+            method: 'POST',
+            headers: authHeadersForInstance({ url: instUrl }),
+            body: JSON.stringify({}),
+        });
+    } catch (e) { /* ignore */ }
+    // Spawn a new command with the same parameters
+    try {
+        const body = { cmd: cmdName, args: cmdArgs };
+        if (cert) body.certificate = cert;
+        const res = await fetch(apiUrl('/api/commands', { url: instUrl }), {
+            method: 'POST',
+            headers: authHeadersForInstance({ url: instUrl }),
+            body: JSON.stringify(body),
+        });
+        const json = await res.json();
+        if (json.status === 'ok' && json.data && json.data.id) {
+            state.selectedInstUrl = instUrl;
+            state.selectedCmdId = json.data.id;
+            loadCommands();
+        }
+    } catch (e) { /* ignore */ }
+}
+
+// ─── Welcome Panel Spawn ───
+async function spawnFromWelcome() {
+    const input = document.getElementById('welcomeCmd');
+    if (!input || !input.value.trim()) return;
+    const cmd = input.value.trim();
+    const instUrl = getBaseUrl();
+    try {
+        const res = await fetch(apiUrl('/api/commands', { url: instUrl }), {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ cmd }),
+        });
+        const json = await res.json();
+        if (json.status === 'ok') {
+            const newId = json.data && json.data.id ? json.data.id : null;
+            if (newId) {
+                state.selectedInstUrl = instUrl;
+                state.selectedCmdId = newId;
+            }
+            loadCommands();
+        } else {
+            alert('Spawn failed: ' + (json.error || 'unknown'));
+        }
+    } catch (e) {
+        alert('Spawn failed: ' + e.message);
+    }
+}
+
+// ─── Command Pinning / Favorites ───
+function getPinnedNames() {
+    try {
+        return JSON.parse(localStorage.getItem('vrunner_pinned_cmds') || '[]');
+    } catch { return []; }
+}
+
+function setPinnedNames(names) {
+    localStorage.setItem('vrunner_pinned_cmds', JSON.stringify(names));
+}
+
+function togglePinCmd(cmdName) {
+    const pinned = getPinnedNames();
+    const idx = pinned.indexOf(cmdName);
+    if (idx >= 0) {
+        pinned.splice(idx, 1);
+    } else {
+        pinned.push(cmdName);
+    }
+    setPinnedNames(pinned);
+    loadCommands();
+}
+
+function rearrangePinnedCommands(container) {
+    // This is called before innerHTML is set, so we work with the container
+    // after it's rendered. The actual DOM rearrangement happens after container.innerHTML is set.
+    // We use a MutationObserver-like approach: after innerHTML, rearrange.
+    setTimeout(() => {
+        if (!container) return;
+        const items = container.querySelectorAll('.cmd-item[data-cmd-name]');
+        const pinned = getPinnedNames();
+        const pinnedItems = [];
+        const unpinnedItems = [];
+        items.forEach(item => {
+            const name = item.dataset.cmdName;
+            if (pinned.includes(name)) {
+                pinnedItems.push(item);
+            } else {
+                unpinnedItems.push(item);
+            }
+        });
+        if (pinnedItems.length > 0 && unpinnedItems.length > 0) {
+            // Create pinned section header
+            const header = document.createElement('div');
+            header.className = 'pinned-section-header';
+            header.textContent = '★ Pinned';
+            // Insert pinned items first
+            const parent = items[0] && items[0].parentNode;
+            if (parent) {
+                const first = parent.firstChild;
+                // Remove all items, then re-add in pinned-first order
+                items.forEach(item => item.remove());
+                if (first) {
+                    parent.insertBefore(header, first);
+                    pinnedItems.forEach(item => parent.insertBefore(item, first));
+                }
+                unpinnedItems.forEach(item => parent.appendChild(item));
+            }
+        }
+        // Update pin button icons
+        container.querySelectorAll('.pin-btn').forEach(btn => {
+            const item = btn.closest('.cmd-item');
+            if (item && pinned.includes(item.dataset.cmdName)) {
+                btn.classList.add('active');
+                btn.textContent = '★';
+                btn.title = 'Unpin';
+            } else {
+                btn.classList.remove('active');
+                btn.textContent = '☆';
+                btn.title = 'Pin';
+            }
+        });
+    }, 0);
+}
+
+// ─── Command Templates ───
+const DEFAULT_TEMPLATES = [
+    { name: 'Node Dev', cmd: 'npm', args: 'run dev' },
+    { name: 'Python Tests', cmd: 'python', args: '-m pytest -v' },
+    { name: 'Docker Compose', cmd: 'docker-compose', args: 'up' },
+];
+
+function getTemplates() {
+    try {
+        const saved = JSON.parse(localStorage.getItem('vrunner_templates') || 'null');
+        if (saved && saved.length > 0) return saved;
+    } catch { /* ignore */ }
+    return [...DEFAULT_TEMPLATES];
+}
+
+function saveTemplates(templates) {
+    localStorage.setItem('vrunner_templates', JSON.stringify(templates));
+}
+
+function renderTemplates() {
+    const container = document.getElementById('templateList');
+    if (!container) return;
+    const templates = getTemplates();
+    if (templates.length === 0) {
+        container.innerHTML = '<div style="padding:0.5rem;color:var(--text-muted);font-size:0.7rem;text-align:center;">No templates saved</div>';
+        return;
+    }
+    container.innerHTML = templates.map((t, i) => `
+        <div class="template-card" onclick="spawnTemplate(${i})" title="Click to spawn this command">
+            <div class="template-name">${escHtml(t.name)}</div>
+            <div class="template-cmd">${escHtml(t.cmd)}${t.args ? ' ' + escHtml(t.args) : ''}</div>
+            <div class="template-actions">
+                <button class="btn btn-xs btn-danger" onclick="event.stopPropagation();deleteTemplate(${i})" title="Delete">&#x2715;</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function spawnTemplate(index) {
+    const templates = getTemplates();
+    const t = templates[index];
+    if (!t) return;
+    const instSelect = document.getElementById('spawnInstance');
+    const instUrl = instSelect ? instSelect.value : getBaseUrl();
+    const args = t.args ? t.args.split(/\s+/) : [];
+    const body = { cmd: t.cmd, args };
+    // Auto-switch to the spawn tab's target instance
+    fetch(apiUrl('/api/commands', { url: instUrl }), {
+        method: 'POST',
+        headers: authHeadersForInstance({ url: instUrl }),
+        body: JSON.stringify(body),
+    }).then(res => res.json()).then(json => {
+        if (json.status === 'ok') {
+            const newId = json.data && json.data.id ? json.data.id : null;
+            if (newId) {
+                state.selectedInstUrl = instUrl;
+                state.selectedCmdId = newId;
+            }
+            loadCommands();
+            // Switch to commands view
+            const cmdTab = document.querySelector('.sidebar-tab');
+            if (cmdTab) switchSidebarTab('commands', cmdTab);
+        } else {
+            alert('Spawn failed: ' + (json.error || 'unknown'));
+        }
+    }).catch(e => alert('Spawn failed: ' + e.message));
+}
+
+function deleteTemplate(index) {
+    const templates = getTemplates();
+    templates.splice(index, 1);
+    saveTemplates(templates);
+    renderTemplates();
+}
+
+function showAddTemplateForm() {
+    const form = document.getElementById('templateAddForm');
+    if (form) form.style.display = '';
+}
+
+function hideAddTemplateForm() {
+    const form = document.getElementById('templateAddForm');
+    if (form) form.style.display = 'none';
+    document.getElementById('templateName').value = '';
+    document.getElementById('templateCmd').value = '';
+    document.getElementById('templateArgs').value = '';
+}
+
+function saveTemplate() {
+    const name = document.getElementById('templateName').value.trim();
+    const cmd = document.getElementById('templateCmd').value.trim();
+    const args = document.getElementById('templateArgs').value.trim();
+    if (!name || !cmd) { alert('Name and command are required'); return; }
+    const templates = getTemplates();
+    templates.push({ name, cmd, args });
+    saveTemplates(templates);
+    hideAddTemplateForm();
+    renderTemplates();
+}
+
+// ─── Drag-and-Drop Panel Reorder ───
+let _draggedPanelId = null;
+
+function onPanelDragStart(e, panelId) {
+    _draggedPanelId = panelId;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', panelId);
+    setTimeout(() => {
+        const el = document.getElementById(panelId);
+        if (el) el.classList.add('dragging');
+    }, 0);
+}
+
+function onPanelDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const panel = e.target.closest('.panel');
+    if (!panel || panel.id === _draggedPanelId) return;
+    const rect = panel.getBoundingClientRect();
+    const midX = rect.left + rect.width / 2;
+    panel.classList.remove('drag-over-left', 'drag-over-right');
+    if (e.clientX < midX) {
+        panel.classList.add('drag-over-left');
+    } else {
+        panel.classList.add('drag-over-right');
+    }
+}
+
+function onPanelDragLeave(e) {
+    const panel = e.target.closest('.panel');
+    if (panel) panel.classList.remove('drag-over-left', 'drag-over-right');
+}
+
+function onPanelDrop(e, targetPanelId) {
+    e.preventDefault();
+    if (!_draggedPanelId || _draggedPanelId === targetPanelId) {
+        onPanelDragEnd(e);
+        return;
+    }
+    const container = document.getElementById('view-vtty');
+    const draggedEl = document.getElementById(_draggedPanelId);
+    const targetEl = document.getElementById(targetPanelId);
+    if (!draggedEl || !targetEl || !container) {
+        onPanelDragEnd(e);
+        return;
+    }
+    // Determine insert position
+    const rect = targetEl.getBoundingClientRect();
+    const midX = rect.left + rect.width / 2;
+    if (e.clientX < midX) {
+        container.insertBefore(draggedEl, targetEl);
+    } else {
+        container.insertBefore(draggedEl, targetEl.nextSibling);
+    }
+    // Also remove the resize handle and re-add it after the panel
+    const handle = draggedEl.nextElementSibling;
+    if (handle && handle.classList.contains('panel-resize-handle')) {
+        container.removeChild(handle);
+        const nextEl = draggedEl.nextElementSibling;
+        container.insertBefore(handle, nextEl);
+    }
+    // Update state.panels order to match DOM
+    const panelEls = container.querySelectorAll('.panel');
+    const newOrder = [];
+    panelEls.forEach(el => {
+        const p = state.panels.find(pp => pp.id === el.id);
+        if (p) newOrder.push(p);
+    });
+    state.panels = newOrder;
+    localStorage.setItem('vrunner_panel_order', JSON.stringify(newOrder.map(p => p.id)));
+    onPanelDragEnd(e);
+}
+
+function onPanelDragEnd(e) {
+    _draggedPanelId = null;
+    document.querySelectorAll('.panel').forEach(p => {
+        p.classList.remove('dragging', 'drag-over-left', 'drag-over-right');
+    });
+}
+
+// ─── Global Search ───
+function openGlobalSearch() {
+    const modal = document.getElementById('globalSearchModal');
+    modal.style.display = '';
+    const input = document.getElementById('globalSearchInput');
+    input.value = '';
+    input.focus();
+    document.getElementById('globalSearchResults').innerHTML = '<div style="padding:1rem;color:var(--text-muted);text-align:center;font-size:0.75rem;">Type a query and press Enter to search across all command output</div>';
+}
+
+function closeGlobalSearch() {
+    const modal = document.getElementById('globalSearchModal');
+    modal.style.display = 'none';
+}
+
+async function executeGlobalSearch() {
+    const query = document.getElementById('globalSearchInput').value.trim();
+    if (!query) return;
+    const resultsContainer = document.getElementById('globalSearchResults');
+    resultsContainer.innerHTML = '<div style="padding:1rem;color:var(--text-muted);text-align:center;font-size:0.75rem;">Searching...</div>';
+    let allResults = [];
+    for (const inst of state.instanceUrls) {
+        if (!inst._commands) continue;
+        for (const cmd of inst._commands) {
+            try {
+                const res = await fetch(apiUrl(`/api/commands/${cmd.id}/vtty/text`, { url: inst.url }), {
+                    headers: authHeadersForInstance(inst),
+                });
+                if (!res.ok) continue;
+                const json = await res.json();
+                if (json.status !== 'ok' || !json.data || !json.data.text) continue;
+                const lines = json.data.text.split('\n');
+                const cmdName = cmd.name || cmd.id;
+                const matchingLines = [];
+                lines.forEach((line, idx) => {
+                    if (line.toLowerCase().includes(query.toLowerCase())) {
+                        matchingLines.push({ lineNum: idx + 1, text: line.trim() });
+                    }
+                });
+                if (matchingLines.length > 0) {
+                    allResults.push({ cmdName, cmdId: cmd.id, instUrl: inst.url, lines: matchingLines.slice(0, 50) });
+                }
+            } catch (e) { /* skip */ }
+        }
+    }
+    if (allResults.length === 0) {
+        resultsContainer.innerHTML = '<div style="padding:1rem;color:var(--text-muted);text-align:center;font-size:0.75rem;">No results found</div>';
+        return;
+    }
+    resultsContainer.innerHTML = allResults.map(group => `
+        <div class="search-result-group">
+            <div class="search-result-header" onclick="selectCommand('${escHtml(group.instUrl)}','${escHtml(group.cmdId)}','${escHtml(group.cmdName)}');closeGlobalSearch()">
+                ${escHtml(group.cmdName)} <span style="color:var(--text-muted);font-size:0.6rem;">(${group.lines.length} matches)</span>
+            </div>
+            ${group.lines.map(l => `<div class="search-result-line" title="${escHtml(l.text)}"><span style="color:var(--text-muted);">${l.lineNum}:</span> ${escHtml(l.text)}</div>`).join('')}
+        </div>
+    `).join('');
+}
+
+// ─── Sound Notifications ───
+function initSoundToggle() {
+    const btn = document.getElementById('soundBtn');
+    if (!btn) return;
+    if (state.soundEnabled) btn.classList.add('sound-btn-active');
+}
+
+function toggleSoundNotifications() {
+    state.soundEnabled = !state.soundEnabled;
+    localStorage.setItem('vrunner_sound', state.soundEnabled.toString());
+    const btn = document.getElementById('soundBtn');
+    if (btn) btn.classList.toggle('sound-btn-active', state.soundEnabled);
+}
+
+function playExitSound(success) {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        if (success) {
+            osc.frequency.value = 880;
+            osc.type = 'sine';
+        } else {
+            osc.frequency.value = 440;
+            osc.type = 'square';
+        }
+        gain.gain.value = 0.1;
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.5);
+    } catch (e) { /* ignore — audio not supported */ }
 }

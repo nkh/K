@@ -38,7 +38,9 @@ pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
         .route("/api/commands/:id/handles", get(handlers::handles::list_handles).post(handlers::handles::add_handle))
         .route("/api/commands/:id/resources", get(handlers::resources::get_resources))
         .route("/api/commands/:id/ws", get(handlers::ws::ws_vtty_stream))
+        .route("/api/commands/:id/share", post(handlers::share::create_share_token))
         .route("/api/ws/logs", get(handlers::ws::ws_log_stream))
+        .route("/api/share/:token", get(handlers::share::get_share))
         .route("/api/shutdown", post(handlers::commands::shutdown));
 
     // Public routes — admin panel and static assets
@@ -47,6 +49,7 @@ pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
         .route("/admin", get(handlers::admin::admin_page))
         .route("/admin/*path", get(handlers::admin::admin_assets))
         .route("/favicon.ico", get(handlers::admin::admin_favicon))
+        .route("/share/{token}", get(handlers::admin::share_page))
         // Smart fallback: serves embedded static assets (style.css, app.js, etc.)
         // with correct MIME types, or index.html for command-name URL routing.
         .fallback(handlers::admin::smart_fallback);
