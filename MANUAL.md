@@ -1841,7 +1841,54 @@ curl -k https://localhost:9090/api/commands
 
 ## 5.3 CORS Policy
 
-vrunner uses `tower-http` CORS middleware. By default, CORS is permissive (all origins allowed) in local mode. For remote deployments, configure the allowed origins in the config file.
+vrunner uses `tower-http` CORS middleware to control cross-origin access to the API and admin interface. The CORS policy is configurable through the `security.cors` field in the configuration file.
+
+### Configuration
+
+```yaml
+security:
+  cors:
+    policy: "any"    # default: allow all origins
+```
+
+### Policy Values
+
+| Value | Behavior |
+|-------|----------|
+| `"any"` | Allow all origins. Sets `Access-Control-Allow-Origin: *`. This is the default for backward compatibility. Suitable for local development where the browser and API are on the same machine. |
+| `"none"` | Block all cross-origin requests. No `Access-Control-Allow-Origin` header is set. The admin interface still works when served from the same origin. |
+| Comma-separated origins | Allow only the listed origins. Example: `"https://myapp.example.com,https://admin.example.com"`. Each origin must include the scheme (`http` or `https`). |
+
+### Examples
+
+Allow all origins (default):
+```yaml
+security:
+  cors:
+    policy: "any"
+```
+
+Block cross-origin requests:
+```yaml
+security:
+  cors:
+    policy: "none"
+```
+
+Allow specific origins:
+```yaml
+security:
+  cors:
+    policy: "https://dashboard.example.com,https://ci.example.com"
+```
+
+### CORS and Authentication
+
+When both authentication and CORS are enabled, the `Authorization` header is exposed to allowed origins via `Access-Control-Expose-Headers`. If you restrict CORS to specific origins, ensure those origins are listed in the policy so that the browser can read the auth headers from API responses.
+
+### Recommendation
+
+For production deployments where the admin interface is accessed from a different origin than the API server, set the CORS policy to the specific origin(s) that need access. For localhost development, the default `"any"` policy is appropriate.
 
 ## 5.4 Token Management
 
