@@ -2447,6 +2447,51 @@ function checkForExitedCommands() {
 })();
 
 // ─── Export Terminal Output ───
+/// Copy terminal text to the clipboard.
+/// If the user has selected text in the VTTY, copy that selection.
+/// Otherwise, fall back to the full VTTY content.
+function copyTerminalSelection(panelId) {
+    const panel = document.getElementById(panelId);
+    if (!panel) return;
+
+    // First try the browser text selection
+    const selection = window.getSelection();
+    let text = selection ? selection.toString().trim() : '';
+
+    // Fallback: copy full VTTY content
+    if (!text) {
+        const pre = panel.querySelector('pre');
+        if (pre) {
+            text = pre.textContent || pre.innerText || '';
+        }
+    }
+
+    if (!text) return;
+
+    navigator.clipboard.writeText(text).then(() => {
+        // Show "Copied!" feedback
+        const feedback = document.getElementById('copyFeedback-' + panelId);
+        if (feedback) {
+            feedback.classList.add('visible');
+            setTimeout(() => feedback.classList.remove('visible'), 1200);
+        }
+    }).catch(() => {
+        // Clipboard API may fail (e.g. non-HTTPS); fall back to execCommand
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;opacity:0;';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); } catch (_) { /* ignore */ }
+        document.body.removeChild(ta);
+        const feedback = document.getElementById('copyFeedback-' + panelId);
+        if (feedback) {
+            feedback.classList.add('visible');
+            setTimeout(() => feedback.classList.remove('visible'), 1200);
+        }
+    });
+}
+
 function exportTerminal(panelId) {
     const panel = document.getElementById(panelId);
     if (!panel) return;
