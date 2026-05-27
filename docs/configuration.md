@@ -71,18 +71,39 @@ server:
 
 ### `security`
 
-Controls bearer token authentication for API requests.
+Controls bearer token authentication and CORS policy for API requests.
 
 | Key | Type | Default | CLI Flag | Description |
 |-----|------|---------|----------|-------------|
 | `require_auth` | `bool` | `false` | `--auth` | When `false` (default), no authentication is required for API requests. This is safe for localhost since the sender already has machine access. When `true`, every API request must include a valid `Authorization: Bearer <token>` header. |
 | `token_file` | `string` | `~/.config/vrunner/token` | `--token-file <FILE>` | Path to a file containing the bearer token. If this file does not exist when auth is required, a cryptographically random 256-bit token (64 hex characters) is generated and saved to this path. The file is created with restrictive permissions (`0600`) so only the owner can read it. |
+| `cors.policy` | `string` | `"any"` | — | CORS policy for cross-origin requests. `"any"` allows all origins (default). `"none"` blocks all cross-origin requests. A comma-separated list of origins (e.g., `"https://app.example.com,https://admin.example.com"`) allows only those specific origins. Each origin must include the scheme (`http` or `https`). Config-file-only; no CLI flag. |
 
 **Example:**
 ```yaml
 security:
   require_auth: false
   token_file: "~/.config/vrunner/token"
+  cors:
+    policy: "any"
+```
+
+**CORS policy examples:**
+```yaml
+# Allow all origins (default, backward compatible)
+security:
+  cors:
+    policy: "any"
+
+# Block all cross-origin requests
+security:
+  cors:
+    policy: "none"
+
+# Allow specific origins only
+security:
+  cors:
+    policy: "https://dashboard.example.com,https://ci.example.com"
 ```
 
 ### `tls`
@@ -506,6 +527,7 @@ Every configuration file entry has a corresponding CLI flag. This table summariz
 | `server` | `port` | `--port <PORT>` |
 | `security` | `require_auth` | `--auth` |
 | `security` | `token_file` | `--token-file <FILE>` |
+| `security` | `cors.policy` | Config only — no CLI equivalent |
 | `tls` | `enabled` | `--tls` |
 | `tls` | `cert_file` | `--cert-file <FILE>` |
 | `tls` | `key_file` | `--key-file <FILE>` |
@@ -651,6 +673,8 @@ server:
 security:
   require_auth: false      # no auth for localhost
   token_file: "~/.config/vrunner/token"
+  cors:
+    policy: "any"          # allow all origins (default)
 
 tls:
   enabled: false           # plain HTTP by default
