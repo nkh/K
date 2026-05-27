@@ -1,7 +1,7 @@
 use axum::{
     body::Body,
     extract::Path,
-    http::{header, StatusCode},
+    http::{header, StatusCode, Uri},
     response::Response,
 };
 use std::path::PathBuf;
@@ -83,4 +83,25 @@ fn guess_mime_type(path: &str) -> &'static str {
         "otf" => "font/otf",
         _ => "application/octet-stream",
     }
+}
+
+/// Smart catch-all fallback: if the requested path matches an embedded static
+/// asset (e.g. /style.css, /app.js, /favicon-32x32.png), serve it with the
+/// correct MIME type.  Otherwise serve index.html — this supports command-name
+/// URL routing where /htop, /btop etc. auto-select a command in the JS.
+pub async fn smart_fallback(uri: Uri) -> Response {
+    let path = uri.path().trim_start_matches('/');
+
+    // Skip empty paths and already-handled prefixes
+    if path.is_empty() || path.starts_with("api/") || path.starts_with("admin") {
+        return admin_page().await;
+    }
+
+    // Try to serve the embedded asset directly
+    if let Some(content) = AdminAssets::get(path) {
+        return no_cache_response(guess_mime_type(path), content.data.to_vec());
+    }
+
+    // No matching asset — serve index.html for command-name URL routing
+    admin_page().await
 }

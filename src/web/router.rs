@@ -46,9 +46,9 @@ pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
         .route("/admin", get(handlers::admin::admin_page))
         .route("/admin/*path", get(handlers::admin::admin_assets))
         .route("/favicon.ico", get(handlers::admin::admin_favicon))
-        // Catch-all: serve index.html for any other path (e.g. /htop).
-        // The JS reads window.location.pathname and auto-selects the command.
-        .fallback(handlers::admin::admin_page);
+        // Smart fallback: serves embedded static assets (style.css, app.js, etc.)
+        // with correct MIME types, or index.html for command-name URL routing.
+        .fallback(handlers::admin::smart_fallback);
 
     // Auth middleware layer — injects auth requirement from state into extensions
     let auth_token = state.auth_token.clone();
