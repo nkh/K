@@ -20,6 +20,9 @@ use crate::hooks::runner::run_hook;
 
 pub type CommandId = String;
 
+/// A single entry returned by [`CommandManager::list`].
+pub type CommandEntry = (CommandId, String, Vec<String>, u32, Option<String>);
+
 /// Metadata stored alongside a named snapshot.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SnapshotMeta {
@@ -76,6 +79,7 @@ impl CommandManager {
     /// from `config.default_exit.exit` is used.  When `Some(...)`, the
     /// provided `ExitConfig` takes full precedence (on_exit, on_error,
     /// timeout_secs).
+    #[allow(clippy::too_many_arguments)]
     pub async fn spawn(&self, cmd: String, args: Vec<String>, certificate: Option<String>, exit_config: Option<crate::config::schema::ExitConfig>, env_vars: std::collections::HashMap<String, String>, rows: Option<u16>, cols: Option<u16>) -> Result<CommandId> {
         let id = Uuid::new_v4().to_string();
         self.logger.log("spawn", &format!("id={} cmd={} args={:?} cert={:?} env={:?} size={}x{}", id, cmd, args, certificate, env_vars.keys().collect::<Vec<_>>(), rows.unwrap_or(self.config.vtty.rows), cols.unwrap_or(self.config.vtty.cols)));
@@ -292,11 +296,11 @@ impl CommandManager {
 
     /// Get the certificate name bound to a command (if any).
     pub fn get_certificate(&self, id: &CommandId) -> Option<String> {
-        self.commands.get(id).map(|h| h.certificate.clone()).flatten()
+        self.commands.get(id).and_then(|h| h.certificate.clone())
     }
 
     /// List all commands. Returns (id, name, args, pid, certificate).
-    pub fn list(&self) -> Vec<(CommandId, String, Vec<String>, u32, Option<String>)> {
+    pub fn list(&self) -> Vec<CommandEntry> {
         self.commands
             .iter()
             .map(|entry| {
@@ -745,5 +749,32 @@ mod tests {
     #[test]
     fn test_encode_delete() {
         assert_eq!(encode_keys("<Delete>"), vec![0x1b, b'[', b'3', b'~']);
+    }
+
+    #[test]
+    fn test_command_entry_type_alias() {
+        // Verify CommandEntry type alias matches the expected tuple shape
+        let entry: CommandEntry = (
+            "test-id".to_string(),
+            "test-name".to_string(),
+            vec!["--flag".to_string()],
+            12345,
+            Some("cert-name".to_string()),
+        );
+        assert_eq!(entry.0, "test-id");
+        assert_eq!(entry.1, "test-name");
+        assert_eq!(entry.2, vec!["--flag"]);
+        assert_eq!(entry.3, 12345);
+        assert_eq!(entry.4.as_deref(), Some("cert-name"));
+
+        // Also verify None certificate
+        let no_cert: CommandEntry = (
+            "id2".to_string(),
+            "name2".to_string(),
+            vec![],
+            0,
+            None,
+        );
+        assert!(no_cert.4.is_none());
     }
 }

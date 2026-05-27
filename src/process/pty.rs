@@ -119,8 +119,7 @@ impl PtyBackend for PortablePtyBackend {
                 pixel_height: 0,
             })
             .map_err(|e| {
-                ProcessError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                ProcessError::Io(std::io::Error::other(
                     format!("openpty failed: {}", e),
                 ))
             })?;
@@ -150,8 +149,7 @@ impl PtyMaster for PortablePtyMaster {
             .try_clone_reader()
             .map(|r| Box::new(r) as Box<dyn Read + Send>)
             .map_err(|e| {
-                ProcessError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                ProcessError::Io(std::io::Error::other(
                     format!("clone PTY reader: {}", e),
                 ))
             })
@@ -162,8 +160,7 @@ impl PtyMaster for PortablePtyMaster {
             .take_writer()
             .map(|w| Box::new(w) as Box<dyn Write + Send>)
             .map_err(|e| {
-                ProcessError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                ProcessError::Io(std::io::Error::other(
                     format!("take PTY writer: {}", e),
                 ))
             })
@@ -178,8 +175,7 @@ impl PtyMaster for PortablePtyMaster {
                 pixel_height: 0,
             })
             .map_err(|e| {
-                ProcessError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                ProcessError::Io(std::io::Error::other(
                     format!("PTY resize failed: {}", e),
                 ))
             })

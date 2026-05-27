@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 /// When enabled, vrunner renders VTTY output directly in the
 /// terminal it was launched from (similar to mprocs).
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
 pub struct DisplayConfig {
     /// Show VTTY output on the local terminal.
     /// When the CLI command exits, the display is removed unless
@@ -30,7 +31,7 @@ impl Default for DisplayConfig {
 
 /// Configuration for interactive terminal display.
 /// Controls keyboard input, scrolling, and command switching in the CLI.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct InteractiveConfig {
     /// Show a tab bar listing all commands at the top of the display.
     /// When disabled, the active command name is shown in the status bar only.
@@ -64,18 +65,7 @@ pub struct InteractiveConfig {
     pub keybindings: KeybindingsConfig,
 }
 
-impl Default for InteractiveConfig {
-    fn default() -> Self {
-        Self {
-            tabs: false,
-            keybindings: KeybindingsConfig::default(),
-        }
-    }
-}
-
 /// Maps action names to key sequences for the interactive terminal display.
-///
-/// Key names use human-readable format (preferred):
 /// ```yaml
 /// interactive:
 ///   keybindings:
@@ -137,5 +127,54 @@ impl Default for KeybindingsConfig {
             toggle_pause: None,
             quit: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_display_config_defaults() {
+        let config = DisplayConfig::default();
+        assert!(!config.enabled);
+        assert_eq!(config.refresh_ms, 100);
+        assert!(!config.display_all);
+    }
+
+    #[test]
+    fn test_display_config_deserialize_partial() {
+        let json = r#"{"enabled": true}"#;
+        let config: DisplayConfig = serde_json::from_str(json).unwrap();
+        assert!(config.enabled);
+        // refresh_ms and display_all fall back to Rust Default impl
+        assert_eq!(config.refresh_ms, 100);
+        assert!(!config.display_all);
+    }
+
+    #[test]
+    fn test_interactive_config_defaults() {
+        let config = InteractiveConfig::default();
+        assert!(!config.tabs);
+        // Keybindings should have default bindings populated
+        assert_eq!(config.keybindings.next_command.as_deref(), Some("ctrl+right"));
+        assert_eq!(config.keybindings.prev_command.as_deref(), Some("ctrl+left"));
+        assert_eq!(config.keybindings.toggle_log.as_deref(), Some("ctrl+l"));
+        assert_eq!(config.keybindings.spawn_command.as_deref(), Some("f12"));
+        assert_eq!(config.keybindings.show_help.as_deref(), Some("ctrl+h"));
+        assert!(config.keybindings.kill_command.is_none());
+        assert!(config.keybindings.toggle_pause.is_none());
+        assert!(config.keybindings.quit.is_none());
+    }
+
+    #[test]
+    fn test_keybindings_config_deserialize_partial() {
+        let json = r#"{"next_command": "ctrl+left", "prev_command": "ctrl+right"}"#;
+        let config: KeybindingsConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.next_command.as_deref(), Some("ctrl+left"));
+        assert_eq!(config.prev_command.as_deref(), Some("ctrl+right"));
+        // Other fields use serde defaults
+        assert_eq!(config.toggle_log.as_deref(), Some("ctrl+l"));
+        assert!(config.kill_command.is_none());
     }
 }

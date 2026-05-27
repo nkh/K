@@ -103,7 +103,7 @@ pub fn parse_key_name(name: &str) -> Option<Vec<u8>> {
     // ── Raw escape fallback ──
     // Interpret the string as a Rust-style escape literal (e.g., "\x1b[1;5C").
     // We unescape common sequences.
-    parse_raw_escape(&name)
+    parse_raw_escape(name)
 }
 
 /// Parse a `ctrl+<key>` modifier.

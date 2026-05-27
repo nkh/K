@@ -53,8 +53,8 @@ pub struct ColorPalette {
 impl ColorPalette {
     pub fn new() -> Self {
         let mut slots = [[0u8; 3]; 256];
-        for i in 0..256 {
-            slots[i] = color_256_to_rgb(i as u8);
+        for (i, slot) in slots.iter_mut().enumerate() {
+            *slot = color_256_to_rgb(i as u8);
         }
         Self { slots }
     }
@@ -106,9 +106,8 @@ impl ColorPalette {
 /// Parse an OSC 4 color specification into an RGB triplet.
 fn parse_osc4_color(spec: &str) -> Option<[u8; 3]> {
     let spec = spec.trim();
-    if spec.starts_with("rgb:") {
+    if let Some(hex) = spec.strip_prefix("rgb:") {
         // rgb:RR/GG/BB or rgb:rr/gg/bb
-        let hex = &spec[4..];
         let parts: Vec<&str> = hex.split('/').collect();
         if parts.len() == 3 {
             let r = u8::from_str_radix(parts[0], 16).ok()?;
@@ -170,5 +169,55 @@ mod tests {
             let back = rgb_to_color_256(rgb[0], rgb[1], rgb[2]);
             assert_eq!(back, i, "Roundtrip failed for color {}", i);
         }
+    }
+
+    #[test]
+    fn test_parse_osc4_color_rgb_prefix() {
+        assert_eq!(parse_osc4_color("rgb:ff/00/00"), Some([255, 0, 0]));
+        assert_eq!(parse_osc4_color("rgb:12/34/ab"), Some([0x12, 0x34, 0xab]));
+        assert_eq!(parse_osc4_color("  rgb:ff/00/00  "), Some([255, 0, 0]));
+        // Not enough parts
+        assert_eq!(parse_osc4_color("rgb:ff/00"), None);
+        // Invalid hex
+        assert_eq!(parse_osc4_color("rgb:gg/00/00"), None);
+    }
+
+    #[test]
+    fn test_parse_osc4_color_hex_prefix() {
+        assert_eq!(parse_osc4_color("#ff0000"), Some([255, 0, 0]));
+        assert_eq!(parse_osc4_color("#123456"), Some([0x12, 0x34, 0x56]));
+        // Wrong length
+        assert_eq!(parse_osc4_color("#fff"), None);
+        assert_eq!(parse_osc4_color("#ffffffff"), None);
+        // No prefix match
+        assert_eq!(parse_osc4_color("ff0000"), None);
+    }
+
+    #[test]
+    fn test_parse_osc4_color_empty() {
+        assert_eq!(parse_osc4_color(""), None);
+        assert_eq!(parse_osc4_color("notacolor"), None);
+    }
+
+    #[test]
+    fn test_palette_apply_osc4() {
+        let mut palette = ColorPalette::new();
+        // Apply a single color
+        palette.apply_osc4("1;rgb:ff/00/00");
+        assert_eq!(palette.get(1), [255, 0, 0]);
+        // Apply multiple colors
+        palette.apply_osc4("2;#00ff00;3;rgb:00/00/ff");
+        assert_eq!(palette.get(2), [0, 255, 0]);
+        assert_eq!(palette.get(3), [0, 0, 255]);
+    }
+
+    #[test]
+    fn test_palette_set_and_reset() {
+        let mut palette = ColorPalette::new();
+        let original = palette.get(5);
+        palette.set(5, [99, 99, 99]);
+        assert_eq!(palette.get(5), [99, 99, 99]);
+        palette.reset();
+        assert_eq!(palette.get(5), original);
     }
 }

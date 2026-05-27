@@ -17,8 +17,8 @@ pub async fn list_commands(
             // Look up exit config for the command
             let exit_info = state.manager.get(&id).map(|h| {
                 serde_json::json!({
-                    "on_exit": h.exit_config.on_exit.as_deref().unwrap_or(&String::new()),
-                    "on_error": h.exit_config.on_error.as_deref().unwrap_or(&String::new()),
+                    "on_exit": h.exit_config.on_exit.as_deref().unwrap_or(""),
+                    "on_error": h.exit_config.on_error.as_deref().unwrap_or(""),
                     "exit_timeout": h.exit_config.timeout_secs,
                     "retain_on_exit": h.exit_config.retain_on_exit,
                     "snapshot_on_exit": h.exit_config.snapshot_on_exit,
@@ -29,7 +29,7 @@ pub async fn list_commands(
                 let ec = h.exit_code.lock().ok().and_then(|c| *c);
                 let et = h.exit_time.lock().ok()
                     .and_then(|guard| *guard)
-                    .map(|t| t.elapsed().as_secs() as u64);
+                    .map(|t| t.elapsed().as_secs());
                 (h.is_alive(), h.runtime_secs(), ec, et)
             }).unwrap_or((false, 0.0, None, None));
             serde_json::json!({

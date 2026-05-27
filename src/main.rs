@@ -157,7 +157,7 @@ async fn async_main(cli: Cli) -> Result<()> {
 
     // Handle spawn subcommand — send to a running vrunner instance
     if let Some(Commands::Spawn { ref cmd, ref args, rows, cols }) = cli.command {
-        subcommands::handle_spawn_command(&cli, &cmd, &args, rows, cols).await?;
+        subcommands::handle_spawn_command(&cli, cmd, args, rows, cols).await?;
         return Ok(());
     }
 

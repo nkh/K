@@ -604,9 +604,9 @@ pub fn format_command(cmd: &serde_json::Value) -> Option<String> {
 ///   1. Exact: `name == target` or `name arg1 arg2 ... == target`
 ///   2. Prefix on full: `name arg1 arg2 ...` starts with `target`
 ///   3. Prefix on name: `name` starts with `target`
-/// If after all rounds exactly one command matches, it is stopped.
-/// If multiple commands match, an error lists them and suggests using a
-/// PID to disambiguate.
+///      If after all rounds exactly one command matches, it is stopped.
+///      If multiple commands match, an error lists them and suggests using a
+///      PID to disambiguate.
 ///
 /// Returns true if exactly one command was found and stopped.
 pub async fn handle_stop_command(_cli: &Cli, target: Option<&str>) -> Result<bool> {
@@ -864,7 +864,7 @@ pub async fn handle_purge_command(_cli: &Cli, target: Option<&str>) -> Result<bo
                 let info = instances.iter().find(|i| i.pid == inst_pid).unwrap();
                 let url = instance_url(info, &None);
                 tracing::info!("Purging only exited command: {} (ID {})", full, cmd_id);
-                return purge_command_by_id(&client, &url, cmd_id, &full).await;
+                return purge_command_by_id(&client, &url, cmd_id, full).await;
             }
             _ => {
                 tracing::warn!("Multiple exited commands. Specify which one to purge:");
@@ -1109,7 +1109,7 @@ pub fn handle_cert_command(action: &CertAction) -> Result<()> {
                     if certs.is_empty() {
                         println!("No certificates in the store.");
                     } else {
-                        println!("{:<25} {:<50} {}", "NAME", "CERT FILE", "TOKEN (prefix)");
+                        println!("{:<25} {:<50} TOKEN (prefix)", "NAME", "CERT FILE");
                         println!("{}", "-".repeat(100));
                         for cert in certs {
                             let token_preview = cert

@@ -677,13 +677,10 @@ impl VttyEmulator {
                 }
                 7 => self.auto_wrap = set,
                 6 => self.origin_mode = set,
-                1000 => {
-                    // VT200 mouse tracking — basic button press/release
-                    if !set {
-                        // Disabling 1000 also disables higher modes
-                        self.mouse_button_tracking = false;
-                        self.mouse_any_tracking = false;
-                    }
+                1000 if !set => {
+                    // Disabling 1000 also disables higher modes
+                    self.mouse_button_tracking = false;
+                    self.mouse_any_tracking = false;
                 }
                 1002 => self.mouse_button_tracking = set,
                 1003 => self.mouse_any_tracking = set,

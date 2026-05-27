@@ -87,6 +87,7 @@ impl ProcessSpawner {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn spawn(
         &self,
         cmd: String,
@@ -365,7 +366,7 @@ impl ProcessSpawner {
                 on_error.as_ref()
             };
 
-            if let Some(ref on_cmd_str) = per_cmd_hook {
+            if let Some(on_cmd_str) = per_cmd_hook {
                 let parts: Vec<&str> = on_cmd_str.split_whitespace().collect();
                 if !parts.is_empty() {
                     let binary = parts[0];
@@ -399,7 +400,7 @@ impl ProcessSpawner {
                 global_on_error.as_ref()
             };
 
-            if let Some(ref global_hook_str) = global_hook {
+            if let Some(global_hook_str) = global_hook {
                 let mut vars = HashMap::new();
                 vars.insert("name", watch_id.clone());
                 vars.insert("id", watch_id.clone());

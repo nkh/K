@@ -46,6 +46,7 @@ use crate::process::manager::CommandManager;
 ///
 /// Additionally, the spawner now removes the command from the manager after
 /// the child exits, so the manager.get() check is the most reliable signal.
+#[allow(clippy::too_many_arguments)]
 pub async fn run_display_loop(
     manager: &Arc<CommandManager>,
     direct_child_id: Option<&str>,
@@ -94,7 +95,7 @@ pub async fn run_display_loop(
             }
         }
     }
-    send_focus_event(&manager, true).await;
+    send_focus_event(manager, true).await;
 
     // ── Keystroke reading via /dev/tty + AsyncFd ──
     //
@@ -368,7 +369,7 @@ pub async fn run_display_loop(
         let target_id = active_id.as_ref()
             .or_else(|| commands.first().map(|(id, _, _, _, _)| id));
 
-        if let Some(ref id) = target_id {
+        if let Some(id) = target_id {
             if let Some(handle) = manager.get(id) {
                 let buf = handle.vtty_snapshot().await;
                 let (cur_row, cur_col) = handle.cursor_position().await;
@@ -430,7 +431,7 @@ pub async fn run_display_loop(
         let mut col: u16 = 1;
         let mut positions: Vec<(String, u16, u16)> = Vec::new();
         for (id, name, _args, _pid, _cert) in &commands {
-            let is_active = active_id.as_ref().map_or(false, |a| a == id);
+            let is_active = active_id.as_ref() == Some(id);
             // Check if the command has exited (retain_on_exit)
             let is_exited = manager.get(id).map(|h| !h.is_alive()).unwrap_or(false);
             let exit_code_str = {
@@ -483,7 +484,7 @@ pub async fn run_display_loop(
         // Clear remaining space
         stdout.queue(ResetColor).ok();
         stdout.queue(SetBackgroundColor(Color::Rgb { r: 40, g: 42, b: 54 })).ok();
-        if (col as u16) < phys_cols {
+        if col < phys_cols {
             stdout.queue(MoveTo(col, 0)).ok();
             stdout.queue(crossterm::terminal::Clear(ClearType::UntilNewLine)).ok();
         }
@@ -505,7 +506,7 @@ pub async fn run_display_loop(
             .or_else(|| commands.first().map(|(id, _, _, _, _)| id));
         let mut positions = Vec::new();
 
-        if let Some(ref id) = target_id {
+        if let Some(id) = target_id {
             if let Some(handle) = manager.get(id) {
                 let buf = handle.vtty_snapshot_blocking();
                 let total = buf.total_lines();
@@ -778,7 +779,7 @@ pub async fn run_display_loop(
                 _ => MouseButton::Left,
             };
             // Check for wheel events (SGR encoding uses cb values 64-67)
-            let (button, event_type) = if cb >= 64 && cb <= 67 {
+            let (button, event_type) = if (64..=67).contains(&cb) {
                 let wheel = if cb & 1 != 0 { MouseButton::WheelDown } else { MouseButton::WheelUp };
                 (wheel, MouseEventType::Press)
             } else {
@@ -859,7 +860,7 @@ pub async fn run_display_loop(
         let target_id = active_id.as_ref()
             .or_else(|| commands.first().map(|(id, _, _, _, _)| id));
 
-        if let Some(ref id) = target_id {
+        if let Some(id) = target_id {
             if let Some(handle) = manager.get(id) {
                 let buf = handle.vtty_snapshot_blocking();
                 let (min_row, max_row) = if start.0 <= end.0 { (start.0, end.0) } else { (end.0, start.0) };
@@ -1106,7 +1107,7 @@ pub async fn run_display_loop(
                     // Re-render help overlay (e.g. after SIGWINCH)
                     render_help_overlay(&bindings, &mut stdout);
                 } else if showing_log {
-                    render_log_overlay(&manager, &log_entries, log_scroll_offset, &mut stdout);
+                    render_log_overlay(manager, log_entries, log_scroll_offset, &mut stdout);
                 } else {
                     // Check for bell events from any command (visual feedback)
                     for entry in manager.list() {
@@ -1118,13 +1119,13 @@ pub async fn run_display_loop(
                         }
                     }
                     if show_tabs {
-                        tab_positions = render_tab_bar(&manager, &active_id);
+                        tab_positions = render_tab_bar(manager, &active_id);
                     }
                     if split_mode {
                         // Split-pane mode: render two VTTYs side-by-side
-                        render_split_pane(&manager, &active_id, &split_right_id, if show_tabs { 1 } else { 0 });
+                        render_split_pane(manager, &active_id, &split_right_id, if show_tabs { 1 } else { 0 });
                     } else {
-                        render_vtty(&manager, &active_id, if show_tabs { 1 } else { 0 }, scrollback_offset, display_all).await;
+                        render_vtty(manager, &active_id, if show_tabs { 1 } else { 0 }, scrollback_offset, display_all).await;
                     }
                     // Render [EXITED] watermark if active command has exited
                     {
@@ -1384,7 +1385,7 @@ pub async fn run_display_loop(
                                                 // Re-compile regex
                                                 search_regex = regex::Regex::new(&search_query).ok();
                                                 search_match_positions = if let Some(ref re) = search_regex {
-                                                    find_search_matches(&manager, &active_id, re)
+                                                    find_search_matches(manager, &active_id, re)
                                                 } else {
                                                     Vec::new()
                                                 };
@@ -1397,7 +1398,7 @@ pub async fn run_display_loop(
                                                 // Re-compile and search
                                                 search_regex = regex::Regex::new(&search_query).ok();
                                                 search_match_positions = if let Some(ref re) = search_regex {
-                                                    find_search_matches(&manager, &active_id, re)
+                                                    find_search_matches(manager, &active_id, re)
                                                 } else {
                                                     Vec::new()
                                                 };
@@ -1532,7 +1533,7 @@ pub async fn run_display_loop(
                                                                 mouse_selecting = false;
                                                                 if let (Some(start), Some(end)) = (mouse_selection_start, mouse_selection_end) {
                                                                     let tab_off = if show_tabs { 1u16 } else { 0 };
-                                                                    copy_selection_to_clipboard(&manager, &active_id, start, end, tab_off);
+                                                                    copy_selection_to_clipboard(manager, &active_id, start, end, tab_off);
                                                                 }
                                                                 mouse_selection_start = None;
                                                                 mouse_selection_end = None;
@@ -1674,7 +1675,7 @@ pub async fn run_display_loop(
                                                         active_id = Some(new_id.clone());
                                                         scrollback_offset = 0;
                                                         manager.logger().log("switch", &format!("id={} name={} pid={}", new_id, new_name, new_pid));
-                                                        render_vtty(&manager, &active_id, if show_tabs { 1 } else { 0 }, scrollback_offset, display_all).await;
+                                                        render_vtty(manager, &active_id, if show_tabs { 1 } else { 0 }, scrollback_offset, display_all).await;
                                                     }
                                                 }
                                                 ActionEffect::ToggleLog(show) => {
@@ -1802,7 +1803,7 @@ pub async fn run_display_loop(
                                                     let (new_id, new_name, _, new_pid, _) = &commands[new_idx];
                                                     active_id = Some(new_id.clone());
                                                     manager.logger().log("switch", &format!("id={} name={} pid={}", new_id, new_name, new_pid));
-                                                    render_vtty(&manager, &active_id, if show_tabs { 1 } else { 0 }, scrollback_offset, display_all).await;
+                                                    render_vtty(manager, &active_id, if show_tabs { 1 } else { 0 }, scrollback_offset, display_all).await;
                                                 }
                                             }
                                             ActionEffect::ToggleLog(show) => {

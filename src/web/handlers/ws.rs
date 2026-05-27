@@ -72,7 +72,7 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
 
     // Send the welcome message.
     let welcome = json!({"type": "connected", "id": &id}).to_string();
-    if ws_tx.send(Message::Text(welcome.into())).await.is_err() {
+    if ws_tx.send(Message::Text(welcome)).await.is_err() {
         tracing::warn!(?id, "ws_vtty: failed to send welcome message");
         return;
     }
@@ -102,7 +102,7 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
                 "alternate_screen": alt_screen,
             }
         }).to_string();
-        if ws_tx.send(Message::Text(full_msg.into())).await.is_err() {
+        if ws_tx.send(Message::Text(full_msg)).await.is_err() {
             tracing::warn!(?id, "ws_vtty: failed to send initial snapshot");
             return;
         }
@@ -128,13 +128,13 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
                         // Check if command still exists
                         if manager.get(&watch_id).is_none() {
                             let end_msg = json!({"type": "command_ended", "id": &watch_id}).to_string();
-                            let _ = ws_tx.send(Message::Text(end_msg.into())).await;
+                            let _ = ws_tx.send(Message::Text(end_msg)).await;
                             break;
                         }
 
                         // Forward the dirty signal directly to the client.
                         // The message is pre-serialized JSON from the diff watcher.
-                        if ws_tx.send(Message::Text(msg_json.into())).await.is_err() {
+                        if ws_tx.send(Message::Text(msg_json)).await.is_err() {
                             tracing::debug!(?watch_id, "ws_vtty: client disconnected");
                             break;
                         }
@@ -165,7 +165,7 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
                                     "alternate_screen": alt_screen,
                                 }
                             }).to_string();
-                            let _ = ws_tx.send(Message::Text(resync_msg.into())).await;
+                            let _ = ws_tx.send(Message::Text(resync_msg)).await;
                         }
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => {
@@ -222,7 +222,7 @@ async fn handle_vtty_client_message(
             if !keys.is_empty() {
                 if let Err(e) = manager.send_keys(id, keys).await {
                     let _ = ws_tx.send(Message::Text(
-                        json!({"type": "error", "message": e.to_string()}).to_string().into()
+                        json!({"type": "error", "message": e.to_string()}).to_string()
                     )).await;
                 }
             }
@@ -237,7 +237,7 @@ async fn handle_vtty_client_message(
                     }
                     Err(e) => {
                         let _ = ws_tx.send(Message::Text(
-                            json!({"type": "error", "message": e.to_string()}).to_string().into()
+                            json!({"type": "error", "message": e.to_string()}).to_string()
                         )).await;
                     }
                 }
@@ -245,7 +245,7 @@ async fn handle_vtty_client_message(
         }
         "ping" => {
             let _ = ws_tx.send(Message::Text(
-                json!({"type": "pong"}).to_string().into()
+                json!({"type": "pong"}).to_string()
             )).await;
         }
         "paste" => {
@@ -254,7 +254,7 @@ async fn handle_vtty_client_message(
                 if let Some(handle) = manager.get(id) {
                     if let Err(e) = handle.send_paste(text).await {
                         let _ = ws_tx.send(Message::Text(
-                            json!({"type": "error", "message": e.to_string()}).to_string().into()
+                            json!({"type": "error", "message": e.to_string()}).to_string()
                         )).await;
                     }
                 }
@@ -289,7 +289,7 @@ async fn handle_log_socket(socket: WebSocket, state: AppState) {
 
     // Send the welcome message.
     let welcome = json!({"type": "connected", "stream": "logs"}).to_string();
-    if ws_tx.send(Message::Text(welcome.into())).await.is_err() {
+    if ws_tx.send(Message::Text(welcome)).await.is_err() {
         tracing::warn!("ws_log: failed to send welcome message");
         return;
     }
@@ -307,7 +307,7 @@ async fn handle_log_socket(socket: WebSocket, state: AppState) {
                             "type": "log_entry",
                             "data": entry
                         }).to_string();
-                        if ws_tx.send(Message::Text(msg.into())).await.is_err() {
+                        if ws_tx.send(Message::Text(msg)).await.is_err() {
                             tracing::debug!("ws_log: client disconnected");
                             break;
                         }
@@ -330,7 +330,7 @@ async fn handle_log_socket(socket: WebSocket, state: AppState) {
                         if let Ok(msg) = serde_json::from_str::<Value>(&text) {
                             if msg.get("type").and_then(|v| v.as_str()) == Some("ping") {
                                 let _ = ws_tx.send(Message::Text(
-                                    json!({"type": "pong"}).to_string().into()
+                                    json!({"type": "pong"}).to_string()
                                 )).await;
                             }
                         }
