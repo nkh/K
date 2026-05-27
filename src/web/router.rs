@@ -36,6 +36,7 @@ pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
         .route("/api/commands/:id/diff", post(handlers::commands::diff_command))
         .route("/api/commands/:id/snapshots/{name}", delete(handlers::commands::delete_snapshot))
         .route("/api/commands/:id/handles", get(handlers::handles::list_handles).post(handlers::handles::add_handle))
+        .route("/api/commands/:id/resources", get(handlers::resources::get_resources))
         .route("/api/commands/:id/ws", get(handlers::ws::ws_vtty_stream))
         .route("/api/ws/logs", get(handlers::ws::ws_log_stream))
         .route("/api/shutdown", post(handlers::commands::shutdown));

@@ -28,6 +28,18 @@
             --font-sans: system-ui, -apple-system, sans-serif;
             --font-size: 10px;
         }
+        /* Grey theme */
+        html[data-theme="grey"] {
+            --bg-primary: #1a1a1a;
+            --bg-secondary: #242424;
+            --bg-tertiary: #2e2e2e;
+            --border: #3a3a3a;
+            --text-primary: #d4d4d4;
+            --text-secondary: #8a8a8a;
+            --text-muted: #555555;
+            --accent: #7eb8da;
+            --accent-dim: #7eb8da22;
+        }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: var(--font-sans); background: var(--bg-primary); color: var(--text-primary); font-size: var(--font-size); overflow: hidden; height: 100vh; }
 
@@ -233,6 +245,28 @@
         .shortcuts-panel td { padding: 0.25rem 0.5rem; font-size: 0.75rem; color: var(--text-secondary); border-bottom: 1px solid var(--border); }
         .shortcuts-panel td:first-child { color: var(--text-primary); font-family: var(--font-mono); white-space: nowrap; }
 
+        /* Exit code badge */
+        .exit-badge { font-size: 0.6rem; font-family: var(--font-mono); padding: 0 0.3rem; border-radius: 3px; flex-shrink: 0; white-space: nowrap; }
+        .exit-badge.success { background: rgba(63,185,80,0.15); color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
+        .exit-badge.failure { background: rgba(248,81,73,0.15); color: var(--red); border: 1px solid rgba(248,81,73,0.3); }
+        .exit-badge.signal { background: rgba(210,153,34,0.15); color: var(--yellow); border: 1px solid rgba(210,153,34,0.3); }
+        /* Resource badges */
+        .resource-badge { font-size: 0.6rem; font-family: var(--font-mono); color: var(--text-muted); flex-shrink: 0; white-space: nowrap; }
+        .resource-badge span { margin: 0 0.2rem; }
+        /* Welcome panel */
+        .welcome-panel { display: flex; align-items: center; justify-content: center; flex: 1; background: var(--bg-primary); }
+        .welcome-card { text-align: center; padding: 2rem; max-width: 480px; }
+        .welcome-card h2 { color: var(--accent); font-size: 1.3rem; margin-bottom: 0.5rem; }
+        .welcome-card p { color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 1rem; line-height: 1.5; }
+        .welcome-card .welcome-form { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
+        .welcome-card .welcome-form input { flex: 1; font-family: var(--font-mono); font-size: 0.85rem; }
+        .welcome-card .tips { text-align: left; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem 1rem; }
+        .welcome-card .tips h3 { color: var(--text-primary); font-size: 0.8rem; margin-bottom: 0.4rem; }
+        .welcome-card .tips li { color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 0.25rem; line-height: 1.4; }
+        .welcome-card .tips code { background: var(--bg-tertiary); padding: 0.1rem 0.3rem; border-radius: 3px; font-family: var(--font-mono); font-size: 0.7rem; color: var(--accent); }
+        /* Theme selector */
+        .theme-select { font-size: 0.7rem; padding: 0.15rem 0.3rem; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
+
         /* Responsive: small screens */
         @media (max-width: 768px) {
             .sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: 280px; min-width: 0; z-index: 50; box-shadow: 4px 0 12px rgba(0,0,0,0.5); }
@@ -251,6 +285,10 @@
     <!-- Top bar -->
     <div class="topbar">
         <h1>vrunner</h1>
+        <select class="theme-select" id="themeSelect" onchange="applyTheme(this.value)" title="Color theme">
+            <option value="dark">Dark</option>
+            <option value="grey">Grey</option>
+        </select>
         <div class="spacer"></div>
         <div class="font-size-ctrl">
             <button class="icon-btn small" onclick="changeFontSize(-1)" title="Decrease font size">A-</button>
@@ -445,6 +483,11 @@ const state = {
     serverUpdateMode: null,
     serverPollMs: null,
     serverDirtyMs: null,
+    // Resource usage cache: keyed by "instUrl:cmdId"
+    _resourceCache: {},
+    _resourceInterval: null,
+    // Track whether command list was empty (for welcome panel toggling)
+    _wasEmpty: null,
 };
 
 // ─── Initialization ───
@@ -452,6 +495,7 @@ const state = {
     document.getElementById('authToken').value = state.authToken;
     applyFontSize();
     initBottombar();
+    initTheme();
 
     // Parse URL arguments for multi-instance
     const params = new URLSearchParams(window.location.search);
@@ -628,6 +672,17 @@ function applyFontSize() {
     localStorage.setItem('vrunner_font_size', state.fontSize.toString());
 }
 
+// ─── Theme ───
+function initTheme() {
+    const saved = localStorage.getItem('vrunner_theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    document.getElementById('themeSelect').value = saved;
+}
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('vrunner_theme', theme);
+}
+
 // ─── Sidebar ───
 function toggleSidebar() {
     document.getElementById('sidebar').classList.toggle('collapsed');
@@ -725,7 +780,6 @@ async function loadCommands() {
             const key = inst.url + ':' + cmd.id;
             const selected = (state.selectedInstUrl === inst.url && state.selectedCmdId === cmd.id) ? ' selected' : '';
             const argsStr = (cmd.args || []).join(' ');
-            const detail = argsStr ? `${argsStr}  (pid ${cmd.pid})` : `pid ${cmd.pid}`;
             const isAlive = cmd.alive !== false;
             const isFrozen = cmd.frozen === true;
             let statusDot;
@@ -740,18 +794,43 @@ async function loadCommands() {
             const runtimeStr = (isAlive || isFrozen) && cmd.runtime_secs > 0
                 ? `<span style="color:var(--text-muted);font-size:0.6rem;flex-shrink:0;">${formatRuntime(cmd.runtime_secs)}</span>`
                 : '';
+
+            // Exit code badge
+            let exitBadge = '';
+            if (!isAlive && !isFrozen && cmd.exit_code !== undefined && cmd.exit_code !== null) {
+                const ec = cmd.exit_code;
+                const cls = ec === 0 ? 'success' : (ec < 0 ? 'signal' : 'failure');
+                const label = ec < 0 ? `SIG${-ec}` : `exit ${ec}`;
+                exitBadge = `<span class="exit-badge ${cls}">${label}</span>`;
+            }
+
+            // Detail line with on_exit/on_error
+            let detailParts = [];
+            if (argsStr) detailParts.push(argsStr);
+            detailParts.push(`pid ${cmd.pid}`);
+            if (cmd.exit && cmd.exit.on_exit) detailParts.push(`on_exit: ${cmd.exit.on_exit}`);
+            if (cmd.exit && cmd.exit.on_error) detailParts.push(`on_error: ${cmd.exit.on_error}`);
+            const detailStr = detailParts.join('  ·  ');
+
+            // Resource info (from cached data)
+            const resKey = inst.url + ':' + cmd.id;
+            const res = state._resourceCache && state._resourceCache[resKey];
+            const resBadge = (res && res.cpu_percent !== null) ? `<span class="resource-badge">CPU ${res.cpu_percent.toFixed(1)}% | MEM ${res.memory_mb.toFixed(0)}MB</span>` : '';
+
             html += `
                 <div class="cmd-item${selected}${frozenClass}" onclick="selectCommand('${inst.url}','${cmd.id}','${escHtml(cmdName)}')" oncontextmenu="event.preventDefault();showCmdContextMenu(event,'${inst.url}','${cmd.id}','${escHtml(cmdName)}',${isAlive})" title="${escHtml(inst.label)} / ${escHtml(cmdName)} ${escHtml(argsStr)}" style="${(isAlive || isFrozen) ? '' : 'opacity:0.6;'}">
                     <div class="cmd-item-row">
                         ${statusDot}
                         <span class="name">${escHtml(cmdName)}</span>
+                        ${exitBadge}
                         ${isFrozen ? '<span style="color:var(--yellow);font-size:0.6rem;flex-shrink:0;">PAUSED</span>' : ''}
                         ${runtimeStr}
+                        ${resBadge}
                         ${certBadge}
                         <span class="pid">${cmd.pid}</span>
                         <button class="small danger" onclick="event.stopPropagation();killCommand('${inst.url}','${cmd.id}')" title="Kill">&#x2715;</button>
                     </div>
-                    <div class="cmd-detail">${escHtml(detail)}</div>
+                    <div class="cmd-detail">${escHtml(detailStr)}</div>
                 </div>`;
         }
     }
@@ -760,6 +839,12 @@ async function loadCommands() {
 
     // Update spawn instance dropdown
     updateInstanceDropdown();
+
+    // Determine if there are any commands across all instances
+    let anyCommands = false;
+    for (const inst of state.instanceUrls) {
+        if (inst._commands && inst._commands.length > 0) { anyCommands = true; break; }
+    }
 
     // Auto-select a pending command (from URL routing /command-name)
     if (state._pendingSelectId) {
@@ -788,9 +873,21 @@ async function loadCommands() {
     // If a command is selected, refresh its VTTY
     if (state.selectedInstUrl && state.selectedCmdId) {
         updatePanelCommandInfo();
+        // Check if we need to re-render panels (command list went from empty to populated)
+        if (state._wasEmpty === true && anyCommands) {
+            state._wasEmpty = false;
+            renderPanels();
+        }
         // Only poll via HTTP if using poll mode or viewing a non-current buffer
         if (state.updateMode === 'poll' || state.bufferView !== 'current') {
             scheduleVttyHttp(state.selectedInstUrl, state.selectedCmdId, 500);
+        }
+    } else {
+        // No command selected — check if we need to toggle welcome panel
+        const isNowEmpty = !anyCommands;
+        if (state._wasEmpty !== isNowEmpty) {
+            state._wasEmpty = isNowEmpty;
+            renderPanels();
         }
     }
 }
@@ -798,6 +895,7 @@ async function loadCommands() {
 function selectCommand(instUrl, cmdId, name) {
     state.selectedInstUrl = instUrl;
     state.selectedCmdId = cmdId;
+    state._wasEmpty = false;
     state.bufferView = 'current';
     document.getElementById('bufferSelect').value = 'current';
     // Reset scrollback offset when switching commands
@@ -826,6 +924,9 @@ function updatePanelCommandInfo() {
     const nameEl = panel.querySelector('.cmd-fullname');
     const argsEl = panel.querySelector('.cmd-args');
     const pauseBtn = panel.querySelector('[id^="pauseRunBtn-"]');
+    const exitBadge = panel.querySelector('[id^="exitBadge-"]');
+    const restartBtn = panel.querySelector('[id^="restartBtn-"]');
+    const resourceBadge = panel.querySelector('[id^="resourceBadge-"]');
     if (nameEl && cmd) {
         const fullName = cmd.name || cmd.id;
         nameEl.textContent = fullName;
@@ -843,12 +944,44 @@ function updatePanelCommandInfo() {
             pauseBtn.textContent = isFrozen ? '\u25B6 Run' : '\u23F8 Pause';
             pauseBtn.className = 'small' + (isFrozen ? ' primary' : '');
         }
+        // Exit code badge in panel header
+        if (exitBadge) {
+            const isAlive = cmd.alive !== false;
+            if (!isAlive && cmd.exit_code !== undefined && cmd.exit_code !== null) {
+                const ec = cmd.exit_code;
+                const cls = ec === 0 ? 'success' : (ec < 0 ? 'signal' : 'failure');
+                const label = ec < 0 ? `SIG${-ec}` : `exit ${ec}`;
+                exitBadge.textContent = label;
+                exitBadge.className = 'exit-badge ' + cls;
+                exitBadge.style.display = '';
+            } else {
+                exitBadge.style.display = 'none';
+            }
+        }
+        // Restart button — show for any command that has data
+        if (restartBtn) {
+            restartBtn.style.display = '';
+        }
+        // Resource badge
+        if (resourceBadge) {
+            const resKey = state.selectedInstUrl + ':' + state.selectedCmdId;
+            const res = state._resourceCache && state._resourceCache[resKey];
+            if (res && res.cpu_percent !== null) {
+                resourceBadge.innerHTML = `<span>CPU ${res.cpu_percent.toFixed(1)}%</span> <span>|</span> <span>MEM ${res.memory_mb.toFixed(0)}MB</span>`;
+                resourceBadge.style.display = '';
+            } else {
+                resourceBadge.style.display = 'none';
+            }
+        }
         // Update bottom bar command label
         updateBottomBarLabel(cmd);
     } else if (nameEl) {
         nameEl.textContent = '';
         if (argsEl) argsEl.textContent = '';
         if (pauseBtn) pauseBtn.style.display = 'none';
+        if (exitBadge) exitBadge.style.display = 'none';
+        if (restartBtn) restartBtn.style.display = 'none';
+        if (resourceBadge) resourceBadge.style.display = 'none';
         updateBottomBarLabel(null);
     }
 }
@@ -1548,6 +1681,39 @@ function removePanel(id) {
 
 function renderPanels() {
     const container = document.getElementById('view-vtty');
+
+    // Check if there are any commands at all
+    let hasAnyCommands = false;
+    for (const inst of state.instanceUrls) {
+        if (inst._commands && inst._commands.length > 0) { hasAnyCommands = true; break; }
+    }
+
+    if (!hasAnyCommands) {
+        container.innerHTML = `
+            <div class="welcome-panel">
+                <div class="welcome-card">
+                    <h2>Welcome to vrunner</h2>
+                    <p>Spawn a command to get started. Your terminal output will appear here.</p>
+                    <div class="welcome-form">
+                        <input type="text" id="welcomeCmdInput" placeholder="/usr/bin/htop" onkeydown="if(event.key==='Enter'){event.preventDefault();welcomeSpawn()}">
+                        <button class="primary" onclick="welcomeSpawn()">Spawn</button>
+                    </div>
+                    <div class="tips">
+                        <h3>Getting started</h3>
+                        <ul>
+                            <li>Use the <strong>Spawn</strong> tab in the sidebar to configure advanced options</li>
+                            <li>Click a command in the sidebar to view its terminal output</li>
+                            <li>Right-click a command for quick actions (pause, kill, restart)</li>
+                            <li>Click on the terminal to type directly</li>
+                            <li><code>Ctrl+F</code> to search terminal output</li>
+                            <li><code>A-</code> / <code>A+</code> in the top bar to adjust font size</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>`;
+        return;
+    }
+
     let html = '';
     for (const panel of state.panels) {
         const inst = state.instanceUrls.find(i => i.url === panel.instUrl);
@@ -1559,7 +1725,10 @@ function renderPanels() {
                         <span class="cmd-fullname" id="cmdName-${panel.id}"></span>
                         <span class="cmd-args" id="cmdArgs-${panel.id}"></span>
                     </div>
+                    <span class="exit-badge" id="exitBadge-${panel.id}" style="display:none;"></span>
+                    <span class="resource-badge" id="resourceBadge-${panel.id}" style="display:none;"></span>
                     <span class="instance-url">${escHtml(panel.instUrl.replace(/^https?:\/\//, ''))}</span>
+                    <button id="restartBtn-${panel.id}" class="small" onclick="restartCommand('${panel.id}')" title="Restart the command" style="display:none;">&#x21BB; Restart</button>
                     <button id="pauseRunBtn-${panel.id}" class="small" onclick="togglePauseRunPanel('${panel.id}')" title="Pause/Resume the selected command" style="display:none;">&#9208; Pause</button>
                     <div class="input-row" style="min-width:140px;max-width:220px;flex:0 1 auto;">
                         <input type="text" id="keyInput-${panel.id}" placeholder="Send keys..." style="font-size:0.7rem;" onkeydown="if(event.key==='Enter'){event.preventDefault();sendKeysToPanel('${panel.id}')}">
@@ -1576,7 +1745,7 @@ function renderPanels() {
                         <button onclick="vttySearchPrev('${panel.id}')" title="Previous match">&#x25B2;</button>
                         <button onclick="vttySearchClose('${panel.id}')" title="Close search">&#x2715;</button>
                     </div>
-                    <pre style="color:#484f58;">No command selected — spawn or select a command to view its output</pre>
+                    <pre style="color:#484f58;">No command selected</pre>
                     <div class="cursor-indicator" style="display:none;"></div>
                     <button class="scroll-bottom-btn" id="scrollBtn-${panel.id}" onclick="scrollTerminalBottom('${panel.id}')" title="Scroll to bottom">&#x25BC;</button>
                 </div>
@@ -1595,6 +1764,17 @@ function renderPanels() {
             btn.classList.toggle('visible', !isNearBottom);
         });
     });
+}
+
+// ─── Welcome panel quick spawn ───
+function welcomeSpawn() {
+    const input = document.getElementById('welcomeCmdInput');
+    if (!input || !input.value.trim()) return;
+    // Switch to spawn tab and prefill
+    switchSidebarTab('spawn', document.querySelectorAll('.sidebar-tab')[1]);
+    document.getElementById('spawnCmd').value = input.value.trim();
+    document.getElementById('spawnCmd').focus();
+    spawnCommand();
 }
 
 async function sendKeysToPanel(panelId) {
@@ -1865,6 +2045,43 @@ function startRefresh() {
         loadCommands();
         checkForExitedCommands();
     }, 1000);
+
+    // Start resource polling every 2 seconds
+    state._resourceCache = {};
+    if (state._resourceInterval) clearInterval(state._resourceInterval);
+    state._resourceInterval = setInterval(fetchAllResources, 2000);
+    fetchAllResources();
+}
+
+// ─── Resource Usage Polling ───
+async function fetchAllResources() {
+    for (const inst of state.instanceUrls) {
+        if (!inst._commands) continue;
+        for (const cmd of inst._commands) {
+            if (!cmd.alive) {
+                // Clear resource cache for dead commands
+                const key = inst.url + ':' + cmd.id;
+                if (state._resourceCache && state._resourceCache[key]) {
+                    state._resourceCache[key] = { cpu_percent: null, memory_mb: null };
+                }
+                continue;
+            }
+            try {
+                const res = await fetch(apiUrl(`/api/commands/${cmd.id}/resources`, inst), {
+                    headers: authHeadersForInstance(inst),
+                });
+                const json = await res.json();
+                if (json.status === 'ok' && json.data) {
+                    if (!state._resourceCache) state._resourceCache = {};
+                    const key = inst.url + ':' + cmd.id;
+                    state._resourceCache[key] = {
+                        cpu_percent: json.data.cpu_percent,
+                        memory_mb: json.data.memory_mb,
+                    };
+                }
+            } catch (e) { /* ignore */ }
+        }
+    }
 }
 
 // ─── Keyboard handling ───
@@ -2482,10 +2699,12 @@ function showCmdContextMenu(e, instUrl, cmdId, cmdName, isAlive) {
     items += `<div class="ctx-menu-item" onclick="copyCommandUrl('${instUrl}','${cmdId}','${escHtml(cmdName)}');closeContextMenu();">Copy URL</div>`;
     if (isAlive) {
         items += `<div class="ctx-menu-sep"></div>`;
+        items += `<div class="ctx-menu-item" onclick="restartCommandById('${instUrl}','${cmdId}');closeContextMenu();">Restart</div>`;
         items += `<div class="ctx-menu-item" onclick="togglePauseCmd('${instUrl}','${cmdId}');closeContextMenu();">Pause/Resume</div>`;
         items += `<div class="ctx-menu-item danger" onclick="killCommand('${instUrl}','${cmdId}');closeContextMenu();">Kill</div>`;
     } else {
         items += `<div class="ctx-menu-sep"></div>`;
+        items += `<div class="ctx-menu-item" onclick="restartCommandById('${instUrl}','${cmdId}');closeContextMenu();">Restart</div>`;
         items += `<div class="ctx-menu-item danger" onclick="purgeCommand('${instUrl}','${cmdId}','${escHtml(cmdName)}');closeContextMenu();">Purge</div>`;
     }
     menu.innerHTML = items;
@@ -2506,6 +2725,71 @@ function togglePauseCmd(instUrl, cmdId) {
     state.selectedInstUrl = instUrl;
     state.selectedCmdId = cmdId;
     togglePauseRun();
+}
+
+// ─── Restart Command ───
+async function restartCommand(panelId) {
+    const panel = state.panels.find(p => p.id === panelId);
+    if (!panel || !state.selectedCmdId) return;
+    const cmdId = state.selectedCmdId;
+    const instUrl = panel.instUrl;
+
+    // Find the command data to re-use its args
+    const inst = state.instanceUrls.find(i => i.url === instUrl);
+    const cmd = inst && inst._commands ? inst._commands.find(c => c.id === cmdId) : null;
+    if (!cmd) return;
+
+    const body = { cmd: cmd.name, args: cmd.args || [] };
+    if (cmd.certificate) body.certificate = cmd.certificate;
+
+    try {
+        // Kill first
+        await fetch(apiUrl(`/api/commands/${cmdId}/kill`, { url: instUrl }), {
+            method: 'POST',
+            headers: authHeadersForInstance({ url: instUrl }),
+            body: JSON.stringify({}),
+        });
+        // Spawn new one
+        const res = await fetch(apiUrl('/api/commands', { url: instUrl }), {
+            method: 'POST',
+            headers: authHeadersForInstance({ url: instUrl }),
+            body: JSON.stringify(body),
+        });
+        const json = await res.json();
+        if (json.status === 'ok' && json.data && json.data.id) {
+            state.selectedInstUrl = instUrl;
+            state.selectedCmdId = json.data.id;
+        }
+        loadCommands();
+    } catch (e) { /* ignore */ }
+}
+
+async function restartCommandById(instUrl, cmdId) {
+    // Find command data for the given id
+    const inst = state.instanceUrls.find(i => i.url === instUrl);
+    const cmd = inst && inst._commands ? inst._commands.find(c => c.id === cmdId) : null;
+    if (!cmd) return;
+
+    const body = { cmd: cmd.name, args: cmd.args || [] };
+    if (cmd.certificate) body.certificate = cmd.certificate;
+
+    try {
+        await fetch(apiUrl(`/api/commands/${cmdId}/kill`, { url: instUrl }), {
+            method: 'POST',
+            headers: authHeadersForInstance({ url: instUrl }),
+            body: JSON.stringify({}),
+        });
+        const res = await fetch(apiUrl('/api/commands', { url: instUrl }), {
+            method: 'POST',
+            headers: authHeadersForInstance({ url: instUrl }),
+            body: JSON.stringify(body),
+        });
+        const json = await res.json();
+        if (json.status === 'ok' && json.data && json.data.id) {
+            selectCommand(instUrl, json.data.id, cmd.name);
+        }
+        loadCommands();
+    } catch (e) { /* ignore */ }
 }
 
 // ─── Auto-fit Terminal on Window Resize ───
