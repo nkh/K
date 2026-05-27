@@ -26,6 +26,10 @@ const state = {
     serverUpdateMode: null,
     serverPollMs: null,
     serverDirtyMs: null,
+    // WebSocket for real-time log streaming
+    logWs: null,
+    logWsReconnectTimer: null,
+    _logWsReconnectAttempts: 0,
 };
 
 // ─── Theme ───
@@ -374,11 +378,22 @@ function switchSidebarTab(tab, el) {
 function switchViewTab(view, el) {
     document.querySelectorAll('.view-tab').forEach(t => t.classList.remove('active'));
     el.classList.add('active');
+    const prevView = state.currentView;
     state.currentView = view;
     document.getElementById('view-vtty').style.display = view === 'vtty' ? 'flex' : 'none';
     document.getElementById('view-log').style.display = view === 'log' ? 'flex' : 'none';
     document.getElementById('view-docs').style.display = view === 'docs' ? 'block' : 'none';
-    if (view === 'log') loadLog();
+    // Disconnect log WS when leaving log view
+    if (prevView === 'log' && view !== 'log') {
+        disconnectLogWs();
+    }
+    if (view === 'log') {
+        loadLog();
+        // After HTTP load, start WebSocket streaming (unless search is active)
+        if (!document.getElementById('logSearch').value) {
+            connectLogWs();
+        }
+    }
 }
 
 // ─── Commands ───
@@ -494,12 +509,21 @@ async function loadCommands() {
 }
 
 function selectCommand(instUrl, cmdId, name) {
+    // Clear stored scrollback for the previously selected command
+    if (state.selectedCmdId) {
+        sessionStorage.removeItem('vrunner_scrollback_' + state.selectedCmdId);
+    }
+
     state.selectedInstUrl = instUrl;
     state.selectedCmdId = cmdId;
     state.bufferView = 'current';
     document.getElementById('bufferSelect').value = 'current';
-    // Reset scrollback offset when switching commands
-    state.panels.forEach(p => p.scrollbackOffset = 0);
+
+    // Restore scrollback offset from sessionStorage for the new command
+    const savedOffset = sessionStorage.getItem('vrunner_scrollback_' + cmdId);
+    const restoredOffset = savedOffset !== null ? parseInt(savedOffset, 10) : 0;
+    state.panels.forEach(p => p.scrollbackOffset = restoredOffset);
+
     updatePanelCommandInfo();
     loadCommands(); // Re-render to update selection
     // Immediately load VTTY content via HTTP
@@ -961,6 +985,8 @@ function switchBuffer(view) {
 
     // Reset scrollback when switching buffer views
     state.panels.forEach(p => p.scrollbackOffset = 0);
+    // Clear stored scrollback since we reset
+    sessionStorage.removeItem('vrunner_scrollback_' + state.selectedCmdId);
 
     if (view === 'current') {
         // Re-enable the active update mode for live updates
@@ -1306,6 +1332,148 @@ async function sendKeysToPanel(panelId) {
 }
 
 // ─── Logs ───
+
+// Log WebSocket: connect, disconnect, and indicator helpers
+
+function _updateLogTransportIndicator(mode) {
+    const el = document.getElementById('logTransportIndicator');
+    if (!el) return;
+    el.textContent = mode.toUpperCase();
+    el.dataset.mode = mode;
+}
+
+function connectLogWs() {
+    // Don't connect if already connected or if there's an active search filter
+    if (state.logWs && state.logWs.readyState === WebSocket.OPEN) return;
+
+    disconnectLogWs();
+
+    const wsUrl = getBaseUrl().replace(/^http/, 'ws');
+    const token = state.authToken || (state.instanceUrls[0] || {}).token || '';
+    const sep = token ? '?' : '';
+    const url = `${wsUrl}/api/ws/logs${sep}${token ? 'token=' + encodeURIComponent(token) : ''}`;
+
+    try {
+        const ws = new WebSocket(url);
+        state.logWs = ws;
+
+        ws.onopen = () => {
+            state._logWsReconnectAttempts = 0;
+            _updateLogTransportIndicator('ws');
+            // Append a connected indicator line
+            const container = document.getElementById('logContent');
+            if (container && container.querySelector('.log-line')) {
+                const indicator = document.createElement('div');
+                indicator.className = 'log-line log-ws-indicator';
+                indicator.innerHTML = '<span class="timestamp">[' + new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '') + ']</span> <span class="details" style="color:var(--green);">Connected to log stream</span>';
+                container.appendChild(indicator);
+                _autoScrollLog(container);
+            }
+            // Start a ping interval to keep the connection alive
+            clearInterval(state._logWsPingTimer);
+            state._logWsPingTimer = setInterval(() => {
+                if (state.logWs && state.logWs.readyState === WebSocket.OPEN) {
+                    state.logWs.send(JSON.stringify({ type: 'ping' }));
+                }
+            }, 30000);
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'log_entry' && msg.data) {
+                    const container = document.getElementById('logContent');
+                    if (!container) return;
+                    // Remove the "no entries" placeholder if present
+                    const placeholder = container.querySelector('[style*="text-align:center"]');
+                    if (placeholder && !placeholder.classList.contains('log-line')) {
+                        placeholder.remove();
+                    }
+                    const parsed = parseLogLine(msg.data);
+                    const div = document.createElement('div');
+                    div.className = 'log-line';
+                    div.innerHTML = formatLogLine(parsed, msg.data);
+                    container.appendChild(div);
+                    _autoScrollLog(container);
+                    // Update line count
+                    const countEl = document.getElementById('logCount');
+                    if (countEl) {
+                        const current = container.querySelectorAll('.log-line').length;
+                        countEl.textContent = `${current} lines (streaming)`;
+                    }
+                } else if (msg.type === 'connected') {
+                    // Server confirmed connection — nothing extra to do
+                } else if (msg.type === 'pong') {
+                    // Heartbeat response — ignore
+                }
+            } catch (e) {
+                console.error('Log WS message parse error:', e);
+            }
+        };
+
+        ws.onclose = () => {
+            _updateLogTransportIndicator('http');
+            clearInterval(state._logWsPingTimer);
+            state._logWsPingTimer = null;
+            if (state.logWs === ws) {
+                state.logWs = null;
+            }
+            _scheduleLogWsReconnect();
+        };
+
+        ws.onerror = () => {
+            _updateLogTransportIndicator('http');
+            clearInterval(state._logWsPingTimer);
+            state._logWsPingTimer = null;
+            if (state.logWs === ws) {
+                state.logWs = null;
+            }
+            _scheduleLogWsReconnect();
+        };
+    } catch (e) {
+        console.error('Log WebSocket connect failed:', e);
+        _updateLogTransportIndicator('http');
+        _scheduleLogWsReconnect();
+    }
+}
+
+function _scheduleLogWsReconnect() {
+    if (state.logWsReconnectTimer) return; // already scheduled
+    if (state.currentView !== 'log') return; // don't reconnect if not viewing logs
+
+    const delay = Math.min(1000 * Math.pow(2, state._logWsReconnectAttempts), 30000);
+    state._logWsReconnectAttempts++;
+    state.logWsReconnectTimer = setTimeout(() => {
+        state.logWsReconnectTimer = null;
+        if (state.currentView === 'log') {
+            connectLogWs();
+        }
+    }, delay);
+}
+
+function disconnectLogWs() {
+    if (state.logWsReconnectTimer) {
+        clearTimeout(state.logWsReconnectTimer);
+        state.logWsReconnectTimer = null;
+    }
+    clearInterval(state._logWsPingTimer);
+    state._logWsPingTimer = null;
+    if (state.logWs) {
+        state.logWs.onclose = null;
+        state.logWs.onerror = null;
+        state.logWs.close();
+        state.logWs = null;
+    }
+    _updateLogTransportIndicator('http');
+}
+
+function _autoScrollLog(container) {
+    // Only auto-scroll if user is already near the bottom
+    if (container.scrollHeight - container.scrollTop - container.clientHeight < 50) {
+        container.scrollTop = container.scrollHeight;
+    }
+}
+
 async function loadLog() {
     try {
         const search = document.getElementById('logSearch').value;
@@ -1800,6 +1968,11 @@ document.addEventListener('wheel', (e) => {
         panelObj.scrollbackOffset += 3;
     }
 
+    // Persist scrollback offset to sessionStorage
+    if (state.selectedCmdId) {
+        sessionStorage.setItem('vrunner_scrollback_' + state.selectedCmdId, panelObj.scrollbackOffset.toString());
+    }
+
     // Fetch updated HTML with new scrollback offset
     loadVttyHttp(panelObj.instUrl, state.selectedCmdId);
 
@@ -2070,6 +2243,10 @@ function scrollTerminalBottom(panelId) {
     const panelObj = state.panels.find(p => p.id === panelId);
     if (panelObj && panelObj.scrollbackOffset > 0) {
         panelObj.scrollbackOffset = 0;
+        // Clear stored scrollback since we reset
+        if (state.selectedCmdId) {
+            sessionStorage.removeItem('vrunner_scrollback_' + state.selectedCmdId);
+        }
         const sbIndicator = document.getElementById('scrollbackIndicator');
         if (sbIndicator) sbIndicator.style.display = 'none';
         if (state.selectedCmdId && panelObj.instUrl) {
