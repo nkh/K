@@ -281,30 +281,74 @@ This mirrors the VTTY contents to stdout at the refresh interval specified by `-
 
 ### Web Admin VTTY Viewer
 
-The web admin interface is available at `/admin` (or any unrecognised path, which redirects to the dashboard). It provides a full-featured terminal management dashboard with real-time VTTY streaming, command lifecycle controls, and several productivity features.
+The web admin interface is available at `/admin` (or any unrecognised path, which redirects to the dashboard). It is split into `index.html`, `style.css`, and `app.js` — all embedded in the binary at compile time with no external dependencies. It provides a full-featured terminal management dashboard with real-time VTTY streaming, command lifecycle controls, and several productivity features.
 
 #### Direct Command URLs
 
 Navigate directly to a command's terminal using its name: `http://localhost:8080/<command_name>`. For example, `/htop` opens the VTTY viewer for a command named `htop`. If multiple running commands share the same name, a picker list is displayed showing each instance with its arguments so you can choose the right one. Running commands are highlighted with their elapsed uptime.
 
+#### Top Bar Layout
+
+The top bar is organized into three button groups:
+
+- **Left group** — Add Panel (spawn), Pause/Run toggle, Kill All
+- **Center group** — Font size controls (A-/A+), resize to fit, alternate screen buffer selector
+- **Right group** — Auth token input, documentation link, keyboard shortcuts (`?`), theme toggle (sun/moon)
+
+The layout uses a consistent button sizing system: `btn-xs` (compact), `btn-sm` (small), `btn` (default), and `btn-primary`/`btn-danger` (color variants). The center group collapses on mobile viewports.
+
 #### Dashboard Features
 
+**Terminal Interaction:**
+
 - **Real-time VTTY Viewer** — Streams terminal output via the incremental diff WebSocket protocol (`GET /api/commands/:id/ws`). Falls back to 1-second HTTP polling if WebSocket is unavailable. Automatically selects the first running command on load.
+- **Click to Focus** — Click anywhere on the terminal pane to immediately capture keyboard input for sending keystrokes.
+- **Mouse Event Forwarding** — Clicks, drags, and wheel events are forwarded to the child process via `POST /api/commands/:id/mouse` when mouse tracking is enabled by the child application.
+- **Mouse Wheel Scrollback** — Scroll through command history; when the child application has mouse tracking enabled, wheel events are forwarded to it, otherwise they scroll the view.
+- **Terminal Search** — Press `Ctrl+F` to open a search bar inside the terminal viewer. Matches are highlighted in the output buffer.
+- **Scroll-to-Bottom** — When scrolled up, a floating button appears in the bottom-right corner of the terminal. Click it to jump back to live output.
+- **Selection Mode** — Toggle with `Ctrl+Shift+S` or `Alt+S` to enable native text selection on the terminal. When active, mouse events are not forwarded to the PTY, allowing you to select and copy text. The panel shows an accent border as a visual indicator.
+- **Copy to Clipboard** — `Ctrl+Shift+C` copies the selected terminal text to the clipboard. If no text is selected, the full VTTY buffer content is copied instead. A "Copied!" toast confirms the action.
+- **Per-Panel Font Size** — Each panel has A-/A+ buttons in its header for independent font sizing (8–28px). The size is persisted to `localStorage` and restored on page load. The global font size buttons in the top bar set the default for new panels only.
+- **Persistent Scrollback** — The scrollback offset is saved to `sessionStorage` when scrolling. Re-selecting a command restores the previous scroll position. Uses session storage to avoid stale data across sessions.
+- **Auto-Fit Terminal** — The terminal automatically resizes to fill the available panel space when the browser window is resized.
+- **Export Output** — Download the current terminal buffer contents as a `.txt` file via the toolbar or context menu.
+
+**Command Management:**
+
 - **Command Sidebar** — Lists all commands with name, arguments, PID, status, and runtime. Running commands show elapsed uptime and are visually highlighted. Use the search/filter box at the top to narrow the list by command name.
 - **Batch Kill All** — A button in the top bar terminates every running command on the instance in one click.
 - **Pause / Run** — Toggle freeze/thaw on the currently selected command from the top bar using SIGSTOP/SIGCONT.
-- **Terminal Search** — Press `Ctrl+F` to open a search bar inside the terminal viewer. Matches are highlighted in the output buffer.
-- **Scroll-to-Bottom** — When scrolled up, a floating button appears in the bottom-right corner of the terminal. Click it to jump back to live output.
-- **Click to Focus** — Click anywhere on the terminal pane to immediately capture keyboard input for sending keystrokes.
-- **Auto-Fit Terminal** — The terminal automatically resizes to fill the available panel space when the browser window is resized.
-- **Drag-to-Resize Panels** — Drag the divider between the sidebar and the terminal to adjust their relative widths.
-- **Export Output** — Download the current terminal buffer contents as a `.txt` file via the toolbar or context menu.
-- **Right-Click Context Menu** — Right-click any command in the sidebar to access quick actions: kill, freeze/thaw, copy URL, open command in a new tab.
+- **Incremental DOM Updates** — The command list is polled every second, but DOM updates are skipped when the command state fingerprint has not changed. This reduces unnecessary DOM thrashing from polling.
+
+**Context Menu and Accessibility:**
+
+- **Context Menu (Sidebar)** — Right-click any command in the sidebar to access quick actions: kill, freeze/thaw, copy URL, open command in a new tab. The menu is built with `createElement` and `addEventListener` (no inline `onclick`), eliminating XSS injection vectors.
+- **Context Menu (Panel Headers)** — Right-click panel headers (tab bar) for Copy URL, Pause/Resume, Kill, and Remove Panel actions.
+- **Keyboard-Accessible Menu** — `Shift+F10` opens the context menu, arrow keys navigate items, Enter activates the focused item, and Escape closes the menu. `role=menu` and `role=menuitem` ARIA attributes are applied.
 - **Copy Command URL** — Copy the direct URL for any command to the clipboard from the context menu or a button next to the command name.
-- **Browser Notifications** — When enabled (via browser permission prompt), a desktop notification is sent when a command exits.
+
+**Focus and Keyboard:**
+
+- **Focus Management** — Modals (Add Panel, Command Picker, Shortcuts Overlay, Terminal Search Bar) trap focus within their container using Tab/Shift+Tab wrapping. When a modal opens, focus moves to the first interactive element; when it closes, focus returns to the previously focused element.
+- **Escape to Dismiss** — All modals and overlays are dismissed consistently with the Escape key.
 - **Keyboard Shortcuts** — Press `?` to open the shortcuts help panel showing all available keybindings and their actions.
+
+**Connection and Theming:**
+
+- **Connection Quality Indicator** — The bottom bar displays WebSocket round-trip latency (measured via ping/pong every 10 seconds) with color coding: green (< 100ms), yellow (100–500ms), red (> 500ms). A tooltip shows the reconnect count. Latency resets on disconnect and reconnects are tracked across the connection lifecycle.
 - **Auto-Reconnect** — WebSocket connections automatically re-establish after network interruptions or server restarts, with no manual refresh needed.
+- **Light Theme** — Toggle between dark and light themes via the sun/moon button in the top bar. The light theme uses a GitHub-inspired palette. When no explicit choice has been made, the theme follows the operating system's `prefers-color-scheme` media query. The active theme is persisted to `localStorage`.
+- **VTTY Theme-Aware** — The terminal background adapts to the active theme (dark or light) for a seamless visual experience.
 - **Responsive Layout** — The dashboard adapts to mobile and tablet screen sizes. The sidebar collapses into a toggleable drawer on narrow viewports.
+- **Browser Notifications** — When enabled (via browser permission prompt), a desktop notification is sent when a command exits.
+
+**Real-Time Log Streaming:**
+
+- **WebSocket Log Stream** — When the log viewer is active, the client connects to `ws://host:port/api/ws/logs` and appends incoming log entries in real-time, eliminating the need for periodic polling.
+- **HTTP Fallback** — The initial log load and search filtering use the HTTP endpoint (`GET /api/log`). The log toolbar shows the active transport (ws or http).
+- **Auto-Scroll** — When the log viewer is already scrolled to the bottom, new entries cause automatic scrolling to keep the latest entry visible.
+- **Exponential Backoff** — If the log WebSocket connection drops, the client reconnects with exponential backoff (1s, 2s, 4s, up to 30s maximum).
 
 ### VTTY API Endpoints
 
