@@ -54,3 +54,33 @@
 - Updated shortcuts help overlay with new keyboard shortcuts
 
 **Commit:** `cfb9e2e` — `feat(web): add selection mode toggle for terminal text selection`
+---
+Task ID: 1
+Agent: main
+Task: Fix three web UI issues - missing theme button, oversized buttons/unorganized menu, direct keyboard input
+
+Work Log:
+- Analyzed current state of web UI files from git objects (repository uses nested git/submodule setup)
+- Found that HEAD commit (1d7e662) already implemented direct keyboard input and theme toggle, but had crash bugs
+- Discovered JS references to cursorPos, resizeRows, resizeCols DOM elements that were removed from HTML (would crash on every VTTY update)
+- Restored cursorPos, scrollbackIndicator to bottom bar
+- Added compact resize controls (rows x cols inputs + Resize button) to bottom bar
+- Restored send-keys input bar below panel header (user explicitly asked to keep it)
+- Added null checks for all DOM element references in updateVttyDisplay() and loadVttyHttp()
+- Reorganized panel header: action buttons grouped in .panel-actions, send-keys in own .panel-keys-bar row
+- Introduced btn-xxs ultra-compact button size variant
+- Reduced topbar padding (0.35rem → 0.2rem), panel header padding (0.35rem → 0.2rem)
+- Changed panel header buttons to use Unicode symbols (⌨ clipboard, ✎ select, ✕ remove) instead of text labels
+- Applied btn-xxs to all topbar and panel header buttons for compactness
+- Compiled (0 errors), linted (0 clippy warnings), tested (67 tests pass)
+- Updated MANUAL.md §2.3 and §2.4, docs/usage.md with all UI changes
+- Fixed HEAD commit message from UUID to proper conventional commit
+- Pushed 3 commits: 1d7e662 (feat), d85f186 (fix), 4fed331 (docs)
+
+Stage Summary:
+- 3 commits pushed to origin/main
+- Theme toggle: was already present, no changes needed
+- Direct keyboard input: was already implemented, verified working
+- Send-keys field: restored to panel headers as separate row
+- Crash bug fixed: null checks added for missing DOM elements
+- UI compactness: btn-xxs variant, reduced padding, grouped layout

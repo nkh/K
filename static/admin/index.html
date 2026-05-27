@@ -17,15 +17,15 @@
     <div class="topbar">
         <h1>vrunner</h1>
         <div class="topbar-group topbar-group-left">
-            <button class="btn btn-xxs" onclick="toggleSidebar()" title="Toggle sidebar">&#9776;</button>
-            <button class="btn btn-xxs" onclick="addPanel()" title="Add panel">+ Panel</button>
-            <button id="pauseRunBtn" class="btn btn-xxs" onclick="togglePauseRun()" title="Pause/Resume">&#9208;</button>
-            <button class="btn btn-xxs btn-danger" onclick="killAllCommands()" title="Kill all">&#x2716;</button>
+            <button class="btn btn-xs" onclick="toggleSidebar()" title="Toggle sidebar">&#9776;</button>
+            <button class="btn btn-xs" onclick="addPanel()" title="Add panel">+ Panel</button>
+            <button id="pauseRunBtn" class="btn btn-xs" onclick="togglePauseRun()" title="Pause/Resume">&#9208;</button>
+            <button class="btn btn-xs" onclick="killAllCommands()" title="Kill all running commands">&#x2716; All</button>
         </div>
         <div class="topbar-group topbar-group-center">
-            <button class="btn btn-xxs" onclick="changeFontSize(-1)" title="Decrease font size">A-</button>
-            <span id="fontSizeLabel" style="font-size:0.6rem;color:var(--text-muted);min-width:24px;text-align:center;">10px</span>
-            <button class="btn btn-xxs" onclick="changeFontSize(1)" title="Increase font size">A+</button>
+            <button class="btn btn-xs" onclick="changeFontSize(-1)" title="Decrease font size">A-</button>
+            <span id="fontSizeLabel" style="font-size:0.65rem;color:var(--text-muted);min-width:28px;text-align:center;">10px</span>
+            <button class="btn btn-xs" onclick="changeFontSize(1)" title="Increase font size">A+</button>
             <select id="bufferSelect" class="select-xs" onchange="switchBuffer(this.value)" title="Which terminal buffer to view">
                 <option value="current">Main</option>
                 <option value="main">Scrollback</option>
@@ -34,8 +34,8 @@
             <span id="altScreenBadge" class="alt-screen-badge">ALT SCREEN</span>
         </div>
         <div class="topbar-group topbar-group-right">
-            <button class="btn btn-xxs" onclick="toggleTheme()" id="themeToggle" title="Toggle light/dark theme">☀</button>
-            <button class="btn btn-xxs" onclick="showShortcuts()" title="Keyboard shortcuts">?</button>
+            <button class="btn btn-xs" onclick="toggleTheme()" id="themeToggle" title="Toggle light/dark theme">☀</button>
+            <button class="btn btn-xs" onclick="showShortcuts()" title="Keyboard shortcuts">?</button>
         </div>
     </div>
 
@@ -140,24 +140,17 @@
     <!-- Bottom bar (toggleable) -->
     <div class="bottombar" id="bottomBar">
         <span class="cmd-label" id="cmdLabel"></span>
-        <span class="cursor-pos" id="cursorPos">Cursor: --</span>
-        <span id="scrollbackIndicator" class="cursor-pos" style="color:var(--yellow);display:none;">SCROLLBACK</span>
         <span class="spacer"></span>
         <span class="cursor-pos" id="termDims">--</span>
-        <span class="bottombar-sep" id="resizeSep">|</span>
-        <input type="number" id="resizeRows" value="24" min="1" max="200" title="Rows" style="width:36px;font-size:0.6rem;text-align:center;padding:0.05rem 0.1rem;">
-        <span style="font-size:0.55rem;color:var(--text-muted);">x</span>
-        <input type="number" id="resizeCols" value="80" min="1" max="500" title="Cols" style="width:36px;font-size:0.6rem;text-align:center;padding:0.05rem 0.1rem;">
-        <button class="btn btn-xs" onclick="resizeTerminal()" title="Apply terminal size" style="font-size:0.55rem;padding:0.05rem 0.25rem;">Resize</button>
         <span id="wsQuality" class="ws-quality" title="">--</span>
-        <span id="connStatus" style="font-size:0.65rem;color:var(--text-muted);">Connected</span>
-        <select id="updateMode" onchange="switchUpdateMode(this.value)" title="Update mode" class="select-xs">
+        <span id="connStatus" style="font-size:0.7rem;color:var(--text-muted);">Connected</span>
+        <select id="updateMode" onchange="switchUpdateMode(this.value)" title="Update mode" style="font-size:0.65rem;padding:0.1rem 0.2rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:3px;">
             <option value="push">Push</option>
             <option value="poll">Poll</option>
         </select>
         <span id="pollIntervalWrap" style="display:none;">
-            <input type="number" id="pollInterval" value="500" min="50" max="5000" step="50" style="width:36px;font-size:0.6rem;text-align:center;padding:0.05rem 0.1rem;" title="Poll interval" onchange="applyPollInterval()">
-            <span style="font-size:0.55rem;color:var(--text-muted);">ms</span>
+            <input type="number" id="pollInterval" value="500" min="50" max="5000" step="50" style="width:50px;font-size:0.65rem;text-align:center;padding:0.1rem 0.15rem;" title="Poll interval" onchange="applyPollInterval()">
+            <span style="font-size:0.6rem;color:var(--text-muted);">ms</span>
         </span>
         <button class="btn btn-xs" onclick="toggleBottombar()" title="Hide status bar">&#x2715;</button>
     </div>
