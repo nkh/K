@@ -258,8 +258,11 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .ctx-menu { position: fixed; z-index: 200; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 4px 0; min-width: 160px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
 .ctx-menu-item { padding: 0.35rem 0.75rem; cursor: pointer; font-size: 0.75rem; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem; }
 .ctx-menu-item:hover { background: var(--accent-dim); }
+.ctx-menu-item:focus { background: var(--accent-dim); outline: 1px solid var(--accent); outline-offset: -1px; }
+.ctx-menu-item.ctx-menu-focused { background: var(--accent-dim); }
 .ctx-menu-item.danger { color: var(--red); }
 .ctx-menu-item.danger:hover { background: rgba(248, 81, 73, 0.15); }
+.ctx-menu-item.danger:focus { background: rgba(248, 81, 73, 0.15); outline-color: var(--red); }
 .ctx-menu-sep { height: 1px; background: var(--border); margin: 3px 0; }
 
 /* Shortcuts help overlay */

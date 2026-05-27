@@ -267,19 +267,25 @@ function showCommandPicker(matches) {
     const overlay = document.createElement('div');
     overlay.id = 'cmdPicker';
     overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:100;display:flex;align-items:center;justify-content:center;';
-    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    overlay.onclick = (e) => { if (e.target === overlay) { releaseCurrentFocusTrap(); overlay.remove(); } };
     overlay.innerHTML = `<div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:1.25rem;min-width:420px;max-width:90vw;">
         <h2 style="font-size:1rem;color:var(--accent);margin-bottom:0.75rem;">Multiple commands matching "${escHtml(window.location.pathname.replace(/^\/+|\/+$/g, ''))}"</h2>
         <p style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.75rem;">Click a command to view its terminal:</p>
         <div style="max-height:50vh;overflow-y:auto;">${items}</div>
         <div style="margin-top:0.75rem;text-align:right;">
-            <button onclick="document.getElementById('cmdPicker').remove()" style="font-size:0.8rem;">Cancel</button>
+            <button onclick="releaseCurrentFocusTrap();document.getElementById('cmdPicker').remove()" style="font-size:0.8rem;">Cancel</button>
         </div>
     </div>`;
     document.body.appendChild(overlay);
+    // Trap focus inside the picker and focus the first command item
+    const panel = overlay.querySelector('div[style*="background:var(--bg-secondary)"]');
+    if (panel) trapFocus(panel);
+    const firstItem = overlay.querySelector('.cmd-item');
+    if (firstItem) firstItem.focus();
 }
 
 function pickCommand(id, name) {
+    releaseCurrentFocusTrap();
     const picker = document.getElementById('cmdPicker');
     if (picker) picker.remove();
     state._pendingSelectId = id;
@@ -434,7 +440,7 @@ async function loadCommands() {
                 ? `<span style="color:var(--text-muted);font-size:0.6rem;flex-shrink:0;">${formatRuntime(cmd.runtime_secs)}</span>`
                 : '';
             html += `
-                <div class="cmd-item${selected}" onclick="selectCommand('${inst.url}','${cmd.id}','${escHtml(cmdName)}')" oncontextmenu="event.preventDefault();showCmdContextMenu(event,'${inst.url}','${cmd.id}','${escHtml(cmdName)}',${isAlive})" title="${escHtml(inst.label)} / ${escHtml(cmdName)} ${escHtml(argsStr)}" style="${isAlive ? '' : 'opacity:0.6;'}">
+                <div class="cmd-item${selected}" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" onclick="selectCommand(this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)} ${escHtml(argsStr)}" style="${isAlive ? '' : 'opacity:0.6;'}">
                     <div class="cmd-item-row">
                         ${statusDot}
                         <span class="name">${escHtml(cmdName)}</span>
@@ -1166,14 +1172,19 @@ function addPanelDirect(instUrl, label, token) {
 }
 
 function addPanel() {
-    document.getElementById('panelModal').style.display = '';
+    const modal = document.getElementById('panelModal');
+    modal.style.display = '';
     document.getElementById('panelUrl').value = 'http://localhost:9090';
     document.getElementById('panelLabel').value = '';
     document.getElementById('panelToken').value = '';
+    // Trap focus inside the modal and auto-focus the URL input
+    const modalInner = modal.querySelector('.modal');
+    if (modalInner) trapFocus(modalInner);
     document.getElementById('panelUrl').focus();
 }
 
 function closePanelModal() {
+    releaseCurrentFocusTrap();
     document.getElementById('panelModal').style.display = 'none';
 }
 
@@ -1215,7 +1226,7 @@ function renderPanels() {
         const resizeHandle = state.panels.length > 1 ? `<div class="panel-resize-handle" data-panel="${panel.id}"></div>` : '';
         html += `
             <div class="panel" id="${panel.id}" style="flex: 1 1 0;">
-                <div class="panel-header">
+                <div class="panel-header" data-panel-id="${panel.id}" oncontextmenu="showPanelContextMenu(event,'${panel.id}')" tabindex="0" role="button" aria-label="Panel options for ${escHtml(inst ? inst.label : panel.instUrl)}">
                     <div class="cmd-info" id="cmdInfo-${panel.id}">
                         <span class="cmd-fullname" id="cmdName-${panel.id}"></span>
                         <span class="cmd-args" id="cmdArgs-${panel.id}"></span>
@@ -1551,6 +1562,9 @@ document.addEventListener('keydown', (e) => {
                     const sb = document.getElementById('searchBar-' + panel.id);
                     if (sb) {
                         sb.classList.add('visible');
+                        // Trap focus inside the search bar
+                        const vttyContainer = panel.querySelector('.vtty-container');
+                        if (vttyContainer) trapFocus(vttyContainer);
                         const si = document.getElementById('searchInput-' + panel.id);
                         if (si) { si.focus(); si.select(); }
                     }
@@ -1583,14 +1597,46 @@ document.addEventListener('keydown', (e) => {
                 const searchBar = document.getElementById('searchBar-' + panel.id);
                 if (searchBar) {
                     searchBar.classList.add('visible');
+                    // Trap focus inside the search bar area
+                    const vtty = panel.querySelector('.vtty-container');
+                    if (vtty) trapFocus(vtty);
                     const searchInput = document.getElementById('searchInput-' + panel.id);
                     if (searchInput) { searchInput.focus(); searchInput.select(); }
                 }
             }
         }
     }
-    // Escape — close terminal search bar
+    // Shift+F10 or ContextMenu key — open context menu on focused cmd-item or panel-header
+    if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+        e.preventDefault();
+        const target = document.activeElement;
+        if (!target) return;
+        // Panel header context menu
+        if (target.classList.contains('panel-header') && target.dataset.panelId) {
+            const rect = target.getBoundingClientRect();
+            showPanelContextMenu({ preventDefault: () => {}, clientX: rect.left + rect.width / 2, clientY: rect.bottom }, target.dataset.panelId);
+        }
+        // Command item context menu
+        if (target.classList.contains('cmd-item') && target.dataset.instUrl) {
+            const rect = target.getBoundingClientRect();
+            showCmdContextMenu({ preventDefault: () => {}, clientX: rect.left + rect.width / 2, clientY: rect.bottom }, target.dataset.instUrl, target.dataset.cmdId, target.dataset.cmdName, target.dataset.cmdAlive === 'true');
+        }
+    }
+    // Escape — close terminal search bar, panel modal, command picker, shortcuts
     if (e.key === 'Escape') {
+        // Close Add Panel modal if open
+        const panelModal = document.getElementById('panelModal');
+        if (panelModal && panelModal.style.display !== 'none') {
+            closePanelModal();
+            return;
+        }
+        // Close Command Picker if open
+        const cmdPicker = document.getElementById('cmdPicker');
+        if (cmdPicker) {
+            releaseCurrentFocusTrap();
+            cmdPicker.remove();
+            return;
+        }
         const panel = getSelectedPanel();
         if (panel) {
             vttySearchClose(panel.id);
@@ -1982,6 +2028,7 @@ function vttySearchPrev(panelId) {
 }
 
 function vttySearchClose(panelId) {
+    releaseCurrentFocusTrap();
     const searchBar = document.getElementById('searchBar-' + panelId);
     if (searchBar) searchBar.classList.remove('visible');
     const panel = document.getElementById(panelId);
@@ -1991,6 +2038,11 @@ function vttySearchClose(panelId) {
     vttySearchState.matchIndex = 0;
     const countEl = document.getElementById('searchCount-' + panelId);
     if (countEl) countEl.textContent = '';
+    // Return focus to the VTTY container
+    if (panel) {
+        const vtty = panel.querySelector('.vtty-container');
+        if (vtty) vtty.focus();
+    }
 }
 
 // ─── Scroll to Bottom ───
@@ -2118,42 +2170,176 @@ function exportTerminal(panelId) {
 }
 
 // ─── Right-click Context Menu ───
+// Tracks the currently focused menu item index for keyboard navigation.
+let _ctxMenuFocusedIndex = -1;
+
 function closeContextMenu() {
     const el = document.getElementById('ctxMenu');
     if (el) el.remove();
+    _ctxMenuFocusedIndex = -1;
 }
 
-function showCmdContextMenu(e, instUrl, cmdId, cmdName, isAlive) {
-    closeContextMenu();
-    const menu = document.createElement('div');
-    menu.id = 'ctxMenu';
-    menu.className = 'ctx-menu';
-    menu.style.left = e.clientX + 'px';
-    menu.style.top = e.clientY + 'px';
+// Helper: create a single context menu item div with safe textContent + addEventListener.
+function _createCtxMenuItem(label, onClick, isDanger) {
+    const div = document.createElement('div');
+    div.className = 'ctx-menu-item' + (isDanger ? ' danger' : '');
+    div.setAttribute('role', 'menuitem');
+    div.setAttribute('tabindex', '-1');
+    div.textContent = label;
+    div.addEventListener('click', () => {
+        onClick();
+        closeContextMenu();
+    });
+    return div;
+}
 
-    // Ensure menu stays within viewport
+// Helper: position menu at (x, y), ensuring it stays within the viewport.
+function _positionCtxMenu(menu, x, y) {
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
     document.body.appendChild(menu);
     const rect = menu.getBoundingClientRect();
     if (rect.right > window.innerWidth) menu.style.left = (window.innerWidth - rect.width - 4) + 'px';
     if (rect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - rect.height - 4) + 'px';
+}
 
-    const baseUrl = instUrl.replace(/^https?:\/\//, '');
-    let items = `<div class="ctx-menu-item" onclick="selectCommand('${instUrl}','${cmdId}','${escHtml(cmdName)}');closeContextMenu();">View Terminal</div>`;
-    items += `<div class="ctx-menu-item" onclick="copyCommandUrl('${instUrl}','${cmdId}','${escHtml(cmdName)}');closeContextMenu();">Copy URL</div>`;
-    if (isAlive) {
-        items += `<div class="ctx-menu-sep"></div>`;
-        items += `<div class="ctx-menu-item" onclick="togglePauseCmd('${instUrl}','${cmdId}');closeContextMenu();">Pause/Resume</div>`;
-        items += `<div class="ctx-menu-item danger" onclick="killCommand('${instUrl}','${cmdId}');closeContextMenu();">Kill</div>`;
-    } else {
-        items += `<div class="ctx-menu-sep"></div>`;
-        items += `<div class="ctx-menu-item danger" onclick="purgeCommand('${instUrl}','${cmdId}','${escHtml(cmdName)}');closeContextMenu();">Purge</div>`;
-    }
-    menu.innerHTML = items;
-
+// Helper: set up close-on-click-outside and keyboard navigation for a context menu.
+function _setupCtxMenuListeners(menu) {
     // Close on click outside
     setTimeout(() => {
         document.addEventListener('click', closeContextMenu, { once: true });
     }, 0);
+
+    // Keyboard navigation inside the context menu
+    menu.addEventListener('keydown', (e) => {
+        const items = menu.querySelectorAll('.ctx-menu-item');
+        if (items.length === 0) return;
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            _ctxMenuFocusedIndex = (_ctxMenuFocusedIndex + 1) % items.length;
+            _focusCtxMenuItem(items);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            _ctxMenuFocusedIndex = (_ctxMenuFocusedIndex - 1 + items.length) % items.length;
+            _focusCtxMenuItem(items);
+        } else if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            if (_ctxMenuFocusedIndex >= 0 && _ctxMenuFocusedIndex < items.length) {
+                items[_ctxMenuFocusedIndex].click();
+            }
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            closeContextMenu();
+        } else if (e.key === 'Tab') {
+            // Prevent tab from leaving the menu
+            e.preventDefault();
+            closeContextMenu();
+        }
+    });
+
+    // Focus the first item for keyboard users
+    _ctxMenuFocusedIndex = 0;
+    const firstItem = menu.querySelector('.ctx-menu-item');
+    if (firstItem) firstItem.focus();
+}
+
+function _focusCtxMenuItem(items) {
+    items.forEach((item, i) => {
+        item.classList.toggle('ctx-menu-focused', i === _ctxMenuFocusedIndex);
+        if (i === _ctxMenuFocusedIndex) {
+            item.focus();
+        }
+    });
+}
+
+function showCmdContextMenu(e, instUrl, cmdId, cmdName, isAlive) {
+    e.preventDefault();
+    closeContextMenu();
+    const menu = document.createElement('div');
+    menu.id = 'ctxMenu';
+    menu.className = 'ctx-menu';
+    menu.setAttribute('role', 'menu');
+
+    // View Terminal
+    menu.appendChild(_createCtxMenuItem('View Terminal', () => selectCommand(instUrl, cmdId, cmdName), false));
+    // Copy URL
+    menu.appendChild(_createCtxMenuItem('Copy URL', () => copyCommandUrl(instUrl, cmdId, cmdName), false));
+
+    if (isAlive) {
+        // Separator
+        const sep1 = document.createElement('div');
+        sep1.className = 'ctx-menu-sep';
+        sep1.setAttribute('role', 'separator');
+        menu.appendChild(sep1);
+        // Pause/Resume
+        menu.appendChild(_createCtxMenuItem('Pause/Resume', () => togglePauseCmd(instUrl, cmdId), false));
+        // Kill
+        menu.appendChild(_createCtxMenuItem('Kill', () => killCommand(instUrl, cmdId), true));
+    } else {
+        // Separator
+        const sep1 = document.createElement('div');
+        sep1.className = 'ctx-menu-sep';
+        sep1.setAttribute('role', 'separator');
+        menu.appendChild(sep1);
+        // Purge
+        menu.appendChild(_createCtxMenuItem('Purge', () => purgeCommand(instUrl, cmdId, cmdName), true));
+    }
+
+    _positionCtxMenu(menu, e.clientX, e.clientY);
+    _setupCtxMenuListeners(menu);
+}
+
+function showPanelContextMenu(e, panelId) {
+    e.preventDefault();
+    closeContextMenu();
+    const panel = state.panels.find(p => p.id === panelId);
+    if (!panel) return;
+
+    const instUrl = panel.instUrl;
+    // Determine which command is shown in this panel
+    const isSelectedPanel = (instUrl === state.selectedInstUrl);
+    const cmdId = isSelectedPanel ? state.selectedCmdId : null;
+
+    const menu = document.createElement('div');
+    menu.id = 'ctxMenu';
+    menu.className = 'ctx-menu';
+    menu.setAttribute('role', 'menu');
+
+    // Copy URL
+    menu.appendChild(_createCtxMenuItem('Copy URL', () => {
+        if (cmdId) {
+            // Find the command name from instance data
+            const inst = state.instanceUrls.find(i => i.url === instUrl);
+            const cmd = inst && inst._commands ? inst._commands.find(c => c.id === cmdId) : null;
+            const cmdName = cmd ? (cmd.name || cmd.id) : cmdId;
+            copyCommandUrl(instUrl, cmdId, cmdName);
+        } else {
+            // Just copy the instance URL
+            navigator.clipboard.writeText(instUrl).catch(() => {});
+        }
+    }, false));
+
+    if (cmdId) {
+        // Pause/Resume
+        menu.appendChild(_createCtxMenuItem('Pause/Resume', () => togglePauseCmd(instUrl, cmdId), false));
+        // Kill
+        menu.appendChild(_createCtxMenuItem('Kill', () => killCommand(instUrl, cmdId), true));
+    }
+
+    // Separator
+    const sep = document.createElement('div');
+    sep.className = 'ctx-menu-sep';
+    sep.setAttribute('role', 'separator');
+    menu.appendChild(sep);
+
+    // Remove Panel (only if more than one panel)
+    if (state.panels.length > 1) {
+        menu.appendChild(_createCtxMenuItem('Remove Panel', () => removePanel(panelId), true));
+    }
+
+    _positionCtxMenu(menu, e.clientX, e.clientY);
+    _setupCtxMenuListeners(menu);
 }
 
 function copyCommandUrl(instUrl, cmdId, cmdName) {
@@ -2162,10 +2348,18 @@ function copyCommandUrl(instUrl, cmdId, cmdName) {
     navigator.clipboard.writeText(url).catch(() => {});
 }
 
-function togglePauseCmd(instUrl, cmdId) {
+async function togglePauseCmd(instUrl, cmdId) {
+    // Temporarily set the selected command so togglePauseRun targets the right one
+    const prevInstUrl = state.selectedInstUrl;
+    const prevCmdId = state.selectedCmdId;
     state.selectedInstUrl = instUrl;
     state.selectedCmdId = cmdId;
-    togglePauseRun();
+    await togglePauseRun();
+    // Restore previous selection if the panel context menu was for a non-selected panel
+    if (prevInstUrl !== instUrl || prevCmdId !== cmdId) {
+        state.selectedInstUrl = prevInstUrl;
+        state.selectedCmdId = prevCmdId;
+    }
 }
 
 // ─── Auto-fit Terminal on Window Resize ───
@@ -2213,9 +2407,15 @@ function showShortcuts() {
         </div>
     </div>`;
     document.body.appendChild(overlay);
+    // Trap focus inside the shortcuts panel and focus the close button
+    const shortcutsPanel = overlay.querySelector('.shortcuts-panel');
+    if (shortcutsPanel) trapFocus(shortcutsPanel);
+    const closeBtn = overlay.querySelector('button');
+    if (closeBtn) closeBtn.focus();
 }
 
 function closeShortcuts() {
+    releaseCurrentFocusTrap();
     const el = document.getElementById('shortcutsOverlay');
     if (el) el.remove();
 }
