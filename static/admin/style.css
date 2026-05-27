@@ -21,10 +21,13 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 
 /* Layout */
 .app { display: flex; flex-direction: column; height: 100vh; }
-.topbar { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 1rem; background: var(--bg-secondary); border-bottom: 1px solid var(--border); flex-shrink: 0; z-index: 10; flex-wrap: wrap; }
-.topbar h1 { font-size: 1rem; color: var(--accent); white-space: nowrap; }
+.topbar { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.75rem; background: var(--bg-secondary); border-bottom: 1px solid var(--border); flex-shrink: 0; z-index: 10; flex-wrap: wrap; }
+.topbar h1 { font-size: 0.9rem; color: var(--accent); white-space: nowrap; margin-right: 0.25rem; }
 .topbar .spacer { flex: 1; }
-.topbar button, .topbar select, .topbar input { font-size: 0.8rem; }
+.topbar-group { display: flex; align-items: center; gap: 0.35rem; }
+.topbar-group-left { flex-shrink: 0; }
+.topbar-group-center { flex: 1; flex-wrap: wrap; justify-content: center; }
+.topbar-group-right { flex-shrink: 0; margin-left: auto; }
 .main { display: flex; flex: 1; overflow: hidden; }
 .sidebar { width: 280px; background: var(--bg-secondary); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; transition: width 0.15s ease; }
 .sidebar.collapsed { width: 0; overflow: hidden; border-right: none; }
@@ -82,15 +85,27 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .status-running { background: var(--green); }
 .status-exited { background: var(--red); }
 
-/* Buttons */
-button { padding: 0.3rem 0.6rem; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-family: inherit; font-size: inherit; }
-button:hover { background: #30363d; }
+/* Buttons — size variants: btn-xs, btn-sm, btn (default) */
+.btn { display: inline-flex; align-items: center; justify-content: center; padding: 0.3rem 0.6rem; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 0.75rem; line-height: 1.2; white-space: nowrap; transition: background 0.1s; }
+.btn:hover { background: #30363d; }
+.btn-xs { padding: 0.1rem 0.35rem; font-size: 0.65rem; border-radius: 3px; }
+.btn-sm { padding: 0.2rem 0.45rem; font-size: 0.7rem; }
+.btn-primary { background: #238636; border-color: #2ea043; color: #fff; }
+.btn-primary:hover { background: #2ea043; }
+.btn-danger { background: #da3633; border-color: #f85149; color: #fff; }
+.btn-danger:hover { background: #f85149; }
+/* Legacy button classes (backward compat with app.js generated HTML) */
+button.small { padding: 0.15rem 0.4rem; font-size: 0.7rem; }
 button.primary { background: #238636; border-color: #2ea043; color: #fff; }
 button.primary:hover { background: #2ea043; }
 button.danger { background: #da3633; border-color: #f85149; color: #fff; }
 button.danger:hover { background: #f85149; }
-button.small { padding: 0.15rem 0.4rem; font-size: 0.7rem; }
 button.icon-btn { padding: 0.2rem 0.4rem; font-size: 0.9rem; line-height: 1; }
+/* Compact select */
+.select-xs { font-size: 0.65rem; padding: 0.1rem 0.25rem; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 3px; }
+/* Alt screen badge */
+.alt-screen-badge { display: none; font-size: 0.6rem; color: var(--yellow); background: rgba(210,153,34,0.15); border: 1px solid rgba(210,153,34,0.3); border-radius: 3px; padding: 0 0.3rem; }
+.alt-screen-badge.visible { display: inline; }
 
 /* Inputs */
 input, select, textarea { padding: 0.3rem 0.5rem; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px; font-family: inherit; font-size: inherit; }
@@ -223,9 +238,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 @media (max-width: 768px) {
     .sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: 280px; z-index: 50; box-shadow: 4px 0 12px rgba(0,0,0,0.5); }
     .sidebar.collapsed { width: 0; box-shadow: none; }
-    .topbar { padding: 0.35rem 0.5rem; gap: 0.4rem; }
-    .topbar h1 { font-size: 0.85rem; }
-    .resize-controls, .buffer-select-wrapper, .font-size-ctrl { display: none; }
+    .topbar { padding: 0.25rem 0.4rem; gap: 0.3rem; }
+    .topbar h1 { font-size: 0.8rem; }
+    .topbar-group-center { display: none; }
+    .resize-controls, .font-size-ctrl { display: none; }
     .bottombar { padding: 0.25rem 0.5rem; gap: 0.3rem; }
     .token-bar input { width: 80px; }
     .vtty-container .search-bar input { width: 120px; }

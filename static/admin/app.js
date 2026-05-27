@@ -322,7 +322,7 @@ async function loadCommands() {
                         ${runtimeStr}
                         ${certBadge}
                         <span class="pid">${cmd.pid}</span>
-                        <button class="small danger" onclick="event.stopPropagation();killCommand('${inst.url}','${cmd.id}')" title="Kill">&#x2715;</button>
+                        <button class="btn btn-xs btn-danger" onclick="event.stopPropagation();killCommand('${inst.url}','${cmd.id}')" title="Kill">&#x2715;</button>
                     </div>
                     <div class="cmd-detail">${escHtml(detail)}</div>
                 </div>`;
@@ -495,7 +495,7 @@ async function togglePauseRun() {
         });
         btn.dataset.frozen = isFrozen ? 'false' : 'true';
         btn.textContent = isFrozen ? '\u23F8 Pause' : '\u25B6 Run';
-        btn.className = 'small ' + (isFrozen ? '' : 'primary');
+        btn.className = 'btn btn-xs' + (isFrozen ? '' : ' btn-primary');
         loadCommands();
     } catch (e) { /* ignore */ }
 }
@@ -610,7 +610,7 @@ function connectVttyWs(instUrl, cmdId) {
                         updateVttyDisplay(msg.data);
                     }
                     const badge = document.getElementById('altScreenBadge');
-                    if (badge) badge.style.display = msg.data.alternate_screen ? '' : 'none';
+                    if (badge) badge.classList.toggle('visible', !!msg.data.alternate_screen);
                 } else if (msg.type === 'vtty_dirty' && msg.data) {
                     // Buffer has changed — schedule a debounced HTTP fetch.
                     // The server doesn't send any cell data, just a notification.
@@ -801,7 +801,7 @@ async function loadVttyHttp(instUrl, cmdId) {
 
             // Update alt screen badge
             const badge = document.getElementById('altScreenBadge');
-            if (badge) badge.style.display = json.data.alternate_screen ? '' : 'none';
+            if (badge) badge.classList.toggle('visible', !!json.data.alternate_screen);
 
             // Update mouse state
             if (panelObj) {
@@ -1104,10 +1104,10 @@ function renderPanels() {
                     <span class="instance-url">${escHtml(panel.instUrl.replace(/^https?:\/\//, ''))}</span>
                     <div class="input-row" style="flex:1;min-width:120px;">
                         <input type="text" id="keyInput-${panel.id}" placeholder="Send keys... (e.g. q, <Enter>, <C-c>)" style="font-size:0.7rem;" onkeydown="if(event.key==='Enter'){event.preventDefault();sendKeysToPanel('${panel.id}')}">
-                        <button class="small" onclick="sendKeysToPanel('${panel.id}')">Send</button>
+                        <button class="btn btn-xs" onclick="sendKeysToPanel('${panel.id}')">Send</button>
                     </div>
-                    ${state.panels.length > 1 ? `<button class="small danger" onclick="removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
-                    <button class="small" onclick="exportTerminal('${panel.id}')" title="Export terminal as text">&#x2913;</button>
+                    ${state.panels.length > 1 ? `<button class="btn btn-xs btn-danger" onclick="removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
+                    <button class="btn btn-xs" onclick="exportTerminal('${panel.id}')" title="Export terminal as text">&#x2913;</button>
                 </div>
                 <div class="vtty-container" id="vtty-${panel.id}">
                     <div class="search-bar" id="searchBar-${panel.id}">

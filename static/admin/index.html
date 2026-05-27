@@ -16,34 +16,39 @@
     <!-- Top bar -->
     <div class="topbar">
         <h1>vrunner</h1>
-        <div class="spacer"></div>
-        <div class="font-size-ctrl">
-            <button class="icon-btn small" onclick="changeFontSize(-1)" title="Decrease font size">A-</button>
-            <span id="fontSizeLabel">10px</span>
-            <button class="icon-btn small" onclick="changeFontSize(1)" title="Increase font size">A+</button>
+        <div class="topbar-group topbar-group-left">
+            <button class="btn btn-xs" onclick="toggleSidebar()" title="Toggle sidebar">&#9776;</button>
+            <button class="btn btn-xs" onclick="addPanel()" title="Add panel">+ Panel</button>
+            <button id="pauseRunBtn" class="btn btn-xs" onclick="togglePauseRun()" title="Pause/Resume">&#9208; Pause</button>
         </div>
-        <div class="resize-controls">
-            <label>R:</label>
-            <input type="number" id="resizeRows" value="24" min="1" max="200" title="Terminal rows">
-            <label>C:</label>
-            <input type="number" id="resizeCols" value="80" min="1" max="500" title="Terminal columns">
-            <button class="small" onclick="resizeTerminal()">Resize</button>
+        <div class="topbar-group topbar-group-center">
+            <div class="font-size-ctrl">
+                <button class="btn btn-xs" onclick="changeFontSize(-1)" title="Decrease font size">A-</button>
+                <span id="fontSizeLabel">10px</span>
+                <button class="btn btn-xs" onclick="changeFontSize(1)" title="Increase font size">A+</button>
+            </div>
+            <div class="resize-controls">
+                <label>R:</label>
+                <input type="number" id="resizeRows" value="24" min="1" max="200" title="Terminal rows">
+                <label>C:</label>
+                <input type="number" id="resizeCols" value="80" min="1" max="500" title="Terminal columns">
+                <button class="btn btn-xs" onclick="resizeTerminal()">Resize</button>
+            </div>
+            <select id="bufferSelect" class="select-xs" onchange="switchBuffer(this.value)" title="Which terminal buffer to view">
+                <option value="current">Current</option>
+                <option value="main">Main Buffer</option>
+                <option value="alt">Alt Buffer</option>
+            </select>
+            <span id="altScreenBadge" class="alt-screen-badge">ALT SCREEN</span>
         </div>
-        <select id="bufferSelect" onchange="switchBuffer(this.value)" title="Which terminal buffer to view" style="font-size:0.7rem;padding:0.15rem 0.3rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;">
-            <option value="current">Current</option>
-            <option value="main">Main Buffer</option>
-            <option value="alt">Alt Buffer</option>
-        </select>
-        <span id="altScreenBadge" style="display:none;font-size:0.65rem;color:var(--yellow);background:rgba(210,153,34,0.15);border:1px solid rgba(210,153,34,0.3);border-radius:3px;padding:0 0.3rem;">ALT SCREEN</span>
-        <button class="small" onclick="toggleSidebar()" title="Toggle sidebar">&#9776;</button>
-        <button class="small" onclick="addPanel()" title="Add panel (multi-view)">+ Panel</button>
-        <button class="small" onclick="showDocs()" title="Documentation">Docs</button>
-        <button class="small" onclick="showShortcuts()" title="Keyboard shortcuts">?</button>
-        <button id="pauseRunBtn" class="small" onclick="togglePauseRun()" title="Pause/Resume the selected command">&#9208; Pause</button>
-        <div class="token-bar">
-            <label for="authToken">Token:</label>
-            <input type="password" id="authToken" placeholder="Bearer token" title="Authorization token">
-            <button class="small" onclick="saveToken()">Set Token</button>
+        <div class="topbar-group topbar-group-right">
+            <div class="token-bar">
+                <label for="authToken">Token:</label>
+                <input type="password" id="authToken" placeholder="Bearer token" title="Authorization token">
+                <button class="btn btn-xs" onclick="saveToken()">Set</button>
+            </div>
+            <button class="btn btn-xs" onclick="showDocs()" title="Documentation">Docs</button>
+            <button class="btn btn-xs" onclick="showShortcuts()" title="Keyboard shortcuts">?</button>
         </div>
     </div>
 
@@ -60,7 +65,7 @@
                 <div id="tab-commands">
                     <div style="padding:0.3rem 0.5rem;border-bottom:1px solid var(--border);display:flex;gap:0.3rem;align-items:center;">
                         <input type="text" id="cmdFilter" placeholder="Filter commands..." oninput="loadCommands()" style="flex:1;font-size:0.7rem;padding:0.15rem 0.4rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:3px;">
-                        <button class="small danger" onclick="killAllCommands()" title="Kill all running commands">Kill All</button>
+                        <button class="btn btn-xs btn-danger" onclick="killAllCommands()" title="Kill all running commands">Kill All</button>
                     </div>
                     <div id="commandList"></div>
                 </div>
@@ -84,7 +89,7 @@
                                 <label>Cols</label>
                                 <input type="number" id="spawnCols" value="" min="1" max="500" placeholder="default">
                             </div>
-                            <button class="small" onclick="autofitTerminalSize()" title="Calculate optimal terminal size from the panel container" style="align-self:flex-end;margin-bottom:0.2rem;">Auto-fit</button>
+                            <button class="btn btn-xs" onclick="autofitTerminalSize()" title="Calculate optimal terminal size from the panel container" style="align-self:flex-end;margin-bottom:0.2rem;">Auto-fit</button>
                         </div>
                         <div class="autofit-hint" id="autofitHint"></div>
                         <div class="field">
@@ -97,7 +102,7 @@
                             <label>Target Instance</label>
                             <select id="spawnInstance"></select>
                         </div>
-                        <button class="primary" onclick="spawnCommand()" style="width:100%;margin-top:0.5rem;">Spawn Command</button>
+                        <button class="btn btn-primary" onclick="spawnCommand()" style="width:100%;margin-top:0.5rem;">Spawn Command</button>
                     </div>
                 </div>
                 <!-- Certs tab -->
@@ -125,8 +130,8 @@
             <div id="view-log" class="log-viewer" style="display:none;">
                 <div class="log-toolbar">
                     <input type="text" id="logSearch" placeholder="Search logs..." oninput="searchLogs()">
-                    <button class="small" onclick="clearLogSearch()">Clear</button>
-                    <button class="small" onclick="loadLog()">Refresh</button>
+                    <button class="btn btn-xs" onclick="clearLogSearch()">Clear</button>
+                    <button class="btn btn-xs" onclick="loadLog()">Refresh</button>
                     <span id="logCount" style="font-size:0.7rem;color:var(--text-muted);"></span>
                 </div>
                 <div class="log-content" id="logContent"></div>
@@ -154,7 +159,7 @@
             <span style="font-size:0.65rem;color:var(--text-muted);">ms</span>
         </span>
         <span style="font-size:0.7rem;color:var(--text-muted);" id="connStatus">Connected</span>
-        <button class="small" onclick="toggleBottombar()" title="Hide status bar">&#x2715;</button>
+        <button class="btn btn-xs" onclick="toggleBottombar()" title="Hide status bar">&#x2715;</button>
     </div>
     <button class="status-toggle" id="statusToggle" onclick="toggleBottombar()" title="Show status bar" style="display:none;">&#9650;</button>
 </div>
@@ -176,8 +181,8 @@
             <input type="text" id="panelToken" placeholder="Bearer token for this instance">
         </div>
         <div class="actions">
-            <button onclick="closePanelModal()">Cancel</button>
-            <button class="primary" onclick="confirmAddPanel()">Add Panel</button>
+            <button class="btn" onclick="closePanelModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="confirmAddPanel()">Add Panel</button>
         </div>
     </div>
 </div>
