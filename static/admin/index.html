@@ -19,37 +19,23 @@
         <div class="topbar-group topbar-group-left">
             <button class="btn btn-xs" onclick="toggleSidebar()" title="Toggle sidebar">&#9776;</button>
             <button class="btn btn-xs" onclick="addPanel()" title="Add panel">+ Panel</button>
-            <button id="pauseRunBtn" class="btn btn-xs" onclick="togglePauseRun()" title="Pause/Resume">&#9208; Pause</button>
+            <button id="pauseRunBtn" class="btn btn-xs" onclick="togglePauseRun()" title="Pause/Resume">&#9208;</button>
+            <button class="btn btn-xs" onclick="killAllCommands()" title="Kill all running commands">&#x2716; All</button>
         </div>
         <div class="topbar-group topbar-group-center">
-            <div class="font-size-ctrl">
-                <button class="btn btn-xs" onclick="changeFontSize(-1)" title="Decrease font size">A-</button>
-                <span id="fontSizeLabel">10px</span>
-                <button class="btn btn-xs" onclick="changeFontSize(1)" title="Increase font size">A+</button>
-            </div>
-            <div class="resize-controls">
-                <label>R:</label>
-                <input type="number" id="resizeRows" value="24" min="1" max="200" title="Terminal rows">
-                <label>C:</label>
-                <input type="number" id="resizeCols" value="80" min="1" max="500" title="Terminal columns">
-                <button class="btn btn-xs" onclick="resizeTerminal()">Resize</button>
-            </div>
+            <button class="btn btn-xs" onclick="changeFontSize(-1)" title="Decrease font size">A-</button>
+            <span id="fontSizeLabel" style="font-size:0.65rem;color:var(--text-muted);min-width:28px;text-align:center;">10px</span>
+            <button class="btn btn-xs" onclick="changeFontSize(1)" title="Increase font size">A+</button>
             <select id="bufferSelect" class="select-xs" onchange="switchBuffer(this.value)" title="Which terminal buffer to view">
-                <option value="current">Current</option>
-                <option value="main">Main Buffer</option>
-                <option value="alt">Alt Buffer</option>
+                <option value="current">Main</option>
+                <option value="main">Scrollback</option>
+                <option value="alt">Alt Screen</option>
             </select>
             <span id="altScreenBadge" class="alt-screen-badge">ALT SCREEN</span>
         </div>
         <div class="topbar-group topbar-group-right">
-            <div class="token-bar">
-                <label for="authToken">Token:</label>
-                <input type="password" id="authToken" placeholder="Bearer token" title="Authorization token">
-                <button class="btn btn-xs" onclick="saveToken()">Set</button>
-            </div>
-            <button class="btn btn-xs" onclick="showDocs()" title="Documentation">Docs</button>
+            <button class="btn btn-xs" onclick="toggleTheme()" id="themeToggle" title="Toggle light/dark theme">☀</button>
             <button class="btn btn-xs" onclick="showShortcuts()" title="Keyboard shortcuts">?</button>
-            <button class="btn btn-xs" id="themeToggle" onclick="toggleTheme()" title="Toggle theme">☾</button>
         </div>
     </div>
 
@@ -111,6 +97,13 @@
                     <div id="certList"></div>
                 </div>
             </div>
+            <div style="padding:0.3rem 0.5rem;border-top:1px solid var(--border);">
+                <div style="display:flex;gap:0.3rem;align-items:center;">
+                    <label for="authToken" style="font-size:0.65rem;color:var(--text-muted);white-space:nowrap;">Token:</label>
+                    <input type="password" id="authToken" placeholder="Bearer token" style="flex:1;font-size:0.65rem;padding:0.15rem 0.3rem;" onkeydown="if(event.key==='Enter'){event.preventDefault();saveToken()}">
+                    <button class="btn btn-xs" onclick="saveToken()">Set</button>
+                </div>
+            </div>
         </div>
 
         <!-- Content area -->
@@ -147,21 +140,18 @@
     <!-- Bottom bar (toggleable) -->
     <div class="bottombar" id="bottomBar">
         <span class="cmd-label" id="cmdLabel"></span>
-        <span class="cursor-pos" id="cursorPos">Cursor: --</span>
-        <span class="dims" id="termDims">--</span>
-        <span class="cursor-pos" id="scrollbackIndicator" style="color:var(--yellow);display:none;">SCROLLBACK</span>
         <span class="spacer"></span>
-        <label for="updateMode" style="font-size:0.7rem;color:var(--text-muted);">Update:</label>
-        <select id="updateMode" onchange="switchUpdateMode(this.value)" title="How the web UI detects VTTY buffer changes" style="font-size:0.65rem;padding:0.1rem 0.2rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:3px;">
-            <option value="push">Push (WS)</option>
+        <span class="cursor-pos" id="termDims">--</span>
+        <span id="wsQuality" class="ws-quality" title="">--</span>
+        <span id="connStatus" style="font-size:0.7rem;color:var(--text-muted);">Connected</span>
+        <select id="updateMode" onchange="switchUpdateMode(this.value)" title="Update mode" style="font-size:0.65rem;padding:0.1rem 0.2rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:3px;">
+            <option value="push">Push</option>
             <option value="poll">Poll</option>
         </select>
         <span id="pollIntervalWrap" style="display:none;">
-            <input type="number" id="pollInterval" value="500" min="50" max="5000" step="50" style="width:50px;font-size:0.65rem;text-align:center;padding:0.1rem 0.15rem;" title="Poll interval in milliseconds" onchange="applyPollInterval()">
-            <span style="font-size:0.65rem;color:var(--text-muted);">ms</span>
+            <input type="number" id="pollInterval" value="500" min="50" max="5000" step="50" style="width:50px;font-size:0.65rem;text-align:center;padding:0.1rem 0.15rem;" title="Poll interval" onchange="applyPollInterval()">
+            <span style="font-size:0.6rem;color:var(--text-muted);">ms</span>
         </span>
-        <span id="wsQuality" class="ws-quality" title="">--</span>
-        <span style="font-size:0.7rem;color:var(--text-muted);" id="connStatus">Connected</span>
         <button class="btn btn-xs" onclick="toggleBottombar()" title="Hide status bar">&#x2715;</button>
     </div>
     <button class="status-toggle" id="statusToggle" onclick="toggleBottombar()" title="Show status bar" style="display:none;">&#9650;</button>
