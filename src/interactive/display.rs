@@ -122,6 +122,8 @@ pub(crate) fn render_tab_bar(
         let is_active = active_id.as_ref() == Some(id);
         // Check if the command has exited (retain_on_exit)
         let is_exited = manager.get(id).map(|h| !h.is_alive()).unwrap_or(false);
+        // Check if the command is frozen (SIGSTOP)
+        let is_frozen = manager.get(id).map(|h| h.is_frozen()).unwrap_or(false);
         let exit_code_str = {
             let ec_opt: Option<i32> = manager.get(id).and_then(|h| {
                 let guard = h.exit_code.lock().ok()?;
@@ -130,13 +132,21 @@ pub(crate) fn render_tab_bar(
             ec_opt.map(|c| format!(" [exit {}]", c)).unwrap_or_default()
         };
         if is_active {
-            stdout.queue(SetBackgroundColor(Color::Rgb { r: 68, g: 71, b: 90 })).ok();
-            if is_exited {
+            if is_frozen {
+                stdout.queue(SetBackgroundColor(Color::Rgb { r: 80, g: 60, b: 20 })).ok();
+                stdout.queue(SetForegroundColor(Color::Rgb { r: 255, g: 220, b: 100 })).ok();
+            } else if is_exited {
+                stdout.queue(SetBackgroundColor(Color::Rgb { r: 68, g: 71, b: 90 })).ok();
                 stdout.queue(SetForegroundColor(Color::Rgb { r: 255, g: 120, b: 120 })).ok();
             } else {
+                stdout.queue(SetBackgroundColor(Color::Rgb { r: 68, g: 71, b: 90 })).ok();
                 stdout.queue(SetForegroundColor(Color::Rgb { r: 255, g: 255, b: 255 })).ok();
             }
             stdout.queue(style::SetAttribute(Attribute::Bold)).ok();
+        } else if is_frozen {
+            stdout.queue(SetBackgroundColor(Color::Rgb { r: 60, g: 45, b: 15 })).ok();
+            stdout.queue(SetForegroundColor(Color::Rgb { r: 210, g: 180, b: 80 })).ok();
+            stdout.queue(style::SetAttribute(Attribute::NoBold)).ok();
         } else if is_exited {
             stdout.queue(SetBackgroundColor(Color::Rgb { r: 40, g: 42, b: 54 })).ok();
             stdout.queue(SetForegroundColor(Color::Rgb { r: 180, g: 100, b: 100 })).ok();

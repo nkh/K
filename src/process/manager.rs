@@ -324,6 +324,7 @@ impl CommandManager {
         self.logger.log("freeze", &format!("id={}", id));
         if let Some(handle) = self.commands.get(id) {
             let pid = handle.pid;
+            handle.frozen.store(true, std::sync::atomic::Ordering::Relaxed);
             drop(handle);
             #[cfg(unix)]
             {
@@ -351,6 +352,7 @@ impl CommandManager {
         self.logger.log("thaw", &format!("id={}", id));
         if let Some(handle) = self.commands.get(id) {
             let pid = handle.pid;
+            handle.frozen.store(false, std::sync::atomic::Ordering::Relaxed);
             drop(handle);
             #[cfg(unix)]
             {

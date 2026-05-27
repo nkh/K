@@ -49,6 +49,9 @@ pub struct CommandHandle {
     /// Wall-clock time when the child process exited.
     /// None while the process is still running.
     pub exit_time: std::sync::Mutex<Option<std::time::Instant>>,
+    /// Whether the process has been frozen (SIGSTOP).  Uses AtomicBool
+    /// so any thread can check or flip the flag without holding a lock.
+    pub frozen: std::sync::atomic::AtomicBool,
 }
 
 impl CommandHandle {
@@ -232,6 +235,11 @@ impl CommandHandle {
         {
             true // best-effort on non-Unix
         }
+    }
+
+    /// Whether the process has been frozen (SIGSTOP / suspended).
+    pub fn is_frozen(&self) -> bool {
+        self.frozen.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Whether the child has enabled focus reporting (?1004h).

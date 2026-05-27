@@ -273,6 +273,7 @@ impl ProcessSpawner {
             exit_rx: child_exit_rx,
             exit_code: std::sync::Mutex::new(None),
             exit_time: std::sync::Mutex::new(None),
+            frozen: std::sync::atomic::AtomicBool::new(false),
         })
     }
 }
