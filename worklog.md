@@ -1,56 +1,21 @@
-# Worklog: vrunner Web UI Improvements
-
-## Commit 11: Incremental DOM updates for command list
-
-**Files modified:** `static/admin/app.js`
-
-**Problem:** `loadCommands()` rebuilds the entire `#commandList` via `innerHTML` every 1 second, causing unnecessary DOM thrashing even when nothing changed.
-
-**Solution:**
-- Added `_lastCommandState` variable to store a fingerprint of command list state
-- Built a lightweight fingerprint string from command data: `inst.url:cmd.id:cmd.alive:cmd.runtime_secs` joined with `|`
-- Compare fingerprint against previous state before updating innerHTML
-- Skip DOM rebuild entirely when fingerprint matches (no-op polls)
-- Force full rebuild on state transitions (kill, purge, killAll) by clearing `_lastCommandState`
-- When skipping DOM update, still process pending command selection and panel info updates
-
-**Commit:** `c14b8ab` — `perf(web): skip redundant command list DOM updates`
-
 ---
+Task ID: 1
+Agent: main
+Task: Fix completely broken web UI
 
-## Commit 12: Per-instance font size for multi-panel layouts
+Work Log:
+- Analyzed user's screenshot showing broken layout (single-column instead of sidebar+content, empty terminal, misaligned elements)
+- Identified that previous commits (1d7e662, d85f186, 4fed331) reorganized HTML/CSS/JS and broke the UI
+- Initially restored to 24f0fc3 (oldest of 13 web UI commits) - too old, missing theme support
+- Correctly identified 111ae5e as the last known-good state (parent of first broken commit)
+- Verified 111ae5e already has all 3 features the user wanted: theme toggle, compact buttons, direct keyboard input
+- Restored all 5 changed files: index.html, style.css, app.js, MANUAL.md, docs/usage.md
+- Confirmed 0 diff between working tree and 111ae5e for all web UI and doc files
+- All 67 tests pass (65 unit + 2 doc-tests)
+- Cargo check succeeds with 0 errors
 
-**Files modified:** `static/admin/app.js`, `static/admin/style.css`
-
-**Problem:** All panels share a single global font size. Multi-panel layouts with different instances may need different font sizes per panel.
-
-**Solution:**
-- Added `fontSize` property to each panel state object, initialized from global `state.fontSize`
-- `addPanelDirect()` checks localStorage for per-panel saved font size (`vrunner_panel_font_{id}`)
-- `renderPanels()` applies per-panel font size via inline `style="font-size: {px}px"` on the VTTY container
-- Added font size controls (A-/A+ buttons) in panel header next to instance URL
-- `changePanelFontSize(panelId, delta)` function: clamps 8-28px, updates panel state, applies inline style, persists to localStorage
-- Added CSS for `.panel-font-size-ctrl` and `.panel-font-size` styling
-- Global font size buttons (topbar) change the default for new panels only
-
-**Commit:** `faac222` — `feat(web): per-instance font size for multi-panel layouts`
-
----
-
-## Commit 13: Selection mode toggle for terminal text selection
-
-**Files modified:** `static/admin/app.js`, `static/admin/style.css`
-
-**Problem:** When mouse tracking is enabled by the child process, text selection on the terminal is impossible because all mouse events are forwarded to the PTY.
-
-**Solution:**
-- Added `selectionMode` property to panel state, persisted to localStorage (`vrunner_panel_sel_{id}`)
-- Added `toggleSelectionMode(panelId)` function that toggles mode, updates CSS class, button state, and persists
-- "Select" button in panel header (next to Copy and Export) toggles selection mode
-- Keyboard shortcuts: `Ctrl+Shift+S` and `Alt+S` toggle selection mode
-- In mouse event handlers (mousedown, mouseup, mousemove, wheel): if `selectionMode` is true, skip PTY forwarding and let browser handle natively
-- CSS for `.vtty-container.selection-mode`: text cursor, accent outline border, forced `user-select: text` on pre element
-- Button shows "✓ Select" when active (with btn-primary class for visual feedback)
-- Updated shortcuts help overlay with new keyboard shortcuts
-
-**Commit:** `cfb9e2e` — `feat(web): add selection mode toggle for terminal text selection`
+Stage Summary:
+- Root cause: Previous modification attempts reorganized HTML structure, added new CSS classes (btn-xxs, panel-actions, panel-keys-bar), and restructured JS renderPanels() — breaking the layout entirely
+- Fix: Full revert to 111ae5e (known-good state with all features already working)
+- Key insight: The 3 requested features (theme toggle, compact buttons, direct keyboard input) were ALREADY present in the known-good state — no changes were needed
+- The files are embedded via rust_embed — user must recompile to see the fix
