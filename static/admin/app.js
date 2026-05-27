@@ -232,6 +232,34 @@ function releaseCurrentFocusTrap() {
     if (pathname && pathname !== 'admin' && !pathname.startsWith('api/')) {
         lookupAndSelectCommand(pathname);
     }
+
+    // ── Sidebar resize ──
+    const sidebarHandle = document.getElementById('sidebarResizeHandle');
+    if (sidebarHandle) {
+        let startX, startWidth;
+        const sidebar = document.getElementById('sidebar');
+        sidebarHandle.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            startX = e.clientX;
+            startWidth = sidebar.offsetWidth;
+            sidebarHandle.classList.add('active');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            const onMove = (e) => {
+                const newWidth = Math.max(150, Math.min(600, startWidth + e.clientX - startX));
+                sidebar.style.width = newWidth + 'px';
+            };
+            const onUp = () => {
+                sidebarHandle.classList.remove('active');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        });
+    }
 })();
 
 // ── Command-name URL lookup ──
@@ -428,23 +456,51 @@ function toggleSidebar() {
 // ─── Bottom bar toggle ───
 function toggleBottombar() {
     const bar = document.getElementById('bottomBar');
-    const toggle = document.getElementById('statusToggle');
+    const btn = document.getElementById('statusBtn');
     bar.classList.toggle('hidden');
     const isHidden = bar.classList.contains('hidden');
-    toggle.style.display = isHidden ? '' : 'none';
+    if (btn) {
+        btn.style.background = isHidden ? '' : 'var(--accent)';
+        btn.style.color = isHidden ? '' : '#fff';
+    }
     localStorage.setItem('vrunner_bottombar_hidden', isHidden ? 'true' : 'false');
 }
 
 function initBottombar() {
-    const shouldHide = localStorage.getItem('vrunner_bottombar_hidden') === 'true';
+    const shouldHide = localStorage.getItem('vrunner_bottombar_hidden') !== 'false'; // hidden by default
     const bar = document.getElementById('bottomBar');
-    const toggle = document.getElementById('statusToggle');
+    const btn = document.getElementById('statusBtn');
     if (shouldHide) {
         bar.classList.add('hidden');
-        toggle.style.display = '';
     } else {
         bar.classList.remove('hidden');
-        toggle.style.display = 'none';
+        if (btn) { btn.style.background = 'var(--accent)'; btn.style.color = '#fff'; }
+    }
+}
+
+// ─── Logs view toggle ───
+function toggleLogsView() {
+    const btn = document.getElementById('logsBtn');
+    const vtty = document.getElementById('view-vtty');
+    const log = document.getElementById('view-log');
+    const prevView = state.currentView;
+    if (state.currentView === 'log') {
+        // Switch back to terminal
+        state.currentView = 'vtty';
+        vtty.style.display = 'flex';
+        log.style.display = 'none';
+        if (btn) { btn.style.background = ''; btn.style.color = ''; }
+        disconnectLogWs();
+    } else {
+        // Switch to logs
+        state.currentView = 'log';
+        vtty.style.display = 'none';
+        log.style.display = 'flex';
+        if (btn) { btn.style.background = 'var(--accent)'; btn.style.color = '#fff'; }
+        loadLog();
+        if (!document.getElementById('logSearch').value) {
+            connectLogWs();
+        }
     }
 }
 
@@ -1478,7 +1534,6 @@ function renderPanels() {
                     <button class="btn btn-xs" onclick="copyTerminalSelection('${panel.id}')" title="Copy selected text to clipboard">Copy</button>
                     <button class="btn btn-xs" onclick="exportTerminal('${panel.id}')" title="Export terminal as text">&#x2913;</button>
                     <button class="btn btn-xs" id="panelThemeBtn-${panel.id}" onclick="togglePanelTheme('${panel.id}')" title="Panel theme: inherit (click to toggle)">${panel.theme === 'light' ? '\u263E' : panel.theme === 'dark' ? '\u2600' : '\u25D0'}</button>
-                    <button class="btn btn-xs" id="selectBtn-${panel.id}" onclick="toggleSelectionMode('${panel.id}')" title="Toggle selection mode (Ctrl+Shift+S)">Select</button>
                 </div>
                 <div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px;">
                     <div class="search-bar" id="searchBar-${panel.id}">

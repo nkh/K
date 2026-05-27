@@ -42,6 +42,8 @@
             <span id="altScreenBadge" class="alt-screen-badge">ALT SCREEN</span>
         </div>
         <div class="topbar-group topbar-group-right">
+            <button class="btn btn-xs" id="logsBtn" onclick="toggleLogsView()" title="Toggle log viewer">Logs</button>
+            <button class="btn btn-xs" id="statusBtn" onclick="toggleBottombar()" title="Toggle status bar">Status</button>
             <div class="token-bar">
                 <label for="authToken">Token:</label>
                 <input type="password" id="authToken" placeholder="Bearer token" title="Authorization token">
@@ -64,8 +66,8 @@
             <div class="sidebar-content" id="sidebarContent">
                 <!-- Commands tab (default) -->
                 <div id="tab-commands">
-                    <div style="padding:0.3rem 0.5rem;border-bottom:1px solid var(--border);display:flex;gap:0.3rem;align-items:center;">
-                        <input type="text" id="cmdFilter" placeholder="Filter commands..." oninput="loadCommands()" style="flex:1;font-size:0.7rem;padding:0.15rem 0.4rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:3px;">
+                    <div style="padding:0.2rem 0.3rem;display:flex;gap:0.2rem;align-items:center;">
+                        <input type="text" id="cmdFilter" placeholder="Filter..." oninput="loadCommands()" style="flex:1;min-width:0;font-size:0.65rem;padding:0.1rem 0.3rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:2px;">
                         <button class="btn btn-xs btn-danger" onclick="killAllCommands()" title="Kill all running commands">Kill All</button>
                     </div>
                     <div id="commandList"></div>
@@ -112,16 +114,10 @@
                 </div>
             </div>
         </div>
+        <div class="sidebar-resize-handle" id="sidebarResizeHandle"></div>
 
         <!-- Content area -->
         <div class="content-area" id="contentArea">
-            <!-- View tabs -->
-            <div class="view-tabs">
-                <div class="view-tab active" onclick="switchViewTab('vtty', this)">Terminal</div>
-                <div class="view-tab" onclick="switchViewTab('log', this)">Logs</div>
-                <div class="view-tab" onclick="switchViewTab('docs', this)" id="docsTab" style="display:none;">Documentation</div>
-            </div>
-
             <!-- Terminal view -->
             <div id="view-vtty" class="panel-container">
                 <!-- Panels are dynamically added here -->
@@ -144,15 +140,15 @@
         </div>
     </div>
 
-    <!-- Bottom bar (toggleable) -->
-    <div class="bottombar" id="bottomBar">
+    <!-- Bottom bar (hidden by default) -->
+    <div class="bottombar hidden" id="bottomBar">
         <span class="cmd-label" id="cmdLabel"></span>
         <span class="cursor-pos" id="cursorPos">Cursor: --</span>
         <span class="dims" id="termDims">--</span>
         <span class="cursor-pos" id="scrollbackIndicator" style="color:var(--yellow);display:none;">SCROLLBACK</span>
         <span class="spacer"></span>
-        <label for="updateMode" style="font-size:0.7rem;color:var(--text-muted);">Update:</label>
-        <select id="updateMode" onchange="switchUpdateMode(this.value)" title="How the web UI detects VTTY buffer changes" style="font-size:0.65rem;padding:0.1rem 0.2rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:3px;">
+        <label for="updateMode" style="font-size:0.6rem;color:var(--text-muted);">Update:</label>
+        <select id="updateMode" onchange="switchUpdateMode(this.value)" title="How the web UI detects VTTY buffer changes" style="font-size:0.6rem;padding:0.05rem 0.15rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:2px;">
             <option value="push">Push (WS)</option>
             <option value="poll">Poll</option>
         </select>
@@ -161,10 +157,8 @@
             <span style="font-size:0.65rem;color:var(--text-muted);">ms</span>
         </span>
         <span id="wsQuality" class="ws-quality" title="">--</span>
-        <span style="font-size:0.7rem;color:var(--text-muted);" id="connStatus">Connected</span>
-        <button class="btn btn-xs" onclick="toggleBottombar()" title="Hide status bar">&#x2715;</button>
+        <span style="font-size:0.6rem;color:var(--text-muted);" id="connStatus">Connected</span>
     </div>
-    <button class="status-toggle" id="statusToggle" onclick="toggleBottombar()" title="Show status bar" style="display:none;">&#9650;</button>
 </div>
 
 <!-- Add panel modal -->
