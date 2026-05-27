@@ -133,6 +133,7 @@
                     <input type="text" id="logSearch" placeholder="Search logs..." oninput="searchLogs()">
                     <button class="btn btn-xs" onclick="clearLogSearch()">Clear</button>
                     <button class="btn btn-xs" onclick="loadLog()">Refresh</button>
+                    <span id="logTransportIndicator" class="log-transport-indicator" data-mode="http">HTTP</span>
                     <span id="logCount" style="font-size:0.7rem;color:var(--text-muted);"></span>
                 </div>
                 <div class="log-content" id="logContent"></div>
@@ -159,6 +160,7 @@
             <input type="number" id="pollInterval" value="500" min="50" max="5000" step="50" style="width:50px;font-size:0.65rem;text-align:center;padding:0.1rem 0.15rem;" title="Poll interval in milliseconds" onchange="applyPollInterval()">
             <span style="font-size:0.65rem;color:var(--text-muted);">ms</span>
         </span>
+        <span id="wsQuality" class="ws-quality" title="">--</span>
         <span style="font-size:0.7rem;color:var(--text-muted);" id="connStatus">Connected</span>
         <button class="btn btn-xs" onclick="toggleBottombar()" title="Hide status bar">&#x2715;</button>
     </div>

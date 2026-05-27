@@ -30,6 +30,12 @@ const state = {
     logWs: null,
     logWsReconnectTimer: null,
     _logWsReconnectAttempts: 0,
+    _logSearchReconnectTimer: null,
+    // WebSocket connection quality tracking
+    _wsLatency: 0,
+    _wsPingInterval: null,
+    _wsReconnectCount: 0,
+    _wsPingSendTime: 0,
 };
 
 // ─── Theme ───
@@ -748,6 +754,15 @@ function connectVttyWs(instUrl, cmdId) {
 
         ws.onopen = () => {
             document.getElementById('connStatus').textContent = 'WS Connected';
+            // Start ping/pong latency measurement (every 10s)
+            clearInterval(state._wsPingInterval);
+            state._wsPingInterval = setInterval(() => {
+                if (state.vttyWs && state.vttyWs.readyState === WebSocket.OPEN) {
+                    state._wsPingSendTime = Date.now();
+                    state.vttyWs.send(JSON.stringify({ type: 'ping' }));
+                }
+            }, 10000);
+            updateWsQualityIndicator();
         };
 
         ws.onmessage = (event) => {
@@ -771,6 +786,16 @@ function connectVttyWs(instUrl, cmdId) {
                     disconnectVttyWs();
                     // Browser notification on command exit
                     notifyCommandEnded(state.vttyWsCmdId);
+                } else if (msg.type === 'pong') {
+                    // Calculate RTT from ping/pong
+                    if (state._wsPingSendTime > 0) {
+                        state._wsLatency = Date.now() - state._wsPingSendTime;
+                        state._wsPingSendTime = 0;
+                        updateWsQualityIndicator();
+                        // Also update connStatus to show latency
+                        const connEl = document.getElementById('connStatus');
+                        if (connEl) connEl.textContent = 'Connected (' + state._wsLatency + 'ms)';
+                    }
                 } else if (msg.type === 'connected') {
                     // Server confirms connection. A vtty_full follows immediately.
                 }
@@ -782,13 +807,19 @@ function connectVttyWs(instUrl, cmdId) {
         ws.onclose = () => {
             if (state.vttyWs === ws) {
                 state.vttyWs = null;
+                clearInterval(state._wsPingInterval);
+                state._wsPingInterval = null;
+                state._wsPingSendTime = 0;
+                state._wsLatency = 0;
                 document.getElementById('connStatus').textContent = 'WS Disconnected';
+                updateWsQualityIndicator();
                 // When WebSocket disconnects, schedule an HTTP fetch to keep display alive
                 if (state.selectedInstUrl && state.selectedCmdId) {
                     scheduleVttyHttp(state.selectedInstUrl, state.selectedCmdId, 0);
                 }
                 // Auto-reconnect after 2 seconds if the command is still selected and alive
                 if (state.selectedInstUrl && state.selectedCmdId && !state._wsReconnectTimer) {
+                    state._wsReconnectCount++;
                     state._wsReconnectTimer = setTimeout(() => {
                         state._wsReconnectTimer = null;
                         if (state.selectedInstUrl && state.selectedCmdId && state.updateMode === 'push') {
@@ -813,6 +844,10 @@ function disconnectVttyWs() {
         clearTimeout(state._wsReconnectTimer);
         state._wsReconnectTimer = null;
     }
+    clearInterval(state._wsPingInterval);
+    state._wsPingInterval = null;
+    state._wsPingSendTime = 0;
+    state._wsLatency = 0;
     if (state.vttyWs) {
         state.vttyWs.onclose = null; // prevent re-entry
         state.vttyWs.close();
@@ -820,6 +855,40 @@ function disconnectVttyWs() {
         state.vttyWsUrl = null;
         state.vttyWsCmdId = null;
     }
+    updateWsQualityIndicator();
+}
+
+// ─── WebSocket Connection Quality Indicator ───
+function updateWsQualityIndicator() {
+    const el = document.getElementById('wsQuality');
+    if (!el) return;
+
+    const latency = state._wsLatency;
+    const reconnects = state._wsReconnectCount;
+    const isConnected = state.vttyWs && state.vttyWs.readyState === WebSocket.OPEN;
+
+    if (!isConnected && latency === 0) {
+        el.textContent = '--';
+        el.style.color = 'var(--red)';
+        el.title = 'Disconnected';
+        return;
+    }
+
+    let color;
+    if (latency === 0) {
+        // Connected but no measurement yet
+        color = 'var(--text-muted)';
+    } else if (latency < 50) {
+        color = 'var(--green)';
+    } else if (latency < 200) {
+        color = 'var(--yellow)';
+    } else {
+        color = 'var(--red)';
+    }
+
+    el.textContent = latency > 0 ? latency + 'ms' : '...';
+    el.style.color = color;
+    el.title = 'Latency: ' + (latency > 0 ? latency + 'ms' : 'measuring...') + ' | Reconnects: ' + reconnects;
 }
 
 // ─── Poll Mode ───
@@ -1475,6 +1544,7 @@ function _autoScrollLog(container) {
 }
 
 async function loadLog() {
+    _updateLogTransportIndicator('http');
     try {
         const search = document.getElementById('logSearch').value;
         const params = new URLSearchParams();
@@ -1491,19 +1561,23 @@ async function loadLog() {
 
             if (lines.length === 0) {
                 container.innerHTML = '<div style="padding:1rem;color:var(--text-muted);text-align:center;">No log entries found.' + (json.data.message ? ' ' + json.data.message : '') + '</div>';
-                return;
+            } else {
+                container.innerHTML = lines.map(line => {
+                    const parsed = parseLogLine(line);
+                    if (search && line.toLowerCase().includes(search.toLowerCase())) {
+                        return `<div class="log-line highlight">${formatLogLine(parsed, line)}</div>`;
+                    }
+                    return `<div class="log-line">${formatLogLine(parsed, line)}</div>`;
+                }).join('');
+
+                // Auto-scroll to bottom
+                container.scrollTop = container.scrollHeight;
             }
 
-            container.innerHTML = lines.map(line => {
-                const parsed = parseLogLine(line);
-                if (search && line.toLowerCase().includes(search.toLowerCase())) {
-                    return `<div class="log-line highlight">${formatLogLine(parsed, line)}</div>`;
-                }
-                return `<div class="log-line">${formatLogLine(parsed, line)}</div>`;
-            }).join('');
-
-            // Auto-scroll to bottom
-            container.scrollTop = container.scrollHeight;
+            // Start WebSocket streaming after HTTP load if no search filter is active
+            if (!search) {
+                connectLogWs();
+            }
         }
     } catch (e) {
         document.getElementById('logContent').innerHTML = `<div style="padding:1rem;color:var(--red);">Failed to load log: ${escHtml(e.message)}</div>`;
@@ -1526,10 +1600,24 @@ function formatLogLine(parsed, raw) {
     return escHtml(raw);
 }
 
-function searchLogs() { loadLog(); }
+function searchLogs() {
+    // Disconnect WS during search — user is filtering, streaming would bypass the filter
+    disconnectLogWs();
+    state._logWsReconnectAttempts = 0; // reset for after search
+    loadLog();
+}
+
 function clearLogSearch() {
     document.getElementById('logSearch').value = '';
     loadLog();
+    // Reconnect WS after search is cleared (debounced)
+    clearTimeout(state._logSearchReconnectTimer);
+    state._logSearchReconnectTimer = setTimeout(() => {
+        state._logSearchReconnectTimer = null;
+        if (state.currentView === 'log') {
+            connectLogWs();
+        }
+    }, 500);
 }
 
 // ─── Documentation ───
