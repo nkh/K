@@ -643,8 +643,11 @@ GET /
 GET /admin
 ```
 
-All static assets (HTML, CSS, JS, favicon) are embedded in the binary. No external
-dependencies or CDN resources are required.
+The interface is split into three files — `index.html`, `style.css`, and `app.js` — all embedded in the binary via `rust-embed`. No external dependencies or CDN resources are required.
+
+### CORS Configuration
+
+Cross-origin request policy is controlled by the `security.cors` configuration field. See [CORS Policy](#cors-configuration) below for details.
 
 ### Command-Name URL Routing
 
@@ -758,3 +761,29 @@ Forward a mouse event to a command's PTY. Used by the web UI to send mouse click
 ```json
 { "status": "ok", "data": { "id": "...", "kind": "press", "button": "left", "row": 10, "col": 20 } }
 ```
+
+---
+
+## CORS Configuration
+
+CORS (Cross-Origin Resource Sharing) controls which origins may make cross-origin requests to the vrunner API. This is configured through the `security.cors` section in the configuration file.
+
+### Configuration
+
+```yaml
+security:
+  cors:
+    policy: "any"
+```
+
+### Policy Modes
+
+| Policy | Behavior |
+|--------|----------|
+| `"any"` (default) | Sets `Access-Control-Allow-Origin: *`. All origins are allowed. Suitable for localhost development. |
+| `"none"` | No `Access-Control-Allow-Origin` header is set. Cross-origin requests are blocked by the browser. The admin interface still works when served from the same origin. |
+| Comma-separated origins | Only the listed origins are allowed. Example: `"https://dashboard.example.com,https://ci.example.com"`. Each origin must include the scheme (`http` or `https`). |
+
+### Interaction with Authentication
+
+When authentication is enabled (`security.require_auth: true`), the `Authorization` header is exposed to allowed CORS origins via `Access-Control-Expose-Headers`. If you restrict CORS to specific origins, those origins must be listed in the policy so that browser-based clients can read the authorization response headers.
