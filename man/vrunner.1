@@ -222,6 +222,14 @@ Save the VTTY buffer to \fIFILE\fR as plain text when the command exits. This is
 Send keystrokes to the command after it starts. Uses the same key notation as the API's \fBsend_keys\fR endpoint. Plain text is sent as-is; special keys use \fB<...>\fR notation: \fB<Enter>\fR, \fB<Tab>\fR, \fB<Esc>\fR, \fB<Up>\fR, \fB<Down>\fR, \fB<Left>\fR, \fB<Right>\fR, \fB<F1>\fR through \fB<F12>\fR, \fB<C\-c>\fR (Ctrl+C), \fB<C\-d>\fR (Ctrl+D), \fB<A\-x>\fR (Alt+x). Example: \fB\-\-send\-keys "ls<Enter>"\fR.
 
 .TP
+.B \-\-snapshot\-on\-exit \fIFILE\fR
+Save the VTTY buffer to a file as plain text when the command exits. The output includes scrollback content followed by the visible screen rows, with each line trimmed of trailing whitespace. The snapshot is taken after the process exits but before the command is removed from the manager. This is a per-command option.
+
+.TP
+.B \-\-send\-keys \fIKEYS\fR
+Send keystrokes to the command after it starts. Uses the same key notation as the API's send_keys endpoint. Plain text is sent as-is; special keys use <...> notation: <Enter>, <Tab>, <Esc>, <Up>, <Down>, <Left>, <Right>, <F1>\-<F12>, <C\-c>, <C\-d>, <A\-x> (Alt+x). Example: \fB\-\-send\-keys "ls<Enter>\fR.
+
+.TP
 .B \-\-log\-pty\-raw \fIFILE\fR
 Log raw PTY output from child processes to a file. Each line records one read() call with an elapsed-time stamp and escaped bytes (printable ASCII as-is, non-printable as \fB\\xHH\fR). The resulting log can be replayed step-by-step with \fBansi-replay\fR.
 
@@ -880,6 +888,22 @@ Child command exited with a non-zero status (when running a command directly).
 .SH SEE ALSO
 
 .BR vrunnerctrl (1),
+.BR vrunner\-list (1),
+.BR vrunner\-stop (1),
+.BR vrunner\-spawn (1),
+.BR vrunner\-freeze (1),
+.BR vrunner\-thaw (1),
+.BR vrunner\-cert (1),
+.BR vrunner\-cert\-generate (1),
+.BR vrunner\-cert\-list (1),
+.BR vrunner\-cert\-show (1),
+.BR vrunner\-cert\-remove (1),
+.BR vrunner\-list\-vrunner (1),
+.BR vrunner\-list\-commands (1),
+.BR vrunner\-stop\-command (1),
+.BR vrunner\-purge (1),
+.BR vrunner\-resize (1),
+.BR vrunner\-config\-check (1),
 .BR curl (1),
 .BR kill (1),
 .BR lsof (8)
