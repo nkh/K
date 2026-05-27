@@ -16,6 +16,42 @@
     --font-sans: system-ui, -apple-system, sans-serif;
     --font-size: 10px;
 }
+
+[data-theme="light"] {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f6f8fa;
+    --bg-tertiary: #eaeef2;
+    --border: #d0d7de;
+    --text-primary: #1f2328;
+    --text-secondary: #656d76;
+    --text-muted: #8b949e;
+    --accent: #0969da;
+    --accent-dim: #0969da22;
+    --green: #1a7f37;
+    --red: #cf222e;
+    --yellow: #9a6700;
+    --purple: #8250df;
+}
+[data-theme="light"] .vtty-container { --vtty-bg: #ffffff; }
+
+@media (prefers-color-scheme: light) {
+    :root:not([data-theme]) {
+        --bg-primary: #ffffff;
+        --bg-secondary: #f6f8fa;
+        --bg-tertiary: #eaeef2;
+        --border: #d0d7de;
+        --text-primary: #1f2328;
+        --text-secondary: #656d76;
+        --text-muted: #8b949e;
+        --accent: #0969da;
+        --accent-dim: #0969da22;
+        --green: #1a7f37;
+        --red: #cf222e;
+        --yellow: #9a6700;
+        --purple: #8250df;
+    }
+    :root:not([data-theme]) .vtty-container { --vtty-bg: #ffffff; }
+}
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: var(--font-sans); background: var(--bg-primary); color: var(--text-primary); font-size: var(--font-size); overflow: hidden; height: 100vh; }
 
@@ -51,7 +87,7 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .panel-header .instance-url { font-size: 0.65rem; color: var(--text-muted); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
 
 /* VTTY */
-.vtty-container { flex: 1; overflow: auto; background: #000; position: relative; cursor: text; }
+.vtty-container { flex: 1; overflow: auto; background: var(--vtty-bg, #000); position: relative; cursor: text; }
 .vtty-container pre { margin: 0; padding: 0; font-family: var(--font-mono); font-size: var(--font-size); line-height: 1.2; min-width: 100%; min-height: 100%; }
 .vtty-container .cursor-indicator { position: absolute; width: 8px; height: 14px; background: rgba(88, 166, 255, 0.6); border: 1px solid var(--accent); pointer-events: none; transition: top 0.05s, left 0.05s; z-index: 5; }
 .vtty-container .search-bar { position: absolute; top: 4px; right: 4px; z-index: 10; display: none; gap: 4px; align-items: center; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; }
