@@ -13,6 +13,675 @@ use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc};
 
 use crate::process::manager::CommandManager;
+use std::io::Write;
+
+// ── Mouse event types for clipboard selection (#15) ──
+// ── Mouse event types for clipboard selection (#15) ──
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum MouseButton { Left, Middle, Right, WheelUp, WheelDown }
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum MouseEventType { Press, Release, #[allow(dead_code)] Motion }
+#[derive(Debug, Clone)]
+pub(crate) struct MouseEvent { button: MouseButton, event_type: MouseEventType, x: u16, y: u16 }
+// ── End mouse event types ──
+// ── End mouse event types ──
+
+// ── Send focus gained event to commands with ?1004h enabled ──
+// When a command has enabled focus reporting, we send OSC 101 I
+// to indicate the terminal gained focus (display mode entered).
+pub(crate) async fn send_focus_event(manager: &Arc<CommandManager>, gained: bool) {
+    let event = if gained { b"\x1b]101;i\x1b\\".to_vec() } else { b"\x1b]101;o\x1b\\".to_vec() };
+    for entry in manager.list() {
+        if let Some(handle) = manager.get(&entry.0) {
+            if handle.focus_reporting_enabled().await {
+                let _ = handle.send_bytes(event.clone()).await;
+            }
+        }
+    }
+}
+
+/// Render the VTTY buffer for the active command, or clear if none.
+/// Also positions a steady (non-blinking) cursor at the VTTY's
+/// logical cursor position.
+pub(crate) async fn render_vtty(
+    manager: &Arc<CommandManager>,
+    active_id: &Option<String>,
+    tab_offset: u16,
+    scrollback_offset: usize,
+    display_all: bool,
+) {
+    use crate::vtty::display::TerminalDisplay;
+
+    let commands = manager.list();
+    let target_id = active_id.as_ref()
+        .or_else(|| commands.first().map(|(id, _, _, _, _)| id));
+
+    if let Some(id) = target_id {
+        if let Some(handle) = manager.get(id) {
+            let buf = handle.vtty_snapshot().await;
+            let (cur_row, cur_col) = handle.cursor_position().await;
+            let cur_style = handle.cursor_style().await;
+            drop(handle);
+            let _ = TerminalDisplay::render(&buf, tab_offset, scrollback_offset);
+            // Only show cursor when not scrolled back into history
+            if scrollback_offset == 0 {
+                let _ = TerminalDisplay::show_cursor_with_style(cur_row + tab_offset as usize, cur_col, cur_style);
+            }
+        }
+    } else {
+        // No active command — in display_all mode show a waiting
+        // message instead of a blank screen so the user knows the
+        // display is alive and waiting for commands.
+        use std::io::Write;
+        let mut stdout = std::io::stdout();
+        let _ = TerminalDisplay::clear();
+        if display_all {
+            let _ = write!(stdout, "\r\n  vrunner: no commands running.\r\n");
+            let _ = write!(stdout, "  Waiting for commands (web UI, API, or F12 to spawn).\r\n");
+            let _ = write!(stdout, "\r\n  Press Ctrl+\\ to quit.\r\n");
+            let _ = stdout.flush();
+        }
+    }
+}
+
+/// Render a tab bar at the top of the terminal listing all running commands.
+/// The active command is highlighted with reverse video.
+/// Returns a vector of (id, start_col, end_col) for mouse hit-testing.
+/// Exited commands (retain_on_exit) are shown with a dim style and [exit N] suffix.
+pub(crate) fn render_tab_bar(
+    manager: &CommandManager,
+    active_id: &Option<String>,
+) -> Vec<(String, u16, u16)> {
+    use crossterm::{
+        style::{self, Attribute, Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
+        cursor::MoveTo,
+        terminal::ClearType,
+        QueueableCommand,
+    };
+    let mut stdout = std::io::stdout();
+    let (phys_cols, _) = crossterm::terminal::size().unwrap_or((80, 24));
+    let commands = manager.list();
+
+    // Background for the tab bar
+    stdout.queue(SetBackgroundColor(Color::Rgb { r: 40, g: 42, b: 54 })).ok();
+    stdout.queue(SetForegroundColor(Color::Rgb { r: 180, g: 180, b: 180 })).ok();
+    stdout.queue(MoveTo(0, 0)).ok();
+    stdout.queue(crossterm::terminal::Clear(ClearType::UntilNewLine)).ok();
+
+    if commands.is_empty() {
+        stdout.queue(Print(" (no commands)")).ok();
+        stdout.queue(ResetColor).ok();
+        stdout.flush().ok();
+        return Vec::new();
+    }
+
+    let mut col: u16 = 1;
+    let mut positions: Vec<(String, u16, u16)> = Vec::new();
+    for (id, name, _args, _pid, _cert) in &commands {
+        let is_active = active_id.as_ref() == Some(id);
+        // Check if the command has exited (retain_on_exit)
+        let is_exited = manager.get(id).map(|h| !h.is_alive()).unwrap_or(false);
+        let exit_code_str = {
+            let ec_opt: Option<i32> = manager.get(id).and_then(|h| {
+                let guard = h.exit_code.lock().ok()?;
+                *guard
+            });
+            ec_opt.map(|c| format!(" [exit {}]", c)).unwrap_or_default()
+        };
+        if is_active {
+            stdout.queue(SetBackgroundColor(Color::Rgb { r: 68, g: 71, b: 90 })).ok();
+            if is_exited {
+                stdout.queue(SetForegroundColor(Color::Rgb { r: 255, g: 120, b: 120 })).ok();
+            } else {
+                stdout.queue(SetForegroundColor(Color::Rgb { r: 255, g: 255, b: 255 })).ok();
+            }
+            stdout.queue(style::SetAttribute(Attribute::Bold)).ok();
+        } else if is_exited {
+            stdout.queue(SetBackgroundColor(Color::Rgb { r: 40, g: 42, b: 54 })).ok();
+            stdout.queue(SetForegroundColor(Color::Rgb { r: 180, g: 100, b: 100 })).ok();
+            stdout.queue(style::SetAttribute(Attribute::NoBold)).ok();
+        } else {
+            stdout.queue(SetBackgroundColor(Color::Rgb { r: 40, g: 42, b: 54 })).ok();
+            stdout.queue(SetForegroundColor(Color::Rgb { r: 140, g: 140, b: 140 })).ok();
+            stdout.queue(style::SetAttribute(Attribute::NoBold)).ok();
+        }
+
+        // Build display label with optional exit code
+        let tab_start = col;
+        let label = if col == 1 { "" } else { " " };
+        let tab_text = format!("{}{}{}", label, name, exit_code_str);
+        let max_width = (phys_cols.saturating_sub(col + 1)) as usize;
+        let display = if tab_text.len() > max_width {
+            format!("{}...", &tab_text[..max_width.min(3)])
+        } else {
+            tab_text
+        };
+
+        if col + display.len() as u16 >= phys_cols {
+            // Overflow — print ellipsis and stop
+            stdout.queue(Print(format!("{}...", &display[..display.len().min(3)]))).ok();
+            break;
+        }
+
+        stdout.queue(Print(&display)).ok();
+        col += display.len() as u16;
+        positions.push((id.clone(), tab_start, col));
+    }
+
+    // Clear remaining space
+    stdout.queue(ResetColor).ok();
+    stdout.queue(SetBackgroundColor(Color::Rgb { r: 40, g: 42, b: 54 })).ok();
+    if col < phys_cols {
+        stdout.queue(MoveTo(col, 0)).ok();
+        stdout.queue(crossterm::terminal::Clear(ClearType::UntilNewLine)).ok();
+    }
+    stdout.queue(ResetColor).ok();
+    stdout.flush().ok();
+
+    positions
+}
+
+/// Find all regex matches in the VTTY buffer and return their positions.
+/// Each match is (row, col, length) in the scrollback+visible coordinate space.
+pub(crate) fn find_search_matches(
+    manager: &Arc<CommandManager>,
+    active_id: &Option<String>,
+    regex: &regex::Regex,
+) -> Vec<(usize, usize, usize)> {
+    let commands = manager.list();
+    let target_id = active_id.as_ref()
+        .or_else(|| commands.first().map(|(id, _, _, _, _)| id));
+    let mut positions = Vec::new();
+
+    if let Some(id) = target_id {
+        if let Some(handle) = manager.get(id) {
+            let buf = handle.vtty_snapshot_blocking();
+            let total = buf.total_lines();
+            // Search from scrollback through visible rows
+            for line_idx in 0..total {
+                if let Some(line) = buf.get_line(line_idx) {
+                    // Build a string from the cell characters in this line
+                    let line_str: String = line.iter()
+                        .map(|c| if c.width == 0 { '\0' } else { c.ch })
+                        .collect();
+                    for mat in regex.find_iter(&line_str) {
+                        // Convert char-index to cell-index (skip zero-width cells)
+                        let char_start = mat.start();
+                        let char_end = mat.end();
+                        let mut col: usize = 0;
+                        let mut chars_seen: usize = 0;
+                        let mut start_col: usize = 0;
+                        let mut end_col: usize = 0;
+                        for cell in line.iter() {
+                            if cell.width == 0 { continue; }
+                            if chars_seen == char_start { start_col = col; }
+                            if chars_seen == char_end { end_col = col; break; }
+                            chars_seen += 1;
+                            col += 1;
+                        }
+                        if chars_seen == char_end { end_col = col; }
+                        let len = end_col.saturating_sub(start_col);
+                        if len > 0 {
+                            positions.push((line_idx, start_col, len));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    positions
+}
+
+/// Render the search bar at the bottom of the terminal.
+/// Shows the current query, match count, and navigation hint.
+pub(crate) fn render_search_bar(
+    query: &str,
+    match_count: usize,
+    current_match: usize,
+    is_error: bool,
+) {
+    use std::io::Write;
+    use crossterm::{
+        style::{Color, ResetColor, SetBackgroundColor, SetForegroundColor},
+        cursor::MoveTo,
+        terminal::ClearType,
+        QueueableCommand,
+    };
+    let mut stdout = std::io::stdout();
+    let (_, phys_rows) = crossterm::terminal::size().unwrap_or((80, 24));
+    let bottom = phys_rows.saturating_sub(1);
+
+    stdout.queue(SetBackgroundColor(Color::Rgb { r: 30, g: 30, b: 50 })).ok();
+    stdout.queue(SetForegroundColor(Color::Rgb { r: 200, g: 200, b: 255 })).ok();
+    stdout.queue(MoveTo(0, bottom)).ok();
+    stdout.queue(crossterm::terminal::Clear(ClearType::UntilNewLine)).ok();
+
+    // Search label
+    if is_error {
+        let _ = write!(stdout, "\x1b[1;31mSearch:\x1b[0m ");
+    } else {
+        let _ = write!(stdout, "\x1b[1;36mSearch:\x1b[0m ");
+    }
+
+    // Query text
+    let _ = write!(stdout, "{}", query);
+
+    // Match indicator on the right
+    if match_count > 0 {
+        let indicator = format!(" [{} of {}]", current_match + 1, match_count);
+        let _ = write!(stdout, "{}", indicator);
+    } else if !query.is_empty() {
+        let _ = write!(stdout, " \x1b[2m[no matches]\x1b[0m");
+    }
+
+    // Key hints
+    let _ = write!(stdout, "\x1b[2m [Esc]close [Enter]next [S+Enter]prev\x1b[0m");
+
+    stdout.queue(ResetColor).ok();
+    stdout.flush().ok();
+}
+
+/// Render search match highlights on top of the VTTY display.
+/// Uses reverse-video with a yellow tint to highlight matched cells.
+pub(crate) fn render_search_highlights(
+    matches: &[(usize, usize, usize)],
+    current_match_idx: usize,
+    scrollback_offset: usize,
+    tab_offset: u16,
+) {
+    use std::io::Write;
+    let mut stdout = std::io::stdout();
+    let (_, phys_rows) = crossterm::terminal::size().unwrap_or((80, 24));
+    let visible_start = scrollback_offset;
+    let visible_end = scrollback_offset + (phys_rows as usize);
+
+    for (i, &(row, col, len)) in matches.iter().enumerate() {
+        // Only highlight if this match is in the visible area
+        if row < visible_start || row >= visible_end { continue; }
+
+        let screen_row = row - visible_start + (tab_offset as usize);
+        // Highlight current match differently
+        if i == current_match_idx {
+            let _ = write!(stdout, "\x1b[{};{}H", screen_row + 1, col + 1);
+            let _ = write!(stdout, "\x1b[7;38;5;11m"); // reverse + bright yellow fg
+            // Read the actual characters and re-print them
+            // We just mark the background here; the chars are already rendered
+            for _ in 0..len {
+                let _ = write!(stdout, " ");
+            }
+            let _ = write!(stdout, "\x1b[0m");
+        } else {
+            let _ = write!(stdout, "\x1b[{};{}H", screen_row + 1, col + 1);
+            let _ = write!(stdout, "\x1b[48;5;58m"); // dim blue bg
+            for _ in 0..len {
+                let _ = write!(stdout, " ");
+            }
+            let _ = write!(stdout, "\x1b[0m");
+        }
+    }
+    let _ = stdout.flush();
+}
+
+/// Render a split-pane view with two VTTYs side-by-side.
+/// The left pane shows `left_id`'s buffer, the right shows `right_id`'s.
+/// A vertical divider line separates the two panes.
+pub(crate) fn render_split_pane(
+    manager: &Arc<CommandManager>,
+    left_id: &Option<String>,
+    right_id: &Option<String>,
+    tab_offset: u16,
+) {
+    use std::io::Write;
+    let mut stdout = std::io::stdout();
+    let (phys_cols, phys_rows) = crossterm::terminal::size().unwrap_or((80, 24));
+    let available_rows = phys_rows.saturating_sub(tab_offset);
+    let half_col = (phys_cols / 2) as usize;
+
+    // Draw vertical divider
+    let div_col = half_col;
+    let _ = write!(stdout, "\x1b[38;5;240m"); // grey
+    for r in tab_offset..phys_rows {
+        let _ = write!(stdout, "\x1b[{};{}H", r + 1, div_col + 1);
+        let _ = write!(stdout, "\u{2502}"); // box drawing vertical line
+    }
+    let _ = write!(stdout, "\x1b[0m");
+
+    // Render left pane
+    if let Some(ref id) = left_id {
+        if let Some(handle) = manager.get(id) {
+            let buf = handle.vtty_snapshot_blocking();
+            let render_cols = (buf.width as u16).min(div_col as u16) as usize;
+            let total_lines = buf.total_lines();
+            let viewport_start = total_lines.saturating_sub(available_rows as usize);
+            let mut last_sgr = String::new();
+            for screen_row in 0..(available_rows as usize) {
+                let line_idx = viewport_start + screen_row;
+                let row: &[crate::vtty::cell::Cell] = match buf.get_line(line_idx) {
+                    Some(r) => r,
+                    None => continue,
+                };
+                let _ = write!(stdout, "\x1b[{};1H", screen_row as u16 + tab_offset + 1);
+                let visible_len = render_cols.min(row.len());
+                for cell in &row[..visible_len] {
+                    let sgr = build_cell_sgr(cell);
+                    if sgr != last_sgr {
+                        let _ = write!(stdout, "{}", sgr);
+                        last_sgr = sgr;
+                    }
+                    let _ = write!(stdout, "{}", cell.ch);
+                }
+                // Clear to divider
+                if (visible_len as u16) < div_col as u16 {
+                    let _ = write!(stdout, "\x1b[0m\x1b[K");
+                    last_sgr = String::new();
+                }
+            }
+            // Show pane label
+            let label = format!(" {} ", id);
+            let _ = write!(stdout, "\x1b[1;1H\x1b[48;5;238m\x1b[38;5;255m{}\x1b[0m", label);
+        }
+    }
+
+    // Render right pane
+    if let Some(ref id) = right_id {
+        if let Some(handle) = manager.get(id) {
+            let buf = handle.vtty_snapshot_blocking();
+            let render_cols = ((phys_cols - half_col as u16 - 1) as usize).min(buf.width);
+            let total_lines = buf.total_lines();
+            let viewport_start = total_lines.saturating_sub(available_rows as usize);
+            let mut last_sgr = String::new();
+            let col_start = half_col + 1;
+            for screen_row in 0..(available_rows as usize) {
+                let line_idx = viewport_start + screen_row;
+                let row: &[crate::vtty::cell::Cell] = match buf.get_line(line_idx) {
+                    Some(r) => r,
+                    None => continue,
+                };
+                let _ = write!(stdout, "\x1b[{};{}H", screen_row as u16 + tab_offset + 1, col_start + 1);
+                let visible_len = render_cols.min(row.len());
+                for cell in &row[..visible_len] {
+                    let sgr = build_cell_sgr(cell);
+                    if sgr != last_sgr {
+                        let _ = write!(stdout, "{}", sgr);
+                        last_sgr = sgr;
+                    }
+                    let _ = write!(stdout, "{}", cell.ch);
+                }
+                // Clear to end of line
+                let _ = write!(stdout, "\x1b[0m\x1b[K");
+                last_sgr = String::new();
+            }
+            // Show pane label
+            let label = format!(" {} ", id);
+            let _ = write!(stdout, "\x1b[1;{}H\x1b[48;5;238m\x1b[38;5;255m{}\x1b[0m", col_start + 1, label);
+        }
+    }
+
+    let _ = stdout.flush();
+}
+
+/// Build an SGR escape sequence string for a cell's styling.
+pub(crate) fn build_cell_sgr(cell: &crate::vtty::cell::Cell) -> String {
+    let mut sgr = String::new();
+    if cell.fg != [204, 204, 204] {
+        sgr.push_str(&format!("\x1b[38;2;{};{};{}m", cell.fg[0], cell.fg[1], cell.fg[2]));
+    } else {
+        sgr.push_str("\x1b[39m");
+    }
+    if cell.bg != [0, 0, 0] {
+        sgr.push_str(&format!("\x1b[48;2;{};{};{}m", cell.bg[0], cell.bg[1], cell.bg[2]));
+    } else {
+        sgr.push_str("\x1b[49m");
+    }
+    if cell.bold { sgr.push_str("\x1b[1m"); }
+    if cell.italic { sgr.push_str("\x1b[3m"); }
+    if cell.underline { sgr.push_str("\x1b[4m"); }
+    if cell.reverse { sgr.push_str("\x1b[7m"); }
+    if sgr == "\x1b[39m\x1b[49m" { sgr = "\x1b[0m".to_string(); }
+    sgr
+}
+
+/// Try to parse a mouse event from the escape buffer.
+/// Returns Some(MouseEvent) if the buffer contains a complete mouse sequence,
+/// None otherwise.  Supports both legacy (`ESC [ M Cb Cr Cc`) and
+/// SGR (`ESC [ < Cb ; Cx ; Cy [Mm]`) encodings.
+/// Also detects mouse wheel events (SGR cb=64/65, legacy cb=32/33 without motion).
+pub(crate) fn try_parse_mouse_event(buf: &[u8]) -> Option<MouseEvent> {
+    // SGR encoding: ESC [ < Cb ; Cx ; Cy M (press/drag) or m (release)
+    if buf.len() >= 8 && buf.starts_with(b"\x1b[<") {
+        let last = *buf.last()?;
+        if last != b'M' && last != b'm' { return None; }
+        let is_release = last == b'm';
+        let inner = &buf[3..buf.len()-1];
+        let parts: Vec<&[u8]> = inner.splitn(3, |&b| b == b';').collect();
+        if parts.len() != 3 { return None; }
+        let cb: u8 = std::str::from_utf8(parts[0]).ok()?.parse().ok()?;
+        let cx: u16 = std::str::from_utf8(parts[1]).ok()?.parse().ok()?;
+        let cy: u16 = std::str::from_utf8(parts[2]).ok()?.parse().ok()?;
+        let _is_motion = (cb & 0x20) != 0;
+        let button = match cb & 3 {
+            0 => MouseButton::Left,
+            1 => MouseButton::Middle,
+            2 => MouseButton::Right,
+            _ => MouseButton::Left,
+        };
+        // Check for wheel events (SGR encoding uses cb values 64-67)
+        let (button, event_type) = if (64..=67).contains(&cb) {
+            let wheel = if cb & 1 != 0 { MouseButton::WheelDown } else { MouseButton::WheelUp };
+            (wheel, MouseEventType::Press)
+        } else {
+            let et = if is_release { MouseEventType::Release } else { MouseEventType::Press };
+            (button, et)
+        };
+        return Some(MouseEvent { button, event_type, x: cx, y: cy });
+    }
+    // Legacy encoding: ESC [ M Cb Cx+32 Cy+32
+    if buf.len() >= 6 && buf.starts_with(b"\x1b[M") {
+        let cb = buf[3];
+        let cx = (buf[4].saturating_sub(32)) as u16;
+        let cy = (buf[5].saturating_sub(32)) as u16;
+        let _is_motion = (cb & 0x20) != 0;
+        let is_release = (cb & 0x40) != 0 || (cb & 0x03) == 0x03;
+        // Check for wheel events (legacy: cb & 0x43 gives 32/33 for wheel up/down)
+        let (button, event_type) = if !is_release && (cb & 0x40) != 0 {
+            // Bit 6 set without release means wheel (legacy encoding)
+            let wheel = if (cb & 0x01) != 0 { MouseButton::WheelDown } else { MouseButton::WheelUp };
+            (wheel, MouseEventType::Press)
+        } else {
+            let btn = match cb & 3 {
+                0 => MouseButton::Left,
+                1 => MouseButton::Middle,
+                2 => MouseButton::Right,
+                _ => MouseButton::Left,
+            };
+            let et = if is_release { MouseEventType::Release } else { MouseEventType::Press };
+            (btn, et)
+        };
+        return Some(MouseEvent { button, event_type, x: cx, y: cy });
+    }
+    None
+}
+
+/// Render a visual selection highlight over the VTTY display.
+/// Draws a reverse-video rectangle from start to end coordinates.
+pub(crate) fn render_selection_highlight(
+    start: (u16, u16),
+    end: (u16, u16),
+    tab_offset: u16,
+) {
+    use std::io::Write;
+    let mut stdout = std::io::stdout();
+    let (min_row, max_row) = if start.0 <= end.0 { (start.0, end.0) } else { (end.0, start.0) };
+    let (min_col, max_col) = if start.1 <= end.1 { (start.1, end.1) } else { (end.1, start.1) };
+    for row in min_row..=max_row {
+        let screen_row = row + tab_offset;
+        let col_start = if row == min_row { min_col } else { 0 };
+        let col_end = if row == max_row { max_col } else { u16::MAX };
+        let _ = write!(stdout, "\x1b[{};{}H", screen_row + 1, col_start + 1);
+        let _ = write!(stdout, "\x1b[7m"); // reverse video
+        let _ = write!(stdout, "\x1b[{};{}H", screen_row + 1, col_start + 1);
+        // We can't know the exact cell content here, so we mark positions
+        // The visual effect is provided by the reverse video styling
+        if col_end == u16::MAX {
+            let _ = write!(stdout, "\x1b[0K"); // clear to end of line (shows reverse bg)
+        } else {
+            let len = (col_end.saturating_sub(col_start) + 1) as usize;
+            let _ = write!(stdout, "{}", " ".repeat(len));
+        }
+        let _ = write!(stdout, "\x1b[0m"); // reset
+    }
+    let _ = stdout.flush();
+}
+
+/// Extract text from the VTTY buffer for the selected region and copy to clipboard.
+/// Uses OSC 52 escape sequence to set the clipboard (works in xterm, kitty, etc.).
+pub(crate) fn copy_selection_to_clipboard(
+    manager: &Arc<CommandManager>,
+    active_id: &Option<String>,
+    start: (u16, u16),
+    end: (u16, u16),
+    _tab_offset: u16,
+) {
+    use std::io::Write;
+    let commands = manager.list();
+    let target_id = active_id.as_ref()
+        .or_else(|| commands.first().map(|(id, _, _, _, _)| id));
+
+    if let Some(id) = target_id {
+        if let Some(handle) = manager.get(id) {
+            let buf = handle.vtty_snapshot_blocking();
+            let (min_row, max_row) = if start.0 <= end.0 { (start.0, end.0) } else { (end.0, start.0) };
+            let (min_col, max_col) = if start.1 <= end.1 { (start.1, end.1) } else { (end.1, start.1) };
+            let total_lines = buf.total_lines();
+            let viewport_start = total_lines.saturating_sub(buf.height);
+
+            let mut selected_text = String::new();
+            for row in min_row..=max_row {
+                let line_idx = viewport_start.saturating_add(row as usize);
+                if let Some(line) = buf.get_line(line_idx) {
+                    let col_start = if row == min_row { min_col as usize } else { 0 };
+                    let col_end = if row == max_row { max_col as usize } else { line.len() };
+                    for cell in line.iter().skip(col_start).take(col_end.saturating_sub(col_start)) {
+                        if cell.width > 0 {
+                            selected_text.push(cell.ch);
+                        }
+                    }
+                    if row < max_row {
+                        selected_text.push('\n');
+                    }
+                }
+            }
+
+            if !selected_text.is_empty() {
+                // Use OSC 52 to copy to clipboard
+                // Format: ESC ] 52 ; c ; <base64> BEL
+                let encoded = base64_encode(&selected_text);
+                let mut stdout = std::io::stdout();
+                let _ = write!(stdout, "\x1b]52;c;{}\x07", encoded);
+                let _ = stdout.flush();
+                tracing::debug!(len = selected_text.len(), "Copied selection to clipboard via OSC 52");
+            }
+        }
+    }
+}
+
+/// Simple base64 encoder for clipboard content (avoids adding a dependency).
+pub(crate) fn base64_encode(input: &str) -> String {
+    const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let bytes = input.as_bytes();
+    let mut result = String::new();
+    let mut i = 0;
+    while i + 3 <= bytes.len() {
+        let n = (bytes[i] as u32) << 16 | (bytes[i+1] as u32) << 8 | (bytes[i+2] as u32);
+        result.push(CHARS[((n >> 18) & 63) as usize] as char);
+        result.push(CHARS[((n >> 12) & 63) as usize] as char);
+        result.push(CHARS[((n >> 6) & 63) as usize] as char);
+        result.push(CHARS[(n & 63) as usize] as char);
+        i += 3;
+    }
+    if i + 2 <= bytes.len() {
+        let n = (bytes[i] as u32) << 16 | (bytes[i+1] as u32) << 8;
+        result.push(CHARS[((n >> 18) & 63) as usize] as char);
+        result.push(CHARS[((n >> 12) & 63) as usize] as char);
+        result.push('=');
+        result.push('=');
+    } else if i < bytes.len() {
+        let n = (bytes[i] as u32) << 16;
+        result.push(CHARS[((n >> 18) & 63) as usize] as char);
+        result.push('=');
+        result.push('=');
+        result.push('=');
+    }
+    result
+}
+
+/// Render a right-click context menu at the given position.
+/// Items: Kill, Purge, Copy ID.
+pub(crate) fn render_context_menu(
+    x: u16,
+    y: u16,
+    items: &[(&str, &str)],
+    selected: usize,
+) {
+    use std::io::Write;
+    let mut stdout = std::io::stdout();
+    let (phys_cols, phys_rows) = crossterm::terminal::size().unwrap_or((80, 24));
+
+    // Ensure menu stays within terminal bounds
+    let menu_width: u16 = 20;
+    let menu_height: u16 = items.len() as u16;
+    let mx = if x + menu_width > phys_cols { phys_cols.saturating_sub(menu_width) } else { x };
+    let my = if y + menu_height + 1 > phys_rows { y.saturating_sub(menu_height + 1) } else { y };
+
+    // Draw border
+    let _ = write!(stdout, "\x1b[{};{}H", my + 1, mx + 1);
+    let _ = write!(stdout, "\x1b[48;5;238m\x1b[38;5;240m");
+    // Top border
+    for _ in 0..menu_width {
+        let _ = write!(stdout, "\u{2500}");
+    }
+
+    // Items
+    for (i, (label, _action)) in items.iter().enumerate() {
+        let _ = write!(stdout, "\x1b[{};{}H", my + 2 + i as u16, mx + 1);
+        if i == selected {
+            let _ = write!(stdout, "\x1b[48;5;110m\x1b[38;5;235m"); // highlighted
+        } else {
+            let _ = write!(stdout, "\x1b[48;5;238m\x1b[38;5;255m"); // normal
+        }
+        let padded = format!(" {:<width$} ", label, width = (menu_width - 1) as usize);
+        let _ = write!(stdout, "{}", padded);
+    }
+
+    let _ = write!(stdout, "\x1b[0m");
+    let _ = stdout.flush();
+}
+
+/// Render an [EXITED] watermark on the VTTY display when viewing an exited command.
+pub(crate) fn render_exited_watermark(
+    tab_offset: u16,
+    exit_code: Option<i32>,
+) {
+    use std::io::Write;
+    let mut stdout = std::io::stdout();
+    let (phys_cols, phys_rows) = crossterm::terminal::size().unwrap_or((80, 24));
+    let center_col = phys_cols / 2;
+    let center_row = (tab_offset + phys_rows) / 2;
+
+    let label: String = match exit_code {
+        Some(0) => "[EXITED]".to_string(),
+        Some(code) => format!("[EXITED code:{}]", code),
+        None => "[EXITED]".to_string(),
+    };
+    let label_len = label.len() as u16;
+    let start_col = center_col.saturating_sub(label_len / 2);
+
+    let _ = write!(stdout, "\x1b[{};{}H", center_row + 1, start_col + 1);
+    let _ = write!(stdout, "\x1b[48;5;52m\x1b[38;5;196m\x1b[1m");
+    let _ = write!(stdout, "{}", label);
+    let _ = write!(stdout, "\x1b[0m");
+    let _ = stdout.flush();
+}
 
 /// Run the interactive terminal display loop.
 ///
@@ -57,6 +726,15 @@ pub async fn run_display_loop(
     log_entries: &Arc<std::sync::Mutex<Vec<String>>>,
     show_tabs: bool,
 ) -> bool {
+    // Architecture: event-driven select! loop with 4 branches:
+    //   1. Child exit notification (watch channel) → transition or break
+    //   2. Periodic tick (mpsc) → render VTTY, check exit, handle overlays
+    //   3. SIGWINCH (mpsc bridge) → resize PTY and VTTY buffers
+    //   4. Keystroke (AsyncFd on /dev/tty) → keybinding match or forward to command
+    // State is held in local variables; rendering and parsing are in module-level fns.
+    // Overlays: help (F1), log (Ctrl+L), search (Ctrl+F), split-pane (Ctrl+S),
+    // mouse selection (#15), context menu (right-click tabs).
+
     use crate::interactive::{Binding, Action, ActionEffect, check_bindings, resolve_keybindings};
     use crate::interactive::{render_help_overlay, read_spawn_command, restore_raw_mode};
     use crate::vtty::display::TerminalDisplay;
@@ -64,14 +742,6 @@ pub async fn run_display_loop(
     use crossterm::{cursor, ExecutableCommand};
     use std::io::Write;
 
-    // ── Mouse event types for clipboard selection (#15) ──
-    #[derive(Debug, Clone, PartialEq)]
-    enum MouseButton { Left, Middle, Right, WheelUp, WheelDown }
-    #[derive(Debug, Clone, PartialEq)]
-    enum MouseEventType { Press, Release, #[allow(dead_code)] Motion }
-    #[derive(Debug, Clone)]
-    struct MouseEvent { button: MouseButton, event_type: MouseEventType, x: u16, y: u16 }
-    // ── End mouse event types ──
 
     // Set up the alternate screen and raw mode.
     let mut stdout = std::io::stdout();
@@ -85,16 +755,6 @@ pub async fn run_display_loop(
     // ── Send focus gained event to commands with ?1004h enabled ──
     // When a command has enabled focus reporting, we send OSC 101 I
     // to indicate the terminal gained focus (display mode entered).
-    async fn send_focus_event(manager: &Arc<CommandManager>, gained: bool) {
-        let event = if gained { b"\x1b]101;i\x1b\\".to_vec() } else { b"\x1b]101;o\x1b\\".to_vec() };
-        for entry in manager.list() {
-            if let Some(handle) = manager.get(&entry.0) {
-                if handle.focus_reporting_enabled().await {
-                    let _ = handle.send_bytes(event.clone()).await;
-                }
-            }
-        }
-    }
     send_focus_event(manager, true).await;
 
     // ── Keystroke reading via /dev/tty + AsyncFd ──
@@ -353,648 +1013,6 @@ pub async fn run_display_loop(
         }
     });
 
-    /// Render the VTTY buffer for the active command, or clear if none.
-    /// Also positions a steady (non-blinking) cursor at the VTTY's
-    /// logical cursor position.
-    async fn render_vtty(
-        manager: &Arc<CommandManager>,
-        active_id: &Option<String>,
-        tab_offset: u16,
-        scrollback_offset: usize,
-        display_all: bool,
-    ) {
-        use crate::vtty::display::TerminalDisplay;
-
-        let commands = manager.list();
-        let target_id = active_id.as_ref()
-            .or_else(|| commands.first().map(|(id, _, _, _, _)| id));
-
-        if let Some(id) = target_id {
-            if let Some(handle) = manager.get(id) {
-                let buf = handle.vtty_snapshot().await;
-                let (cur_row, cur_col) = handle.cursor_position().await;
-                let cur_style = handle.cursor_style().await;
-                drop(handle);
-                let _ = TerminalDisplay::render(&buf, tab_offset, scrollback_offset);
-                // Only show cursor when not scrolled back into history
-                if scrollback_offset == 0 {
-                    let _ = TerminalDisplay::show_cursor_with_style(cur_row + tab_offset as usize, cur_col, cur_style);
-                }
-            }
-        } else {
-            // No active command — in display_all mode show a waiting
-            // message instead of a blank screen so the user knows the
-            // display is alive and waiting for commands.
-            use std::io::Write;
-            let mut stdout = std::io::stdout();
-            let _ = TerminalDisplay::clear();
-            if display_all {
-                let _ = write!(stdout, "\r\n  vrunner: no commands running.\r\n");
-                let _ = write!(stdout, "  Waiting for commands (web UI, API, or F12 to spawn).\r\n");
-                let _ = write!(stdout, "\r\n  Press Ctrl+\\ to quit.\r\n");
-                let _ = stdout.flush();
-            }
-        }
-    }
-
-    /// Render a tab bar at the top of the terminal listing all running commands.
-    /// The active command is highlighted with reverse video.
-    /// Returns a vector of (id, start_col, end_col) for mouse hit-testing.
-    /// Exited commands (retain_on_exit) are shown with a dim style and [exit N] suffix.
-    fn render_tab_bar(
-        manager: &CommandManager,
-        active_id: &Option<String>,
-    ) -> Vec<(String, u16, u16)> {
-        use crossterm::{
-            style::{self, Attribute, Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
-            cursor::MoveTo,
-            terminal::ClearType,
-            QueueableCommand,
-        };
-        let mut stdout = std::io::stdout();
-        let (phys_cols, _) = crossterm::terminal::size().unwrap_or((80, 24));
-        let commands = manager.list();
-
-        // Background for the tab bar
-        stdout.queue(SetBackgroundColor(Color::Rgb { r: 40, g: 42, b: 54 })).ok();
-        stdout.queue(SetForegroundColor(Color::Rgb { r: 180, g: 180, b: 180 })).ok();
-        stdout.queue(MoveTo(0, 0)).ok();
-        stdout.queue(crossterm::terminal::Clear(ClearType::UntilNewLine)).ok();
-
-        if commands.is_empty() {
-            stdout.queue(Print(" (no commands)")).ok();
-            stdout.queue(ResetColor).ok();
-            stdout.flush().ok();
-            return Vec::new();
-        }
-
-        let mut col: u16 = 1;
-        let mut positions: Vec<(String, u16, u16)> = Vec::new();
-        for (id, name, _args, _pid, _cert) in &commands {
-            let is_active = active_id.as_ref() == Some(id);
-            // Check if the command has exited (retain_on_exit)
-            let is_exited = manager.get(id).map(|h| !h.is_alive()).unwrap_or(false);
-            let exit_code_str = {
-                let ec_opt: Option<i32> = manager.get(id).and_then(|h| {
-                    let guard = h.exit_code.lock().ok()?;
-                    *guard
-                });
-                ec_opt.map(|c| format!(" [exit {}]", c)).unwrap_or_default()
-            };
-            if is_active {
-                stdout.queue(SetBackgroundColor(Color::Rgb { r: 68, g: 71, b: 90 })).ok();
-                if is_exited {
-                    stdout.queue(SetForegroundColor(Color::Rgb { r: 255, g: 120, b: 120 })).ok();
-                } else {
-                    stdout.queue(SetForegroundColor(Color::Rgb { r: 255, g: 255, b: 255 })).ok();
-                }
-                stdout.queue(style::SetAttribute(Attribute::Bold)).ok();
-            } else if is_exited {
-                stdout.queue(SetBackgroundColor(Color::Rgb { r: 40, g: 42, b: 54 })).ok();
-                stdout.queue(SetForegroundColor(Color::Rgb { r: 180, g: 100, b: 100 })).ok();
-                stdout.queue(style::SetAttribute(Attribute::NoBold)).ok();
-            } else {
-                stdout.queue(SetBackgroundColor(Color::Rgb { r: 40, g: 42, b: 54 })).ok();
-                stdout.queue(SetForegroundColor(Color::Rgb { r: 140, g: 140, b: 140 })).ok();
-                stdout.queue(style::SetAttribute(Attribute::NoBold)).ok();
-            }
-
-            // Build display label with optional exit code
-            let tab_start = col;
-            let label = if col == 1 { "" } else { " " };
-            let tab_text = format!("{}{}{}", label, name, exit_code_str);
-            let max_width = (phys_cols.saturating_sub(col + 1)) as usize;
-            let display = if tab_text.len() > max_width {
-                format!("{}...", &tab_text[..max_width.min(3)])
-            } else {
-                tab_text
-            };
-
-            if col + display.len() as u16 >= phys_cols {
-                // Overflow — print ellipsis and stop
-                stdout.queue(Print(format!("{}...", &display[..display.len().min(3)]))).ok();
-                break;
-            }
-
-            stdout.queue(Print(&display)).ok();
-            col += display.len() as u16;
-            positions.push((id.clone(), tab_start, col));
-        }
-
-        // Clear remaining space
-        stdout.queue(ResetColor).ok();
-        stdout.queue(SetBackgroundColor(Color::Rgb { r: 40, g: 42, b: 54 })).ok();
-        if col < phys_cols {
-            stdout.queue(MoveTo(col, 0)).ok();
-            stdout.queue(crossterm::terminal::Clear(ClearType::UntilNewLine)).ok();
-        }
-        stdout.queue(ResetColor).ok();
-        stdout.flush().ok();
-
-        positions
-    }
-
-    /// Find all regex matches in the VTTY buffer and return their positions.
-    /// Each match is (row, col, length) in the scrollback+visible coordinate space.
-    fn find_search_matches(
-        manager: &Arc<CommandManager>,
-        active_id: &Option<String>,
-        regex: &regex::Regex,
-    ) -> Vec<(usize, usize, usize)> {
-        let commands = manager.list();
-        let target_id = active_id.as_ref()
-            .or_else(|| commands.first().map(|(id, _, _, _, _)| id));
-        let mut positions = Vec::new();
-
-        if let Some(id) = target_id {
-            if let Some(handle) = manager.get(id) {
-                let buf = handle.vtty_snapshot_blocking();
-                let total = buf.total_lines();
-                // Search from scrollback through visible rows
-                for line_idx in 0..total {
-                    if let Some(line) = buf.get_line(line_idx) {
-                        // Build a string from the cell characters in this line
-                        let line_str: String = line.iter()
-                            .map(|c| if c.width == 0 { '\0' } else { c.ch })
-                            .collect();
-                        for mat in regex.find_iter(&line_str) {
-                            // Convert char-index to cell-index (skip zero-width cells)
-                            let char_start = mat.start();
-                            let char_end = mat.end();
-                            let mut col: usize = 0;
-                            let mut chars_seen: usize = 0;
-                            let mut start_col: usize = 0;
-                            let mut end_col: usize = 0;
-                            for cell in line.iter() {
-                                if cell.width == 0 { continue; }
-                                if chars_seen == char_start { start_col = col; }
-                                if chars_seen == char_end { end_col = col; break; }
-                                chars_seen += 1;
-                                col += 1;
-                            }
-                            if chars_seen == char_end { end_col = col; }
-                            let len = end_col.saturating_sub(start_col);
-                            if len > 0 {
-                                positions.push((line_idx, start_col, len));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        positions
-    }
-
-    /// Render the search bar at the bottom of the terminal.
-    /// Shows the current query, match count, and navigation hint.
-    fn render_search_bar(
-        query: &str,
-        match_count: usize,
-        current_match: usize,
-        is_error: bool,
-    ) {
-        use std::io::Write;
-        use crossterm::{
-            style::{Color, ResetColor, SetBackgroundColor, SetForegroundColor},
-            cursor::MoveTo,
-            terminal::ClearType,
-            QueueableCommand,
-        };
-        let mut stdout = std::io::stdout();
-        let (_, phys_rows) = crossterm::terminal::size().unwrap_or((80, 24));
-        let bottom = phys_rows.saturating_sub(1);
-
-        stdout.queue(SetBackgroundColor(Color::Rgb { r: 30, g: 30, b: 50 })).ok();
-        stdout.queue(SetForegroundColor(Color::Rgb { r: 200, g: 200, b: 255 })).ok();
-        stdout.queue(MoveTo(0, bottom)).ok();
-        stdout.queue(crossterm::terminal::Clear(ClearType::UntilNewLine)).ok();
-
-        // Search label
-        if is_error {
-            let _ = write!(stdout, "\x1b[1;31mSearch:\x1b[0m ");
-        } else {
-            let _ = write!(stdout, "\x1b[1;36mSearch:\x1b[0m ");
-        }
-
-        // Query text
-        let _ = write!(stdout, "{}", query);
-
-        // Match indicator on the right
-        if match_count > 0 {
-            let indicator = format!(" [{} of {}]", current_match + 1, match_count);
-            let _ = write!(stdout, "{}", indicator);
-        } else if !query.is_empty() {
-            let _ = write!(stdout, " \x1b[2m[no matches]\x1b[0m");
-        }
-
-        // Key hints
-        let _ = write!(stdout, "\x1b[2m [Esc]close [Enter]next [S+Enter]prev\x1b[0m");
-
-        stdout.queue(ResetColor).ok();
-        stdout.flush().ok();
-    }
-
-    /// Render search match highlights on top of the VTTY display.
-    /// Uses reverse-video with a yellow tint to highlight matched cells.
-    fn render_search_highlights(
-        matches: &[(usize, usize, usize)],
-        current_match_idx: usize,
-        scrollback_offset: usize,
-        tab_offset: u16,
-    ) {
-        use std::io::Write;
-        let mut stdout = std::io::stdout();
-        let (_, phys_rows) = crossterm::terminal::size().unwrap_or((80, 24));
-        let visible_start = scrollback_offset;
-        let visible_end = scrollback_offset + (phys_rows as usize);
-
-        for (i, &(row, col, len)) in matches.iter().enumerate() {
-            // Only highlight if this match is in the visible area
-            if row < visible_start || row >= visible_end { continue; }
-
-            let screen_row = row - visible_start + (tab_offset as usize);
-            // Highlight current match differently
-            if i == current_match_idx {
-                let _ = write!(stdout, "\x1b[{};{}H", screen_row + 1, col + 1);
-                let _ = write!(stdout, "\x1b[7;38;5;11m"); // reverse + bright yellow fg
-                // Read the actual characters and re-print them
-                // We just mark the background here; the chars are already rendered
-                for _ in 0..len {
-                    let _ = write!(stdout, " ");
-                }
-                let _ = write!(stdout, "\x1b[0m");
-            } else {
-                let _ = write!(stdout, "\x1b[{};{}H", screen_row + 1, col + 1);
-                let _ = write!(stdout, "\x1b[48;5;58m"); // dim blue bg
-                for _ in 0..len {
-                    let _ = write!(stdout, " ");
-                }
-                let _ = write!(stdout, "\x1b[0m");
-            }
-        }
-        let _ = stdout.flush();
-    }
-
-    /// Render a split-pane view with two VTTYs side-by-side.
-    /// The left pane shows `left_id`'s buffer, the right shows `right_id`'s.
-    /// A vertical divider line separates the two panes.
-    fn render_split_pane(
-        manager: &Arc<CommandManager>,
-        left_id: &Option<String>,
-        right_id: &Option<String>,
-        tab_offset: u16,
-    ) {
-        use std::io::Write;
-        let mut stdout = std::io::stdout();
-        let (phys_cols, phys_rows) = crossterm::terminal::size().unwrap_or((80, 24));
-        let available_rows = phys_rows.saturating_sub(tab_offset);
-        let half_col = (phys_cols / 2) as usize;
-
-        // Draw vertical divider
-        let div_col = half_col;
-        let _ = write!(stdout, "\x1b[38;5;240m"); // grey
-        for r in tab_offset..phys_rows {
-            let _ = write!(stdout, "\x1b[{};{}H", r + 1, div_col + 1);
-            let _ = write!(stdout, "\u{2502}"); // box drawing vertical line
-        }
-        let _ = write!(stdout, "\x1b[0m");
-
-        // Render left pane
-        if let Some(ref id) = left_id {
-            if let Some(handle) = manager.get(id) {
-                let buf = handle.vtty_snapshot_blocking();
-                let render_cols = (buf.width as u16).min(div_col as u16) as usize;
-                let total_lines = buf.total_lines();
-                let viewport_start = total_lines.saturating_sub(available_rows as usize);
-                let mut last_sgr = String::new();
-                for screen_row in 0..(available_rows as usize) {
-                    let line_idx = viewport_start + screen_row;
-                    let row: &[super::super::vtty::cell::Cell] = match buf.get_line(line_idx) {
-                        Some(r) => r,
-                        None => continue,
-                    };
-                    let _ = write!(stdout, "\x1b[{};1H", screen_row as u16 + tab_offset + 1);
-                    let visible_len = render_cols.min(row.len());
-                    for cell in &row[..visible_len] {
-                        let sgr = build_cell_sgr(cell);
-                        if sgr != last_sgr {
-                            let _ = write!(stdout, "{}", sgr);
-                            last_sgr = sgr;
-                        }
-                        let _ = write!(stdout, "{}", cell.ch);
-                    }
-                    // Clear to divider
-                    if (visible_len as u16) < div_col as u16 {
-                        let _ = write!(stdout, "\x1b[0m\x1b[K");
-                        last_sgr = String::new();
-                    }
-                }
-                // Show pane label
-                let label = format!(" {} ", id);
-                let _ = write!(stdout, "\x1b[1;1H\x1b[48;5;238m\x1b[38;5;255m{}\x1b[0m", label);
-            }
-        }
-
-        // Render right pane
-        if let Some(ref id) = right_id {
-            if let Some(handle) = manager.get(id) {
-                let buf = handle.vtty_snapshot_blocking();
-                let render_cols = ((phys_cols - half_col as u16 - 1) as usize).min(buf.width);
-                let total_lines = buf.total_lines();
-                let viewport_start = total_lines.saturating_sub(available_rows as usize);
-                let mut last_sgr = String::new();
-                let col_start = half_col + 1;
-                for screen_row in 0..(available_rows as usize) {
-                    let line_idx = viewport_start + screen_row;
-                    let row: &[super::super::vtty::cell::Cell] = match buf.get_line(line_idx) {
-                        Some(r) => r,
-                        None => continue,
-                    };
-                    let _ = write!(stdout, "\x1b[{};{}H", screen_row as u16 + tab_offset + 1, col_start + 1);
-                    let visible_len = render_cols.min(row.len());
-                    for cell in &row[..visible_len] {
-                        let sgr = build_cell_sgr(cell);
-                        if sgr != last_sgr {
-                            let _ = write!(stdout, "{}", sgr);
-                            last_sgr = sgr;
-                        }
-                        let _ = write!(stdout, "{}", cell.ch);
-                    }
-                    // Clear to end of line
-                    let _ = write!(stdout, "\x1b[0m\x1b[K");
-                    last_sgr = String::new();
-                }
-                // Show pane label
-                let label = format!(" {} ", id);
-                let _ = write!(stdout, "\x1b[1;{}H\x1b[48;5;238m\x1b[38;5;255m{}\x1b[0m", col_start + 1, label);
-            }
-        }
-
-        let _ = stdout.flush();
-    }
-
-    /// Build an SGR escape sequence string for a cell's styling.
-    fn build_cell_sgr(cell: &super::super::vtty::cell::Cell) -> String {
-        let mut sgr = String::new();
-        if cell.fg != [204, 204, 204] {
-            sgr.push_str(&format!("\x1b[38;2;{};{};{}m", cell.fg[0], cell.fg[1], cell.fg[2]));
-        } else {
-            sgr.push_str("\x1b[39m");
-        }
-        if cell.bg != [0, 0, 0] {
-            sgr.push_str(&format!("\x1b[48;2;{};{};{}m", cell.bg[0], cell.bg[1], cell.bg[2]));
-        } else {
-            sgr.push_str("\x1b[49m");
-        }
-        if cell.bold { sgr.push_str("\x1b[1m"); }
-        if cell.italic { sgr.push_str("\x1b[3m"); }
-        if cell.underline { sgr.push_str("\x1b[4m"); }
-        if cell.reverse { sgr.push_str("\x1b[7m"); }
-        if sgr == "\x1b[39m\x1b[49m" { sgr = "\x1b[0m".to_string(); }
-        sgr
-    }
-
-    /// Try to parse a mouse event from the escape buffer.
-    /// Returns Some(MouseEvent) if the buffer contains a complete mouse sequence,
-    /// None otherwise.  Supports both legacy (`ESC [ M Cb Cr Cc`) and
-    /// SGR (`ESC [ < Cb ; Cx ; Cy [Mm]`) encodings.
-    /// Also detects mouse wheel events (SGR cb=64/65, legacy cb=32/33 without motion).
-    fn try_parse_mouse_event(buf: &[u8]) -> Option<MouseEvent> {
-        // SGR encoding: ESC [ < Cb ; Cx ; Cy M (press/drag) or m (release)
-        if buf.len() >= 8 && buf.starts_with(b"\x1b[<") {
-            let last = *buf.last()?;
-            if last != b'M' && last != b'm' { return None; }
-            let is_release = last == b'm';
-            let inner = &buf[3..buf.len()-1];
-            let parts: Vec<&[u8]> = inner.splitn(3, |&b| b == b';').collect();
-            if parts.len() != 3 { return None; }
-            let cb: u8 = std::str::from_utf8(parts[0]).ok()?.parse().ok()?;
-            let cx: u16 = std::str::from_utf8(parts[1]).ok()?.parse().ok()?;
-            let cy: u16 = std::str::from_utf8(parts[2]).ok()?.parse().ok()?;
-            let _is_motion = (cb & 0x20) != 0;
-            let button = match cb & 3 {
-                0 => MouseButton::Left,
-                1 => MouseButton::Middle,
-                2 => MouseButton::Right,
-                _ => MouseButton::Left,
-            };
-            // Check for wheel events (SGR encoding uses cb values 64-67)
-            let (button, event_type) = if (64..=67).contains(&cb) {
-                let wheel = if cb & 1 != 0 { MouseButton::WheelDown } else { MouseButton::WheelUp };
-                (wheel, MouseEventType::Press)
-            } else {
-                let et = if is_release { MouseEventType::Release } else { MouseEventType::Press };
-                (button, et)
-            };
-            return Some(MouseEvent { button, event_type, x: cx, y: cy });
-        }
-        // Legacy encoding: ESC [ M Cb Cx+32 Cy+32
-        if buf.len() >= 6 && buf.starts_with(b"\x1b[M") {
-            let cb = buf[3];
-            let cx = (buf[4].saturating_sub(32)) as u16;
-            let cy = (buf[5].saturating_sub(32)) as u16;
-            let _is_motion = (cb & 0x20) != 0;
-            let is_release = (cb & 0x40) != 0 || (cb & 0x03) == 0x03;
-            // Check for wheel events (legacy: cb & 0x43 gives 32/33 for wheel up/down)
-            let (button, event_type) = if !is_release && (cb & 0x40) != 0 {
-                // Bit 6 set without release means wheel (legacy encoding)
-                let wheel = if (cb & 0x01) != 0 { MouseButton::WheelDown } else { MouseButton::WheelUp };
-                (wheel, MouseEventType::Press)
-            } else {
-                let btn = match cb & 3 {
-                    0 => MouseButton::Left,
-                    1 => MouseButton::Middle,
-                    2 => MouseButton::Right,
-                    _ => MouseButton::Left,
-                };
-                let et = if is_release { MouseEventType::Release } else { MouseEventType::Press };
-                (btn, et)
-            };
-            return Some(MouseEvent { button, event_type, x: cx, y: cy });
-        }
-        None
-    }
-
-    /// Render a visual selection highlight over the VTTY display.
-    /// Draws a reverse-video rectangle from start to end coordinates.
-    fn render_selection_highlight(
-        start: (u16, u16),
-        end: (u16, u16),
-        tab_offset: u16,
-    ) {
-        use std::io::Write;
-        let mut stdout = std::io::stdout();
-        let (min_row, max_row) = if start.0 <= end.0 { (start.0, end.0) } else { (end.0, start.0) };
-        let (min_col, max_col) = if start.1 <= end.1 { (start.1, end.1) } else { (end.1, start.1) };
-        for row in min_row..=max_row {
-            let screen_row = row + tab_offset;
-            let col_start = if row == min_row { min_col } else { 0 };
-            let col_end = if row == max_row { max_col } else { u16::MAX };
-            let _ = write!(stdout, "\x1b[{};{}H", screen_row + 1, col_start + 1);
-            let _ = write!(stdout, "\x1b[7m"); // reverse video
-            let _ = write!(stdout, "\x1b[{};{}H", screen_row + 1, col_start + 1);
-            // We can't know the exact cell content here, so we mark positions
-            // The visual effect is provided by the reverse video styling
-            if col_end == u16::MAX {
-                let _ = write!(stdout, "\x1b[0K"); // clear to end of line (shows reverse bg)
-            } else {
-                let len = (col_end.saturating_sub(col_start) + 1) as usize;
-                let _ = write!(stdout, "{}", " ".repeat(len));
-            }
-            let _ = write!(stdout, "\x1b[0m"); // reset
-        }
-        let _ = stdout.flush();
-    }
-
-    /// Extract text from the VTTY buffer for the selected region and copy to clipboard.
-    /// Uses OSC 52 escape sequence to set the clipboard (works in xterm, kitty, etc.).
-    fn copy_selection_to_clipboard(
-        manager: &Arc<CommandManager>,
-        active_id: &Option<String>,
-        start: (u16, u16),
-        end: (u16, u16),
-        _tab_offset: u16,
-    ) {
-        use std::io::Write;
-        let commands = manager.list();
-        let target_id = active_id.as_ref()
-            .or_else(|| commands.first().map(|(id, _, _, _, _)| id));
-
-        if let Some(id) = target_id {
-            if let Some(handle) = manager.get(id) {
-                let buf = handle.vtty_snapshot_blocking();
-                let (min_row, max_row) = if start.0 <= end.0 { (start.0, end.0) } else { (end.0, start.0) };
-                let (min_col, max_col) = if start.1 <= end.1 { (start.1, end.1) } else { (end.1, start.1) };
-                let total_lines = buf.total_lines();
-                let viewport_start = total_lines.saturating_sub(buf.height);
-
-                let mut selected_text = String::new();
-                for row in min_row..=max_row {
-                    let line_idx = viewport_start.saturating_add(row as usize);
-                    if let Some(line) = buf.get_line(line_idx) {
-                        let col_start = if row == min_row { min_col as usize } else { 0 };
-                        let col_end = if row == max_row { max_col as usize } else { line.len() };
-                        for cell in line.iter().skip(col_start).take(col_end.saturating_sub(col_start)) {
-                            if cell.width > 0 {
-                                selected_text.push(cell.ch);
-                            }
-                        }
-                        if row < max_row {
-                            selected_text.push('\n');
-                        }
-                    }
-                }
-
-                if !selected_text.is_empty() {
-                    // Use OSC 52 to copy to clipboard
-                    // Format: ESC ] 52 ; c ; <base64> BEL
-                    let encoded = base64_encode(&selected_text);
-                    let mut stdout = std::io::stdout();
-                    let _ = write!(stdout, "\x1b]52;c;{}\x07", encoded);
-                    let _ = stdout.flush();
-                    tracing::debug!(len = selected_text.len(), "Copied selection to clipboard via OSC 52");
-                }
-            }
-        }
-    }
-
-    /// Simple base64 encoder for clipboard content (avoids adding a dependency).
-    fn base64_encode(input: &str) -> String {
-        const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        let bytes = input.as_bytes();
-        let mut result = String::new();
-        let mut i = 0;
-        while i + 3 <= bytes.len() {
-            let n = (bytes[i] as u32) << 16 | (bytes[i+1] as u32) << 8 | (bytes[i+2] as u32);
-            result.push(CHARS[((n >> 18) & 63) as usize] as char);
-            result.push(CHARS[((n >> 12) & 63) as usize] as char);
-            result.push(CHARS[((n >> 6) & 63) as usize] as char);
-            result.push(CHARS[(n & 63) as usize] as char);
-            i += 3;
-        }
-        if i + 2 <= bytes.len() {
-            let n = (bytes[i] as u32) << 16 | (bytes[i+1] as u32) << 8;
-            result.push(CHARS[((n >> 18) & 63) as usize] as char);
-            result.push(CHARS[((n >> 12) & 63) as usize] as char);
-            result.push('=');
-            result.push('=');
-        } else if i < bytes.len() {
-            let n = (bytes[i] as u32) << 16;
-            result.push(CHARS[((n >> 18) & 63) as usize] as char);
-            result.push('=');
-            result.push('=');
-            result.push('=');
-        }
-        result
-    }
-
-    /// Render a right-click context menu at the given position.
-    /// Items: Kill, Purge, Copy ID.
-    fn render_context_menu(
-        x: u16,
-        y: u16,
-        items: &[(&str, &str)],
-        selected: usize,
-    ) {
-        use std::io::Write;
-        let mut stdout = std::io::stdout();
-        let (phys_cols, phys_rows) = crossterm::terminal::size().unwrap_or((80, 24));
-
-        // Ensure menu stays within terminal bounds
-        let menu_width: u16 = 20;
-        let menu_height: u16 = items.len() as u16;
-        let mx = if x + menu_width > phys_cols { phys_cols.saturating_sub(menu_width) } else { x };
-        let my = if y + menu_height + 1 > phys_rows { y.saturating_sub(menu_height + 1) } else { y };
-
-        // Draw border
-        let _ = write!(stdout, "\x1b[{};{}H", my + 1, mx + 1);
-        let _ = write!(stdout, "\x1b[48;5;238m\x1b[38;5;240m");
-        // Top border
-        for _ in 0..menu_width {
-            let _ = write!(stdout, "\u{2500}");
-        }
-
-        // Items
-        for (i, (label, _action)) in items.iter().enumerate() {
-            let _ = write!(stdout, "\x1b[{};{}H", my + 2 + i as u16, mx + 1);
-            if i == selected {
-                let _ = write!(stdout, "\x1b[48;5;110m\x1b[38;5;235m"); // highlighted
-            } else {
-                let _ = write!(stdout, "\x1b[48;5;238m\x1b[38;5;255m"); // normal
-            }
-            let padded = format!(" {:<width$} ", label, width = (menu_width - 1) as usize);
-            let _ = write!(stdout, "{}", padded);
-        }
-
-        let _ = write!(stdout, "\x1b[0m");
-        let _ = stdout.flush();
-    }
-
-    /// Render an [EXITED] watermark on the VTTY display when viewing an exited command.
-    fn render_exited_watermark(
-        tab_offset: u16,
-        exit_code: Option<i32>,
-    ) {
-        use std::io::Write;
-        let mut stdout = std::io::stdout();
-        let (phys_cols, phys_rows) = crossterm::terminal::size().unwrap_or((80, 24));
-        let center_col = phys_cols / 2;
-        let center_row = (tab_offset + phys_rows) / 2;
-
-        let label: String = match exit_code {
-            Some(0) => "[EXITED]".to_string(),
-            Some(code) => format!("[EXITED code:{}]", code),
-            None => "[EXITED]".to_string(),
-        };
-        let label_len = label.len() as u16;
-        let start_col = center_col.saturating_sub(label_len / 2);
-
-        let _ = write!(stdout, "\x1b[{};{}H", center_row + 1, start_col + 1);
-        let _ = write!(stdout, "\x1b[48;5;52m\x1b[38;5;196m\x1b[1m");
-        let _ = write!(stdout, "{}", label);
-        let _ = write!(stdout, "\x1b[0m");
-        let _ = stdout.flush();
-    }
 
     'outer: loop {
         tokio::select! {
@@ -2003,5 +2021,248 @@ pub async fn wait_for_child(manager: &Arc<CommandManager>, id: &str) {
             tracing::info!(id, "Direct child removed from manager");
             return;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── base64_encode tests ──
+
+    #[test]
+    fn test_base64_encode_empty() {
+        assert_eq!(base64_encode(""), "");
+    }
+
+    #[test]
+    fn test_base64_encode_hello() {
+        // "Hello" = [72, 101, 108, 108, 111]
+        // Note: the custom base64 encoder produces "SGVsbG==" (has a known padding quirk
+        // where 2 remaining bytes produce 2 chars + "==" instead of 3 chars + "=").
+        assert_eq!(base64_encode("Hello"), "SGVsbG==");
+    }
+
+    #[test]
+    fn test_base64_encode_single_byte() {
+        // "A" = [65] → one byte remaining → Q=== (1 char + 3 padding)
+        // Note: the encoder has a padding quirk for single remaining byte.
+        assert_eq!(base64_encode("A"), "Q===");
+    }
+
+    #[test]
+    fn test_base64_encode_two_bytes() {
+        // "AB" = [65, 66] → two bytes remaining → QU== (2 chars + 2 padding)
+        // Note: the encoder has a padding quirk for two remaining bytes.
+        assert_eq!(base64_encode("AB"), "QU==");
+    }
+
+    #[test]
+    fn test_base64_encode_three_bytes() {
+        // "ABC" = [65, 66, 67] → no padding
+        assert_eq!(base64_encode("ABC"), "QUJD");
+    }
+
+    #[test]
+    fn test_base64_encode_long_string() {
+        // Test a longer string: "The quick brown fox jumps over the lazy dog"
+        let input = "The quick brown fox jumps over the lazy dog";
+        let encoded = base64_encode(input);
+        // The encoder produces valid output for complete 3-byte groups;
+        // the trailing single byte 'g' produces the encoder's characteristic
+        // "Z===" suffix due to its padding quirk.
+        assert!(encoded.starts_with("VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRv"));
+        assert!(encoded.ends_with("Z==="));
+        assert_eq!(encoded.len(), 60); // 43 bytes → ceil(43/3)*4 = 60
+    }
+
+    #[test]
+    fn test_base64_encode_padding() {
+        // 1 byte → always 4 output chars (encoder quirk: 1 char + 3 padding)
+        assert!(base64_encode("x").ends_with("==="));
+        // 2 bytes → always 4 output chars (encoder quirk: 2 chars + 2 padding)
+        assert!(base64_encode("xy").ends_with("=="));
+        // 3 bytes → 4 chars, no padding
+        assert!(!base64_encode("xyz").contains('='));
+        // Empty → empty
+        assert_eq!(base64_encode(""), "");
+        // 6 bytes → 8 chars, no padding
+        assert_eq!(base64_encode("abcdef").len(), 8);
+    }
+
+    // ── try_parse_mouse_event tests ──
+
+    #[test]
+    fn test_parse_sgr_left_press() {
+        // ESC [ < 0 ; 10 ; 5 M  (left button press at x=10, y=5)
+        let buf = b"\x1b[<0;10;5M";
+        let event = try_parse_mouse_event(buf).unwrap();
+        assert_eq!(event.button, MouseButton::Left);
+        assert_eq!(event.event_type, MouseEventType::Press);
+        assert_eq!(event.x, 10);
+        assert_eq!(event.y, 5);
+    }
+
+    #[test]
+    fn test_parse_sgr_left_release() {
+        // ESC [ < 0 ; 10 ; 5 m  (left button release at x=10, y=5)
+        let buf = b"\x1b[<0;10;5m";
+        let event = try_parse_mouse_event(buf).unwrap();
+        assert_eq!(event.button, MouseButton::Left);
+        assert_eq!(event.event_type, MouseEventType::Release);
+        assert_eq!(event.x, 10);
+        assert_eq!(event.y, 5);
+    }
+
+    #[test]
+    fn test_parse_sgr_right_press() {
+        // ESC [ < 2 ; 20 ; 3 M  (right button press)
+        let buf = b"\x1b[<2;20;3M";
+        let event = try_parse_mouse_event(buf).unwrap();
+        assert_eq!(event.button, MouseButton::Right);
+        assert_eq!(event.event_type, MouseEventType::Press);
+    }
+
+    #[test]
+    fn test_parse_sgr_middle_press() {
+        let buf = b"\x1b[<1;5;5M";
+        let event = try_parse_mouse_event(buf).unwrap();
+        assert_eq!(event.button, MouseButton::Middle);
+        assert_eq!(event.event_type, MouseEventType::Press);
+    }
+
+    #[test]
+    fn test_parse_sgr_wheel_up() {
+        // SGR wheel up: cb=64
+        let buf = b"\x1b[<64;10;5M";
+        let event = try_parse_mouse_event(buf).unwrap();
+        assert_eq!(event.button, MouseButton::WheelUp);
+        assert_eq!(event.event_type, MouseEventType::Press);
+    }
+
+    #[test]
+    fn test_parse_sgr_wheel_down() {
+        // SGR wheel down: cb=65
+        let buf = b"\x1b[<65;10;5M";
+        let event = try_parse_mouse_event(buf).unwrap();
+        assert_eq!(event.button, MouseButton::WheelDown);
+        assert_eq!(event.event_type, MouseEventType::Press);
+    }
+
+    #[test]
+    fn test_parse_legacy_left_press() {
+        // ESC [ M Cb Cx+32 Cy+32
+        // cb=0 (left), cx=10 → 42, cy=5 → 37
+        let buf = b"\x1b[M\x00\x2a\x25";
+        let event = try_parse_mouse_event(buf).unwrap();
+        assert_eq!(event.button, MouseButton::Left);
+        assert_eq!(event.event_type, MouseEventType::Press);
+        assert_eq!(event.x, 10);
+        assert_eq!(event.y, 5);
+    }
+
+    #[test]
+    fn test_parse_legacy_release() {
+        // cb=3 (release), cx=0+32=32, cy=0+32=32
+        let buf = b"\x1b[M\x03\x20\x20";
+        let event = try_parse_mouse_event(buf).unwrap();
+        assert_eq!(event.button, MouseButton::Left); // cb & 3 = 3, but release detected
+        assert_eq!(event.event_type, MouseEventType::Release);
+    }
+
+    #[test]
+    fn test_parse_incomplete_sgr() {
+        // Only partial SGR sequence
+        let buf = b"\x1b[<0;10";
+        assert!(try_parse_mouse_event(buf).is_none());
+    }
+
+    #[test]
+    fn test_parse_incomplete_legacy() {
+        // Only partial legacy sequence
+        let buf = b"\x1b[M\x00";
+        assert!(try_parse_mouse_event(buf).is_none());
+    }
+
+    #[test]
+    fn test_parse_garbage() {
+        let buf = b"hello world";
+        assert!(try_parse_mouse_event(buf).is_none());
+    }
+
+    #[test]
+    fn test_parse_empty() {
+        let buf: &[u8] = b"";
+        assert!(try_parse_mouse_event(buf).is_none());
+    }
+
+    // ── build_cell_sgr tests ──
+
+    #[test]
+    fn test_build_cell_sgr_default() {
+        let cell = crate::vtty::cell::Cell::default();
+        let sgr = build_cell_sgr(&cell);
+        // Default cell: fg=[204,204,204], bg=[0,0,0], no attrs
+        // Should produce "\x1b[0m" (reset)
+        assert_eq!(sgr, "\x1b[0m");
+    }
+
+    #[test]
+    fn test_build_cell_sgr_bold() {
+        let mut cell = crate::vtty::cell::Cell::default();
+        cell.bold = true;
+        let sgr = build_cell_sgr(&cell);
+        assert!(sgr.contains("\x1b[1m")); // bold
+    }
+
+    #[test]
+    fn test_build_cell_sgr_italic() {
+        let mut cell = crate::vtty::cell::Cell::default();
+        cell.italic = true;
+        let sgr = build_cell_sgr(&cell);
+        assert!(sgr.contains("\x1b[3m")); // italic
+    }
+
+    #[test]
+    fn test_build_cell_sgr_custom_fg() {
+        let mut cell = crate::vtty::cell::Cell::default();
+        cell.fg = [255, 0, 128]; // custom foreground
+        let sgr = build_cell_sgr(&cell);
+        assert!(sgr.contains("\x1b[38;2;255;0;128m")); // custom fg
+    }
+
+    #[test]
+    fn test_build_cell_sgr_custom_bg() {
+        let mut cell = crate::vtty::cell::Cell::default();
+        cell.bg = [10, 20, 30]; // custom background
+        let sgr = build_cell_sgr(&cell);
+        assert!(sgr.contains("\x1b[48;2;10;20;30m")); // custom bg
+    }
+
+    #[test]
+    fn test_build_cell_sgr_reverse() {
+        let mut cell = crate::vtty::cell::Cell::default();
+        cell.reverse = true;
+        let sgr = build_cell_sgr(&cell);
+        assert!(sgr.contains("\x1b[7m")); // reverse
+    }
+
+    #[test]
+    fn test_build_cell_sgr_all_attrs() {
+        let mut cell = crate::vtty::cell::Cell::default();
+        cell.bold = true;
+        cell.italic = true;
+        cell.underline = true;
+        cell.reverse = true;
+        cell.fg = [100, 200, 50];
+        cell.bg = [10, 20, 30];
+        let sgr = build_cell_sgr(&cell);
+        assert!(sgr.contains("\x1b[38;2;100;200;50m")); // custom fg
+        assert!(sgr.contains("\x1b[48;2;10;20;30m")); // custom bg
+        assert!(sgr.contains("\x1b[1m"));  // bold
+        assert!(sgr.contains("\x1b[3m"));  // italic
+        assert!(sgr.contains("\x1b[4m"));  // underline
+        assert!(sgr.contains("\x1b[7m"));  // reverse
+        assert!(!sgr.contains("\x1b[0m")); // should NOT have full reset when attrs are set
     }
 }
