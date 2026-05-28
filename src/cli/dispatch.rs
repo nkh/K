@@ -6,13 +6,13 @@
 //! freeze, thaw, cat, resize, purge) and returns `true` if one was handled.
 
 use anyhow::Result;
+
 use crate::cli::args::{Cli, Commands};
 use crate::cli::subcommands;
-
+use crate::config::loader::load_config;
 use crate::config::merge::apply_profile;
 use crate::config::schema::Config;
 use crate::config::validation::{validate_config, ValidationLevel};
-use crate::config::loader::load_config;
 
 /// Load, profile-merge, and CLI-override the configuration.
 ///
@@ -124,7 +124,10 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
             subcommands::handle_config_check_command(cli.config.as_deref())?;
             return Ok(None);
         }
-        Some(Commands::Cat { target: _, color_always: _ }) => {
+        Some(Commands::Cat {
+            target: _,
+            color_always: _,
+        }) => {
             // cat is async (needs HTTP), fall through to async phase
         }
         None => {}

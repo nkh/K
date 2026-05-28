@@ -806,7 +806,8 @@ function selectCommand(instUrl, cmdId, name) {
     state.selectedInstUrl = instUrl;
     state.selectedCmdId = cmdId;
     state.bufferView = 'current';
-    document.getElementById('bufferSelect')?.value = 'current';
+    const globalBufferSel = document.getElementById('bufferSelect');
+    if (globalBufferSel) globalBufferSel.value = 'current';
     // Reset panel-scoped buffer selects too
     state.panels.forEach(p => {
         const sel = document.getElementById('bufferSelect-' + p.id);
@@ -1125,12 +1126,10 @@ function connectVttyWs(instUrl, cmdId) {
                     if (state.bufferView === 'current') {
                         updateVttyDisplay(msg.data);
                     }
-                    const badge = document.getElementById('altScreenBadge-' + state.panelId);
-                    if (!badge) {
-                        const globalBadge = document.getElementById('altScreenBadge');
-                        if (globalBadge) globalBadge.classList.toggle('visible', !!msg.data.alternate_screen);
-                    } else {
-                        badge.classList.toggle('visible', !!msg.data.alternate_screen);
+                    const selPanel = getSelectedPanel();
+                    if (selPanel) {
+                        const badge = document.getElementById('altScreenBadge-' + selPanel.id);
+                        if (badge) badge.classList.toggle('visible', !!msg.data.alternate_screen);
                     }
                 } else if (msg.type === 'vtty_dirty' && msg.data) {
                     // Buffer has changed — schedule a debounced HTTP fetch.
@@ -1386,11 +1385,8 @@ async function loadVttyHttp(instUrl, cmdId) {
             document.getElementById('termDims').textContent = `${dims.rows || '-'}x${dims.cols || '-'}`;
 
             // Update alt screen badge
-            const badge = document.getElementById('altScreenBadge-' + panelId);
-            if (!badge) {
-                const globalBadge = document.getElementById('altScreenBadge');
-                if (globalBadge) globalBadge.classList.toggle('visible', !!json.data.alternate_screen);
-            } else {
+            const badge = document.getElementById('altScreenBadge-' + panel.id);
+            if (badge) {
                 badge.classList.toggle('visible', !!json.data.alternate_screen);
             }
 

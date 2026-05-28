@@ -52,24 +52,20 @@ pub async fn handle_cat_command(cli: &Cli, target: Option<&str>, color_always: b
                 }
             }
         }
-        None => {
-            match all_commands.len() {
-                0 => anyhow::bail!(
-                    "No running commands. Use `vrunner list` to see commands."
-                ),
-                1 => all_commands.into_iter().next().unwrap(),
-                _ => {
-                    let list: Vec<_> = all_commands
-                        .iter()
-                        .map(|e| format!("  pid {}  {}", e.2, e.3))
-                        .collect();
-                    anyhow::bail!(
-                        "Multiple commands running. Specify a target:\n{}",
-                        list.join("\n")
-                    )
-                }
+        None => match all_commands.len() {
+            0 => anyhow::bail!("No running commands. Use `vrunner list` to see commands."),
+            1 => all_commands.into_iter().next().unwrap(),
+            _ => {
+                let list: Vec<_> = all_commands
+                    .iter()
+                    .map(|e| format!("  pid {}  {}", e.2, e.3))
+                    .collect();
+                anyhow::bail!(
+                    "Multiple commands running. Specify a target:\n{}",
+                    list.join("\n")
+                )
             }
-        }
+        },
     };
 
     let info = instances

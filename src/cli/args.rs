@@ -1,6 +1,6 @@
 use crate::config::schema::Config;
-use clap::{FromArgMatches, Parser, Subcommand};
 use clap::CommandFactory;
+use clap::{FromArgMatches, Parser, Subcommand};
 
 #[derive(Parser, Debug)]
 #[command(name = "vrunner")]
@@ -291,8 +291,7 @@ impl Cli {
         let mut cmd = <Self as CommandFactory>::command();
         cmd = cmd.version(version.trim());
         let matches = cmd.get_matches();
-        <Self as FromArgMatches>::from_arg_matches(&matches)
-            .expect("failed to parse CLI arguments")
+        <Self as FromArgMatches>::from_arg_matches(&matches).expect("failed to parse CLI arguments")
     }
 
     /// Parse --env KEY=VALUE flags into a HashMap.
@@ -364,9 +363,15 @@ impl Cli {
             // message rather than silently ignoring them.
             if self.display || self.display_all || self.tabs {
                 let mut flags = Vec::new();
-                if self.display { flags.push("--display"); }
-                if self.display_all { flags.push("--display-all"); }
-                if self.tabs { flags.push("--tabs"); }
+                if self.display {
+                    flags.push("--display");
+                }
+                if self.display_all {
+                    flags.push("--display-all");
+                }
+                if self.tabs {
+                    flags.push("--tabs");
+                }
                 anyhow::bail!(
                     "--daemon conflicts with {}. Display mode requires a terminal, \
                      but --daemon detaches from the controlling terminal.",
@@ -484,7 +489,10 @@ mod tests {
         let result = cli.apply_overrides(&mut default_config());
         assert!(result.is_err());
         let msg = result.unwrap_err().to_string();
-        assert!(msg.contains("--daemon conflicts with --display-all"), "unexpected: {msg}");
+        assert!(
+            msg.contains("--daemon conflicts with --display-all"),
+            "unexpected: {msg}"
+        );
     }
 
     #[test]
@@ -493,7 +501,10 @@ mod tests {
         let result = cli.apply_overrides(&mut default_config());
         assert!(result.is_err());
         let msg = result.unwrap_err().to_string();
-        assert!(msg.contains("--daemon conflicts with --display"), "unexpected: {msg}");
+        assert!(
+            msg.contains("--daemon conflicts with --display"),
+            "unexpected: {msg}"
+        );
     }
 
     #[test]
@@ -502,16 +513,23 @@ mod tests {
         let result = cli.apply_overrides(&mut default_config());
         assert!(result.is_err());
         let msg = result.unwrap_err().to_string();
-        assert!(msg.contains("--daemon conflicts with --tabs"), "unexpected: {msg}");
+        assert!(
+            msg.contains("--daemon conflicts with --tabs"),
+            "unexpected: {msg}"
+        );
     }
 
     #[test]
     fn daemon_conflicts_with_all_display_flags() {
-        let cli = Cli::try_parse_from(["vrunner", "--daemon", "--display-all", "--tabs", "htop"]).unwrap();
+        let cli = Cli::try_parse_from(["vrunner", "--daemon", "--display-all", "--tabs", "htop"])
+            .unwrap();
         let result = cli.apply_overrides(&mut default_config());
         assert!(result.is_err());
         let msg = result.unwrap_err().to_string();
-        assert!(msg.contains("--display-all"), "missing --display-all in: {msg}");
+        assert!(
+            msg.contains("--display-all"),
+            "missing --display-all in: {msg}"
+        );
         assert!(msg.contains("--tabs"), "missing --tabs in: {msg}");
     }
 

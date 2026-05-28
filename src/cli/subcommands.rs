@@ -5,8 +5,8 @@
 
 // Re-export all public items for backward compatibility.
 // External code (main.rs, tests) imports from `crate::cli::subcommands::*`.
-pub use crate::cli::commands::cert::handle_cert_command;
 pub use crate::cli::commands::cat::handle_cat_command;
+pub use crate::cli::commands::cert::handle_cert_command;
 pub use crate::cli::commands::common::{
     c, collect_all_commands, format_instance_list, http_client, instance_url, resolve_instance,
     resolve_pid_to_id, resolve_stop_target, resolve_targeted_instances,
