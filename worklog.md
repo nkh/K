@@ -27,3 +27,67 @@ Stage Summary:
 - Exited command indicator: Complete - red banner with exit code shown on VTTY container
 - Spawn working directory: Complete - full stack (HTML input + JS + API validation + PTY cwd)
 - Bash multi-commands: Backend already supported via sh -c / bash -c; fixed web UI argument parser to handle quoted strings properly
+---
+Task ID: 1
+Agent: main
+Task: Fix kill button hidden when sidebar is narrow
+
+Work Log:
+- Added overflow:hidden to .cmd-item-row CSS rule
+- Added flex-shrink:0 !important to .cmd-kill-btn CSS rule
+- The kill button now remains visible regardless of sidebar width
+
+Stage Summary:
+- Kill button always visible with flex-shrink:0
+- Other elements (name, badges) absorb the space reduction
+---
+Task ID: 2
+Agent: main
+Task: Fix spawn button color changing to white on hover (light theme)
+
+Work Log:
+- Identified CSS specificity bug: [data-theme="light"] .btn:hover (0,3,0) was
+  overriding .btn-primary:hover (0,2,0), causing green button to turn white
+- Added light-theme-specific overrides for .btn-primary:hover and .btn-danger:hover
+  with matching (0,3,0) specificity
+
+Stage Summary:
+- .btn-primary:hover now stays green (#2ea043) in light theme
+- .btn-danger:hover stays red (#f85149) in light theme
+---
+Task ID: 3
+Agent: main
+Task: Compile, lint, test
+
+Work Log:
+- cargo fmt (fixed formatting drift in regression_test.rs)
+- cargo clippy: clean, no warnings
+- cargo test: 494 tests all passing (300+121+4+67+2)
+
+Stage Summary:
+- All 494 tests pass
+- Clippy clean, format clean
+---
+Task ID: 4
+Agent: main
+Task: Create mdbook documentation for the web UI with screenshots
+
+Work Log:
+- Created docs/web-ui/ directory as mdbook project
+- Wrote book.toml with dark theme, GitHub links
+- Wrote SUMMARY.md with 17 chapters
+- Created 17 markdown documentation files covering every UI element
+- Captured 25 screenshots using Playwright (chromium headless):
+  - General overview + numbered overview
+  - Topbar, sidebar (4 tabs), panel header, terminal view
+  - Send keys, bottombar, log viewer, global search
+  - Keyboard shortcuts, special keys help, context menu
+  - Dark, light, grey themes
+  - Welcome screen, exited commands, collapsed sidebar
+  - Add panel modal
+
+Stage Summary:
+- Complete mdbook project at docs/web-ui/
+- 17 markdown chapters + SUMMARY.md + book.toml
+- 25 screenshots in docs/web-ui/screenshots/
+- Ready for mdbook serve/build
