@@ -1571,17 +1571,21 @@ async function killAllCommands() {
             }
         }
     }
-    await Promise.all(promises);
     // Clear cached commands immediately so the sidebar empties
     for (const inst of state.instanceUrls) {
         inst._commands = [];
     }
     state.selectedInstUrl = null;
     state.selectedCmdId = null;
-    // Re-fetch from server after a short delay to let the backend process kills
-    _lastCommandState = '';
-    loadCommands();
-    // Second refresh after delay to catch any remaining cleanup
+    // Render the empty sidebar immediately — do NOT call loadCommands() yet
+    // because the server may not have processed all kills, causing stale data.
+    const container = document.getElementById('commandList');
+    if (container) {
+        container.innerHTML = '<div style="padding:1rem;color:var(--text-muted);text-align:center;">No running commands</div>';
+    }
+    // Wait for all kill requests to complete
+    await Promise.all(promises);
+    // Re-fetch from server after a delay to let the backend process kills
     setTimeout(() => { _lastCommandState = ''; loadCommands(); }, 1500);
 }
 

@@ -91,3 +91,20 @@ Stage Summary:
 - 17 markdown chapters + SUMMARY.md + book.toml
 - 25 screenshots in docs/web-ui/screenshots/
 - Ready for mdbook serve/build
+---
+Task ID: 2
+Agent: main
+Task: Fix five critical web UI bugs — kill button visibility, button overlap, panel header spacing, input styling, kill-all sidebar update
+
+Work Log:
+- Analyzed CSS for kill button: found `.btn:hover { opacity: 0.85 }` was the root cause of the button disappearing on hover
+- Removed `opacity: 0.85` from `.btn:hover` globally — this affected ALL buttons, not just the kill button
+- Added `opacity: 1 !important` to `.cmd-kill-btn` as defense-in-depth
+- Fixed `.panel-send-row` overlap: changed `flex-shrink: 1` to `flex-shrink: 0` so the send-keys group doesn't get squeezed, added `max-width: 260px` to prevent it from growing too large
+- Increased `.panel-header` padding from `0.15rem` to `0.2rem` for better vertical spacing around menu areas
+- Removed `max-width: 180px` from `.panel-send-row input` since the container now has a `max-width` constraint
+- Fixed kill-all sidebar: replaced immediate `loadCommands()` (which re-fetched stale data from server) with direct DOM update to show empty state, followed by delayed re-fetch at 1500ms
+
+Stage Summary:
+- All 5 CSS/JS bugs fixed in `static/admin/style.css` and `static/admin/app.js`
+- Build: clean, Clippy: zero warnings, Tests: 594 passing (0 failed)
