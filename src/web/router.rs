@@ -68,6 +68,10 @@ pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
             get(handlers::vtty::get_vtty_partial),
         )
         .route(
+            "/api/commands/:id/vtty/text",
+            get(handlers::vtty::get_vtty_text),
+        )
+        .route(
             "/api/commands/:id/resize",
             post(handlers::vtty::resize_vtty),
         )

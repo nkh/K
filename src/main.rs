@@ -126,6 +126,9 @@ fn pre_runtime() -> Result<Option<Cli>> {
             subcommands::handle_config_check_command(cli.config.as_deref())?;
             return Ok(None);
         }
+        Some(Commands::Cat { target: _ }) => {
+            // cat is async (needs HTTP), fall through to async phase
+        }
         None => {}
     }
 
@@ -206,6 +209,10 @@ async fn handle_subcommands(cli: &Cli) -> Result<bool> {
         }
         Some(Commands::Resize { target, rows, cols }) => {
             subcommands::handle_resize_command(cli, target, *rows, *cols).await?;
+            Ok(true)
+        }
+        Some(Commands::Cat { target }) => {
+            subcommands::handle_cat_command(cli, target.as_deref()).await?;
             Ok(true)
         }
         // Cert and ConfigCheck are handled synchronously in pre_runtime()

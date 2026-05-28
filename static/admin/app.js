@@ -713,51 +713,42 @@ async function loadCommands() {
             const cert = cmd.certificate || '';
             const certBadge = cert
                 ? `<span class="cert-badge" title="Bound to: ${escHtml(cert)}">${escHtml(cert)}</span>`
-                : `<span class="cert-badge empty">--</span>`;
+                : '';
             const selected = (state.selectedInstUrl === inst.url && state.selectedCmdId === cmd.id) ? ' selected' : '';
-            const argsStr = (cmd.args || []).join(' ');
             const isAlive = cmd.alive !== false;
             const isFrozen = cmd.frozen === true;
-            let detailParts = [];
-            if (argsStr) detailParts.push(argsStr);
-            detailParts.push(`pid ${cmd.pid}`);
-            if (cmd.exit_code != null) detailParts.push(`exit ${cmd.exit_code}`);
-            if (cmd.exit) {
-                if (cmd.exit.on_exit) detailParts.push(`on_exit: ${cmd.exit.on_exit}`);
-                if (cmd.exit.on_error) detailParts.push(`on_error: ${cmd.exit.on_error}`);
-            }
-            const detail = detailParts.join('  ');
             const runtimeStr = (isAlive || isFrozen) && cmd.runtime_secs > 0
-                ? `<span style="color:var(--text-muted);font-size:0.6rem;flex-shrink:0;">${formatRuntime(cmd.runtime_secs)}</span>`
+                ? formatRuntime(cmd.runtime_secs)
                 : '';
-            const frozenBadge = isFrozen
-                ? `<span style="color:var(--yellow);font-size:0.55rem;font-weight:600;flex-shrink:0;">PAUSED</span>`
-                : '';
+            const frozenBadge = isFrozen ? 'PAUSED ' : '';
             const exitBadge = (cmd.exit_code != null)
                 ? `<span class="exit-badge ${cmd.exit_code === 0 ? 'success' : 'failure'}">exit ${cmd.exit_code}</span>`
                 : '';
             const res = state._resourceCache[cmd.id];
-            const resourceBadge = (res && (res.cpu_percent != null || res.memory_mb != null))
-                ? `<span class="resource-badge">${res.cpu_percent != null ? 'CPU ' + res.cpu_percent.toFixed(1) + '%' : ''}${res.cpu_percent != null && res.memory_mb != null ? ' | ' : ''}${res.memory_mb != null ? res.memory_mb.toFixed(1) + 'MB' : ''}</span>`
+            const resourceStr = (res && (res.cpu_percent != null || res.memory_mb != null))
+                ? `${res.cpu_percent != null ? res.cpu_percent.toFixed(1) + '%' : ''}${res.cpu_percent != null && res.memory_mb != null ? ' ' : ''}${res.memory_mb != null ? res.memory_mb.toFixed(1) + 'MB' : ''}`
                 : '';
             const pinnedNames = getPinnedNames();
             const isPinned = pinnedNames.includes(cmdName);
             const frozenClass = isFrozen ? ' frozen' : '';
             const exitedClass = (!isAlive && !isFrozen) ? ' exited' : '';
+            // Build inline detail: "12s 3.2% 128MB pid:1234"
+            const detailParts = [];
+            if (runtimeStr) detailParts.push(runtimeStr);
+            if (frozenBadge) detailParts.push(frozenBadge.trim());
+            if (resourceStr) detailParts.push(resourceStr);
+            if (cmd.pid) detailParts.push('pid:' + cmd.pid);
+            const detailStr = detailParts.join(' ');
             out += `
-                <div class="cmd-item${selected}${frozenClass}${exitedClass}" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" onclick="selectCommand(this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)} ${escHtml(argsStr)}" style="${(isAlive || isFrozen) ? '' : 'opacity:0.6;'}">
+                <div class="cmd-item${selected}${frozenClass}${exitedClass}" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" onclick="selectCommand(this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)}" style="${(isAlive || isFrozen) ? '' : 'opacity:0.6;'}">
                     <div class="cmd-item-row">
                         <button class="btn btn-xs btn-danger cmd-kill-btn" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" title="Kill">&#x2715;</button>
                         <button class="pin-btn${isPinned ? ' active' : ''}" onclick="event.stopPropagation();togglePinCmd('${escHtml(cmdName)}')" title="${isPinned ? 'Unpin' : 'Pin'}">&#9734;</button>
                         <span class="name">${escHtml(cmdName)}</span>
-                        ${frozenBadge}
-                        ${runtimeStr}
-                        ${resourceBadge}
+                        <span class="cmd-detail-inline">${escHtml(detailStr)}</span>
                         ${certBadge}
                         ${exitBadge}
-                        <span class="pid">${cmd.pid}</span>
                     </div>
-                    <div class="cmd-detail">${escHtml(detail)}</div>
                 </div>`;
         }
         return out;

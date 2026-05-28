@@ -232,3 +232,24 @@ pub async fn vtty_changed(State(state): State<AppState>, Path(id): Path<String>)
         })),
     }
 }
+
+/// GET /api/commands/:id/vtty/text
+///
+/// Fetch the VTTY buffer as plain text (no ANSI/HTML markup).
+pub async fn get_vtty_text(State(state): State<AppState>, Path(id): Path<String>) -> Json<Value> {
+    match state.manager.get(&id) {
+        Some(handle) => {
+            let text = handle.vtty_plain().await;
+            Json(serde_json::json!({
+                "status": "ok",
+                "data": { "id": id, "text": text },
+                "error": null
+            }))
+        }
+        None => Json(serde_json::json!({
+            "status": "error",
+            "data": null,
+            "error": format!("Command {} not found", id)
+        })),
+    }
+}

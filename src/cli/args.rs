@@ -44,7 +44,8 @@ pub struct Cli {
     #[arg(long, value_name = "FILE")]
     pub key_file: Option<String>,
 
-    /// Define a named certificate for the certificate pool (can be repeated).
+    /// Define a named certificate for the certificate pool (repeatable).
+    ///
     /// Format: NAME:CERT_FILE:KEY_FILE
     /// Example: --certificate "myapp:/path/to/cert.pem:/path/to/key.pem"
     #[arg(long, value_name = "NAME:CERT:KEY")]
@@ -67,9 +68,10 @@ pub struct Cli {
     pub display: bool,
 
     /// Keep displaying VTTY output after the initial CLI command exits,
-    /// switching to the next available command. Without this flag, the
-    /// display is dismissed when the CLI command finishes but the
-    /// server continues running.
+    /// switching to the next available command.
+    ///
+    /// Without this flag, the display is dismissed when the CLI command
+    /// finishes but the server continues running.
     #[arg(long)]
     pub display_all: bool,
 
@@ -90,9 +92,10 @@ pub struct Cli {
     pub log_file: Option<String>,
 
     /// Log raw PTY output from child processes to a file.
+    ///
     /// Each line records one read() call with an elapsed-time stamp and
     /// escaped bytes (printable ASCII as-is, non-printable as \xHH).
-    /// The resulting log can be replayed step-by-step with ansi-replay.
+    /// The resulting log can be replayed with ansi-replay.
     #[arg(long, value_name = "FILE")]
     pub log_pty_raw: Option<String>,
 
@@ -141,46 +144,53 @@ pub struct Cli {
     pub exit_timeout: Option<u64>,
 
     /// Keep the VTTY buffer in memory after the child process exits.
+    ///
     /// This is a per-command option: it only affects the command specified
     /// on the CLI, not future commands spawned via the API.
-    /// The command remains visible in the tab bar and web UI with an "exited"
-    /// status, allowing inspection of final output. The buffer can be
-    /// manually purged via the API (DELETE /api/commands/:id).
+    /// The command remains visible in the tab bar and web UI with an
+    /// "exited" status, allowing inspection of final output.
+    /// The buffer can be manually purged via the API (DELETE /api/commands/:id).
     #[arg(long)]
     pub retain_on_exit: bool,
 
     /// Save the VTTY buffer to a file as plain text when the command exits.
-    /// This is a per-command option.  The output includes scrollback content
-    /// followed by the visible screen rows, with each line trimmed of trailing
-    /// whitespace.  The snapshot is taken after the process exits but before
-    /// the command is removed from the manager.
+    ///
+    /// This is a per-command option. The output includes scrollback
+    /// content followed by the visible screen rows, with each line
+    /// trimmed of trailing whitespace. The snapshot is taken after the
+    /// process exits but before the command is removed from the manager.
     #[arg(long, value_name = "FILE")]
     pub snapshot_on_exit: Option<String>,
 
     /// Send keystrokes to the command after it starts.
+    ///
     /// Uses the same key notation as the API's send_keys endpoint.
     /// Plain text is sent as-is; special keys use <...> notation:
     ///   <Enter>, <Tab>, <Esc>, <Up>, <Down>, <Left>, <Right>,
     ///   <F1>-<F12>, <C-c>, <C-d>, <A-x> (Alt+x).
+    ///
     /// Example: --send-keys "ls<Enter>"
     /// Example: --send-keys "<C-c>quit<Enter>"
     #[arg(long, value_name = "KEYS")]
     pub send_keys: Option<String>,
 
     /// Show tab bar for command switching in interactive display.
+    ///
     /// Requires --display-all for command navigation keybindings to work.
-    /// Keybindings (Ctrl+Left/Right, Ctrl+L, F12) can be customized in the
-    /// config file under `interactive.keybindings`.
+    /// Keybindings (Ctrl+Left/Right, Ctrl+L, F12) can be customized in
+    /// the config file under `interactive.keybindings`.
     #[arg(long)]
     pub tabs: bool,
 
-    /// Set environment variables for the spawned command (can be repeated).
+    /// Set environment variables for the spawned command (repeatable).
+    ///
     /// Format: KEY=VALUE
     /// Example: --env RUST_LOG=debug --env DATABASE_URL=postgres://localhost/mydb
     #[arg(long, value_name = "KEY=VALUE")]
     pub env: Option<Vec<String>>,
 
     /// Ignore environment variables from the config file.
+    ///
     /// Only environment variables set via --env flags (CLI) or the API
     /// "env" field will be passed to the spawned command.
     #[arg(long)]
@@ -288,6 +298,12 @@ pub enum Commands {
     /// Validate config files without starting the server.
     /// Reports validation errors and warnings with field paths.
     ConfigCheck,
+    /// Print the VTTY buffer of a running command as plain text.
+    Cat {
+        /// PID or name of the command whose buffer to print.
+        /// If omitted and exactly one command is running, it is used automatically.
+        target: Option<String>,
+    },
 }
 
 #[derive(Subcommand, Debug)]

@@ -659,7 +659,7 @@ pub(crate) fn try_parse_mouse_event(buf: &[u8]) -> Option<MouseEvent> {
         let cb: u8 = std::str::from_utf8(parts[0]).ok()?.parse().ok()?;
         let cx: u16 = std::str::from_utf8(parts[1]).ok()?.parse().ok()?;
         let cy: u16 = std::str::from_utf8(parts[2]).ok()?.parse().ok()?;
-        let _is_motion = (cb & 0x20) != 0;
+        let is_motion = (cb & 0x20) != 0;
         let button = match cb & 3 {
             0 => MouseButton::Left,
             1 => MouseButton::Middle,
@@ -674,6 +674,8 @@ pub(crate) fn try_parse_mouse_event(buf: &[u8]) -> Option<MouseEvent> {
                 MouseButton::WheelUp
             };
             (wheel, MouseEventType::Press)
+        } else if is_motion {
+            (button, MouseEventType::Motion)
         } else {
             let et = if is_release {
                 MouseEventType::Release
@@ -694,17 +696,25 @@ pub(crate) fn try_parse_mouse_event(buf: &[u8]) -> Option<MouseEvent> {
         let cb = buf[3];
         let cx = (buf[4].saturating_sub(32)) as u16;
         let cy = (buf[5].saturating_sub(32)) as u16;
-        let _is_motion = (cb & 0x20) != 0;
-        let is_release = (cb & 0x40) != 0 || (cb & 0x03) == 0x03;
+        let is_motion = (cb & 0x20) != 0;
+        let is_release = !is_motion && ((cb & 0x40) != 0 || (cb & 0x03) == 0x03);
         // Check for wheel events (legacy: cb & 0x43 gives 32/33 for wheel up/down)
-        let (button, event_type) = if !is_release && (cb & 0x40) != 0 {
-            // Bit 6 set without release means wheel (legacy encoding)
+        let (button, event_type) = if !is_release && !is_motion && (cb & 0x40) != 0 {
+            // Bit 6 set without motion or release means wheel (legacy encoding)
             let wheel = if (cb & 0x01) != 0 {
                 MouseButton::WheelDown
             } else {
                 MouseButton::WheelUp
             };
             (wheel, MouseEventType::Press)
+        } else if is_motion {
+            let btn = match cb & 3 {
+                0 => MouseButton::Left,
+                1 => MouseButton::Middle,
+                2 => MouseButton::Right,
+                _ => MouseButton::Left,
+            };
+            (btn, MouseEventType::Motion)
         } else {
             let btn = match cb & 3 {
                 0 => MouseButton::Left,
@@ -2493,6 +2503,22 @@ mod tests {
         let event = try_parse_mouse_event(buf).unwrap();
         assert_eq!(event.button, MouseButton::Left); // cb & 3 = 3, but release detected
         assert_eq!(event.event_type, MouseEventType::Release);
+    }
+
+    #[test]
+    fn test_parse_sgr_bare_motion() {
+        // ESC [ < 35 ; 10 ; 5 M  (motion without button press: cb=0x20|3=35)
+        let buf = b"\x1b[<35;10;5M";
+        let event = try_parse_mouse_event(buf).unwrap();
+        assert_eq!(event.event_type, MouseEventType::Motion);
+    }
+
+    #[test]
+    fn test_parse_legacy_bare_motion() {
+        // Legacy motion without button: cb = 0x20 | 0x03 = 0x23
+        let buf = b"\x1b[M\x23\x20\x20";
+        let event = try_parse_mouse_event(buf).unwrap();
+        assert_eq!(event.event_type, MouseEventType::Motion);
     }
 
     #[test]
