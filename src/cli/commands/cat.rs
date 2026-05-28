@@ -78,7 +78,7 @@ pub async fn handle_cat_command(cli: &Cli, target: Option<&str>, color_always: b
     if color_always {
         // Fetch the buffer with ANSI escape sequences preserved.
         let resp = client
-            .get(format!("{}/api/commands/{}/vtty/full", url, cmd_id))
+            .get(format!("{}/api/commands/{}/vtty", url, cmd_id))
             .send()
             .await?;
         let json: serde_json::Value = resp.json().await?;
