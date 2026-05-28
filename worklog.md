@@ -132,3 +132,38 @@ Work Log:
 Stage Summary:
 - Build: clean, Clippy: zero warnings, Tests: 600 passing (6 new)
 - Files changed: src/cli/args.rs, src/main.rs, build.rs, static/admin/index.html, static/admin/style.css, static/admin/app.js, docs/index.md, docs/tutorials/getting-started.md, docs/how-to-guides/web-dashboard.md
+---
+Task ID: 4
+Agent: main
+Task: Fix three JavaScript bugs that completely broke the web UI
+
+Work Log:
+- Previous commit c0daa5f introduced three JS bugs during the topbar restructure
+- Bug 1 (CRITICAL): Line 809 used optional chaining on left-hand side of assignment
+  (`document.getElementById('bufferSelect')?.value = 'current'`) which is a JavaScript
+  SyntaxError. This prevented the ENTIRE app.js from being parsed — no code executed,
+  producing a blank page with zero functionality.
+- Bug 2: Line 1390 in loadVttyHttp referenced undefined variable `panelId`. The function
+  scope has `panel` (DOM element) and `panelObj` (state object) but no `panelId`. This
+  caused VTTY terminal content to never render via HTTP path.
+- Bug 3: Line 1129 in WebSocket vtty_full handler used `state.panelId` which doesn't
+  exist on the state object. Used getSelectedPanel() to obtain the correct panel reference.
+- Also fixed dispatch.rs file ownership (was owned by root) and applied cargo fmt to
+  fix formatting drift in args.rs, dispatch.rs, commands/cat.rs, commands/mod.rs,
+  subcommands.rs from the previous commit.
+- Verified syntax with `node -c app.js`, rebuilt binary, tested in browser:
+  - Command list loads correctly
+  - Terminal output renders via both WS and HTTP paths
+  - Send keys works
+  - Resize works
+  - Buffer switching works (Current/Main/Alt)
+  - Font size controls work (A-/A+)
+  - Theme switching works
+  - Spawn and kill work
+  - All panel header controls render correctly
+- All 600 tests pass, clippy clean, fmt clean
+
+Stage Summary:
+- Three JS bugs fixed in static/admin/app.js
+- Formatting drift fixed in 5 Rust files via cargo fmt
+- Pushed as commit 7ade2ac
