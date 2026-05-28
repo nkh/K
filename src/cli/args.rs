@@ -44,10 +44,8 @@ pub struct Cli {
     #[arg(long, value_name = "FILE")]
     pub key_file: Option<String>,
 
-    /// Define a named certificate for the certificate pool (repeatable).
-    ///
+    /// Define a named certificate (repeatable).
     /// Format: NAME:CERT_FILE:KEY_FILE
-    /// Example: --certificate "myapp:/path/to/cert.pem:/path/to/key.pem"
     #[arg(long, value_name = "NAME:CERT:KEY")]
     pub certificate: Option<Vec<String>>,
 
@@ -67,11 +65,7 @@ pub struct Cli {
     #[arg(long)]
     pub display: bool,
 
-    /// Keep displaying VTTY output after the initial CLI command exits,
-    /// switching to the next available command.
-    ///
-    /// Without this flag, the display is dismissed when the CLI command
-    /// finishes but the server continues running.
+    /// Keep displaying after the initial command exits
     #[arg(long)]
     pub display_all: bool,
 
@@ -79,9 +73,13 @@ pub struct Cli {
     #[arg(long)]
     pub no_display: bool,
 
-    /// VTTY display refresh interval in milliseconds
+    /// Display refresh interval in milliseconds
     #[arg(long, value_name = "MS")]
     pub refresh_ms: Option<u64>,
+
+    /// Show tab bar for command switching
+    #[arg(long)]
+    pub tabs: bool,
 
     /// Log API commands to terminal
     #[arg(long)]
@@ -91,11 +89,7 @@ pub struct Cli {
     #[arg(long, value_name = "FILE")]
     pub log_file: Option<String>,
 
-    /// Log raw PTY output from child processes to a file.
-    ///
-    /// Each line records one read() call with an elapsed-time stamp and
-    /// escaped bytes (printable ASCII as-is, non-printable as \xHH).
-    /// The resulting log can be replayed with ansi-replay.
+    /// Log raw PTY output (for debugging terminal escape sequences)
     #[arg(long, value_name = "FILE")]
     pub log_pty_raw: Option<String>,
 
@@ -111,7 +105,7 @@ pub struct Cli {
     #[arg(long, value_name = "N")]
     pub vtty_cols: Option<u16>,
 
-    /// VTTY scrollback buffer size (number of lines)
+    /// Scrollback buffer size (number of lines)
     #[arg(long, value_name = "N")]
     pub scrollback: Option<usize>,
 
@@ -135,79 +129,44 @@ pub struct Cli {
     #[arg(long, value_name = "CMD")]
     pub on_exit: Option<String>,
 
-    /// Run a command when the child exits with an error (non-zero exit code)
+    /// Run a command when the child exits with an error (non-zero)
     #[arg(long, value_name = "CMD")]
     pub on_error: Option<String>,
 
-    /// Seconds to wait for graceful exit before force-killing (default: 10)
+    /// Seconds to wait before force-killing (default: 10)
     #[arg(long, value_name = "SECS")]
     pub exit_timeout: Option<u64>,
 
-    /// Keep the VTTY buffer in memory after the child process exits.
-    ///
-    /// This is a per-command option: it only affects the command specified
-    /// on the CLI, not future commands spawned via the API.
-    /// The command remains visible in the tab bar and web UI with an
-    /// "exited" status, allowing inspection of final output.
-    /// The buffer can be manually purged via the API (DELETE /api/commands/:id).
+    /// Keep the VTTY buffer after the child exits
     #[arg(long)]
     pub retain_on_exit: bool,
 
-    /// Save the VTTY buffer to a file as plain text when the command exits.
-    ///
-    /// This is a per-command option. The output includes scrollback
-    /// content followed by the visible screen rows, with each line
-    /// trimmed of trailing whitespace. The snapshot is taken after the
-    /// process exits but before the command is removed from the manager.
+    /// Save VTTY buffer to a file when the command exits
     #[arg(long, value_name = "FILE")]
     pub snapshot_on_exit: Option<String>,
 
     /// Send keystrokes to the command after it starts.
-    ///
-    /// Uses the same key notation as the API's send_keys endpoint.
-    /// Plain text is sent as-is; special keys use <...> notation:
-    ///   <Enter>, <Tab>, <Esc>, <Up>, <Down>, <Left>, <Right>,
-    ///   <F1>-<F12>, <C-c>, <C-d>, <A-x> (Alt+x).
-    ///
-    /// Example: --send-keys "ls<Enter>"
-    /// Example: --send-keys "<C-c>quit<Enter>"
+    /// Special keys use <...> notation, e.g. <Enter> <C-c> <Esc>
     #[arg(long, value_name = "KEYS")]
     pub send_keys: Option<String>,
 
-    /// Show tab bar for command switching in interactive display.
-    ///
-    /// Requires --display-all for command navigation keybindings to work.
-    /// Keybindings (Ctrl+Left/Right, Ctrl+L, F12) can be customized in
-    /// the config file under `interactive.keybindings`.
-    #[arg(long)]
-    pub tabs: bool,
-
-    /// Set environment variables for the spawned command (repeatable).
-    ///
-    /// Format: KEY=VALUE
-    /// Example: --env RUST_LOG=debug --env DATABASE_URL=postgres://localhost/mydb
+    /// Set environment variables (repeatable). Format: KEY=VALUE
     #[arg(long, value_name = "KEY=VALUE")]
     pub env: Option<Vec<String>>,
 
-    /// Ignore environment variables from the config file.
-    ///
-    /// Only environment variables set via --env flags (CLI) or the API
-    /// "env" field will be passed to the spawned command.
+    /// Ignore environment variables from the config file
     #[arg(long)]
     pub no_env: bool,
 
-    /// Apply a named configuration profile from the config file.
-    /// Profile fields override the base config; CLI flags override both.
-    /// Example: --profile production
+    /// Apply a named configuration profile from the config file
     #[arg(long, value_name = "NAME")]
     pub profile: Option<String>,
 
-    /// Target a specific vrunner instance by PID when using the spawn subcommand.
-    /// If omitted and multiple instances are running, you will be prompted to choose.
+    /// Target a specific vrunner instance by PID
     #[arg(long, value_name = "PID")]
     pub target: Option<u32>,
 
-    /// Subcommand (list, stop, spawn, freeze, thaw, cert)
+    /// Subcommand
     #[command(subcommand)]
     pub command: Option<Commands>,
 
@@ -220,16 +179,14 @@ pub struct Cli {
 pub enum Commands {
     /// List all running vrunner instances
     List,
-    /// Stop a vrunner instance by PID.
-    /// If omitted and exactly one instance is running, it is stopped automatically.
+
+    /// Stop a vrunner instance by PID (auto-selects if only one)
     Stop {
-        /// PID of the instance to stop (optional if only one is running)
+        /// PID of the instance to stop
         pid: Option<u32>,
     },
-    /// Spawn a new command on a running vrunner instance.
-    /// If one instance is running, it is used automatically.
-    /// If multiple instances exist, you will be prompted to choose.
-    /// Use --target PID to skip the prompt.
+
+    /// Spawn a new command on a running vrunner instance
     Spawn {
         /// Command to run
         cmd: String,
@@ -243,48 +200,44 @@ pub enum Commands {
         #[arg(long)]
         cols: Option<u16>,
     },
-    /// Freeze (suspend) a running command via SIGSTOP.
-    /// The command is paused but not terminated.
+
+    /// Freeze (suspend) a running command via SIGSTOP
     Freeze {
         /// PID of the command to freeze
         pid: u32,
     },
-    /// Thaw (resume) a frozen command via SIGCONT.
+
+    /// Thaw (resume) a frozen command via SIGCONT
     Thaw {
         /// PID of the command to thaw
         pid: u32,
     },
+
     /// Manage named certificates for per-command access control
     Cert {
         #[command(subcommand)]
         action: CertAction,
     },
-    /// List vrunner instances only (tab-separated, machine-readable)
+
+    /// List vrunner instances (machine-readable, tab-separated)
     ListVrunner,
-    /// List running commands only (tab-separated, machine-readable)
+
+    /// List running commands (machine-readable, tab-separated)
     ListCommands,
-    /// Stop a specific command by PID or name (not the whole instance).
-    /// If no target is given and exactly one command is running, it is stopped automatically.
-    /// If the target is numeric, it is treated as a PID.
-    /// Otherwise it is matched against command names (and optionally args).
-    /// To match name+args, quote the full string: "vim file.txt"
+
+    /// Stop a specific command by PID or name (not the whole instance)
     StopCommand {
-        /// PID or name (and optional args, quoted) of the command to stop.
-        /// If omitted and exactly one command is running, that command is stopped.
+        /// PID or name of the command to stop
         target: Option<String>,
     },
-    /// Purge a retained (exited) command from the manager.
-    /// Permanently discards the VTTY buffer and all associated state.
-    /// If no target is given and exactly one exited command exists, it is purged automatically.
-    /// If the target is numeric, it is treated as a command ID (first 8 chars).
-    /// Otherwise it is matched against command names.
+
+    /// Purge an exited command, discarding its VTTY buffer
     Purge {
-        /// Command ID or name of the retained (exited) command to purge.
-        /// If omitted and exactly one exited command exists, it is purged automatically.
+        /// Command ID or name of the exited command to purge
         target: Option<String>,
     },
-    /// Resize the VTTY of a running command.
-    /// Resizes both the in-memory buffer and the child PTY (sends SIGWINCH).
+
+    /// Resize the VTTY of a running command (buffer + PTY)
     Resize {
         /// PID or name of the command to resize
         target: String,
@@ -295,14 +248,18 @@ pub enum Commands {
         #[arg(long, default_value_t = 0)]
         cols: u16,
     },
-    /// Validate config files without starting the server.
-    /// Reports validation errors and warnings with field paths.
+
+    /// Validate config files without starting the server
     ConfigCheck,
-    /// Print the VTTY buffer of a running command as plain text.
+
+    /// Print the VTTY buffer of a running command as text
     Cat {
-        /// PID or name of the command whose buffer to print.
-        /// If omitted and exactly one command is running, it is used automatically.
+        /// PID or name of the command whose buffer to print
         target: Option<String>,
+
+        /// Preserve ANSI color escape sequences in the output
+        #[arg(long)]
+        color_always: bool,
     },
 }
 

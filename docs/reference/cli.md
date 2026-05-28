@@ -394,6 +394,50 @@ Exit codes: `0` = valid, `1` = errors found, `2` = warnings (unless `--strict`).
 
 ---
 
+### `cat`
+
+Print the VTTY buffer of a running command to stdout. This is useful for
+inspecting what a command is currently displaying, capturing its output into
+a file, or piping it into other tools. By default the output is plain text
+with all ANSI formatting stripped, making it safe for grep, awk, and other
+text-processing utilities.
+
+```bash
+# Print plain text (no colors)
+vrunner cat
+
+# Print with ANSI colors preserved
+vrunner cat --color-always
+
+# Target a specific command by PID or name
+vrunner cat 12345
+vrunner cat --color-always htop
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--color-always` | `false` | Preserve ANSI color escape sequences in the output. When set, the buffer is rendered with its original colors, bold, underline, and other formatting exactly as the child process displayed it. Without this flag, all ANSI sequences are stripped and only plain text is printed. |
+
+When no target is given and exactly one command is running, that command
+is used automatically. If multiple commands are running, you must specify
+a target by PID or by name. The output includes both the visible screen
+content and the scrollback history.
+
+Common use cases:
+
+```bash
+# Capture command output to a file
+vrunner cat my-server > output.log
+
+# Search for a pattern in a running command's output
+vrunner cat db-console | grep "ERROR"
+
+# View colored output (useful for commands that use syntax highlighting)
+vrunner cat --color-always vim-session | less -R
+```
+
+---
+
 ## Special Key Notation
 
 The `--send-keys` flag and the `keys` field in the API both accept a

@@ -79,7 +79,6 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .topbar .spacer { flex: 1; }
 .topbar-group { display: flex; align-items: center; gap: 0.25rem; }
 .topbar-group-left { flex-shrink: 0; }
-.topbar-group-center { flex: 1; flex-wrap: wrap; justify-content: center; }
 .topbar-group-right { flex-shrink: 0; margin-left: auto; }
 .main { display: flex; flex: 1; overflow: hidden; }
 .sidebar { width: 280px; min-width: 0; background: var(--bg-secondary); display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden; }
@@ -295,10 +294,15 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
-/* Resize controls */
+/* Resize controls — global (topbar, now moved to panel header) */
 .resize-controls { display: flex; align-items: center; gap: 0.3rem; }
 .resize-controls label { font-size: 0.7rem; color: var(--text-muted); }
 .resize-controls input { width: 50px; font-size: 0.7rem; text-align: center; padding: 0.15rem; }
+
+/* Per-panel resize controls — compact variant for the panel header */
+.panel-resize-controls { display: inline-flex; align-items: center; gap: 0.15rem; flex-shrink: 0; }
+.panel-resize-controls label { font-size: 0.6rem; color: var(--text-muted); }
+.panel-resize-controls input { width: 42px; font-size: 0.6rem; text-align: center; padding: 0.1rem 0.15rem; }
 
 /* Multi-panel controls */
 .panel-controls { display: flex; gap: 0.3rem; }
@@ -413,7 +417,6 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
     .sidebar.collapsed { width: 0; box-shadow: none; }
     .topbar { padding: 0.25rem 0.4rem; gap: 0.3rem; }
     .topbar h1 { font-size: 0.8rem; }
-    .topbar-group-center { display: none; }
     .resize-controls, .font-size-ctrl { display: none; }
     .bottombar { padding: 0.1rem 0.3rem; gap: 0.2rem; }
     .token-bar input { width: 60px; }

@@ -21,26 +21,7 @@
             <button class="btn btn-xs" onclick="addPanel()" title="Add panel">+ Panel</button>
             <button class="btn btn-xs" id="globalSearchBtn" onclick="openGlobalSearch()" title="Search output">&#128269;</button>
         </div>
-        <div class="topbar-group topbar-group-center">
-            <div class="font-size-ctrl">
-                <button class="btn btn-xs" onclick="changeFontSize(-1)" title="Decrease font size">A-</button>
-                <span id="fontSizeLabel">10px</span>
-                <button class="btn btn-xs" onclick="changeFontSize(1)" title="Increase font size">A+</button>
-            </div>
-            <div class="resize-controls">
-                <label>R:</label>
-                <input type="number" id="resizeRows" value="24" min="1" max="200" title="Terminal rows">
-                <label>C:</label>
-                <input type="number" id="resizeCols" value="80" min="1" max="500" title="Terminal columns">
-                <button class="btn btn-xs" onclick="resizeTerminal()">Resize</button>
-            </div>
-            <select id="bufferSelect" class="select-xs" onchange="switchBuffer(this.value)" title="Which terminal buffer to view">
-                <option value="current">Current</option>
-                <option value="main">Main Buffer</option>
-                <option value="alt">Alt Buffer</option>
-            </select>
-            <span id="altScreenBadge" class="alt-screen-badge">ALT SCREEN</span>
-        </div>
+
         <div class="topbar-group topbar-group-right">
             <select id="themeSelect" class="select-xs" onchange="applyThemeSelect(this.value)" title="Theme">
                 <option value="">Auto</option>

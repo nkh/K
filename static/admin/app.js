@@ -419,7 +419,8 @@ function changeFontSize(delta) {
 
 function applyFontSize() {
     document.documentElement.style.setProperty('--font-size', state.fontSize + 'px');
-    document.getElementById('fontSizeLabel').textContent = state.fontSize + 'px';
+    const label = document.getElementById('fontSizeLabel');
+    if (label) label.textContent = state.fontSize + 'px';
     localStorage.setItem('vrunner_font_size', state.fontSize.toString());
 }
 
@@ -805,7 +806,12 @@ function selectCommand(instUrl, cmdId, name) {
     state.selectedInstUrl = instUrl;
     state.selectedCmdId = cmdId;
     state.bufferView = 'current';
-    document.getElementById('bufferSelect').value = 'current';
+    document.getElementById('bufferSelect')?.value = 'current';
+    // Reset panel-scoped buffer selects too
+    state.panels.forEach(p => {
+        const sel = document.getElementById('bufferSelect-' + p.id);
+        if (sel) sel.value = 'current';
+    });
 
     // Restore scrollback offset from sessionStorage for the new command
     const savedOffset = sessionStorage.getItem('vrunner_scrollback_' + cmdId);
@@ -1119,8 +1125,13 @@ function connectVttyWs(instUrl, cmdId) {
                     if (state.bufferView === 'current') {
                         updateVttyDisplay(msg.data);
                     }
-                    const badge = document.getElementById('altScreenBadge');
-                    if (badge) badge.classList.toggle('visible', !!msg.data.alternate_screen);
+                    const badge = document.getElementById('altScreenBadge-' + state.panelId);
+                    if (!badge) {
+                        const globalBadge = document.getElementById('altScreenBadge');
+                        if (globalBadge) globalBadge.classList.toggle('visible', !!msg.data.alternate_screen);
+                    } else {
+                        badge.classList.toggle('visible', !!msg.data.alternate_screen);
+                    }
                 } else if (msg.type === 'vtty_dirty' && msg.data) {
                     // Buffer has changed — schedule a debounced HTTP fetch.
                     // The server doesn't send any cell data, just a notification.
@@ -1284,8 +1295,13 @@ function updateVttyDisplay(data) {
     const dims = data.dimensions || {};
     document.getElementById('cursorPos').textContent = `Cursor: ${cursor.row + 1},${cursor.col + 1}`;
     document.getElementById('termDims').textContent = `${dims.rows}x${dims.cols}`;
-    document.getElementById('resizeRows').value = dims.rows || 24;
-    document.getElementById('resizeCols').value = dims.cols || 80;
+    document.getElementById('resizeRows')?.setAttribute('value', dims.rows || 24);
+    document.getElementById('resizeCols')?.setAttribute('value', dims.cols || 80);
+    // Update panel-scoped resize inputs
+    const rowsInput = document.getElementById('resizeRows-' + panel.id);
+    const colsInput = document.getElementById('resizeCols-' + panel.id);
+    if (rowsInput) rowsInput.value = dims.rows || 24;
+    if (colsInput) colsInput.value = dims.cols || 80;
 
     // Show cursor indicator (hide when in scrollback)
     const panelObj = state.panels.find(p => p.id === panel.id);
@@ -1370,8 +1386,13 @@ async function loadVttyHttp(instUrl, cmdId) {
             document.getElementById('termDims').textContent = `${dims.rows || '-'}x${dims.cols || '-'}`;
 
             // Update alt screen badge
-            const badge = document.getElementById('altScreenBadge');
-            if (badge) badge.classList.toggle('visible', !!json.data.alternate_screen);
+            const badge = document.getElementById('altScreenBadge-' + panelId);
+            if (!badge) {
+                const globalBadge = document.getElementById('altScreenBadge');
+                if (globalBadge) globalBadge.classList.toggle('visible', !!json.data.alternate_screen);
+            } else {
+                badge.classList.toggle('visible', !!json.data.alternate_screen);
+            }
 
             // Update mouse state
             if (panelObj) {
@@ -1619,18 +1640,52 @@ async function sendKeys() {
 
 async function resizeTerminal() {
     if (!state.selectedCmdId) return;
-    const cmdId = state.selectedCmdId;
-    const instUrl = state.selectedInstUrl;
-    const rows = parseInt(document.getElementById('resizeRows').value) || 24;
-    const cols = parseInt(document.getElementById('resizeCols').value) || 80;
-
+    const panelId = state.panels.find(p => p.id && p.instUrl === state.selectedInstUrl)?.id;
+    if (panelId) { resizeTerminalPanel(panelId); return; }
+    // Fallback: use old global elements if present (backward compat)
+    const rows = parseInt(document.getElementById('resizeRows')?.value) || 24;
+    const cols = parseInt(document.getElementById('resizeCols')?.value) || 80;
     try {
-        await fetch(apiUrl(`/api/commands/${cmdId}/resize`, { url: instUrl }), {
+        await fetch(apiUrl(`/api/commands/${state.selectedCmdId}/resize`, { url: state.selectedInstUrl }), {
             method: 'POST',
-            headers: authHeadersForInstance({ url: instUrl }),
+            headers: authHeadersForInstance({ url: state.selectedInstUrl }),
             body: JSON.stringify({ rows, cols }),
         });
     } catch (e) { /* ignore */ }
+}
+
+async function resizeTerminalPanel(panelId) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj || !panelObj.cmdId) return;
+    const rows = parseInt(document.getElementById('resizeRows-' + panelId)?.value) || 24;
+    const cols = parseInt(document.getElementById('resizeCols-' + panelId)?.value) || 80;
+    try {
+        await fetch(apiUrl(`/api/commands/${panelObj.cmdId}/resize`, { url: panelObj.instUrl }), {
+            method: 'POST',
+            headers: authHeadersForInstance({ url: panelObj.instUrl, token: panelObj.token }),
+            body: JSON.stringify({ rows, cols }),
+        });
+    } catch (e) { /* ignore */ }
+}
+
+function switchBufferPanel(panelId, view) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj) return;
+    // Update the select element
+    const sel = document.getElementById('bufferSelect-' + panelId);
+    if (sel) sel.value = view;
+    // If this is the currently selected panel, apply the buffer switch
+    if (panelObj.instUrl === state.selectedInstUrl && panelObj.cmdId === state.selectedCmdId) {
+        state.bufferView = view;
+        state.panels.forEach(p => p.scrollbackOffset = 0);
+        sessionStorage.removeItem('vrunner_scrollback_' + state.selectedCmdId);
+        if (view === 'current') {
+            startUpdateMode();
+        } else {
+            stopUpdateMode();
+            loadVttyHttp(panelObj.instUrl, panelObj.cmdId);
+        }
+    }
 }
 
 // ─── Certificates ───
@@ -1807,6 +1862,19 @@ function renderPanels() {
                             <span class="panel-font-size">${panel.fontSize}px</span>
                             <button class="btn btn-xs" onclick="changePanelFontSize('${panel.id}', 1)" title="Increase font size">A+</button>
                         </span>
+                        <span class="panel-resize-controls" id="resizeControls-${panel.id}">
+                            <label>Rows</label>
+                            <input type="number" id="resizeRows-${panel.id}" value="24" min="1" max="200" title="Terminal rows">
+                            <label>Cols</label>
+                            <input type="number" id="resizeCols-${panel.id}" value="80" min="1" max="500" title="Terminal columns">
+                            <button class="btn btn-xs" onclick="resizeTerminalPanel('${panel.id}')">Resize</button>
+                        </span>
+                        <select id="bufferSelect-${panel.id}" class="select-xs" onchange="switchBufferPanel('${panel.id}', this.value)" title="Which terminal buffer to view">
+                            <option value="current">Current</option>
+                            <option value="main">Main</option>
+                            <option value="alt">Alt</option>
+                        </select>
+                        <span id="altScreenBadge-${panel.id}" class="alt-screen-badge">ALT SCREEN</span>
                         <button id="pauseRunBtn-${panel.id}" class="btn btn-xs" onclick="togglePauseRunPanel('${panel.id}')" title="Pause/Resume" style="display:none;">&#9208; Pause</button>
                         <button class="btn btn-xs" onclick="restartCommand('${panel.id}')" title="Restart command">&#x21BB;</button>
                         <div class="panel-send-row">

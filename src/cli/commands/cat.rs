@@ -7,8 +7,10 @@ use crate::instance::registry::InstanceRegistry;
 /// Handle the `vrunner cat [TARGET]` subcommand.
 ///
 /// Fetches the VTTY buffer of the specified (or sole) running command
-/// and prints it as plain text to stdout.
-pub async fn handle_cat_command(cli: &Cli, target: Option<&str>) -> Result<()> {
+/// and prints it to stdout.  When `color_always` is true the output
+/// includes ANSI escape sequences so the terminal renders colours;
+/// otherwise plain text (no formatting) is printed.
+pub async fn handle_cat_command(cli: &Cli, target: Option<&str>, color_always: bool) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let all_instances = registry.list_instances();
     let instances = resolve_targeted_instances(cli, &all_instances)?;
@@ -76,19 +78,34 @@ pub async fn handle_cat_command(cli: &Cli, target: Option<&str>) -> Result<()> {
         .expect("instance must exist");
 
     let url = crate::cli::commands::common::instance_url(info, &None);
-    let resp = client
-        .get(format!("{}/api/commands/{}/vtty/text", url, cmd_id))
-        .send()
-        .await?;
 
-    let json: serde_json::Value = resp.json().await?;
-    if json["status"] != "ok" {
-        let err = json["error"].as_str().unwrap_or("unknown error");
-        anyhow::bail!("Failed to fetch VTTY buffer: {}", err);
+    if color_always {
+        // Fetch the buffer with ANSI escape sequences preserved.
+        let resp = client
+            .get(format!("{}/api/commands/{}/vtty/full", url, cmd_id))
+            .send()
+            .await?;
+        let json: serde_json::Value = resp.json().await?;
+        if json["status"] != "ok" {
+            let err = json["error"].as_str().unwrap_or("unknown error");
+            anyhow::bail!("Failed to fetch VTTY buffer: {}", err);
+        }
+        let content = json["data"]["content"].as_str().unwrap_or("");
+        print!("{}", content);
+    } else {
+        // Plain text — no formatting.
+        let resp = client
+            .get(format!("{}/api/commands/{}/vtty/text", url, cmd_id))
+            .send()
+            .await?;
+        let json: serde_json::Value = resp.json().await?;
+        if json["status"] != "ok" {
+            let err = json["error"].as_str().unwrap_or("unknown error");
+            anyhow::bail!("Failed to fetch VTTY buffer: {}", err);
+        }
+        let text = json["data"]["text"].as_str().unwrap_or("");
+        print!("{}", text);
     }
-
-    let text = json["data"]["text"].as_str().unwrap_or("");
-    println!("{}", text);
 
     Ok(())
 }
