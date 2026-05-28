@@ -155,6 +155,12 @@ impl CommandHandle {
         emu.cursor()
     }
 
+    /// Whether the child application has made the cursor visible (DEC mode 25).
+    pub async fn is_cursor_visible(&self) -> bool {
+        let emu = self.emulator.read().await;
+        emu.is_cursor_visible()
+    }
+
     /// Get the current cursor style.
     pub async fn cursor_style(&self) -> crate::vtty::emulator::CursorStyle {
         let emu = self.emulator.read().await;

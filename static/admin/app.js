@@ -1302,11 +1302,12 @@ function updateVttyDisplay(data) {
     if (rowsInput) rowsInput.value = dims.rows || 24;
     if (colsInput) colsInput.value = dims.cols || 80;
 
-    // Show cursor indicator (hide when in scrollback)
+    // Show cursor indicator (hide when in scrollback or app hid it via ?25l)
     const panelObj = state.panels.find(p => p.id === panel.id);
     const inScrollback = panelObj && panelObj.scrollbackOffset > 0;
+    const cursorHidden = data.cursor_visible === false;
     const cursorEl = vttyEl ? vttyEl.querySelector('.cursor-indicator') : null;
-    if (cursorEl && cursor.row !== undefined && !inScrollback) {
+    if (cursorEl && cursor.row !== undefined && !inScrollback && !cursorHidden) {
         const charW = state.fontSize * 0.6;
         const charH = state.fontSize * 1.2;
         cursorEl.style.top = (cursor.row * charH) + 'px';
@@ -1402,10 +1403,11 @@ async function loadVttyHttp(instUrl, cmdId) {
                 vttyEl.classList.toggle('selectable', !mt);
             }
 
-            // Hide cursor when in scrollback view
+            // Hide cursor when in scrollback view or app hid it via ?25l
+            const cursorVisible = json.data.cursor_visible !== false;
             const cursorEl = vttyEl ? vttyEl.querySelector('.cursor-indicator') : null;
             if (cursorEl) {
-                if (sbOffset > 0) {
+                if (sbOffset > 0 || !cursorVisible) {
                     cursorEl.style.display = 'none';
                 } else {
                     cursorEl.style.display = '';

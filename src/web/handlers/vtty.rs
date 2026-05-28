@@ -59,6 +59,7 @@ pub async fn get_vtty_html(
             let alt_screen = handle.is_alternate_screen().await;
             let mouse_tracking = handle.mouse_tracking_enabled().await;
             let mouse_sgr = handle.mouse_sgr_enabled().await;
+            let cursor_visible = handle.is_cursor_visible().await;
             Json(serde_json::json!({
                 "status": "ok",
                 "data": {
@@ -69,6 +70,7 @@ pub async fn get_vtty_html(
                     "scrollback_lines": scrollback,
                     "scrollback_offset": scrollback_offset,
                     "alternate_screen": alt_screen,
+                    "cursor_visible": cursor_visible,
                     "mouse_tracking": mouse_tracking,
                     "mouse_sgr": mouse_sgr,
                 },
@@ -108,6 +110,7 @@ pub async fn get_vtty_buffer(
             };
             let alt_screen = handle.is_alternate_screen().await;
             let (rows, cols) = handle.dimensions().await;
+            let cursor_visible = handle.is_cursor_visible().await;
             Json(serde_json::json!({
                 "status": "ok",
                 "data": {
@@ -115,6 +118,7 @@ pub async fn get_vtty_buffer(
                     "screen": label,
                     "html": html,
                     "alternate_screen": alt_screen,
+                    "cursor_visible": cursor_visible,
                     "dimensions": { "rows": rows, "cols": cols },
                 },
                 "error": null

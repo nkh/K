@@ -1072,6 +1072,12 @@ impl VttyEmulator {
         (self.cursor_row, self.cursor_col)
     }
 
+    /// Whether the application has made the cursor visible (DEC private mode 25).
+    /// Applications like htop hide the cursor with `?25l`.
+    pub fn is_cursor_visible(&self) -> bool {
+        self.cursor_visible
+    }
+
     pub fn dimensions(&self) -> (usize, usize) {
         (self.rows, self.cols)
     }

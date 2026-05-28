@@ -83,10 +83,12 @@ pub(crate) async fn render_vtty(
             let buf = handle.vtty_snapshot().await;
             let (cur_row, cur_col) = handle.cursor_position().await;
             let cur_style = handle.cursor_style().await;
+            let cur_visible = handle.is_cursor_visible().await;
             drop(handle);
             let _ = TerminalDisplay::render(&buf, tab_offset, scrollback_offset);
-            // Only show cursor when not scrolled back into history
-            if scrollback_offset == 0 {
+            // Only show cursor when not scrolled back and the child
+            // application has not hidden it (e.g. htop uses ?25l).
+            if scrollback_offset == 0 && cur_visible {
                 let _ = TerminalDisplay::show_cursor_with_style(
                     cur_row + tab_offset as usize,
                     cur_col,
