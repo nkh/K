@@ -1572,9 +1572,17 @@ async function killAllCommands() {
         }
     }
     await Promise.all(promises);
+    // Clear cached commands immediately so the sidebar empties
+    for (const inst of state.instanceUrls) {
+        inst._commands = [];
+    }
     state.selectedInstUrl = null;
     state.selectedCmdId = null;
+    // Re-fetch from server after a short delay to let the backend process kills
+    _lastCommandState = '';
     loadCommands();
+    // Second refresh after delay to catch any remaining cleanup
+    setTimeout(() => { _lastCommandState = ''; loadCommands(); }, 1500);
 }
 
 async function sendKeys() {
@@ -1776,8 +1784,8 @@ function renderPanels() {
                         </span>
                         <button id="pauseRunBtn-${panel.id}" class="btn btn-xs" onclick="togglePauseRunPanel('${panel.id}')" title="Pause/Resume" style="display:none;">&#9208; Pause</button>
                         <button class="btn btn-xs" onclick="restartCommand('${panel.id}')" title="Restart command">&#x21BB;</button>
-                        <div class="input-row" style="min-width:140px;max-width:240px;flex:0 1 auto;">
-                            <input type="text" id="keyInput-${panel.id}" placeholder="Send keys..." style="font-size:0.7rem;" onkeydown="if(event.key==='Enter'){event.preventDefault();sendKeysToPanel('${panel.id}')}">
+                        <div class="panel-send-row">
+                            <input type="text" id="keyInput-${panel.id}" placeholder="Send keys..." onkeydown="if(event.key==='Enter'){event.preventDefault();sendKeysToPanel('${panel.id}')}">
                             <button class="btn btn-xs" onclick="sendKeysToPanel('${panel.id}')" title="Send keys to terminal">Send</button>
                             <button class="btn btn-xs" onclick="showSpecialKeysHelp()" title="Special keys reference">&#63;</button>
                         </div>
