@@ -3,7 +3,7 @@ use serde_json;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
-use sysinfo::{System, SystemExt};
+use sysinfo::{ProcessExt, System, SystemExt};
 
 use super::info::InstanceInfo;
 use crate::config::schema::Config;
@@ -57,16 +57,34 @@ impl InstanceRegistry {
                 let path = entry.path();
                 if let Some(stem) = path.file_stem() {
                     if let Ok(pid) = stem.to_string_lossy().parse::<u32>() {
-                        // Check if process is still alive
-                        if system.process(sysinfo::Pid::from(pid as usize)).is_some() {
-                            if let Ok(content) = fs::read_to_string(&path) {
-                                if let Ok(info) = serde_json::from_str::<InstanceInfo>(&content) {
-                                    instances.push(info);
+                        match system.process(sysinfo::Pid::from(pid as usize)) {
+                            Some(proc) => {
+                                // Verify the process is actually vrunner.  If the
+                                // PID was recycled to an unrelated process, clean up
+                                // the stale registry entry.
+                                let name = proc.name().to_lowercase();
+                                if name.contains("vrunner") {
+                                    if let Ok(content) = fs::read_to_string(&path) {
+                                        if let Ok(info) =
+                                            serde_json::from_str::<InstanceInfo>(&content)
+                                        {
+                                            instances.push(info);
+                                        }
+                                    }
+                                } else {
+                                    // PID recycled — remove stale entry
+                                    tracing::warn!(
+                                        pid,
+                                        actual_name = %name,
+                                        "cleaning up stale instance registry entry (PID recycled)"
+                                    );
+                                    let _ = fs::remove_file(&path);
                                 }
                             }
-                        } else {
-                            // Clean up stale pidfile
-                            let _ = fs::remove_file(&path);
+                            None => {
+                                // Process no longer exists — clean up stale pidfile
+                                let _ = fs::remove_file(&path);
+                            }
                         }
                     }
                 }
