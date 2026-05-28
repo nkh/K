@@ -1,5 +1,4 @@
 use anyhow::Result;
-use clap::Parser;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
@@ -50,7 +49,7 @@ fn resolve_config(cli: &Cli) -> Result<Config> {
     }
 
     // Apply CLI overrides (highest precedence)
-    cli.apply_overrides(&mut cfg);
+    cli.apply_overrides(&mut cfg)?;
 
     // Validate the final merged configuration
     let issues = validate_config(&cfg);
@@ -83,7 +82,7 @@ Fields with errors: {}",
 /// because fork() only copies the calling thread while tokio's multi-threaded
 /// runtime creates internal threads for I/O, timers, and blocking tasks.
 fn pre_runtime() -> Result<Option<Cli>> {
-    let cli = Cli::parse();
+    let cli = Cli::parse_with_version();
 
     // Handle subcommands that don't need the runtime
     match &cli.command {

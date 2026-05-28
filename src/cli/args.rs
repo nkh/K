@@ -1,10 +1,12 @@
 use crate::config::schema::Config;
-use clap::{Parser, Subcommand};
+use clap::{FromArgMatches, Parser, Subcommand};
+use clap::CommandFactory;
 
 #[derive(Parser, Debug)]
 #[command(name = "vrunner")]
 #[command(about = "A virtual terminal runner with web control plane")]
 #[command(trailing_var_arg = true)]
+#[command(version)]
 pub struct Cli {
     /// Path to configuration file
     #[arg(short, long, value_name = "FILE")]
@@ -310,6 +312,16 @@ pub enum CertAction {
 }
 
 impl Cli {
+    /// Parse CLI arguments with the git SHA embedded in the version string.
+    pub fn parse_with_version() -> Self {
+        let version = include_str!(concat!(env!("OUT_DIR"), "/version.txt"));
+        let mut cmd = <Self as CommandFactory>::command();
+        cmd = cmd.version(version.trim());
+        let matches = cmd.get_matches();
+        <Self as FromArgMatches>::from_arg_matches(&matches)
+            .expect("failed to parse CLI arguments")
+    }
+
     /// Parse --env KEY=VALUE flags into a HashMap.
     pub fn parse_env_vars(&self) -> std::collections::HashMap<String, String> {
         let mut map = std::collections::HashMap::new();
@@ -325,7 +337,7 @@ impl Cli {
 
     /// Apply CLI overrides to the loaded configuration.
     /// CLI flags take the highest precedence (override global and local config).
-    pub fn apply_overrides(&self, cfg: &mut Config) {
+    pub fn apply_overrides(&self, cfg: &mut Config) -> anyhow::Result<()> {
         // Server
         if let Some(bind) = &self.bind {
             cfg.server.bind = bind.clone();
@@ -374,6 +386,20 @@ impl Cli {
 
         // Daemon
         if self.daemon {
+            // --daemon detaches from the controlling terminal, making display
+            // mode impossible. Reject conflicting flags early with a clear
+            // message rather than silently ignoring them.
+            if self.display || self.display_all || self.tabs {
+                let mut flags = Vec::new();
+                if self.display { flags.push("--display"); }
+                if self.display_all { flags.push("--display-all"); }
+                if self.tabs { flags.push("--tabs"); }
+                anyhow::bail!(
+                    "--daemon conflicts with {}. Display mode requires a terminal, \
+                     but --daemon detaches from the controlling terminal.",
+                    flags.join(", ")
+                );
+            }
             cfg.daemon.enabled = true;
             cfg.display.enabled = false;
         }
@@ -467,5 +493,66 @@ impl Cli {
         // (CLI always adds/overrides config)
         let cli_env = self.parse_env_vars();
         cfg.environment.variables.extend(cli_env);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn default_config() -> Config {
+        Config::default()
+    }
+
+    #[test]
+    fn daemon_conflicts_with_display_all() {
+        let cli = Cli::try_parse_from(["vrunner", "--daemon", "--display-all", "htop"]).unwrap();
+        let result = cli.apply_overrides(&mut default_config());
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("--daemon conflicts with --display-all"), "unexpected: {msg}");
+    }
+
+    #[test]
+    fn daemon_conflicts_with_display() {
+        let cli = Cli::try_parse_from(["vrunner", "--daemon", "--display", "htop"]).unwrap();
+        let result = cli.apply_overrides(&mut default_config());
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("--daemon conflicts with --display"), "unexpected: {msg}");
+    }
+
+    #[test]
+    fn daemon_conflicts_with_tabs() {
+        let cli = Cli::try_parse_from(["vrunner", "--daemon", "--tabs", "htop"]).unwrap();
+        let result = cli.apply_overrides(&mut default_config());
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("--daemon conflicts with --tabs"), "unexpected: {msg}");
+    }
+
+    #[test]
+    fn daemon_conflicts_with_all_display_flags() {
+        let cli = Cli::try_parse_from(["vrunner", "--daemon", "--display-all", "--tabs", "htop"]).unwrap();
+        let result = cli.apply_overrides(&mut default_config());
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("--display-all"), "missing --display-all in: {msg}");
+        assert!(msg.contains("--tabs"), "missing --tabs in: {msg}");
+    }
+
+    #[test]
+    fn daemon_alone_succeeds() {
+        let cli = Cli::try_parse_from(["vrunner", "--daemon", "htop"]).unwrap();
+        let result = cli.apply_overrides(&mut default_config());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn display_all_alone_succeeds() {
+        let cli = Cli::try_parse_from(["vrunner", "--display-all", "htop"]).unwrap();
+        let result = cli.apply_overrides(&mut default_config());
+        assert!(result.is_ok());
     }
 }

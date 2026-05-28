@@ -108,3 +108,27 @@ Work Log:
 Stage Summary:
 - All 5 CSS/JS bugs fixed in `static/admin/style.css` and `static/admin/app.js`
 - Build: clean, Clippy: zero warnings, Tests: 594 passing (0 failed)
+---
+Task ID: 3
+Agent: main
+Task: Fix multiple critical bugs and add features (CLI flags, web UI, docs)
+
+Work Log:
+- Investigated and fixed 9 issues across CLI, web UI, and documentation
+- CLI: Added conflict detection for --daemon + --display/--display-all/--tabs with clear error message
+- CLI: Added --version flag with git commit SHA embedded via build.rs
+- CLI: Added 6 unit tests for flag conflict validation
+- Web UI: Moved kill button from far-right to far-left (replacing status dot)
+- Web UI: Fixed Docs button (was crashing on null #docsTab reference)
+- Web UI: Removed redundant theme toggle button (dropdown covers all themes)
+- Web UI: Fixed 2 unstyled buttons (command-picker Cancel, shortcuts Close)
+- Web UI: Reduced log-toolbar padding from 0.4rem to 0.15rem
+- Web UI: Reduced VTTY search bar button font-size from 0.7rem to 0.6rem
+- Web UI: Reduced scroll-bottom button font-size from 0.75rem to 0.65rem
+- Web UI: Added sidebar sort bar for multi-instance (All/Instance1/Instance2)
+- Docs: Removed Four Quadrants section from index.md, replaced with document index
+- Docs: Added screenshots to tutorials (getting-started) and how-to (web-dashboard)
+
+Stage Summary:
+- Build: clean, Clippy: zero warnings, Tests: 600 passing (6 new)
+- Files changed: src/cli/args.rs, src/main.rs, build.rs, static/admin/index.html, static/admin/style.css, static/admin/app.js, docs/index.md, docs/tutorials/getting-started.md, docs/how-to-guides/web-dashboard.md

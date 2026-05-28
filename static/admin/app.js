@@ -3,6 +3,9 @@
 let _lastCommandState = '';
 // Whether the welcome panel is currently displayed
 let _showingWelcome = true;
+// Sidebar sort: 'name' sorts all commands alphabetically, 'instance' groups by instance.
+// Clicking an instance header sets it to that instance URL.
+let _sidebarSort = 'name';
 
 const state = {
     panels: [],
@@ -352,7 +355,7 @@ function showCommandPicker(matches) {
         <p style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.75rem;">Click a command to view its terminal:</p>
         <div style="max-height:50vh;overflow-y:auto;">${items}</div>
         <div style="margin-top:0.75rem;text-align:right;">
-            <button onclick="releaseCurrentFocusTrap();document.getElementById('cmdPicker').remove()" style="font-size:0.8rem;">Cancel</button>
+            <button class="btn" onclick="releaseCurrentFocusTrap();document.getElementById('cmdPicker').remove()">Cancel</button>
         </div>
     </div>`;
     document.body.appendChild(overlay);
@@ -638,9 +641,20 @@ async function loadCommands() {
     }
     _lastCommandState = fingerprint;
 
-    // Render command list (merge all instances)
+    // Render command list
     const container = document.getElementById('commandList');
     let html = '';
+
+    // Sort bar: "All (by name)" + one button per instance
+    if (state.instanceUrls.length > 1) {
+        html += '<div class="sidebar-sort-bar">';
+        html += `<span class="sidebar-sort-item${_sidebarSort === 'name' ? ' active' : ''}" onclick="_sidebarSort='name';loadCommands()">All</span>`;
+        for (const inst of state.instanceUrls) {
+            const active = _sidebarSort === inst.url ? ' active' : '';
+            html += `<span class="sidebar-sort-item${active}" onclick="_sidebarSort='${escHtml(inst.url)}';loadCommands()">${escHtml(inst.label)}</span>`;
+        }
+        html += '</div>';
+    }
 
     function formatRuntime(secs) {
         if (!secs || secs < 0) return '';
@@ -651,29 +665,59 @@ async function loadCommands() {
         return h + 'h ' + m + 'm';
     }
 
+    // Collect all filtered commands with their instance
+    let allCmds = [];
     for (const inst of state.instanceUrls) {
-        if (inst._lastError) {
-            html += `<div style="padding:0.5rem;color:var(--red);font-size:0.75rem;">${escHtml(inst.label)}: ${escHtml(inst._lastError)}</div>`;
-        } else if (inst._commands.length === 0) {
-            html += `<div style="padding:0.5rem;color:var(--text-muted);font-size:0.75rem;">${escHtml(inst.label)}: No commands</div>`;
-        }
-
         for (const cmd of (inst._commands || [])) {
             const cmdName = cmd.name || cmd.id;
-            // Apply filter
             if (filterLower && !cmdName.toLowerCase().includes(filterLower) &&
                 !(cmd.args || []).join(' ').toLowerCase().includes(filterLower) &&
                 !String(cmd.pid).includes(filterLower)) continue;
+            allCmds.push({ inst, cmd, cmdName });
+        }
+    }
+
+    // Sort and render
+    if (_sidebarSort === 'name') {
+        // Sort alphabetically by command name
+        allCmds.sort((a, b) => a.cmdName.localeCompare(b.cmdName));
+        html += renderCmdList(allCmds);
+    } else {
+        // Group by the selected instance (or show all grouped when _sidebarSort is an instance URL)
+        const targetUrl = _sidebarSort;
+        const grouped = targetUrl === 'all' ? null : targetUrl;
+        // Show only commands from the selected instance, grouped
+        for (const inst of state.instanceUrls) {
+            if (grouped && inst.url !== grouped) continue;
+            const instCmds = allCmds.filter(c => c.inst.url === inst.url);
+            if (instCmds.length === 0 && grouped) continue;
+            if (inst._lastError && (!grouped || inst.url === grouped)) {
+                html += `<div style="padding:0.5rem;color:var(--red);font-size:0.7rem;">${escHtml(inst.label)}: ${escHtml(inst._lastError)}</div>`;
+                continue;
+            }
+            if (state.instanceUrls.length > 1) {
+                html += `<div class="pinned-section-header">${escHtml(inst.label)}</div>`;
+            }
+            if (instCmds.length === 0) {
+                html += `<div style="padding:0.3rem 0.4rem;color:var(--text-muted);font-size:0.7rem;">No commands</div>`;
+                continue;
+            }
+            instCmds.sort((a, b) => a.cmdName.localeCompare(b.cmdName));
+            html += renderCmdList(instCmds);
+        }
+    }
+
+    function renderCmdList(cmds) {
+        let out = '';
+        for (const { inst, cmd, cmdName } of cmds) {
             const cert = cmd.certificate || '';
             const certBadge = cert
                 ? `<span class="cert-badge" title="Bound to: ${escHtml(cert)}">${escHtml(cert)}</span>`
                 : `<span class="cert-badge empty">--</span>`;
-            const key = inst.url + ':' + cmd.id;
             const selected = (state.selectedInstUrl === inst.url && state.selectedCmdId === cmd.id) ? ' selected' : '';
             const argsStr = (cmd.args || []).join(' ');
             const isAlive = cmd.alive !== false;
             const isFrozen = cmd.frozen === true;
-            // Build detail line: args + pid + exit info
             let detailParts = [];
             if (argsStr) detailParts.push(argsStr);
             detailParts.push(`pid ${cmd.pid}`);
@@ -683,41 +727,27 @@ async function loadCommands() {
                 if (cmd.exit.on_error) detailParts.push(`on_error: ${cmd.exit.on_error}`);
             }
             const detail = detailParts.join('  ');
-            // Status dot: running, frozen, or exited
-            let statusDotHtml;
-            if (isFrozen) {
-                statusDotHtml = '<div class="status-dot status-frozen"></div>';
-            } else if (isAlive) {
-                statusDotHtml = '<div class="status-dot status-running"></div>';
-            } else {
-                statusDotHtml = '<div class="status-dot status-exited"></div>';
-            }
-            // Runtime badge
             const runtimeStr = (isAlive || isFrozen) && cmd.runtime_secs > 0
                 ? `<span style="color:var(--text-muted);font-size:0.6rem;flex-shrink:0;">${formatRuntime(cmd.runtime_secs)}</span>`
                 : '';
-            // Frozen badge
             const frozenBadge = isFrozen
                 ? `<span style="color:var(--yellow);font-size:0.55rem;font-weight:600;flex-shrink:0;">PAUSED</span>`
                 : '';
-            // Exit code badge
             const exitBadge = (cmd.exit_code != null)
                 ? `<span class="exit-badge ${cmd.exit_code === 0 ? 'success' : 'failure'}">exit ${cmd.exit_code}</span>`
                 : '';
-            // Resource badge
             const res = state._resourceCache[cmd.id];
             const resourceBadge = (res && (res.cpu_percent != null || res.memory_mb != null))
                 ? `<span class="resource-badge">${res.cpu_percent != null ? 'CPU ' + res.cpu_percent.toFixed(1) + '%' : ''}${res.cpu_percent != null && res.memory_mb != null ? ' | ' : ''}${res.memory_mb != null ? res.memory_mb.toFixed(1) + 'MB' : ''}</span>`
                 : '';
-            // Pin button
             const pinnedNames = getPinnedNames();
             const isPinned = pinnedNames.includes(cmdName);
             const frozenClass = isFrozen ? ' frozen' : '';
             const exitedClass = (!isAlive && !isFrozen) ? ' exited' : '';
-            html += `
+            out += `
                 <div class="cmd-item${selected}${frozenClass}${exitedClass}" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" onclick="selectCommand(this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)} ${escHtml(argsStr)}" style="${(isAlive || isFrozen) ? '' : 'opacity:0.6;'}">
                     <div class="cmd-item-row">
-                        ${statusDotHtml}
+                        <button class="btn btn-xs btn-danger cmd-kill-btn" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" title="Kill">&#x2715;</button>
                         <button class="pin-btn${isPinned ? ' active' : ''}" onclick="event.stopPropagation();togglePinCmd('${escHtml(cmdName)}')" title="${isPinned ? 'Unpin' : 'Pin'}">&#9734;</button>
                         <span class="name">${escHtml(cmdName)}</span>
                         ${frozenBadge}
@@ -726,11 +756,11 @@ async function loadCommands() {
                         ${certBadge}
                         ${exitBadge}
                         <span class="pid">${cmd.pid}</span>
-                        <button class="btn btn-xs btn-danger cmd-kill-btn" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" title="Kill">&#x2715;</button>
                     </div>
                     <div class="cmd-detail">${escHtml(detail)}</div>
                 </div>`;
         }
+        return out;
     }
 
     // Rearrange pinned commands to top
@@ -2143,8 +2173,28 @@ function clearLogSearch() {
 
 // ─── Documentation ───
 function showDocs() {
-    switchViewTab('docs', document.getElementById('docsTab'));
-    loadDocs();
+    const btn = document.getElementById('docsBtn');
+    const vtty = document.getElementById('view-vtty');
+    const log = document.getElementById('view-log');
+    const docs = document.getElementById('view-docs');
+    if (state.currentView === 'docs') {
+        // Switch back to terminal
+        state.currentView = 'vtty';
+        vtty.style.display = 'flex';
+        docs.style.display = 'none';
+        if (btn) { btn.style.background = ''; btn.style.color = ''; }
+    } else {
+        // Disconnect log WS if active
+        if (state.currentView === 'log') {
+            disconnectLogWs();
+            if (log) log.style.display = 'none';
+        }
+        state.currentView = 'docs';
+        vtty.style.display = 'none';
+        docs.style.display = 'block';
+        if (btn) { btn.style.background = 'var(--accent)'; btn.style.color = '#fff'; }
+        loadDocs();
+    }
 }
 
 async function loadDocs() {
@@ -3305,7 +3355,7 @@ function showShortcuts() {
         </table>
         <p style="font-size:0.7rem;color:var(--text-muted);margin-bottom:0.5rem;">Click on the terminal to focus the key input field.</p>
         <div style="text-align:right;margin-top:0.75rem;">
-            <button onclick="closeShortcuts()" style="font-size:0.8rem;">Close</button>
+            <button class="btn" onclick="closeShortcuts()">Close</button>
         </div>
     </div>`;
     document.body.appendChild(overlay);

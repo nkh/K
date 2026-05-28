@@ -49,12 +49,15 @@ vrunner --display -- htop
 
 Open your browser: **http://127.0.0.1:9090/** (or `/admin`)
 
+![Web UI overview](../web-ui/screenshots/01-overview.png)
+
 You can also navigate directly to a command by name: **http://127.0.0.1:9090/htop**
 
 The web UI shows:
-- A sidebar with all running commands (with alive status and runtime)
-- A terminal view with live output
-- A spawn form to launch new commands
+- A **sidebar** with all running commands (with status and runtime)
+- A **terminal view** with live output
+- A **spawn form** to launch new commands
+- **Per-panel controls** for send keys, copy, export, and pause
 
 **Exercise 2.1**: Spawn a second command (`ls -la`) from the web UI spawn form.
 Switch between the two commands using the sidebar.

@@ -13,10 +13,13 @@ vrunner --web --port 8080
 
 ## Layout Overview
 
-The dashboard has three main areas:
+![Dashboard overview](../web-ui/screenshots/01-overview.png)
 
-- **Top Bar** — Instance status, connection indicator, and global controls (Kill All, Pause/Run, keyboard shortcuts).
-- **Sidebar** — Command list with search, status badges, and quick actions (kill, focus, rename).
+The dashboard has four main areas:
+
+- **Top Bar** — Font size, resize, buffer select, theme, auth token, and view toggles.
+- **Sidebar** — Tabs for Commands, Spawn, Templates, and Certs.
+- **Panel Header** — Per-panel controls: send keys, copy, export, pause, theme.
 - **Terminal Pane** — The main VTTY viewer that renders the selected command's output in real time.
 
 ## Real-Time VTTY Viewer
@@ -31,11 +34,17 @@ Click anywhere inside the terminal pane to **focus** it for keyboard input. The 
 
 ## Command Sidebar
 
+![Sidebar commands](../web-ui/screenshots/03-sidebar-commands.png)
+
 The sidebar lists every spawned command with:
 
+- **Kill button** — Close (×) button at the far left of each command entry.
+- **Pin** — Star button to pin a command to the top of the list.
 - **Name** or command string as the label.
-- **Status badge** — Running (green), Exited (gray), Error (red), Paused (yellow).
-- **Quick actions** — Kill (×), Focus (click name).
+- **Status** — Row background indicates running, frozen, or exited state.
+- **Badges** — Exit code, runtime, resource usage, certificate.
+
+When multiple vrunner instances are connected, a sort bar at the top lets you group commands by instance or view all sorted alphabetically.
 
 ### Search
 
