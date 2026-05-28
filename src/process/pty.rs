@@ -59,7 +59,8 @@ pub trait PtyMaster: Send {
 /// Abstraction over the PTY slave side, used to spawn a child process.
 pub trait PtySlave: Send {
     /// Spawn a command attached to this PTY, setting the given TERM value.
-    fn spawn_command(&self, cmd: &str, args: &[String], term: &str, env: &std::collections::HashMap<String, String>) -> Result<Box<dyn ChildProcess + Send>>;
+    /// If `dir` is provided, the child process will be started in that directory.
+    fn spawn_command(&self, cmd: &str, args: &[String], term: &str, env: &std::collections::HashMap<String, String>, dir: Option<&str>) -> Result<Box<dyn ChildProcess + Send>>;
 }
 
 /// Abstraction over a spawned child process.
@@ -200,6 +201,7 @@ impl PtySlave for PortablePtySlave {
         args: &[String],
         term: &str,
         env: &std::collections::HashMap<String, String>,
+        dir: Option<&str>,
     ) -> Result<Box<dyn ChildProcess + Send>> {
         let mut cmd_builder = portable_pty::CommandBuilder::new(cmd);
         for arg in args {
@@ -209,6 +211,10 @@ impl PtySlave for PortablePtySlave {
         cmd_builder.env("TERM", term);
         for (key, value) in env {
             cmd_builder.env(key, value);
+        }
+        // Set working directory if provided
+        if let Some(d) = dir {
+            cmd_builder.cwd(d);
         }
         let child = self.inner.spawn_command(cmd_builder).map_err(|_| {
             ProcessError::SpawnFailed { cmd: cmd.to_string() }

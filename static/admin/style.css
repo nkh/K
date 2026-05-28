@@ -158,6 +158,25 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .exit-badge.success { background:rgba(63,185,80,0.15);color:var(--green); }
 .exit-badge.failure { background:rgba(248,81,73,0.15);color:var(--red); }
 
+/* Exited command banner — overlaid on the VTTY container */
+.exited-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0.6rem;
+    background: rgba(248, 81, 73, 0.12);
+    border-bottom: 1px solid rgba(248, 81, 73, 0.25);
+    color: var(--red);
+    font-size: 0.7rem;
+    font-weight: 600;
+    z-index: 2;
+    flex-shrink: 0;
+}
+.exited-banner-icon {
+    font-size: 0.55rem;
+    opacity: 0.7;
+}
+
 /* Resource usage badge */
 .resource-badge { font-size:0.55rem;color:var(--text-muted);font-family:var(--font-mono);flex-shrink:0; }
 

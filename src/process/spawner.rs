@@ -128,6 +128,7 @@ impl ProcessSpawner {
         manager: &CommandManager,
         rows: Option<u16>,
         cols: Option<u16>,
+        dir: Option<&str>,
         pty_raw_log: Option<&str>,
     ) -> Result<CommandHandle> {
         // Architecture: orchestrates process lifecycle in 5 phases:
@@ -151,6 +152,7 @@ impl ProcessSpawner {
             &args,
             &self.vtty_cfg.term,
             &env_vars,
+            dir,
         )?;
         let pid = child.process_id().unwrap_or(0);
 

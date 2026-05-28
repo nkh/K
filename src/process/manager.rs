@@ -80,9 +80,9 @@ impl CommandManager {
     /// provided `ExitConfig` takes full precedence (on_exit, on_error,
     /// timeout_secs).
     #[allow(clippy::too_many_arguments)]
-    pub async fn spawn(&self, cmd: String, args: Vec<String>, certificate: Option<String>, exit_config: Option<crate::config::schema::ExitConfig>, env_vars: std::collections::HashMap<String, String>, rows: Option<u16>, cols: Option<u16>) -> Result<CommandId> {
+    pub async fn spawn(&self, cmd: String, args: Vec<String>, certificate: Option<String>, exit_config: Option<crate::config::schema::ExitConfig>, env_vars: std::collections::HashMap<String, String>, rows: Option<u16>, cols: Option<u16>, dir: Option<String>) -> Result<CommandId> {
         let id = Uuid::new_v4().to_string();
-        self.logger.log("spawn", &format!("id={} cmd={} args={:?} cert={:?} env={:?} size={}x{}", id, cmd, args, certificate, env_vars.keys().collect::<Vec<_>>(), rows.unwrap_or(self.config.vtty.rows), cols.unwrap_or(self.config.vtty.cols)));
+        self.logger.log("spawn", &format!("id={} cmd={} args={:?} cert={:?} env={:?} size={}x{} dir={:?}", id, cmd, args, certificate, env_vars.keys().collect::<Vec<_>>(), rows.unwrap_or(self.config.vtty.rows), cols.unwrap_or(self.config.vtty.cols), dir));
 
         // Use per-command exit config if provided, otherwise fall back to defaults
         let exit_config = exit_config.unwrap_or_else(|| self.config.default_exit.exit.clone());
@@ -100,6 +100,7 @@ impl CommandManager {
             env_vars,
             self,
             rows, cols,
+            dir.as_deref(),
             pty_raw_log,
         ).await?;
 

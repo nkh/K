@@ -279,7 +279,7 @@ async fn spawn_initial_command(
         cmd, args, None,
         per_command_exit,
         cfg.environment.variables.clone(),
-        None, None,
+        None, None, None,
     ).await?;
 
     // Send initial keystrokes if --send-keys was specified.

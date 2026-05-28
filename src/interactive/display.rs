@@ -826,7 +826,7 @@ pub(crate) async fn execute_context_menu_action(
                 let cmd = h.name.clone();
                 let args = h.args.clone();
                 drop(h);
-                match manager.spawn(cmd, args, None, None, std::collections::HashMap::new(), None, None).await {
+                match manager.spawn(cmd, args, None, None, std::collections::HashMap::new(), None, None, None).await {
                     Ok(new_id) => {
                         manager.logger().log("ctx_restart", &format!("old={} new={}", target_id, new_id));
                         let _ = manager.purge(&target_string);
@@ -859,7 +859,7 @@ pub(crate) async fn handle_spawn_command(
         if !parts.is_empty() {
             let cmd = parts[0].to_string();
             let args = parts[1..].iter().map(|s| s.to_string()).collect();
-            match manager.spawn(cmd, args, None, None, std::collections::HashMap::new(), None, None).await {
+            match manager.spawn(cmd, args, None, None, std::collections::HashMap::new(), None, None, None).await {
                 Ok(id) => {
                     manager.logger().log("spawn_terminal", &format!("id={} cmd={}", id, cmd_str));
                     return SpawnCommandResult::Spawned(id);

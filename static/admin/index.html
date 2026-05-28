@@ -89,7 +89,11 @@
                         </div>
                         <div class="field">
                             <label>Arguments (space-separated)</label>
-                            <input type="text" id="spawnArgs" placeholder="-- arg1 arg2" onkeydown="if(event.key==='Enter'){event.preventDefault();spawnCommand()}">
+                            <input type="text" id="spawnArgs" placeholder='--flag value  or  -c "echo hello; echo world"' onkeydown="if(event.key==='Enter'){event.preventDefault();spawnCommand()}">
+                        </div>
+                        <div class="field">
+                            <label>Working Directory</label>
+                            <input type="text" id="spawnDir" placeholder="/home/user/project" onkeydown="if(event.key==='Enter'){event.preventDefault();spawnCommand()}">
                         </div>
                         <div class="autofit-row">
                             <div class="field">

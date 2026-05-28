@@ -852,6 +852,21 @@ function updatePanelCommandInfo() {
                 resourceBadgeEl.textContent = '';
             }
         }
+
+        // Update exited banner on VTTY container
+        const exitedBanner = panel.querySelector(`[id^="exitedBanner-"]`);
+        if (exitedBanner) {
+            const isAlive = cmd.alive !== false;
+            const isFrozen = cmd.frozen === true;
+            if (!isAlive && !isFrozen) {
+                const exitCode = cmd.exit_code != null ? cmd.exit_code : '?';
+                const exitClass = cmd.exit_code === 0 ? 'success' : 'failure';
+                exitedBanner.innerHTML = `<span class="exited-banner-icon">&#9632;</span> Command exited <span class="exit-badge ${exitClass}">exit ${exitCode}</span>`;
+                exitedBanner.style.display = 'flex';
+            } else {
+                exitedBanner.style.display = 'none';
+            }
+        }
     } else if (nameEl) {
         nameEl.textContent = '';
         if (argsEl) argsEl.textContent = '';
@@ -859,6 +874,9 @@ function updatePanelCommandInfo() {
         // Hide pause button
         const pauseBtn = panel.querySelector(`[id^="pauseRunBtn-"]`);
         if (pauseBtn) pauseBtn.style.display = 'none';
+        // Hide exited banner
+        const exitedBanner = panel.querySelector(`[id^="exitedBanner-"]`);
+        if (exitedBanner) exitedBanner.style.display = 'none';
     }
 }
 
@@ -1386,11 +1404,61 @@ function switchBuffer(view) {
     }
 }
 
+// ─── Spawn argument parser ───
+// Splits a string into arguments respecting quoted strings.
+// Supports double-quoted and single-quoted strings.
+// Examples:
+//   '-c "echo hello; echo world"' -> ['-c', 'echo hello; echo world']
+//   "--flag 'arg with spaces'"      -> ['--flag', 'arg with spaces']
+//   'plain args'                    -> ['plain', 'args']
+function parseSpawnArgs(str) {
+    if (!str) return [];
+    const args = [];
+    let current = '';
+    let inQuote = null; // '"' or "'"
+    let escaped = false;
+    for (let i = 0; i < str.length; i++) {
+        const ch = str[i];
+        if (escaped) {
+            current += ch;
+            escaped = false;
+            continue;
+        }
+        if (ch === '\\') {
+            escaped = true;
+            continue;
+        }
+        if (inQuote) {
+            if (ch === inQuote) {
+                inQuote = null;
+            } else {
+                current += ch;
+            }
+            continue;
+        }
+        if (ch === '"' || ch === "'") {
+            inQuote = ch;
+            continue;
+        }
+        if (ch === ' ' || ch === '\t') {
+            if (current) {
+                args.push(current);
+                current = '';
+            }
+            continue;
+        }
+        current += ch;
+    }
+    if (current) args.push(current);
+    return args;
+}
+
 async function spawnCommand() {
     const cmd = document.getElementById('spawnCmd').value.trim();
     if (!cmd) return;
     const argsStr = document.getElementById('spawnArgs').value.trim();
-    const args = argsStr ? argsStr.split(/\s+/) : [];
+    // Parse arguments with support for quoted strings (double and single quotes)
+    const args = parseSpawnArgs(argsStr);
     const cert = document.getElementById('spawnCert').value || null;
     const instSelect = document.getElementById('spawnInstance');
     const instUrl = instSelect.value;
@@ -1402,6 +1470,10 @@ async function spawnCommand() {
     if (rows > 0) body.rows = rows;
     if (cols > 0) body.cols = cols;
 
+    // Working directory (optional)
+    const dir = document.getElementById('spawnDir').value.trim();
+    if (dir) body.dir = dir;
+
     try {
         const res = await fetch(apiUrl('/api/commands', { url: instUrl }), {
             method: 'POST',
@@ -1412,6 +1484,7 @@ async function spawnCommand() {
         if (json.status === 'ok') {
             document.getElementById('spawnCmd').value = '';
             document.getElementById('spawnArgs').value = '';
+            document.getElementById('spawnDir').value = '';
             document.getElementById('spawnRows').value = '';
             document.getElementById('spawnCols').value = '';
             // Auto-select the newly spawned command so its terminal output appears
@@ -1703,9 +1776,10 @@ function renderPanels() {
                         </span>
                         <button id="pauseRunBtn-${panel.id}" class="btn btn-xs" onclick="togglePauseRunPanel('${panel.id}')" title="Pause/Resume" style="display:none;">&#9208; Pause</button>
                         <button class="btn btn-xs" onclick="restartCommand('${panel.id}')" title="Restart command">&#x21BB;</button>
-                        <div class="input-row" style="min-width:140px;max-width:220px;flex:0 1 auto;">
+                        <div class="input-row" style="min-width:140px;max-width:240px;flex:0 1 auto;">
                             <input type="text" id="keyInput-${panel.id}" placeholder="Send keys..." style="font-size:0.7rem;" onkeydown="if(event.key==='Enter'){event.preventDefault();sendKeysToPanel('${panel.id}')}">
-                            <button class="btn btn-xs" onclick="sendKeysToPanel('${panel.id}')">Send</button>
+                            <button class="btn btn-xs" onclick="sendKeysToPanel('${panel.id}')" title="Send keys to terminal">Send</button>
+                            <button class="btn btn-xs" onclick="showSpecialKeysHelp()" title="Special keys reference">&#63;</button>
                         </div>
                         ${hasMultiplePanels ? `<button class="btn btn-xs btn-danger" onclick="removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
                         <button class="btn btn-xs" onclick="copyTerminalSelection('${panel.id}')" title="Copy selected text to clipboard">Copy</button>
@@ -1713,6 +1787,7 @@ function renderPanels() {
                         <button class="btn btn-xs" id="panelThemeBtn-${panel.id}" onclick="togglePanelTheme('${panel.id}')" title="Panel theme: inherit (click to toggle)">${panel.theme === 'light' ? '\u263E' : panel.theme === 'dark' ? '\u2600' : '\u25D0'}</button>
                     </div>
                     <div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px;">
+                        <div class="exited-banner" id="exitedBanner-${panel.id}" style="display:none;"></div>
                         <div class="search-bar" id="searchBar-${panel.id}">
                             <input type="text" id="searchInput-${panel.id}" placeholder="Search terminal..." oninput="vttySearch('${panel.id}')">
                             <span class="search-count" id="searchCount-${panel.id}"></span>
@@ -1778,6 +1853,60 @@ async function sendKeysToPanel(panelId) {
     } catch (e) {
         console.error('send_keys network error:', e);
     }
+}
+
+// ─── Special Keys Help ───
+function showSpecialKeysHelp() {
+    // Remove existing modal if present
+    const old = document.getElementById('specialKeysModal');
+    if (old) { old.remove(); return; }
+
+    const overlay = document.createElement('div');
+    overlay.id = 'specialKeysModal';
+    overlay.className = 'modal-overlay';
+    overlay.style.display = 'flex';
+    overlay.onclick = (e) => { if (e.target === overlay) { releaseCurrentFocusTrap(); overlay.remove(); } };
+
+    overlay.innerHTML = `<div class="modal" style="max-width:560px;max-height:80vh;overflow-y:auto;">
+        <h2 style="margin-bottom:0.5rem;">Special Keys Reference</h2>
+        <p style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.75rem;">
+            Type special keys using <code style="background:var(--bg-tertiary);padding:0.1rem 0.3rem;border-radius:2px;">&lt;KeyName&gt;</code> syntax in the send-keys input.
+            You can mix plain text with special keys, e.g. <code style="background:var(--bg-tertiary);padding:0.1rem 0.3rem;border-radius:2px;">hello&lt;Enter&gt;world</code>.
+        </p>
+        <table style="width:100%;font-size:0.75rem;border-collapse:collapse;">
+            <thead>
+                <tr style="border-bottom:1px solid var(--border);text-align:left;">
+                    <th style="padding:0.3rem 0.5rem;color:var(--text-muted);font-weight:600;">Key</th>
+                    <th style="padding:0.3rem 0.5rem;color:var(--text-muted);font-weight:600;">Syntax</th>
+                    <th style="padding:0.3rem 0.5rem;color:var(--text-muted);font-weight:600;">Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.25rem 0.5rem;">Return / Enter</td><td style="padding:0.25rem 0.5rem;"><code>&lt;Enter&gt;</code> or <code>&lt;Return&gt;</code></td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Send a newline (carriage return)</td></tr>
+                <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.25rem 0.5rem;">Backspace</td><td style="padding:0.25rem 0.5rem;"><code>&lt;Backspace&gt;</code></td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Delete character before cursor</td></tr>
+                <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.25rem 0.5rem;">Tab</td><td style="padding:0.25rem 0.5rem;"><code>&lt;Tab&gt;</code></td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Insert a tab character</td></tr>
+                <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.25rem 0.5rem;">Escape</td><td style="padding:0.25rem 0.5rem;"><code>&lt;Esc&gt;</code></td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Send the Escape character (0x1B)</td></tr>
+                <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.25rem 0.5rem;">Space</td><td style="padding:0.25rem 0.5rem;">(space character)</td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Type a literal space in the input</td></tr>
+                <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.25rem 0.5rem;">Delete</td><td style="padding:0.25rem 0.5rem;"><code>&lt;Delete&gt;</code></td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Delete character at cursor (forward delete)</td></tr>
+                <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.25rem 0.5rem;">Insert</td><td style="padding:0.25rem 0.5rem;"><code>&lt;Insert&gt;</code></td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Toggle insert/overwrite mode</td></tr>
+                <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.25rem 0.5rem;">Home / End</td><td style="padding:0.25rem 0.5rem;"><code>&lt;Home&gt;</code> <code>&lt;End&gt;</code></td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Jump to beginning / end of line</td></tr>
+                <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.25rem 0.5rem;">Page Up / Down</td><td style="padding:0.25rem 0.5rem;"><code>&lt;PageUp&gt;</code> <code>&lt;PageDown&gt;</code></td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Scroll up / down one page</td></tr>
+                <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.25rem 0.5rem;">Arrow Keys</td><td style="padding:0.25rem 0.5rem;"><code>&lt;Up&gt;</code> <code>&lt;Down&gt;</code> <code>&lt;Left&gt;</code> <code>&lt;Right&gt;</code></td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Cursor movement</td></tr>
+                <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.25rem 0.5rem;">F1 &ndash; F12</td><td style="padding:0.25rem 0.5rem;"><code>&lt;F1&gt;</code> &hellip; <code>&lt;F12&gt;</code></td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Function keys</td></tr>
+                <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.25rem 0.5rem;">Ctrl + key</td><td style="padding:0.25rem 0.5rem;"><code>&lt;C-c&gt;</code> <code>&lt;C-a&gt;</code> <code>&lt;C-d&gt;</code> &hellip;</td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Control modifier (use lowercase letter). <code>&lt;C-c&gt;</code> = SIGINT (interrupt)</td></tr>
+                <tr><td style="padding:0.25rem 0.5rem;">Alt + key</td><td style="padding:0.25rem 0.5rem;"><code>&lt;A-x&gt;</code> <code>&lt;A-enter&gt;</code> &hellip;</td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Alt/Meta modifier prefix (Escape + key)</td></tr>
+            </tbody>
+        </table>
+        <div style="margin-top:0.75rem;text-align:right;">
+            <button class="btn btn-xs" onclick="releaseCurrentFocusTrap();document.getElementById('specialKeysModal').remove()">Close</button>
+        </div>
+    </div>`;
+
+    document.body.appendChild(overlay);
+    const panel = overlay.querySelector('.modal');
+    if (panel) trapFocus(panel);
+    const closeBtn = overlay.querySelector('button');
+    if (closeBtn) closeBtn.focus();
 }
 
 // ─── Logs ───

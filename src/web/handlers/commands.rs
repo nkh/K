@@ -112,6 +112,11 @@ pub async fn start_command(
     let rows: Option<u16> = body.get("rows").and_then(|v| v.as_u64()).map(|v| v as u16);
     let cols: Option<u16> = body.get("cols").and_then(|v| v.as_u64()).map(|v| v as u16);
 
+    // Working directory override (optional)
+    let dir: Option<String> = body.get("dir")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
     // Validate dimensions if provided
     if let (Some(r), Some(c)) = (rows, cols) {
         if r < 1 || c < 1 || r > 200 || c > 500 {
@@ -119,6 +124,18 @@ pub async fn start_command(
                 "status": "error",
                 "data": null,
                 "error": "Invalid dimensions: rows must be 1-200, cols must be 1-500"
+            }));
+        }
+    }
+
+    // Validate working directory if provided
+    if let Some(ref d) = dir {
+        let path = std::path::Path::new(d);
+        if !path.is_dir() {
+            return Json(serde_json::json!({
+                "status": "error",
+                "data": null,
+                "error": format!("Working directory '{}' does not exist or is not a directory", d)
             }));
         }
     }
@@ -142,7 +159,7 @@ pub async fn start_command(
         retain_on_exit: body.get("retain_on_exit").and_then(|v| v.as_bool()).unwrap_or(false),
         snapshot_on_exit,
     };
-    match state.manager.spawn(cmd, args, certificate, Some(exit_config), merged_env, rows, cols).await {
+    match state.manager.spawn(cmd, args, certificate, Some(exit_config), merged_env, rows, cols, dir).await {
         Ok(id) => {
             // Look up the child's OS PID for the response.
             let pid = state.manager.get(&id).map(|h| h.pid).unwrap_or(0);
