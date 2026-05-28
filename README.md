@@ -73,29 +73,22 @@ man vrunner
 
 ## Documentation
 
-The **[User Manual](MANUAL.md)** is the comprehensive guide covering all features, configuration, API reference, troubleshooting, and more. It is structured for three audiences:
+Documentation is organized using the [Diataxis framework](https://diataxis.fr/) into four quadrants. Start at the **[documentation index](docs/index.md)** to find what you need.
 
-| Section | Audience | Description |
-|---------|----------|-------------|
-| [Part I — Getting Started](MANUAL.md#part-i--getting-started) | Beginners | Installation, first run, key concepts |
-| [Part II — Everyday Use](MANUAL.md#part-ii--everyday-use) | All Users | Commands, display, web UI, configuration |
-| [Part III — Advanced Topics](MANUAL.md#part-iii--advanced-topics) | Advanced | Interactive display, TLS, certificates, multi-instance |
-| [Part IV — API Reference](MANUAL.md#part-iv--api-reference) | Developers | All endpoints with curl examples, WebSocket protocol |
-| [Part V — Security](MANUAL.md#part-v--security) | Operators | Authentication, TLS, CORS, best practices |
-| [Part VI — Contributors](MANUAL.md#part-vi--for-contributors) | Contributors | Architecture, ADRs, testing, code organization |
+| Quadrant | Description | Start here |
+|----------|-------------|------------|
+| [Tutorials](docs/tutorials/getting-started.md) | Hands-on lessons for new users | Lesson 1: Your First Command |
+| [How-To Guides](docs/how-to-guides/) | Task-oriented recipes for specific goals | Pick the task you want |
+| [Reference](docs/reference/configuration.md) | Authoritative specs: config, API, CLI, protocol | Look up a value |
+| [Explanation](docs/explanation/architecture.md) | Concepts, architecture, design decisions | Understand why |
 
-### Additional Documents
+**Other resources:**
 
 | Document | Description |
 |----------|-------------|
-| [docs/configuration.md](docs/configuration.md) | Complete configuration reference with all fields and CLI mappings |
-| [docs/api.md](docs/api.md) | Detailed API specification with request/response schemas |
-| [docs/certificates.md](docs/certificates.md) | Certificate pool management guide |
-| [docs/architecture.md](docs/architecture.md) | Technical architecture, module breakdown, data flow diagrams |
-| [docs/websocket.md](docs/websocket.md) | WebSocket protocol specification with message schemas |
-| [docs/comparison.md](docs/comparison.md) | Feature comparison with tmux, screen, mprocs, gotty, wetty |
-| [docs/cookbook/](docs/cookbook/) | Recipes for common tasks and workflows |
-| [docs/examples/](docs/examples/) | Complete example configuration files for common scenarios |
+| [FAQ](docs/faq.md) | 50+ frequently asked questions |
+| [User Manual](MANUAL.md) | Comprehensive all-in-one reference |
+| [docs/examples/](docs/examples/) | Complete example configuration files |
 | [man/vrunner.1](man/vrunner.1) | Unix manpage (comprehensive CLI reference) |
 | [man/vrunnerctrl.1](man/vrunnerctrl.1) | CLI controller and API reference manpage |
 
