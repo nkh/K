@@ -306,3 +306,28 @@ Work Log:
 - 487 tests passing, 0 clippy warnings
 - 5 commits pushed to origin/main
 - Top-4 oversized functions all decomposed: run_display_loop, spawn, parse, async_main
+
+---
+Task ID: diataxis-faq
+Agent: main
+Task: Implement Diataxis Framework for docs and create FAQ page with 50+ questions
+
+Work Log:
+- Read all 14 existing documentation files to understand current content
+- Created Diataxis directory structure: docs/tutorials/, docs/how-to-guides/, docs/reference/, docs/explanation/
+- Created docs/index.md landing page with full document index organized by quadrant
+- Created docs/tutorials/getting-started.md (15 progressive lessons adapted from docs/tutorial.md)
+- Created 15 how-to guide files via subagent (2,690 lines total)
+- Created 2 reference files via subagent: cli.md (505 lines), keybindings.md (232 lines)
+- Created 5 explanation files via subagent (2,029 lines total): architecture.md, comparison.md, incremental-diff.md, security-model.md, lifecycle-policy.md
+- Created docs/faq.md with 88 frequently asked questions across 10 categories
+- Updated README.md to link to new Diataxis documentation structure
+- Installed Rust toolchain, compiled, linted (0 warnings), tested (487 passing), committed and pushed
+- Rebased over upstream changes before push
+
+Stage Summary:
+- Commit 0d3deb1 pushed to main
+- 26 files changed, 6,813 insertions(+), 18 deletions(-)
+- 487 tests passing, 0 clippy warnings
+- Existing docs (MANUAL.md, docs/configuration.md, docs/api.md, etc.) preserved in-place
+- New Diataxis structure complements rather than replaces existing documentation
