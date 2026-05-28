@@ -1,4 +1,4 @@
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -116,17 +116,19 @@ impl TlsManager {
 
         // Set distinguished name
         params.distinguished_name = rcgen::DistinguishedName::new();
-        params.distinguished_name.push(rcgen::DnType::CommonName, "vrunner");
-        params.distinguished_name.push(rcgen::DnType::OrganizationName, "vrunner");
+        params
+            .distinguished_name
+            .push(rcgen::DnType::CommonName, "vrunner");
+        params
+            .distinguished_name
+            .push(rcgen::DnType::OrganizationName, "vrunner");
 
         // Set key usage
         params.key_usages = vec![
             rcgen::KeyUsagePurpose::DigitalSignature,
             rcgen::KeyUsagePurpose::KeyEncipherment,
         ];
-        params.extended_key_usages = vec![
-            rcgen::ExtendedKeyUsagePurpose::ServerAuth,
-        ];
+        params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
 
         params.is_ca = rcgen::IsCa::NoCa;
 
@@ -142,10 +144,10 @@ impl TlsManager {
         ];
         params.subject_alt_names = san_entries;
 
-        let key_pair = rcgen::KeyPair::generate()
-            .context("Failed to generate TLS key pair")?;
+        let key_pair = rcgen::KeyPair::generate().context("Failed to generate TLS key pair")?;
 
-        let cert = params.self_signed(&key_pair)
+        let cert = params
+            .self_signed(&key_pair)
             .context("Failed to create self-signed certificate")?;
 
         let cert_pem = cert.pem();

@@ -25,7 +25,10 @@ pub use common::{
     resolve_pid_to_id, resolve_stop_target, resolve_targeted_instances,
 };
 pub use config::handle_config_check_command;
-pub use list::{format_command, format_instance_header, handle_list_command, handle_list_commands_command, handle_list_vrunner_command};
+pub use list::{
+    format_command, format_instance_header, handle_list_command, handle_list_commands_command,
+    handle_list_vrunner_command,
+};
 pub use purge::handle_purge_command;
 pub use resize::{handle_resize_by_pid, handle_resize_command, resize_command_by_id};
 pub use spawn::{handle_freeze_command, handle_spawn_command, handle_thaw_command};

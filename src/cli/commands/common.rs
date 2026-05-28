@@ -28,7 +28,11 @@ pub fn c(text: &str, color: Color, bold: bool) -> String {
         return text.to_string();
     }
     let styled = text.with(color);
-    if bold { styled.bold().to_string() } else { styled.to_string() }
+    if bold {
+        styled.bold().to_string()
+    } else {
+        styled.to_string()
+    }
 }
 
 /// Build the base URL for a vrunner instance, handling auth and TLS.
@@ -43,14 +47,13 @@ pub fn instance_url(info: &InstanceInfo, _auth_token: &Option<String>) -> String
 
 /// Discover running vrunner instances and resolve to a single target.
 /// Returns the selected InstanceInfo or an error.
-pub fn resolve_instance(
-    cli: &Cli,
-    registry: &InstanceRegistry,
-) -> Result<InstanceInfo> {
+pub fn resolve_instance(cli: &Cli, registry: &InstanceRegistry) -> Result<InstanceInfo> {
     let instances = registry.list_instances();
 
     if instances.is_empty() {
-        anyhow::bail!("No running vrunner instances found. Start one first with: vrunner -- <command>");
+        anyhow::bail!(
+            "No running vrunner instances found. Start one first with: vrunner -- <command>"
+        );
     }
 
     // If --target PID was specified, use that instance
@@ -86,10 +89,13 @@ pub fn resolve_instance(
 
 pub fn format_instance_list(instances: &[InstanceInfo]) -> String {
     let mut out = String::new();
-    out.push_str(&format!("{:<10} {:<8} {:<20} {:<10} {:<10} COMMAND\n",
-        "PID", "PORT", "BIND", "DAEMON", "DISPLAY"));
+    out.push_str(&format!(
+        "{:<10} {:<8} {:<20} {:<10} {:<10} COMMAND\n",
+        "PID", "PORT", "BIND", "DAEMON", "DISPLAY"
+    ));
     for info in instances {
-        out.push_str(&format!("{:<10} {:<8} {:<20} {:<10} {:<10} {}\n",
+        out.push_str(&format!(
+            "{:<10} {:<8} {:<20} {:<10} {:<10} {}\n",
             info.pid,
             info.port,
             info.bind,
@@ -103,7 +109,11 @@ pub fn format_instance_list(instances: &[InstanceInfo]) -> String {
 
 /// Build the full display string ("name arg1 arg2") from a command JSON value.
 pub(crate) fn build_full_display_string(cmd: &serde_json::Value) -> (String, String) {
-    let name = cmd.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let name = cmd
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     let args = cmd.get("args").and_then(|v| v.as_array());
     let full = match args {
         Some(arr) => {
@@ -120,15 +130,8 @@ pub(crate) fn build_full_display_string(cmd: &serde_json::Value) -> (String, Str
 }
 
 /// Resolve a PID to a command UUID by querying the instance's command list.
-pub async fn resolve_pid_to_id(
-    client: &reqwest::Client,
-    url: &str,
-    pid: u32,
-) -> Result<String> {
-    let resp = client
-        .get(format!("{}/api/commands", url))
-        .send()
-        .await?;
+pub async fn resolve_pid_to_id(client: &reqwest::Client, url: &str, pid: u32) -> Result<String> {
+    let resp = client.get(format!("{}/api/commands", url)).send().await?;
 
     let json: serde_json::Value = resp.json().await?;
     if json["status"] != "ok" {
@@ -157,10 +160,7 @@ pub async fn collect_all_commands(
     let mut all_commands: Vec<(u32, String, u32, String, String)> = Vec::new();
     for info in instances {
         let url = instance_url(info, &None);
-        let resp = client
-            .get(format!("{}/api/commands", url))
-            .send()
-            .await;
+        let resp = client.get(format!("{}/api/commands", url)).send().await;
 
         if let Ok(resp) = resp {
             if let Ok(json) = resp.json::<serde_json::Value>().await {
@@ -194,7 +194,11 @@ pub fn resolve_targeted_instances(
                 anyhow::bail!(
                     "No vrunner instance found with PID {}. Running instances:\n{}",
                     target_pid,
-                    all_instances.iter().map(|i| format!("  PID: {}", i.pid)).collect::<Vec<_>>().join("\n")
+                    all_instances
+                        .iter()
+                        .map(|i| format!("  PID: {}", i.pid))
+                        .collect::<Vec<_>>()
+                        .join("\n")
                 );
             }
         }
@@ -206,10 +210,7 @@ pub fn resolve_targeted_instances(
 /// Resolve the target PID for the `vrunner stop` subcommand.
 /// If no PID is given, resolves to the only instance if exactly one is running.
 /// Exits the process if the resolution fails or is ambiguous.
-pub fn resolve_stop_target(
-    pid: Option<u32>,
-    instances: &[InstanceInfo],
-) -> u32 {
+pub fn resolve_stop_target(pid: Option<u32>, instances: &[InstanceInfo]) -> u32 {
     match pid {
         Some(p) => p,
         None => {
@@ -225,7 +226,9 @@ pub fn resolve_stop_target(
                     p
                 }
                 _ => {
-                    tracing::warn!("Multiple vrunner instances running. Specify which one to stop:");
+                    tracing::warn!(
+                        "Multiple vrunner instances running. Specify which one to stop:"
+                    );
                     for inst in instances {
                         tracing::warn!("  PID {} — port {}", inst.pid, inst.port);
                     }

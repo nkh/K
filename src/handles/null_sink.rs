@@ -1,5 +1,5 @@
-use async_trait::async_trait;
 use super::sink::Sink;
+use async_trait::async_trait;
 
 pub struct NullSink;
 

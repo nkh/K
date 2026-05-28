@@ -211,7 +211,11 @@ fn parse_raw_escape(s: &str) -> Option<Vec<u8>> {
         }
     }
 
-    if result.is_empty() { None } else { Some(result) }
+    if result.is_empty() {
+        None
+    } else {
+        Some(result)
+    }
 }
 
 /// Resolve a `KeybindingsConfig` into a vector of `(Vec<u8>, Action)` bindings.
@@ -236,13 +240,48 @@ pub fn resolve_keybindings(config: &KeybindingsConfig) -> Vec<Binding> {
         }
     };
 
-    try_bind("next_command", Action::NextCommand, &config.next_command, &mut bindings);
-    try_bind("prev_command", Action::PrevCommand, &config.prev_command, &mut bindings);
-    try_bind("toggle_log", Action::ToggleLog, &config.toggle_log, &mut bindings);
-    try_bind("spawn_command", Action::SpawnCommand, &config.spawn_command, &mut bindings);
-    try_bind("show_help", Action::ShowHelp, &config.show_help, &mut bindings);
-    try_bind("kill_command", Action::KillCommand, &config.kill_command, &mut bindings);
-    try_bind("toggle_pause", Action::TogglePause, &config.toggle_pause, &mut bindings);
+    try_bind(
+        "next_command",
+        Action::NextCommand,
+        &config.next_command,
+        &mut bindings,
+    );
+    try_bind(
+        "prev_command",
+        Action::PrevCommand,
+        &config.prev_command,
+        &mut bindings,
+    );
+    try_bind(
+        "toggle_log",
+        Action::ToggleLog,
+        &config.toggle_log,
+        &mut bindings,
+    );
+    try_bind(
+        "spawn_command",
+        Action::SpawnCommand,
+        &config.spawn_command,
+        &mut bindings,
+    );
+    try_bind(
+        "show_help",
+        Action::ShowHelp,
+        &config.show_help,
+        &mut bindings,
+    );
+    try_bind(
+        "kill_command",
+        Action::KillCommand,
+        &config.kill_command,
+        &mut bindings,
+    );
+    try_bind(
+        "toggle_pause",
+        Action::TogglePause,
+        &config.toggle_pause,
+        &mut bindings,
+    );
     try_bind("quit", Action::Quit, &config.quit, &mut bindings);
 
     bindings
@@ -328,12 +367,18 @@ mod tests {
 
     #[test]
     fn test_parse_ctrl_left() {
-        assert_eq!(parse_key_name("ctrl+left"), Some(vec![0x1b, b'[', b'1', b';', b'5', b'D']));
+        assert_eq!(
+            parse_key_name("ctrl+left"),
+            Some(vec![0x1b, b'[', b'1', b';', b'5', b'D'])
+        );
     }
 
     #[test]
     fn test_parse_ctrl_right() {
-        assert_eq!(parse_key_name("ctrl+right"), Some(vec![0x1b, b'[', b'1', b';', b'5', b'C']));
+        assert_eq!(
+            parse_key_name("ctrl+right"),
+            Some(vec![0x1b, b'[', b'1', b';', b'5', b'C'])
+        );
     }
 
     #[test]
@@ -348,7 +393,10 @@ mod tests {
 
     #[test]
     fn test_parse_f12() {
-        assert_eq!(parse_key_name("f12"), Some(vec![0x1b, b'[', b'2', b'4', b'~']));
+        assert_eq!(
+            parse_key_name("f12"),
+            Some(vec![0x1b, b'[', b'2', b'4', b'~'])
+        );
     }
 
     #[test]
@@ -358,12 +406,18 @@ mod tests {
 
     #[test]
     fn test_parse_raw_fallback() {
-        assert_eq!(parse_key_name("\\x1b[1;5C"), Some(vec![0x1b, b'[', b'1', b';', b'5', b'C']));
+        assert_eq!(
+            parse_key_name("\\x1b[1;5C"),
+            Some(vec![0x1b, b'[', b'1', b';', b'5', b'C'])
+        );
     }
 
     #[test]
     fn test_format_keys() {
-        assert_eq!(format_key(&[0x1b, b'[', b'1', b';', b'5', b'D']), "Ctrl+Left");
+        assert_eq!(
+            format_key(&[0x1b, b'[', b'1', b';', b'5', b'D']),
+            "Ctrl+Left"
+        );
         assert_eq!(format_key(&[0x0c]), "Ctrl+L");
         assert_eq!(format_key(&[0x1b]), "Esc");
         assert_eq!(format_key(&[0x1b, b'[', b'2', b'4', b'~']), "F12");

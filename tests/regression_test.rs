@@ -16,14 +16,14 @@
 //!
 //! Every test is independent: no shared state, no ordering dependency.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use std::collections::HashMap;
 use tokio::time::sleep;
 
 use vrunner::config::schema::{
-    Config, ServerConfig, SecurityConfig, TlsConfig, VttyConfig,
-    DisplayConfig, CommandLogConfig, DaemonConfig, ExitConfig, EnvironmentConfig,
+    CommandLogConfig, Config, DaemonConfig, DisplayConfig, EnvironmentConfig, ExitConfig,
+    SecurityConfig, ServerConfig, TlsConfig, VttyConfig,
 };
 use vrunner::process::manager::CommandManager;
 
@@ -84,7 +84,16 @@ async fn regression_spawn_echo_returns_valid_id() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("echo".into(), vec!["hi".into()], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "echo".into(),
+            vec!["hi".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     assert!(!id.is_empty(), "spawn() returned empty ID");
@@ -99,7 +108,16 @@ async fn regression_spawn_appears_in_list() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("echo".into(), vec!["test".into()], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "echo".into(),
+            vec!["test".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     let list = manager.list();
@@ -116,13 +134,25 @@ async fn regression_kill_removes_from_list() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("sleep".into(), vec!["60".into()], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "sleep".into(),
+            vec!["60".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     assert_eq!(manager.list().len(), 1);
     manager.kill(&id, None).await.unwrap();
     sleep(Duration::from_millis(200)).await;
-    assert!(manager.get(&id).is_none(), "killed command still in manager");
+    assert!(
+        manager.get(&id).is_none(),
+        "killed command still in manager"
+    );
     assert_eq!(manager.list().len(), 0, "list() should be empty after kill");
 }
 
@@ -145,9 +175,45 @@ async fn regression_spawn_multiple_all_visible() {
     // and get auto-removed before we can check list().
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
-    let id1 = manager.spawn("sleep".into(), vec!["60".into()], None, None, HashMap::new(), None, None, None).await.unwrap();
-    let id2 = manager.spawn("sleep".into(), vec!["60".into()], None, None, HashMap::new(), None, None, None).await.unwrap();
-    let id3 = manager.spawn("sleep".into(), vec!["60".into()], None, None, HashMap::new(), None, None, None).await.unwrap();
+    let id1 = manager
+        .spawn(
+            "sleep".into(),
+            vec!["60".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    let id2 = manager
+        .spawn(
+            "sleep".into(),
+            vec!["60".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    let id3 = manager
+        .spawn(
+            "sleep".into(),
+            vec!["60".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
     let list = manager.list();
     assert_eq!(list.len(), 3, "should have 3 commands");
     let ids: Vec<&str> = list.iter().map(|(id, _, _, _, _)| id.as_str()).collect();
@@ -165,8 +231,32 @@ async fn regression_kill_one_preserves_others() {
     // Regression: kill() removed wrong command from DashMap.
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
-    let id1 = manager.spawn("sleep".into(), vec!["60".into()], None, None, HashMap::new(), None, None, None).await.unwrap();
-    let id2 = manager.spawn("sleep".into(), vec!["60".into()], None, None, HashMap::new(), None, None, None).await.unwrap();
+    let id1 = manager
+        .spawn(
+            "sleep".into(),
+            vec!["60".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    let id2 = manager
+        .spawn(
+            "sleep".into(),
+            vec!["60".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
     manager.kill(&id1, None).await.unwrap();
     sleep(Duration::from_millis(100)).await;
     assert_eq!(manager.list().len(), 1);
@@ -179,7 +269,19 @@ async fn regression_find_by_pid_returns_correct_id() {
     // find_by_pid must return the correct command ID.
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
-    let id = manager.spawn("echo".into(), vec!["pid_test".into()], None, None, HashMap::new(), None, None, None).await.unwrap();
+    let id = manager
+        .spawn(
+            "echo".into(),
+            vec!["pid_test".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
     let pid = manager.get(&id).unwrap().pid;
     let found = manager.find_by_pid(pid);
     assert_eq!(found, Some(id.clone()), "find_by_pid returned wrong ID");
@@ -191,7 +293,19 @@ async fn regression_kill_by_pid_works() {
     // kill_by_pid must remove the correct command.
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
-    let id = manager.spawn("sleep".into(), vec!["60".into()], None, None, HashMap::new(), None, None, None).await.unwrap();
+    let id = manager
+        .spawn(
+            "sleep".into(),
+            vec!["60".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
     let pid = manager.get(&id).unwrap().pid;
     manager.kill_by_pid(pid).await.unwrap();
     sleep(Duration::from_millis(200)).await;
@@ -269,7 +383,16 @@ async fn regression_command_exits_process_removed() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("echo".into(), vec!["done".into()], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "echo".into(),
+            vec!["done".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     // Wait for echo to finish + spawner cleanup
@@ -291,11 +414,35 @@ async fn regression_spawn_after_kill() {
     // Regression: DashMap state corruption after kill prevented new spawns.
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
-    let id1 = manager.spawn("echo".into(), vec!["first".into()], None, None, HashMap::new(), None, None, None).await.unwrap();
+    let id1 = manager
+        .spawn(
+            "echo".into(),
+            vec!["first".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
     manager.kill(&id1, None).await.unwrap();
     sleep(Duration::from_millis(100)).await;
 
-    let id2 = manager.spawn("echo".into(), vec!["second".into()], None, None, HashMap::new(), None, None, None).await.unwrap();
+    let id2 = manager
+        .spawn(
+            "echo".into(),
+            vec!["second".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
     assert_eq!(manager.list().len(), 1);
     assert_eq!(manager.list()[0].0, id2);
     let _ = manager.kill(&id2, None).await;
@@ -307,14 +454,30 @@ async fn regression_list_empty_after_all_killed() {
     let manager = Arc::new(CommandManager::new(cfg));
     let mut ids = vec![];
     for _ in 0..5 {
-        let id = manager.spawn("echo".into(), vec!["x".into()], None, None, HashMap::new(), None, None, None).await.unwrap();
+        let id = manager
+            .spawn(
+                "echo".into(),
+                vec!["x".into()],
+                None,
+                None,
+                HashMap::new(),
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
         ids.push(id);
     }
     for id in &ids {
         manager.kill(id, None).await.unwrap();
     }
     sleep(Duration::from_millis(300)).await;
-    assert_eq!(manager.list().len(), 0, "list should be empty after killing all");
+    assert_eq!(
+        manager.list().len(),
+        0,
+        "list should be empty after killing all"
+    );
 }
 
 #[tokio::test]
@@ -328,7 +491,17 @@ async fn regression_concurrent_spawns() {
     for _ in 0..10 {
         let mgr = manager.clone();
         handles.push(tokio::spawn(async move {
-            mgr.spawn("sleep".into(), vec!["60".into()], None, None, HashMap::new(), None, None, None).await
+            mgr.spawn(
+                "sleep".into(),
+                vec!["60".into()],
+                None,
+                None,
+                HashMap::new(),
+                None,
+                None,
+                None,
+            )
+            .await
         }));
     }
     let mut ids = vec![];
@@ -336,7 +509,12 @@ async fn regression_concurrent_spawns() {
         ids.push(h.await.unwrap().unwrap());
     }
     let list = manager.list();
-    assert_eq!(list.len(), 10, "concurrent spawns: expected 10, got {}", list.len());
+    assert_eq!(
+        list.len(),
+        10,
+        "concurrent spawns: expected 10, got {}",
+        list.len()
+    );
     for id in &ids {
         let _ = manager.kill(id, None).await;
     }
@@ -351,7 +529,16 @@ async fn regression_vtty_snapshot_returns_data() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("echo".into(), vec!["snapshot_test".into()], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "echo".into(),
+            vec!["snapshot_test".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     sleep(Duration::from_millis(300)).await;
@@ -368,7 +555,16 @@ async fn regression_vtty_html_contains_content() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("printf".into(), vec!["hello\\nworld".into()], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "printf".into(),
+            vec!["hello\\nworld".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     sleep(Duration::from_millis(300)).await;
@@ -386,7 +582,16 @@ async fn regression_vtty_plain_text_readable() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("echo".into(), vec!["plain_text_check".into()], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "echo".into(),
+            vec!["plain_text_check".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     sleep(Duration::from_millis(300)).await;
@@ -404,7 +609,16 @@ async fn regression_resize_command() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("sleep".into(), vec!["60".into()], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "sleep".into(),
+            vec!["60".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     if let Some(handle) = manager.get(&id) {
@@ -423,7 +637,16 @@ async fn regression_snapshot_store_and_retrieve() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("sleep".into(), vec!["60".into()], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "sleep".into(),
+            vec!["60".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     sleep(Duration::from_millis(100)).await;
@@ -450,7 +673,16 @@ async fn regression_diff_snapshot() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("sleep".into(), vec!["60".into()], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "sleep".into(),
+            vec!["60".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     sleep(Duration::from_millis(100)).await;
@@ -460,7 +692,10 @@ async fn regression_diff_snapshot() {
 
     // Buffer should be identical → diff should have 0 changes
     let diff = manager.diff_snapshot(&id, "base").unwrap();
-    assert_eq!(diff.changed_count, 0, "diff against identical snapshot should have 0 changes");
+    assert_eq!(
+        diff.changed_count, 0,
+        "diff against identical snapshot should have 0 changes"
+    );
 
     let _ = manager.kill(&id, None).await;
 }
@@ -473,7 +708,16 @@ async fn regression_has_changed_detection() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("sleep".into(), vec!["60".into()], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "sleep".into(),
+            vec!["60".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -485,7 +729,10 @@ async fn regression_has_changed_detection() {
     // Second check should report not-changed (no new writes)
     let result2 = manager.has_changed(&id);
     assert!(result2.is_ok(), "second has_changed should succeed");
-    assert!(!result2.unwrap(), "second has_changed should report not-changed");
+    assert!(
+        !result2.unwrap(),
+        "second has_changed should report not-changed"
+    );
 
     let _ = manager.kill(&id, None).await;
 }
@@ -501,12 +748,24 @@ async fn regression_send_keys_to_running_command() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("cat".into(), vec![], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "cat".into(),
+            vec![],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
     let result = manager.send_keys(&id, "hello world").await;
-    assert!(result.is_ok(), "send_keys should succeed for running command");
+    assert!(
+        result.is_ok(),
+        "send_keys should succeed for running command"
+    );
 
     let result2 = manager.send_keys(&id, "<Enter>").await;
     assert!(result2.is_ok(), "send_keys with Enter should succeed");
@@ -520,7 +779,10 @@ async fn regression_send_keys_nonexistent_errors() {
     let manager = Arc::new(CommandManager::new(cfg));
     let nonexistent = String::from("nonexistent");
     let result = manager.send_keys(&nonexistent, "test").await;
-    assert!(result.is_err(), "send_keys to nonexistent command should error");
+    assert!(
+        result.is_err(),
+        "send_keys to nonexistent command should error"
+    );
 }
 
 #[tokio::test]
@@ -529,7 +791,16 @@ async fn regression_send_ctrl_c_terminates() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("cat".into(), vec![], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "cat".into(),
+            vec![],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -546,13 +817,39 @@ async fn regression_encode_all_special_keys() {
     // Ensure encode_keys doesn't panic on any special key.
     use vrunner::process::manager::encode_keys;
     let keys = [
-        "<Up>", "<Down>", "<Left>", "<Right>",
-        "<Enter>", "<Esc>", "<Tab>", "<Backspace>", "<Delete>",
-        "<Home>", "<End>", "<PageUp>", "<PageDown>",
-        "<F1>", "<F2>", "<F3>", "<F4>", "<F5>",
-        "<F6>", "<F7>", "<F8>", "<F9>", "<F10>", "<F11>", "<F12>",
-        "<C-a>", "<C-b>", "<C-c>", "<C-d>", "<C-z>",
-        "<A-x>", "<A-y>", "<A-z>",
+        "<Up>",
+        "<Down>",
+        "<Left>",
+        "<Right>",
+        "<Enter>",
+        "<Esc>",
+        "<Tab>",
+        "<Backspace>",
+        "<Delete>",
+        "<Home>",
+        "<End>",
+        "<PageUp>",
+        "<PageDown>",
+        "<F1>",
+        "<F2>",
+        "<F3>",
+        "<F4>",
+        "<F5>",
+        "<F6>",
+        "<F7>",
+        "<F8>",
+        "<F9>",
+        "<F10>",
+        "<F11>",
+        "<F12>",
+        "<C-a>",
+        "<C-b>",
+        "<C-c>",
+        "<C-d>",
+        "<C-z>",
+        "<A-x>",
+        "<A-y>",
+        "<A-z>",
         "hello<C-c>world<Enter>done",
     ];
     for key in &keys {
@@ -576,10 +873,15 @@ fn regression_default_config_is_valid() {
     // Default config must pass validation without errors.
     let cfg = Config::default();
     let issues = vrunner::config::validation::validate_config(&cfg);
-    let errors: Vec<_> = issues.iter()
+    let errors: Vec<_> = issues
+        .iter()
         .filter(|i| i.level == vrunner::config::validation::ValidationLevel::Error)
         .collect();
-    assert!(errors.is_empty(), "default config has validation errors: {:?}", errors);
+    assert!(
+        errors.is_empty(),
+        "default config has validation errors: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -666,7 +968,8 @@ fn regression_merge_command_env() {
 
 #[test]
 fn regression_instance_registry_new() {
-    let reg = vrunner::instance::registry::InstanceRegistry::new().expect("InstanceRegistry::new should succeed");
+    let reg = vrunner::instance::registry::InstanceRegistry::new()
+        .expect("InstanceRegistry::new should succeed");
     assert!(reg.list_instances().is_empty());
 }
 
@@ -757,7 +1060,16 @@ async fn regression_spawn_command_not_found() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let result = manager
-        .spawn("nonexistent_binary_xyz_12345".into(), vec![], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "nonexistent_binary_xyz_12345".into(),
+            vec![],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await;
     assert!(result.is_err(), "spawning nonexistent binary should error");
 }
@@ -769,13 +1081,26 @@ async fn regression_spawn_with_env_vars() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("sh".into(), vec!["-c".into(), "echo $TEST_VAR".into()], None, None, env, None, None, None)
+        .spawn(
+            "sh".into(),
+            vec!["-c".into(), "echo $TEST_VAR".into()],
+            None,
+            None,
+            env,
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     sleep(Duration::from_millis(300)).await;
     if let Some(handle) = manager.get(&id) {
         let plain = handle.vtty_plain().await;
-        assert!(plain.contains("test_value"), "env var not passed: got '{}'", plain);
+        assert!(
+            plain.contains("test_value"),
+            "env var not passed: got '{}'",
+            plain
+        );
     }
     let _ = manager.kill(&id, None).await;
 }
@@ -785,7 +1110,16 @@ async fn regression_spawn_with_custom_vtty_size() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("stty".into(), vec!["size".into()], None, None, HashMap::new(), Some(5), Some(20), None)
+        .spawn(
+            "stty".into(),
+            vec!["size".into()],
+            None,
+            None,
+            HashMap::new(),
+            Some(5),
+            Some(20),
+            None,
+        )
         .await
         .unwrap();
     if let Some(handle) = manager.get(&id) {
@@ -806,7 +1140,16 @@ async fn regression_manager_logger_works() {
 
     // Spawning a command logs a "spawn" entry automatically
     let id = manager
-        .spawn("sleep".into(), vec!["60".into()], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "sleep".into(),
+            vec!["60".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -825,7 +1168,16 @@ async fn regression_vtty_change_subscription() {
     let mut rx = manager.subscribe_vtty();
 
     let id = manager
-        .spawn("echo".into(), vec!["subscribe_test".into()], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "echo".into(),
+            vec!["subscribe_test".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -851,17 +1203,34 @@ async fn regression_freeze_thaw_command() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("sleep".into(), vec!["60".into()], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "sleep".into(),
+            vec!["60".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
     let freeze_result = manager.freeze(&id);
-    assert!(freeze_result.is_ok(), "freeze should succeed: {:?}", freeze_result.err());
+    assert!(
+        freeze_result.is_ok(),
+        "freeze should succeed: {:?}",
+        freeze_result.err()
+    );
 
     sleep(Duration::from_millis(100)).await;
 
     let thaw_result = manager.thaw(&id);
-    assert!(thaw_result.is_ok(), "thaw should succeed: {:?}", thaw_result.err());
+    assert!(
+        thaw_result.is_ok(),
+        "thaw should succeed: {:?}",
+        thaw_result.err()
+    );
 
     let _ = manager.kill(&id, None).await;
 }
@@ -871,7 +1240,16 @@ async fn regression_register_sink_on_command() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("echo".into(), vec!["sink_test".into()], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "echo".into(),
+            vec!["sink_test".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -890,7 +1268,16 @@ async fn regression_is_alive_check() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("echo".into(), vec!["alive_check".into()], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "echo".into(),
+            vec!["alive_check".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     sleep(Duration::from_millis(300)).await;
@@ -908,7 +1295,16 @@ async fn regression_cursor_position_and_style() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("echo".into(), vec!["cursor".into()], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "echo".into(),
+            vec!["cursor".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     sleep(Duration::from_millis(200)).await;
@@ -928,7 +1324,16 @@ async fn regression_dimensions_and_scrollback() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("echo".into(), vec!["dim".into()], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "echo".into(),
+            vec!["dim".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -948,7 +1353,16 @@ async fn regression_vtty_html_with_scrollback() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("echo".into(), vec!["scrollback_test".into()], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "echo".into(),
+            vec!["scrollback_test".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     sleep(Duration::from_millis(200)).await;
@@ -966,7 +1380,16 @@ async fn regression_list_handles() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("echo".into(), vec!["handles".into()], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "echo".into(),
+            vec!["handles".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -984,7 +1407,16 @@ async fn regression_runtime_secs_increases() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("sleep".into(), vec!["1".into()], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "sleep".into(),
+            vec!["1".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -1004,7 +1436,16 @@ async fn regression_exit_code_mutex() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("sleep".into(), vec!["1".into()], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "sleep".into(),
+            vec!["1".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -1022,7 +1463,16 @@ async fn regression_multiple_snapshots_same_command() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("sleep".into(), vec!["60".into()], None, None, HashMap::new(), None, None, None)
+        .spawn(
+            "sleep".into(),
+            vec!["60".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
     sleep(Duration::from_millis(100)).await;
@@ -1098,7 +1548,11 @@ fn regression_emulator_alt_screen_preserves_main() {
     emu.feed(b"\x1b[?1049l"); // exit alt
 
     let buf = emu.snapshot();
-    assert_eq!(buf.get(0, 0).unwrap().ch, 'M', "main buffer should be restored");
+    assert_eq!(
+        buf.get(0, 0).unwrap().ch,
+        'M',
+        "main buffer should be restored"
+    );
 }
 
 #[test]
@@ -1111,7 +1565,10 @@ fn regression_emulator_cursor_position_after_scroll() {
     // This should scroll, putting "line2" at row 1
     let buf = emu.snapshot();
     // Verify scrollback has content
-    assert!(buf.scrollback.len() > 0, "scrollback should have entries after overflow");
+    assert!(
+        buf.scrollback.len() > 0,
+        "scrollback should have entries after overflow"
+    );
 }
 
 #[test]
@@ -1123,7 +1580,10 @@ fn regression_buffer_resize_preserves_content() {
     buf.resize(8, 3); // shrink
     assert_eq!(buf.get(0, 0).unwrap().ch, 'P', "P preserved after shrink");
     // Q was at col 9, now width is 8, so col 9 is gone
-    assert!(buf.get(2, 9).is_none(), "col 9 should not exist after shrink");
+    assert!(
+        buf.get(2, 9).is_none(),
+        "col 9 should not exist after shrink"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1148,7 +1608,10 @@ fn regression_no_status_bar_steals_terminal_rows() {
     let tab_bar_rows: u16 = 1;
     let status_bar_rows: u16 = 0; // removed — must stay 0
     let total_chrome = tab_bar_rows + status_bar_rows;
-    assert_eq!(total_chrome, 1, "only the tab bar may consume rows; no status bar");
+    assert_eq!(
+        total_chrome, 1,
+        "only the tab bar may consume rows; no status bar"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1162,8 +1625,18 @@ async fn regression_vtty_height_matches_reported_size() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
-        .spawn("sleep".into(), vec!["60".into()], None, None, HashMap::new(), Some(24), Some(80), None
-        ).await.unwrap();
+        .spawn(
+            "sleep".into(),
+            vec!["60".into()],
+            None,
+            None,
+            HashMap::new(),
+            Some(24),
+            Some(80),
+            None,
+        )
+        .await
+        .unwrap();
 
     if let Some(handle) = manager.get(&id) {
         let (rows, cols) = handle.dimensions().await;
@@ -1191,12 +1664,18 @@ async fn regression_display_render_uses_full_available_height() {
 
     // A command with these dimensions should fill rows tab_offset..tab_offset+rows
     let last_rendered_row = tab_offset + status_offset + rows - 1;
-    assert_eq!(last_rendered_row, 24, "last rendered row = tab_offset + rows - 1 = 24");
+    assert_eq!(
+        last_rendered_row, 24,
+        "last rendered row = tab_offset + rows - 1 = 24"
+    );
 
     // If a status bar existed (status_offset=1), last row would be 25,
     // pushing content off-screen in a 25-row terminal.  With status_offset=0,
     // the VTTY fits exactly in the remaining space.
-    assert!(last_rendered_row <= 24, "VTTY content must not exceed terminal bounds");
+    assert!(
+        last_rendered_row <= 24,
+        "VTTY content must not exceed terminal bounds"
+    );
 }
 
 #[tokio::test]
@@ -1210,16 +1689,33 @@ async fn regression_spawn_bash_multi_command() {
         .spawn(
             "sh".into(),
             vec!["-c".into(), "echo first; echo second; echo third".into()],
-            None, None, HashMap::new(), None, None, None,
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
         )
         .await
         .unwrap();
     sleep(Duration::from_millis(500)).await;
     if let Some(handle) = manager.get(&id) {
         let plain = handle.vtty_plain().await;
-        assert!(plain.contains("first"), "first command output missing: '{}'", plain);
-        assert!(plain.contains("second"), "second command output missing: '{}'", plain);
-        assert!(plain.contains("third"), "third command output missing: '{}'", plain);
+        assert!(
+            plain.contains("first"),
+            "first command output missing: '{}'",
+            plain
+        );
+        assert!(
+            plain.contains("second"),
+            "second command output missing: '{}'",
+            plain
+        );
+        assert!(
+            plain.contains("third"),
+            "third command output missing: '{}'",
+            plain
+        );
     }
     let _ = manager.kill(&id, None).await;
 }
@@ -1235,14 +1731,23 @@ async fn regression_spawn_with_working_directory() {
         .spawn(
             "sh".into(),
             vec!["-c".into(), "pwd".into()],
-            None, None, HashMap::new(), None, None, Some(tmp_dir.clone()),
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            Some(tmp_dir.clone()),
         )
         .await
         .unwrap();
     sleep(Duration::from_millis(300)).await;
     if let Some(handle) = manager.get(&id) {
         let plain = handle.vtty_plain().await;
-        assert!(plain.contains(&tmp_dir), "pwd should show working dir: got '{}'", plain);
+        assert!(
+            plain.contains(&tmp_dir),
+            "pwd should show working dir: got '{}'",
+            plain
+        );
     }
     let _ = manager.kill(&id, None).await;
 }

@@ -12,18 +12,34 @@
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc};
 
-use crate::interactive::{ActionEffect, Binding, read_spawn_command, restore_raw_mode};
+use crate::interactive::{read_spawn_command, restore_raw_mode, ActionEffect, Binding};
 use crate::process::manager::CommandManager;
 use std::io::Write;
 
 // ── Mouse event types for clipboard selection (#15) ──
 // ── Mouse event types for clipboard selection (#15) ──
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum MouseButton { Left, Middle, Right, WheelUp, WheelDown }
+pub(crate) enum MouseButton {
+    Left,
+    Middle,
+    Right,
+    WheelUp,
+    WheelDown,
+}
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum MouseEventType { Press, Release, #[allow(dead_code)] Motion }
+pub(crate) enum MouseEventType {
+    Press,
+    Release,
+    #[allow(dead_code)]
+    Motion,
+}
 #[derive(Debug, Clone)]
-pub(crate) struct MouseEvent { button: MouseButton, event_type: MouseEventType, x: u16, y: u16 }
+pub(crate) struct MouseEvent {
+    button: MouseButton,
+    event_type: MouseEventType,
+    x: u16,
+    y: u16,
+}
 // ── End mouse event types ──
 // ── End mouse event types ──
 
@@ -31,7 +47,11 @@ pub(crate) struct MouseEvent { button: MouseButton, event_type: MouseEventType, 
 // When a command has enabled focus reporting, we send OSC 101 I
 // to indicate the terminal gained focus (display mode entered).
 pub(crate) async fn send_focus_event(manager: &Arc<CommandManager>, gained: bool) {
-    let event = if gained { b"\x1b]101;i\x1b\\".to_vec() } else { b"\x1b]101;o\x1b\\".to_vec() };
+    let event = if gained {
+        b"\x1b]101;i\x1b\\".to_vec()
+    } else {
+        b"\x1b]101;o\x1b\\".to_vec()
+    };
     for entry in manager.list() {
         if let Some(handle) = manager.get(&entry.0) {
             if handle.focus_reporting_enabled().await {
@@ -54,7 +74,8 @@ pub(crate) async fn render_vtty(
     use crate::vtty::display::TerminalDisplay;
 
     let commands = manager.list();
-    let target_id = active_id.as_ref()
+    let target_id = active_id
+        .as_ref()
         .or_else(|| commands.first().map(|(id, _, _, _, _)| id));
 
     if let Some(id) = target_id {
@@ -66,7 +87,11 @@ pub(crate) async fn render_vtty(
             let _ = TerminalDisplay::render(&buf, tab_offset, scrollback_offset);
             // Only show cursor when not scrolled back into history
             if scrollback_offset == 0 {
-                let _ = TerminalDisplay::show_cursor_with_style(cur_row + tab_offset as usize, cur_col, cur_style);
+                let _ = TerminalDisplay::show_cursor_with_style(
+                    cur_row + tab_offset as usize,
+                    cur_col,
+                    cur_style,
+                );
             }
         }
     } else {
@@ -78,7 +103,10 @@ pub(crate) async fn render_vtty(
         let _ = TerminalDisplay::clear();
         if display_all {
             let _ = write!(stdout, "\r\n  vrunner: no commands running.\r\n");
-            let _ = write!(stdout, "  Waiting for commands (web UI, API, or F12 to spawn).\r\n");
+            let _ = write!(
+                stdout,
+                "  Waiting for commands (web UI, API, or F12 to spawn).\r\n"
+            );
             let _ = write!(stdout, "\r\n  Press Ctrl+\\ to quit.\r\n");
             let _ = stdout.flush();
         }
@@ -94,8 +122,10 @@ pub(crate) fn render_tab_bar(
     active_id: &Option<String>,
 ) -> Vec<(String, u16, u16)> {
     use crossterm::{
-        style::{self, Attribute, Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
         cursor::MoveTo,
+        style::{
+            self, Attribute, Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor,
+        },
         terminal::ClearType,
         QueueableCommand,
     };
@@ -104,10 +134,24 @@ pub(crate) fn render_tab_bar(
     let commands = manager.list();
 
     // Background for the tab bar
-    stdout.queue(SetBackgroundColor(Color::Rgb { r: 40, g: 42, b: 54 })).ok();
-    stdout.queue(SetForegroundColor(Color::Rgb { r: 180, g: 180, b: 180 })).ok();
+    stdout
+        .queue(SetBackgroundColor(Color::Rgb {
+            r: 40,
+            g: 42,
+            b: 54,
+        }))
+        .ok();
+    stdout
+        .queue(SetForegroundColor(Color::Rgb {
+            r: 180,
+            g: 180,
+            b: 180,
+        }))
+        .ok();
     stdout.queue(MoveTo(0, 0)).ok();
-    stdout.queue(crossterm::terminal::Clear(ClearType::UntilNewLine)).ok();
+    stdout
+        .queue(crossterm::terminal::Clear(ClearType::UntilNewLine))
+        .ok();
 
     if commands.is_empty() {
         stdout.queue(Print(" (no commands)")).ok();
@@ -133,27 +177,99 @@ pub(crate) fn render_tab_bar(
         };
         if is_active {
             if is_frozen {
-                stdout.queue(SetBackgroundColor(Color::Rgb { r: 80, g: 60, b: 20 })).ok();
-                stdout.queue(SetForegroundColor(Color::Rgb { r: 255, g: 220, b: 100 })).ok();
+                stdout
+                    .queue(SetBackgroundColor(Color::Rgb {
+                        r: 80,
+                        g: 60,
+                        b: 20,
+                    }))
+                    .ok();
+                stdout
+                    .queue(SetForegroundColor(Color::Rgb {
+                        r: 255,
+                        g: 220,
+                        b: 100,
+                    }))
+                    .ok();
             } else if is_exited {
-                stdout.queue(SetBackgroundColor(Color::Rgb { r: 68, g: 71, b: 90 })).ok();
-                stdout.queue(SetForegroundColor(Color::Rgb { r: 255, g: 120, b: 120 })).ok();
+                stdout
+                    .queue(SetBackgroundColor(Color::Rgb {
+                        r: 68,
+                        g: 71,
+                        b: 90,
+                    }))
+                    .ok();
+                stdout
+                    .queue(SetForegroundColor(Color::Rgb {
+                        r: 255,
+                        g: 120,
+                        b: 120,
+                    }))
+                    .ok();
             } else {
-                stdout.queue(SetBackgroundColor(Color::Rgb { r: 68, g: 71, b: 90 })).ok();
-                stdout.queue(SetForegroundColor(Color::Rgb { r: 255, g: 255, b: 255 })).ok();
+                stdout
+                    .queue(SetBackgroundColor(Color::Rgb {
+                        r: 68,
+                        g: 71,
+                        b: 90,
+                    }))
+                    .ok();
+                stdout
+                    .queue(SetForegroundColor(Color::Rgb {
+                        r: 255,
+                        g: 255,
+                        b: 255,
+                    }))
+                    .ok();
             }
             stdout.queue(style::SetAttribute(Attribute::Bold)).ok();
         } else if is_frozen {
-            stdout.queue(SetBackgroundColor(Color::Rgb { r: 60, g: 45, b: 15 })).ok();
-            stdout.queue(SetForegroundColor(Color::Rgb { r: 210, g: 180, b: 80 })).ok();
+            stdout
+                .queue(SetBackgroundColor(Color::Rgb {
+                    r: 60,
+                    g: 45,
+                    b: 15,
+                }))
+                .ok();
+            stdout
+                .queue(SetForegroundColor(Color::Rgb {
+                    r: 210,
+                    g: 180,
+                    b: 80,
+                }))
+                .ok();
             stdout.queue(style::SetAttribute(Attribute::NoBold)).ok();
         } else if is_exited {
-            stdout.queue(SetBackgroundColor(Color::Rgb { r: 40, g: 42, b: 54 })).ok();
-            stdout.queue(SetForegroundColor(Color::Rgb { r: 180, g: 100, b: 100 })).ok();
+            stdout
+                .queue(SetBackgroundColor(Color::Rgb {
+                    r: 40,
+                    g: 42,
+                    b: 54,
+                }))
+                .ok();
+            stdout
+                .queue(SetForegroundColor(Color::Rgb {
+                    r: 180,
+                    g: 100,
+                    b: 100,
+                }))
+                .ok();
             stdout.queue(style::SetAttribute(Attribute::NoBold)).ok();
         } else {
-            stdout.queue(SetBackgroundColor(Color::Rgb { r: 40, g: 42, b: 54 })).ok();
-            stdout.queue(SetForegroundColor(Color::Rgb { r: 140, g: 140, b: 140 })).ok();
+            stdout
+                .queue(SetBackgroundColor(Color::Rgb {
+                    r: 40,
+                    g: 42,
+                    b: 54,
+                }))
+                .ok();
+            stdout
+                .queue(SetForegroundColor(Color::Rgb {
+                    r: 140,
+                    g: 140,
+                    b: 140,
+                }))
+                .ok();
             stdout.queue(style::SetAttribute(Attribute::NoBold)).ok();
         }
 
@@ -170,7 +286,9 @@ pub(crate) fn render_tab_bar(
 
         if col + display.len() as u16 >= phys_cols {
             // Overflow — print ellipsis and stop
-            stdout.queue(Print(format!("{}...", &display[..display.len().min(3)]))).ok();
+            stdout
+                .queue(Print(format!("{}...", &display[..display.len().min(3)])))
+                .ok();
             break;
         }
 
@@ -181,10 +299,18 @@ pub(crate) fn render_tab_bar(
 
     // Clear remaining space
     stdout.queue(ResetColor).ok();
-    stdout.queue(SetBackgroundColor(Color::Rgb { r: 40, g: 42, b: 54 })).ok();
+    stdout
+        .queue(SetBackgroundColor(Color::Rgb {
+            r: 40,
+            g: 42,
+            b: 54,
+        }))
+        .ok();
     if col < phys_cols {
         stdout.queue(MoveTo(col, 0)).ok();
-        stdout.queue(crossterm::terminal::Clear(ClearType::UntilNewLine)).ok();
+        stdout
+            .queue(crossterm::terminal::Clear(ClearType::UntilNewLine))
+            .ok();
     }
     stdout.queue(ResetColor).ok();
     stdout.flush().ok();
@@ -200,7 +326,8 @@ pub(crate) fn find_search_matches(
     regex: &regex::Regex,
 ) -> Vec<(usize, usize, usize)> {
     let commands = manager.list();
-    let target_id = active_id.as_ref()
+    let target_id = active_id
+        .as_ref()
         .or_else(|| commands.first().map(|(id, _, _, _, _)| id));
     let mut positions = Vec::new();
 
@@ -212,7 +339,8 @@ pub(crate) fn find_search_matches(
             for line_idx in 0..total {
                 if let Some(line) = buf.get_line(line_idx) {
                     // Build a string from the cell characters in this line
-                    let line_str: String = line.iter()
+                    let line_str: String = line
+                        .iter()
                         .map(|c| if c.width == 0 { '\0' } else { c.ch })
                         .collect();
                     for mat in regex.find_iter(&line_str) {
@@ -224,13 +352,22 @@ pub(crate) fn find_search_matches(
                         let mut start_col: usize = 0;
                         let mut end_col: usize = 0;
                         for cell in line.iter() {
-                            if cell.width == 0 { continue; }
-                            if chars_seen == char_start { start_col = col; }
-                            if chars_seen == char_end { end_col = col; break; }
+                            if cell.width == 0 {
+                                continue;
+                            }
+                            if chars_seen == char_start {
+                                start_col = col;
+                            }
+                            if chars_seen == char_end {
+                                end_col = col;
+                                break;
+                            }
                             chars_seen += 1;
                             col += 1;
                         }
-                        if chars_seen == char_end { end_col = col; }
+                        if chars_seen == char_end {
+                            end_col = col;
+                        }
                         let len = end_col.saturating_sub(start_col);
                         if len > 0 {
                             positions.push((line_idx, start_col, len));
@@ -251,21 +388,35 @@ pub(crate) fn render_search_bar(
     current_match: usize,
     is_error: bool,
 ) {
-    use std::io::Write;
     use crossterm::{
-        style::{Color, ResetColor, SetBackgroundColor, SetForegroundColor},
         cursor::MoveTo,
+        style::{Color, ResetColor, SetBackgroundColor, SetForegroundColor},
         terminal::ClearType,
         QueueableCommand,
     };
+    use std::io::Write;
     let mut stdout = std::io::stdout();
     let (_, phys_rows) = crossterm::terminal::size().unwrap_or((80, 24));
     let bottom = phys_rows.saturating_sub(1);
 
-    stdout.queue(SetBackgroundColor(Color::Rgb { r: 30, g: 30, b: 50 })).ok();
-    stdout.queue(SetForegroundColor(Color::Rgb { r: 200, g: 200, b: 255 })).ok();
+    stdout
+        .queue(SetBackgroundColor(Color::Rgb {
+            r: 30,
+            g: 30,
+            b: 50,
+        }))
+        .ok();
+    stdout
+        .queue(SetForegroundColor(Color::Rgb {
+            r: 200,
+            g: 200,
+            b: 255,
+        }))
+        .ok();
     stdout.queue(MoveTo(0, bottom)).ok();
-    stdout.queue(crossterm::terminal::Clear(ClearType::UntilNewLine)).ok();
+    stdout
+        .queue(crossterm::terminal::Clear(ClearType::UntilNewLine))
+        .ok();
 
     // Search label
     if is_error {
@@ -286,7 +437,10 @@ pub(crate) fn render_search_bar(
     }
 
     // Key hints
-    let _ = write!(stdout, "\x1b[2m [Esc]close [Enter]next [S+Enter]prev\x1b[0m");
+    let _ = write!(
+        stdout,
+        "\x1b[2m [Esc]close [Enter]next [S+Enter]prev\x1b[0m"
+    );
 
     stdout.queue(ResetColor).ok();
     stdout.flush().ok();
@@ -308,15 +462,17 @@ pub(crate) fn render_search_highlights(
 
     for (i, &(row, col, len)) in matches.iter().enumerate() {
         // Only highlight if this match is in the visible area
-        if row < visible_start || row >= visible_end { continue; }
+        if row < visible_start || row >= visible_end {
+            continue;
+        }
 
         let screen_row = row - visible_start + (tab_offset as usize);
         // Highlight current match differently
         if i == current_match_idx {
             let _ = write!(stdout, "\x1b[{};{}H", screen_row + 1, col + 1);
             let _ = write!(stdout, "\x1b[7;38;5;11m"); // reverse + bright yellow fg
-            // Read the actual characters and re-print them
-            // We just mark the background here; the chars are already rendered
+                                                       // Read the actual characters and re-print them
+                                                       // We just mark the background here; the chars are already rendered
             for _ in 0..len {
                 let _ = write!(stdout, " ");
             }
@@ -389,7 +545,11 @@ pub(crate) fn render_split_pane(
             }
             // Show pane label
             let label = format!(" {} ", id);
-            let _ = write!(stdout, "\x1b[1;1H\x1b[48;5;238m\x1b[38;5;255m{}\x1b[0m", label);
+            let _ = write!(
+                stdout,
+                "\x1b[1;1H\x1b[48;5;238m\x1b[38;5;255m{}\x1b[0m",
+                label
+            );
         }
     }
 
@@ -408,7 +568,12 @@ pub(crate) fn render_split_pane(
                     Some(r) => r,
                     None => continue,
                 };
-                let _ = write!(stdout, "\x1b[{};{}H", screen_row as u16 + tab_offset + 1, col_start + 1);
+                let _ = write!(
+                    stdout,
+                    "\x1b[{};{}H",
+                    screen_row as u16 + tab_offset + 1,
+                    col_start + 1
+                );
                 let visible_len = render_cols.min(row.len());
                 for cell in &row[..visible_len] {
                     let sgr = build_cell_sgr(cell);
@@ -424,7 +589,12 @@ pub(crate) fn render_split_pane(
             }
             // Show pane label
             let label = format!(" {} ", id);
-            let _ = write!(stdout, "\x1b[1;{}H\x1b[48;5;238m\x1b[38;5;255m{}\x1b[0m", col_start + 1, label);
+            let _ = write!(
+                stdout,
+                "\x1b[1;{}H\x1b[48;5;238m\x1b[38;5;255m{}\x1b[0m",
+                col_start + 1,
+                label
+            );
         }
     }
 
@@ -435,20 +605,36 @@ pub(crate) fn render_split_pane(
 pub(crate) fn build_cell_sgr(cell: &crate::vtty::cell::Cell) -> String {
     let mut sgr = String::new();
     if cell.fg != [204, 204, 204] {
-        sgr.push_str(&format!("\x1b[38;2;{};{};{}m", cell.fg[0], cell.fg[1], cell.fg[2]));
+        sgr.push_str(&format!(
+            "\x1b[38;2;{};{};{}m",
+            cell.fg[0], cell.fg[1], cell.fg[2]
+        ));
     } else {
         sgr.push_str("\x1b[39m");
     }
     if cell.bg != [0, 0, 0] {
-        sgr.push_str(&format!("\x1b[48;2;{};{};{}m", cell.bg[0], cell.bg[1], cell.bg[2]));
+        sgr.push_str(&format!(
+            "\x1b[48;2;{};{};{}m",
+            cell.bg[0], cell.bg[1], cell.bg[2]
+        ));
     } else {
         sgr.push_str("\x1b[49m");
     }
-    if cell.bold { sgr.push_str("\x1b[1m"); }
-    if cell.italic { sgr.push_str("\x1b[3m"); }
-    if cell.underline { sgr.push_str("\x1b[4m"); }
-    if cell.reverse { sgr.push_str("\x1b[7m"); }
-    if sgr == "\x1b[39m\x1b[49m" { sgr = "\x1b[0m".to_string(); }
+    if cell.bold {
+        sgr.push_str("\x1b[1m");
+    }
+    if cell.italic {
+        sgr.push_str("\x1b[3m");
+    }
+    if cell.underline {
+        sgr.push_str("\x1b[4m");
+    }
+    if cell.reverse {
+        sgr.push_str("\x1b[7m");
+    }
+    if sgr == "\x1b[39m\x1b[49m" {
+        sgr = "\x1b[0m".to_string();
+    }
     sgr
 }
 
@@ -461,11 +647,15 @@ pub(crate) fn try_parse_mouse_event(buf: &[u8]) -> Option<MouseEvent> {
     // SGR encoding: ESC [ < Cb ; Cx ; Cy M (press/drag) or m (release)
     if buf.len() >= 8 && buf.starts_with(b"\x1b[<") {
         let last = *buf.last()?;
-        if last != b'M' && last != b'm' { return None; }
+        if last != b'M' && last != b'm' {
+            return None;
+        }
         let is_release = last == b'm';
-        let inner = &buf[3..buf.len()-1];
+        let inner = &buf[3..buf.len() - 1];
         let parts: Vec<&[u8]> = inner.splitn(3, |&b| b == b';').collect();
-        if parts.len() != 3 { return None; }
+        if parts.len() != 3 {
+            return None;
+        }
         let cb: u8 = std::str::from_utf8(parts[0]).ok()?.parse().ok()?;
         let cx: u16 = std::str::from_utf8(parts[1]).ok()?.parse().ok()?;
         let cy: u16 = std::str::from_utf8(parts[2]).ok()?.parse().ok()?;
@@ -478,13 +668,26 @@ pub(crate) fn try_parse_mouse_event(buf: &[u8]) -> Option<MouseEvent> {
         };
         // Check for wheel events (SGR encoding uses cb values 64-67)
         let (button, event_type) = if (64..=67).contains(&cb) {
-            let wheel = if cb & 1 != 0 { MouseButton::WheelDown } else { MouseButton::WheelUp };
+            let wheel = if cb & 1 != 0 {
+                MouseButton::WheelDown
+            } else {
+                MouseButton::WheelUp
+            };
             (wheel, MouseEventType::Press)
         } else {
-            let et = if is_release { MouseEventType::Release } else { MouseEventType::Press };
+            let et = if is_release {
+                MouseEventType::Release
+            } else {
+                MouseEventType::Press
+            };
             (button, et)
         };
-        return Some(MouseEvent { button, event_type, x: cx, y: cy });
+        return Some(MouseEvent {
+            button,
+            event_type,
+            x: cx,
+            y: cy,
+        });
     }
     // Legacy encoding: ESC [ M Cb Cx+32 Cy+32
     if buf.len() >= 6 && buf.starts_with(b"\x1b[M") {
@@ -496,7 +699,11 @@ pub(crate) fn try_parse_mouse_event(buf: &[u8]) -> Option<MouseEvent> {
         // Check for wheel events (legacy: cb & 0x43 gives 32/33 for wheel up/down)
         let (button, event_type) = if !is_release && (cb & 0x40) != 0 {
             // Bit 6 set without release means wheel (legacy encoding)
-            let wheel = if (cb & 0x01) != 0 { MouseButton::WheelDown } else { MouseButton::WheelUp };
+            let wheel = if (cb & 0x01) != 0 {
+                MouseButton::WheelDown
+            } else {
+                MouseButton::WheelUp
+            };
             (wheel, MouseEventType::Press)
         } else {
             let btn = match cb & 3 {
@@ -505,25 +712,38 @@ pub(crate) fn try_parse_mouse_event(buf: &[u8]) -> Option<MouseEvent> {
                 2 => MouseButton::Right,
                 _ => MouseButton::Left,
             };
-            let et = if is_release { MouseEventType::Release } else { MouseEventType::Press };
+            let et = if is_release {
+                MouseEventType::Release
+            } else {
+                MouseEventType::Press
+            };
             (btn, et)
         };
-        return Some(MouseEvent { button, event_type, x: cx, y: cy });
+        return Some(MouseEvent {
+            button,
+            event_type,
+            x: cx,
+            y: cy,
+        });
     }
     None
 }
 
 /// Render a visual selection highlight over the VTTY display.
 /// Draws a reverse-video rectangle from start to end coordinates.
-pub(crate) fn render_selection_highlight(
-    start: (u16, u16),
-    end: (u16, u16),
-    tab_offset: u16,
-) {
+pub(crate) fn render_selection_highlight(start: (u16, u16), end: (u16, u16), tab_offset: u16) {
     use std::io::Write;
     let mut stdout = std::io::stdout();
-    let (min_row, max_row) = if start.0 <= end.0 { (start.0, end.0) } else { (end.0, start.0) };
-    let (min_col, max_col) = if start.1 <= end.1 { (start.1, end.1) } else { (end.1, start.1) };
+    let (min_row, max_row) = if start.0 <= end.0 {
+        (start.0, end.0)
+    } else {
+        (end.0, start.0)
+    };
+    let (min_col, max_col) = if start.1 <= end.1 {
+        (start.1, end.1)
+    } else {
+        (end.1, start.1)
+    };
     for row in min_row..=max_row {
         let screen_row = row + tab_offset;
         let col_start = if row == min_row { min_col } else { 0 };
@@ -555,14 +775,23 @@ pub(crate) fn copy_selection_to_clipboard(
 ) {
     use std::io::Write;
     let commands = manager.list();
-    let target_id = active_id.as_ref()
+    let target_id = active_id
+        .as_ref()
         .or_else(|| commands.first().map(|(id, _, _, _, _)| id));
 
     if let Some(id) = target_id {
         if let Some(handle) = manager.get(id) {
             let buf = handle.vtty_snapshot_blocking();
-            let (min_row, max_row) = if start.0 <= end.0 { (start.0, end.0) } else { (end.0, start.0) };
-            let (min_col, max_col) = if start.1 <= end.1 { (start.1, end.1) } else { (end.1, start.1) };
+            let (min_row, max_row) = if start.0 <= end.0 {
+                (start.0, end.0)
+            } else {
+                (end.0, start.0)
+            };
+            let (min_col, max_col) = if start.1 <= end.1 {
+                (start.1, end.1)
+            } else {
+                (end.1, start.1)
+            };
             let total_lines = buf.total_lines();
             let viewport_start = total_lines.saturating_sub(buf.height);
 
@@ -571,8 +800,16 @@ pub(crate) fn copy_selection_to_clipboard(
                 let line_idx = viewport_start.saturating_add(row as usize);
                 if let Some(line) = buf.get_line(line_idx) {
                     let col_start = if row == min_row { min_col as usize } else { 0 };
-                    let col_end = if row == max_row { max_col as usize } else { line.len() };
-                    for cell in line.iter().skip(col_start).take(col_end.saturating_sub(col_start)) {
+                    let col_end = if row == max_row {
+                        max_col as usize
+                    } else {
+                        line.len()
+                    };
+                    for cell in line
+                        .iter()
+                        .skip(col_start)
+                        .take(col_end.saturating_sub(col_start))
+                    {
                         if cell.width > 0 {
                             selected_text.push(cell.ch);
                         }
@@ -590,7 +827,10 @@ pub(crate) fn copy_selection_to_clipboard(
                 let mut stdout = std::io::stdout();
                 let _ = write!(stdout, "\x1b]52;c;{}\x07", encoded);
                 let _ = stdout.flush();
-                tracing::debug!(len = selected_text.len(), "Copied selection to clipboard via OSC 52");
+                tracing::debug!(
+                    len = selected_text.len(),
+                    "Copied selection to clipboard via OSC 52"
+                );
             }
         }
     }
@@ -603,7 +843,7 @@ pub(crate) fn base64_encode(input: &str) -> String {
     let mut result = String::new();
     let mut i = 0;
     while i + 3 <= bytes.len() {
-        let n = (bytes[i] as u32) << 16 | (bytes[i+1] as u32) << 8 | (bytes[i+2] as u32);
+        let n = (bytes[i] as u32) << 16 | (bytes[i + 1] as u32) << 8 | (bytes[i + 2] as u32);
         result.push(CHARS[((n >> 18) & 63) as usize] as char);
         result.push(CHARS[((n >> 12) & 63) as usize] as char);
         result.push(CHARS[((n >> 6) & 63) as usize] as char);
@@ -611,7 +851,7 @@ pub(crate) fn base64_encode(input: &str) -> String {
         i += 3;
     }
     if i + 2 <= bytes.len() {
-        let n = (bytes[i] as u32) << 16 | (bytes[i+1] as u32) << 8;
+        let n = (bytes[i] as u32) << 16 | (bytes[i + 1] as u32) << 8;
         result.push(CHARS[((n >> 18) & 63) as usize] as char);
         result.push(CHARS[((n >> 12) & 63) as usize] as char);
         result.push('=');
@@ -628,12 +868,7 @@ pub(crate) fn base64_encode(input: &str) -> String {
 
 /// Render a right-click context menu at the given position.
 /// Items: Kill, Purge, Copy ID.
-pub(crate) fn render_context_menu(
-    x: u16,
-    y: u16,
-    items: &[(&str, &str)],
-    selected: usize,
-) {
+pub(crate) fn render_context_menu(x: u16, y: u16, items: &[(&str, &str)], selected: usize) {
     use std::io::Write;
     let mut stdout = std::io::stdout();
     let (phys_cols, phys_rows) = crossterm::terminal::size().unwrap_or((80, 24));
@@ -641,8 +876,16 @@ pub(crate) fn render_context_menu(
     // Ensure menu stays within terminal bounds
     let menu_width: u16 = 20;
     let menu_height: u16 = items.len() as u16;
-    let mx = if x + menu_width > phys_cols { phys_cols.saturating_sub(menu_width) } else { x };
-    let my = if y + menu_height + 1 > phys_rows { y.saturating_sub(menu_height + 1) } else { y };
+    let mx = if x + menu_width > phys_cols {
+        phys_cols.saturating_sub(menu_width)
+    } else {
+        x
+    };
+    let my = if y + menu_height + 1 > phys_rows {
+        y.saturating_sub(menu_height + 1)
+    } else {
+        y
+    };
 
     // Draw border
     let _ = write!(stdout, "\x1b[{};{}H", my + 1, mx + 1);
@@ -669,10 +912,7 @@ pub(crate) fn render_context_menu(
 }
 
 /// Render an [EXITED] watermark on the VTTY display when viewing an exited command.
-pub(crate) fn render_exited_watermark(
-    tab_offset: u16,
-    exit_code: Option<i32>,
-) {
+pub(crate) fn render_exited_watermark(tab_offset: u16, exit_code: Option<i32>) {
     use std::io::Write;
     let mut stdout = std::io::stdout();
     let (phys_cols, phys_rows) = crossterm::terminal::size().unwrap_or((80, 24));
@@ -733,11 +973,17 @@ pub(crate) async fn dispatch_action_effect(
         ActionEffect::None => CommandLoopResult::Continue,
         ActionEffect::NextCommand | ActionEffect::PrevCommand => {
             let commands = manager.list();
-            if commands.len() <= 1 { return CommandLoopResult::Continue; }
-            let current = active_id.clone()
+            if commands.len() <= 1 {
+                return CommandLoopResult::Continue;
+            }
+            let current = active_id
+                .clone()
                 .or_else(|| commands.first().map(|(id, _, _, _, _)| id.clone()));
             if let Some(ref cur) = current {
-                let idx = commands.iter().position(|(id, _, _, _, _)| id == cur).unwrap_or(0);
+                let idx = commands
+                    .iter()
+                    .position(|(id, _, _, _, _)| id == cur)
+                    .unwrap_or(0);
                 let new_idx = if effect == ActionEffect::NextCommand {
                     (idx + 1) % commands.len()
                 } else {
@@ -746,7 +992,10 @@ pub(crate) async fn dispatch_action_effect(
                 let (new_id, new_name, _, new_pid, _) = &commands[new_idx];
                 *active_id = Some(new_id.clone());
                 *scrollback_offset = 0;
-                manager.logger().log("switch", &format!("id={} name={} pid={}", new_id, new_name, new_pid));
+                manager.logger().log(
+                    "switch",
+                    &format!("id={} name={} pid={}", new_id, new_name, new_pid),
+                );
                 CommandLoopResult::RenderAndContinue
             } else {
                 CommandLoopResult::Continue
@@ -763,7 +1012,9 @@ pub(crate) async fn dispatch_action_effect(
         }
         ActionEffect::KillCommand => {
             if let Some(id) = active_id.take() {
-                manager.logger().log("kill_keybinding", &format!("id={}", id));
+                manager
+                    .logger()
+                    .log("kill_keybinding", &format!("id={}", id));
                 let _ = manager.kill(&id, None).await;
             }
             CommandLoopResult::Continue
@@ -773,10 +1024,14 @@ pub(crate) async fn dispatch_action_effect(
                 if let Some(handle) = manager.get(id) {
                     if handle.is_alive() {
                         let _ = manager.freeze(id);
-                        manager.logger().log("freeze_keybinding", &format!("id={}", id));
+                        manager
+                            .logger()
+                            .log("freeze_keybinding", &format!("id={}", id));
                     } else {
                         let _ = manager.thaw(id);
-                        manager.logger().log("thaw_keybinding", &format!("id={}", id));
+                        manager
+                            .logger()
+                            .log("thaw_keybinding", &format!("id={}", id));
                     }
                 }
             }
@@ -797,7 +1052,9 @@ pub(crate) async fn execute_context_menu_action(
     let target_string = target_id.to_string();
     match action {
         "kill" => {
-            manager.logger().log("ctx_kill", &format!("id={}", target_id));
+            manager
+                .logger()
+                .log("ctx_kill", &format!("id={}", target_id));
             let _ = manager.kill(&target_string, None).await;
             if active_id.as_deref() == Some(target_id) {
                 None
@@ -806,7 +1063,9 @@ pub(crate) async fn execute_context_menu_action(
             }
         }
         "purge" => {
-            manager.logger().log("ctx_purge", &format!("id={}", target_id));
+            manager
+                .logger()
+                .log("ctx_purge", &format!("id={}", target_id));
             let _ = manager.purge(&target_string);
             if active_id.as_deref() == Some(target_id) {
                 None
@@ -826,9 +1085,23 @@ pub(crate) async fn execute_context_menu_action(
                 let cmd = h.name.clone();
                 let args = h.args.clone();
                 drop(h);
-                match manager.spawn(cmd, args, None, None, std::collections::HashMap::new(), None, None, None).await {
+                match manager
+                    .spawn(
+                        cmd,
+                        args,
+                        None,
+                        None,
+                        std::collections::HashMap::new(),
+                        None,
+                        None,
+                        None,
+                    )
+                    .await
+                {
                     Ok(new_id) => {
-                        manager.logger().log("ctx_restart", &format!("old={} new={}", target_id, new_id));
+                        manager
+                            .logger()
+                            .log("ctx_restart", &format!("old={} new={}", target_id, new_id));
                         let _ = manager.purge(&target_string);
                         Some(new_id)
                     }
@@ -847,9 +1120,7 @@ pub(crate) async fn execute_context_menu_action(
 
 /// Handle the SpawnCommand action: leave raw mode, read command string,
 /// re-enter raw mode, and spawn via manager.
-pub(crate) async fn handle_spawn_command(
-    manager: &Arc<CommandManager>,
-) -> SpawnCommandResult {
+pub(crate) async fn handle_spawn_command(manager: &Arc<CommandManager>) -> SpawnCommandResult {
     let cmd_str = read_spawn_command();
     if !restore_raw_mode() {
         return SpawnCommandResult::ShouldBreak;
@@ -859,13 +1130,30 @@ pub(crate) async fn handle_spawn_command(
         if !parts.is_empty() {
             let cmd = parts[0].to_string();
             let args = parts[1..].iter().map(|s| s.to_string()).collect();
-            match manager.spawn(cmd, args, None, None, std::collections::HashMap::new(), None, None, None).await {
+            match manager
+                .spawn(
+                    cmd,
+                    args,
+                    None,
+                    None,
+                    std::collections::HashMap::new(),
+                    None,
+                    None,
+                    None,
+                )
+                .await
+            {
                 Ok(id) => {
-                    manager.logger().log("spawn_terminal", &format!("id={} cmd={}", id, cmd_str));
+                    manager
+                        .logger()
+                        .log("spawn_terminal", &format!("id={} cmd={}", id, cmd_str));
                     return SpawnCommandResult::Spawned(id);
                 }
                 Err(e) => {
-                    manager.logger().log("spawn_terminal_error", &format!("error={} cmd={}", e, cmd_str));
+                    manager.logger().log(
+                        "spawn_terminal_error",
+                        &format!("error={} cmd={}", e, cmd_str),
+                    );
                 }
             }
         }
@@ -924,19 +1212,18 @@ pub async fn run_display_loop(
     // Duplicated action dispatch (spawn, kill, switch, etc.) is extracted
     // into shared helper functions to avoid repetition.
 
-    use crate::interactive::{Action, check_bindings, resolve_keybindings};
     use crate::interactive::render_help_overlay;
+    use crate::interactive::{check_bindings, resolve_keybindings, Action};
     use crate::vtty::display::TerminalDisplay;
     use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
     use crossterm::{cursor, ExecutableCommand};
     use std::io::Write;
 
-
     // Set up the alternate screen and raw mode.
     let mut stdout = std::io::stdout();
     if let Err(e) = terminal::enable_raw_mode() {
         tracing::warn!(error = %e, "Failed to enable raw mode");
-        return true;  // fatal setup error — shut down
+        return true; // fatal setup error — shut down
     }
     let _ = stdout.execute(EnterAlternateScreen);
     let _ = stdout.execute(cursor::Hide);
@@ -968,7 +1255,7 @@ pub async fn run_display_loop(
                 let _ = terminal::disable_raw_mode();
                 let _ = stdout.execute(cursor::Show);
                 let _ = stdout.execute(LeaveAlternateScreen);
-                return true;  // fatal — shut down
+                return true; // fatal — shut down
             }
         };
         // Ensure non-blocking mode — AsyncFd relies on EAGAIN/EWOULDBLOCK
@@ -985,7 +1272,7 @@ pub async fn run_display_loop(
                 let _ = terminal::disable_raw_mode();
                 let _ = stdout.execute(cursor::Show);
                 let _ = stdout.execute(LeaveAlternateScreen);
-                return true;  // fatal — shut down
+                return true; // fatal — shut down
             }
         }
     };
@@ -1201,7 +1488,6 @@ pub async fn run_display_loop(
             }
         }
     });
-
 
     'outer: loop {
         tokio::select! {
@@ -1937,7 +2223,11 @@ pub fn render_log_overlay(
     let total = entries.len();
 
     // Show header
-    let _ = write!(stdout, "\x1b[1;34m── Command Log ({} entries) ──\x1b[0m  Press q or Ctrl+L to close\r\n\r\n", total);
+    let _ = write!(
+        stdout,
+        "\x1b[1;34m── Command Log ({} entries) ──\x1b[0m  Press q or Ctrl+L to close\r\n\r\n",
+        total
+    );
 
     // Get terminal height, leave room for header (2 lines) and footer (1 line)
     let (_, term_rows) = crossterm::terminal::size().unwrap_or((80, 24));
@@ -1945,7 +2235,11 @@ pub fn render_log_overlay(
 
     // Calculate visible window
     let max_start = total.saturating_sub(available_rows);
-    let start = if scroll_offset > max_start { max_start } else { scroll_offset };
+    let start = if scroll_offset > max_start {
+        max_start
+    } else {
+        scroll_offset
+    };
     let end = (start + available_rows).min(total);
 
     for i in start..end {
@@ -1953,7 +2247,13 @@ pub fn render_log_overlay(
     }
 
     // Footer
-    let _ = write!(stdout, "\r\n\x1b[2mlines {}-{} of {}\x1b[0m", start + 1, end, total);
+    let _ = write!(
+        stdout,
+        "\r\n\x1b[2mlines {}-{} of {}\x1b[0m",
+        start + 1,
+        end,
+        total
+    );
     let _ = stdout.flush();
 }
 
@@ -1976,7 +2276,9 @@ pub fn detect_terminal_size() -> Option<(u16, u16)> {
             let cols = size.ws_col;
             if rows > 0 && cols > 0 {
                 tracing::debug!(
-                    rows, cols, method = "/dev/tty",
+                    rows,
+                    cols,
+                    method = "/dev/tty",
                     "Terminal size from /dev/tty"
                 );
                 return Some((rows, cols));
@@ -1990,7 +2292,9 @@ pub fn detect_terminal_size() -> Option<(u16, u16)> {
     if let Ok((cols, rows)) = crossterm::terminal::size() {
         if rows > 0 && cols > 0 {
             tracing::debug!(
-                rows, cols, method = "crossterm",
+                rows,
+                cols,
+                method = "crossterm",
                 "Terminal size from crossterm (stdout)"
             );
             return Some((rows, cols));
@@ -1998,14 +2302,13 @@ pub fn detect_terminal_size() -> Option<(u16, u16)> {
     }
 
     // Method 3: COLUMNS / LINES environment variables.
-    if let (Ok(cols_str), Ok(rows_str)) = (
-        std::env::var("COLUMNS"),
-        std::env::var("LINES"),
-    ) {
+    if let (Ok(cols_str), Ok(rows_str)) = (std::env::var("COLUMNS"), std::env::var("LINES")) {
         if let (Ok(cols), Ok(rows)) = (cols_str.parse::<u16>(), rows_str.parse::<u16>()) {
             if rows > 0 && cols > 0 {
                 tracing::debug!(
-                    rows, cols, method = "env",
+                    rows,
+                    cols,
+                    method = "env",
                     "Terminal size from COLUMNS/LINES env vars"
                 );
                 return Some((rows, cols));
@@ -2020,7 +2323,9 @@ pub fn detect_terminal_size() -> Option<(u16, u16)> {
 #[cfg(not(unix))]
 pub fn detect_terminal_size() -> Option<(u16, u16)> {
     // crossterm returns (columns, rows); we need (rows, columns).
-    crossterm::terminal::size().ok().map(|(cols, rows)| (rows, cols))
+    crossterm::terminal::size()
+        .ok()
+        .map(|(cols, rows)| (rows, cols))
 }
 
 /// Wait for a direct child command to exit (headless, non-display mode).
@@ -2279,10 +2584,10 @@ mod tests {
         let sgr = build_cell_sgr(&cell);
         assert!(sgr.contains("\x1b[38;2;100;200;50m")); // custom fg
         assert!(sgr.contains("\x1b[48;2;10;20;30m")); // custom bg
-        assert!(sgr.contains("\x1b[1m"));  // bold
-        assert!(sgr.contains("\x1b[3m"));  // italic
-        assert!(sgr.contains("\x1b[4m"));  // underline
-        assert!(sgr.contains("\x1b[7m"));  // reverse
+        assert!(sgr.contains("\x1b[1m")); // bold
+        assert!(sgr.contains("\x1b[3m")); // italic
+        assert!(sgr.contains("\x1b[4m")); // underline
+        assert!(sgr.contains("\x1b[7m")); // reverse
         assert!(!sgr.contains("\x1b[0m")); // should NOT have full reset when attrs are set
     }
     // ── execute_context_menu_action tests (pure-logic, no manager) ──
@@ -2331,15 +2636,24 @@ mod tests {
     fn test_command_loop_result_debug() {
         assert_eq!(format!("{:?}", CommandLoopResult::Break), "Break");
         assert_eq!(format!("{:?}", CommandLoopResult::Continue), "Continue");
-        assert_eq!(format!("{:?}", CommandLoopResult::RenderAndContinue), "RenderAndContinue");
+        assert_eq!(
+            format!("{:?}", CommandLoopResult::RenderAndContinue),
+            "RenderAndContinue"
+        );
     }
 
     // ── SpawnCommandResult tests ──
 
     #[test]
     fn test_spawn_command_result_debug() {
-        assert_eq!(format!("{:?}", SpawnCommandResult::ShouldBreak), "ShouldBreak");
-        assert_eq!(format!("{:?}", SpawnCommandResult::Spawned("id-1".to_string())), r#"Spawned("id-1")"#);
+        assert_eq!(
+            format!("{:?}", SpawnCommandResult::ShouldBreak),
+            "ShouldBreak"
+        );
+        assert_eq!(
+            format!("{:?}", SpawnCommandResult::Spawned("id-1".to_string())),
+            r#"Spawned("id-1")"#
+        );
         assert_eq!(format!("{:?}", SpawnCommandResult::NoOp), "NoOp");
     }
 }

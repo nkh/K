@@ -78,7 +78,9 @@ fn buffer_scroll_down() {
 #[test]
 fn buffer_scroll_region_down() {
     let mut b = vrunner::vtty::buffer::Buffer::new(10, 5, 100);
-    for i in 0..5 { b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap(); }
+    for i in 0..5 {
+        b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap();
+    }
     b.scroll_region_down(1, 3);
     assert_eq!(b.rows[0][0].ch, '0'); // unchanged
     assert_eq!(b.rows[1][0].ch, ' '); // new blank
@@ -90,7 +92,9 @@ fn buffer_scroll_region_down() {
 #[test]
 fn buffer_scroll_region_up_preserves_scrollback() {
     let mut b = vrunner::vtty::buffer::Buffer::new(10, 5, 100);
-    for i in 0..5 { b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap(); }
+    for i in 0..5 {
+        b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap();
+    }
     b.scroll_region_up(2, 4); // top > 0, line NOT added to scrollback
     assert_eq!(b.scrollback.len(), 0);
     assert_eq!(b.rows[2][0].ch, '3');
@@ -475,7 +479,9 @@ fn emulator_erase_line_csi_0k() {
 fn emulator_scroll_on_overflow() {
     let mut emu = make_emulator(3, 5);
     let gen0 = emu.buffer_generation();
-    for i in 0..3 { emu.feed_str(&format!("{}\n", i)); }
+    for i in 0..3 {
+        emu.feed_str(&format!("{}\n", i));
+    }
     emu.feed_str("bottom");
     assert!(emu.buffer_generation() > gen0);
 }
@@ -603,9 +609,15 @@ fn emulator_dec_private_mode_auto_wrap() {
 fn emulator_decscusr_cursor_style() {
     let mut emu = make_emulator(3, 10);
     emu.feed(b"\x1b[3 q"); // blinking underline
-    assert_eq!(emu.cursor_style(), vrunner::vtty::emulator::CursorStyle::Underline(true));
+    assert_eq!(
+        emu.cursor_style(),
+        vrunner::vtty::emulator::CursorStyle::Underline(true)
+    );
     emu.feed(b"\x1b[6 q"); // steady bar
-    assert_eq!(emu.cursor_style(), vrunner::vtty::emulator::CursorStyle::Bar(false));
+    assert_eq!(
+        emu.cursor_style(),
+        vrunner::vtty::emulator::CursorStyle::Bar(false)
+    );
 }
 
 #[test]
@@ -660,12 +672,14 @@ fn emulator_full_reset() {
 fn emulator_decstbm_scroll_region() {
     let mut emu = make_emulator(5, 10);
     let gen0 = emu.buffer_generation();
-    for i in 0..5 { emu.feed_str(&format!("row{}\n", i)); }
+    for i in 0..5 {
+        emu.feed_str(&format!("row{}\n", i));
+    }
     emu.feed(b"\x1b[2;4r"); // scroll region rows 2-4
     emu.feed(b"\x1b[2;1H");
     emu.feed_str("X");
     emu.feed(b"\n"); // scroll within region
-    // Just verify it processed without panicking
+                     // Just verify it processed without panicking
     assert!(emu.buffer_generation() > gen0);
 }
 
@@ -818,8 +832,15 @@ fn config_partial_config_all_none() {
 fn validation_default_config_no_errors() {
     let cfg = vrunner::config::schema::Config::default();
     let issues = vrunner::config::validation::validate_config(&cfg);
-    let errors: Vec<_> = issues.iter().filter(|i| i.level == vrunner::config::validation::ValidationLevel::Error).collect();
-    assert!(errors.is_empty(), "Default config should have no errors: {:?}", errors);
+    let errors: Vec<_> = issues
+        .iter()
+        .filter(|i| i.level == vrunner::config::validation::ValidationLevel::Error)
+        .collect();
+    assert!(
+        errors.is_empty(),
+        "Default config should have no errors: {:?}",
+        errors
+    );
 }
 
 #[test]
@@ -827,7 +848,13 @@ fn validation_port_zero_is_error() {
     let mut cfg = vrunner::config::schema::Config::default();
     cfg.server.port = 0;
     let issues = vrunner::config::validation::validate_config(&cfg);
-    let port_errs: Vec<_> = issues.iter().filter(|i| i.field == "server.port" && i.level == vrunner::config::validation::ValidationLevel::Error).collect();
+    let port_errs: Vec<_> = issues
+        .iter()
+        .filter(|i| {
+            i.field == "server.port"
+                && i.level == vrunner::config::validation::ValidationLevel::Error
+        })
+        .collect();
     assert_eq!(port_errs.len(), 1);
 }
 
@@ -836,7 +863,8 @@ fn validation_bind_empty_is_error() {
     let mut cfg = vrunner::config::schema::Config::default();
     cfg.server.bind = String::new();
     let issues = vrunner::config::validation::validate_config(&cfg);
-    assert!(issues.iter().any(|i| i.field == "server.bind" && i.level == vrunner::config::validation::ValidationLevel::Error));
+    assert!(issues.iter().any(|i| i.field == "server.bind"
+        && i.level == vrunner::config::validation::ValidationLevel::Error));
 }
 
 #[test]
@@ -925,7 +953,9 @@ fn error_result_type_alias() {
     type Result<T> = std::result::Result<T, vrunner::process::error::ProcessError>;
     let r: Result<String> = Ok("ok".into());
     assert_eq!(r.unwrap(), "ok");
-    let r2: Result<()> = Err(vrunner::process::error::ProcessError::PlatformNotSupported("freeze".into()));
+    let r2: Result<()> = Err(vrunner::process::error::ProcessError::PlatformNotSupported(
+        "freeze".into(),
+    ));
     assert!(r2.is_err());
 }
 
@@ -1196,7 +1226,8 @@ fn hooks_config_default_no_hooks() {
 
 #[test]
 fn hooks_config_deserialize() {
-    let json = r#"{ "on_spawn": "echo starting", "on_exit": "echo done", "on_error": "echo failed" }"#;
+    let json =
+        r#"{ "on_spawn": "echo starting", "on_exit": "echo done", "on_error": "echo failed" }"#;
     let hooks: vrunner::config::hooks::HooksConfig = serde_json::from_str(json).unwrap();
     assert_eq!(hooks.on_spawn.as_deref(), Some("echo starting"));
     assert_eq!(hooks.on_exit.as_deref(), Some("echo done"));
@@ -1221,10 +1252,16 @@ fn merge_command_env_empty_overrides() {
 fn merge_profiles_local_overrides_global() {
     use std::collections::HashMap;
     let global = vrunner::config::schema::ProfilesConfig {
-        entries: HashMap::from([("dev".into(), vrunner::config::schema::PartialConfig::default())]),
+        entries: HashMap::from([(
+            "dev".into(),
+            vrunner::config::schema::PartialConfig::default(),
+        )]),
     };
     let local = vrunner::config::schema::ProfilesConfig {
-        entries: HashMap::from([("prod".into(), vrunner::config::schema::PartialConfig::default())]),
+        entries: HashMap::from([(
+            "prod".into(),
+            vrunner::config::schema::PartialConfig::default(),
+        )]),
     };
     let merged = {
         let mut entries = global.entries;
@@ -1251,7 +1288,7 @@ fn emulator_empty_feed() {
 fn emulator_feed_binary_garbage() {
     let mut emu = make_emulator(3, 10);
     emu.feed(&[0x80, 0x81, 0x82, 0xff]); // invalid UTF-8
-    // Should not panic
+                                         // Should not panic
     let buf = emu.snapshot();
     assert_eq!(buf.width, 10);
 }

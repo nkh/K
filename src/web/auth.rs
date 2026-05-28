@@ -1,7 +1,7 @@
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
+use rand::Rng;
 use std::fs;
 use std::path::Path;
-use rand::Rng;
 
 /// Manages bearer token authentication.
 ///
@@ -59,7 +59,9 @@ impl AuthManager {
              \n\
              Use this token in API requests:\n\
              curl -H 'Authorization: Bearer {}' https://localhost:{}/api/commands",
-            token_file, token, "{PORT}"
+            token_file,
+            token,
+            "{PORT}"
         );
 
         Ok(token)

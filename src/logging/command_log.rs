@@ -1,7 +1,7 @@
+use chrono::Utc;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
-use chrono::Utc;
 use tokio::sync::broadcast;
 
 const MEMORY_BUFFER_CAPACITY: usize = 2048;
@@ -25,10 +25,7 @@ impl CommandLogger {
     pub fn new(enabled: bool, file_path: Option<&str>) -> anyhow::Result<Self> {
         let file = match file_path {
             Some(path) => {
-                let f = OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(path)?;
+                let f = OpenOptions::new().create(true).append(true).open(path)?;
                 Some(Mutex::new(f))
             }
             None => None,

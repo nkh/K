@@ -111,11 +111,11 @@ pub async fn send_mouse(
 ///   where Cb = button + 32
 fn encode_mouse_event(event: &str, button: u8, x: u16, y: u16, sgr: bool) -> String {
     let cb = match event {
-        "down" => 32 + button,           // press: 32=left, 33=middle, 34=right
-        "up" => 32 + 3,                  // release always uses button 3
-        "move" => 32 + 32 + button,      // 64 + button (motion while dragging)
-        "wheel_up" => 32 + 64,           // 64 = wheel up
-        "wheel_down" => 32 + 65,         // 65 = wheel down
+        "down" => 32 + button,      // press: 32=left, 33=middle, 34=right
+        "up" => 32 + 3,             // release always uses button 3
+        "move" => 32 + 32 + button, // 64 + button (motion while dragging)
+        "wheel_up" => 32 + 64,      // 64 = wheel up
+        "wheel_down" => 32 + 65,    // 65 = wheel down
         _ => return String::new(),
     };
 

@@ -17,7 +17,10 @@ pub async fn create_share_token(
     Path(id): Path<String>,
     Json(body): Json<Value>,
 ) -> Json<Value> {
-    let keyboard = body.get("keyboard").and_then(|v| v.as_bool()).unwrap_or(false);
+    let keyboard = body
+        .get("keyboard")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let expires_hours = body
         .get("expires_hours")
         .and_then(|v| v.as_u64())
@@ -68,10 +71,7 @@ pub async fn create_share_token(
 
 /// GET /api/share/:token
 /// Validate a share token and return the command's VTTY HTML.
-pub async fn get_share(
-    State(state): State<AppState>,
-    Path(token): Path<String>,
-) -> Json<Value> {
+pub async fn get_share(State(state): State<AppState>, Path(token): Path<String>) -> Json<Value> {
     let Some(entry) = state.share_tokens.get(&token) else {
         return Json(serde_json::json!({
             "status": "error",

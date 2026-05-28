@@ -43,7 +43,8 @@ impl Buffer {
         for row in &mut self.rows {
             row.resize(new_width, Cell::default());
         }
-        self.rows.resize(new_height, vec![Cell::default(); new_width]);
+        self.rows
+            .resize(new_height, vec![Cell::default(); new_width]);
         self.width = new_width;
         self.height = new_height;
         self.bump_generation();
@@ -77,7 +78,10 @@ impl Buffer {
     /// Clear the entire buffer using a template cell (respects current SGR attributes).
     /// The template's character is replaced with a space.
     pub fn clear_all_with(&mut self, template: &Cell) {
-        let blank = Cell { ch: ' ', ..*template };
+        let blank = Cell {
+            ch: ' ',
+            ..*template
+        };
         for row in &mut self.rows {
             for cell in row {
                 *cell = blank;
@@ -99,7 +103,10 @@ impl Buffer {
     /// Clear from the given column to end of line, using a template cell.
     pub fn clear_line_from_with(&mut self, row: usize, col: usize, template: &Cell) {
         if let Some(row_cells) = self.rows.get_mut(row) {
-            let blank = Cell { ch: ' ', ..*template };
+            let blank = Cell {
+                ch: ' ',
+                ..*template
+            };
             for cell in row_cells.iter_mut().skip(col) {
                 *cell = blank;
             }
@@ -120,7 +127,10 @@ impl Buffer {
     /// Clear from the start of line to the given column (inclusive), using a template cell.
     pub fn clear_line_to_with(&mut self, row: usize, col: usize, template: &Cell) {
         if let Some(row_cells) = self.rows.get_mut(row) {
-            let blank = Cell { ch: ' ', ..*template };
+            let blank = Cell {
+                ch: ' ',
+                ..*template
+            };
             for cell in row_cells.iter_mut().take(col + 1) {
                 *cell = blank;
             }
@@ -141,7 +151,10 @@ impl Buffer {
     /// Clear an entire line, using a template cell.
     pub fn clear_line_with(&mut self, row: usize, template: &Cell) {
         if let Some(row_cells) = self.rows.get_mut(row) {
-            let blank = Cell { ch: ' ', ..*template };
+            let blank = Cell {
+                ch: ' ',
+                ..*template
+            };
             for cell in row_cells {
                 *cell = blank;
             }
@@ -227,7 +240,10 @@ impl Buffer {
                 self.scrollback.remove(0);
                 self.scrollback.push(removed);
             }
-            let blank = Cell { ch: ' ', ..*template };
+            let blank = Cell {
+                ch: ' ',
+                ..*template
+            };
             self.rows.insert(bottom, vec![blank; self.width]);
             self.bump_generation();
         }
@@ -248,7 +264,10 @@ impl Buffer {
     pub fn scroll_region_down_with(&mut self, top: usize, bottom: usize, template: &Cell) {
         if !self.rows.is_empty() && top <= bottom && bottom < self.height {
             self.rows.remove(bottom);
-            let blank = Cell { ch: ' ', ..*template };
+            let blank = Cell {
+                ch: ' ',
+                ..*template
+            };
             self.rows.insert(top, vec![blank; self.width]);
             self.bump_generation();
         }
@@ -270,7 +289,10 @@ impl Buffer {
     pub fn insert_line_with(&mut self, row: usize, bottom: Option<usize>, template: &Cell) {
         let bottom = bottom.unwrap_or(self.height.saturating_sub(1));
         if row < self.height && bottom < self.height && row <= bottom {
-            let blank = Cell { ch: ' ', ..*template };
+            let blank = Cell {
+                ch: ' ',
+                ..*template
+            };
             self.rows.insert(row, vec![blank; self.width]);
             self.rows.remove(bottom + 1);
             self.bump_generation();
@@ -294,7 +316,10 @@ impl Buffer {
         let bottom = bottom.unwrap_or(self.height.saturating_sub(1));
         if row < self.height && bottom < self.height && row <= bottom {
             self.rows.remove(row);
-            let blank = Cell { ch: ' ', ..*template };
+            let blank = Cell {
+                ch: ' ',
+                ..*template
+            };
             self.rows.insert(bottom, vec![blank; self.width]);
             self.bump_generation();
         }
@@ -321,7 +346,10 @@ impl Buffer {
             for i in (col + count..self.width).rev() {
                 row_cells[i] = row_cells[i - count];
             }
-            let blank = Cell { ch: ' ', ..*template };
+            let blank = Cell {
+                ch: ' ',
+                ..*template
+            };
             for cell in row_cells.iter_mut().skip(col).take(count) {
                 *cell = blank;
             }
@@ -335,7 +363,11 @@ impl Buffer {
             for i in col..(self.width - count) {
                 row_cells[i] = row_cells[i + count];
             }
-            for cell in row_cells.iter_mut().take(self.width).skip(self.width - count) {
+            for cell in row_cells
+                .iter_mut()
+                .take(self.width)
+                .skip(self.width - count)
+            {
                 cell.clear();
             }
             self.bump_generation();
@@ -350,8 +382,15 @@ impl Buffer {
             for i in col..(self.width - count) {
                 row_cells[i] = row_cells[i + count];
             }
-            let blank = Cell { ch: ' ', ..*template };
-            for cell in row_cells.iter_mut().take(self.width).skip(self.width - count) {
+            let blank = Cell {
+                ch: ' ',
+                ..*template
+            };
+            for cell in row_cells
+                .iter_mut()
+                .take(self.width)
+                .skip(self.width - count)
+            {
                 *cell = blank;
             }
             self.bump_generation();
@@ -521,7 +560,9 @@ mod tests {
     fn test_buffer_scroll_region() {
         let mut b = Buffer::new(10, 5, 100);
         // Mark each row with its index
-        for i in 0..5 { b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap(); }
+        for i in 0..5 {
+            b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap();
+        }
         // Scroll only rows 1-3 (leave rows 0 and 4 untouched)
         b.scroll_region_up(1, 3);
         // Row 0 (char '0') unchanged
@@ -539,7 +580,9 @@ mod tests {
     #[test]
     fn test_buffer_insert_delete_line_with_region() {
         let mut b = Buffer::new(10, 6, 100);
-        for i in 0..6 { b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap(); }
+        for i in 0..6 {
+            b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap();
+        }
         // Insert at row 2, scroll region 2-4
         b.insert_line(2, Some(4));
         assert_eq!(b.rows[0][0].ch, '0'); // unchanged
@@ -564,7 +607,12 @@ mod tests {
         let mut b = Buffer::new(10, 5, 100);
         b.rows[0][0].ch = 'X';
         b.rows[0][0].fg = [255, 0, 0];
-        let template = Cell { ch: ' ', fg: [0, 128, 255], bg: [40, 40, 40], ..Default::default() };
+        let template = Cell {
+            ch: ' ',
+            fg: [0, 128, 255],
+            bg: [40, 40, 40],
+            ..Default::default()
+        };
         b.clear_all_with(&template);
         assert_eq!(b.rows[0][0].ch, ' ');
         assert_eq!(b.rows[0][0].fg, [0, 128, 255]);
@@ -577,7 +625,11 @@ mod tests {
         let mut b = Buffer::new(10, 3, 100);
         b.rows[1][3].ch = 'A';
         b.rows[1][7].ch = 'B';
-        let template = Cell { ch: ' ', bg: [10, 20, 30], ..Default::default() };
+        let template = Cell {
+            ch: ' ',
+            bg: [10, 20, 30],
+            ..Default::default()
+        };
         b.clear_line_from_with(1, 5, &template);
         assert_eq!(b.rows[1][3].ch, 'A'); // before col 5: untouched
         assert_eq!(b.rows[1][5].ch, ' '); // cleared

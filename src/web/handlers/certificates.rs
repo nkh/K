@@ -6,9 +6,7 @@ use crate::web::state::AppState;
 /// List all certificates in the store.
 ///
 /// Returns each certificate's name, cert_file, and derived token (first 16 chars).
-pub async fn list_certificates(
-    State(state): State<AppState>,
-) -> Json<Value> {
+pub async fn list_certificates(State(state): State<AppState>) -> Json<Value> {
     let entries = state.cert_store.list();
     let data: Vec<Value> = entries
         .into_iter()

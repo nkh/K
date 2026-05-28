@@ -1,22 +1,17 @@
-use std::sync::Arc;
 use dashmap::DashMap;
-use uuid::Uuid;
+use std::sync::Arc;
 use tokio::sync::broadcast;
+use uuid::Uuid;
 
 use super::error::{ProcessError, Result};
 
-use crate::config::schema::Config;
-use crate::handles::{
-    file_sink::FileSink,
-    null_sink::NullSink,
-    vtty_sink::VttySink,
-    sink::Sink,
-};
-use crate::logging::command_log::CommandLogger;
-use crate::vtty::buffer::Buffer;
 use super::handle::CommandHandle;
 use super::spawner::ProcessSpawner;
+use crate::config::schema::Config;
+use crate::handles::{file_sink::FileSink, null_sink::NullSink, sink::Sink, vtty_sink::VttySink};
 use crate::hooks::runner::run_hook;
+use crate::logging::command_log::CommandLogger;
+use crate::vtty::buffer::Buffer;
 
 pub type CommandId = String;
 
@@ -59,8 +54,11 @@ pub struct CommandManager {
 impl CommandManager {
     pub fn new(config: Config) -> Self {
         let logger = Arc::new(
-            CommandLogger::new(config.command_log.enabled, config.command_log.file.as_deref())
-                .expect("Failed to initialize command logger")
+            CommandLogger::new(
+                config.command_log.enabled,
+                config.command_log.file.as_deref(),
+            )
+            .expect("Failed to initialize command logger"),
         );
         let (vtty_change_tx, _) = broadcast::channel(256);
         Self {
@@ -80,9 +78,32 @@ impl CommandManager {
     /// provided `ExitConfig` takes full precedence (on_exit, on_error,
     /// timeout_secs).
     #[allow(clippy::too_many_arguments)]
-    pub async fn spawn(&self, cmd: String, args: Vec<String>, certificate: Option<String>, exit_config: Option<crate::config::schema::ExitConfig>, env_vars: std::collections::HashMap<String, String>, rows: Option<u16>, cols: Option<u16>, dir: Option<String>) -> Result<CommandId> {
+    pub async fn spawn(
+        &self,
+        cmd: String,
+        args: Vec<String>,
+        certificate: Option<String>,
+        exit_config: Option<crate::config::schema::ExitConfig>,
+        env_vars: std::collections::HashMap<String, String>,
+        rows: Option<u16>,
+        cols: Option<u16>,
+        dir: Option<String>,
+    ) -> Result<CommandId> {
         let id = Uuid::new_v4().to_string();
-        self.logger.log("spawn", &format!("id={} cmd={} args={:?} cert={:?} env={:?} size={}x{} dir={:?}", id, cmd, args, certificate, env_vars.keys().collect::<Vec<_>>(), rows.unwrap_or(self.config.vtty.rows), cols.unwrap_or(self.config.vtty.cols), dir));
+        self.logger.log(
+            "spawn",
+            &format!(
+                "id={} cmd={} args={:?} cert={:?} env={:?} size={}x{} dir={:?}",
+                id,
+                cmd,
+                args,
+                certificate,
+                env_vars.keys().collect::<Vec<_>>(),
+                rows.unwrap_or(self.config.vtty.rows),
+                cols.unwrap_or(self.config.vtty.cols),
+                dir
+            ),
+        );
 
         // Use per-command exit config if provided, otherwise fall back to defaults
         let exit_config = exit_config.unwrap_or_else(|| self.config.default_exit.exit.clone());
@@ -90,19 +111,22 @@ impl CommandManager {
         let spawner = ProcessSpawner::new(&self.config.vtty, &self.config.web.rate_limit);
         let pty_raw_log = self.config.command_log.pty_raw_log.as_deref();
         let hooks = self.config.hooks.clone();
-        let mut handle = spawner.spawn(
-            cmd,
-            args,
-            self.config.handles.clone(),
-            &id,
-            exit_config,
-            hooks,
-            env_vars,
-            self,
-            rows, cols,
-            dir.as_deref(),
-            pty_raw_log,
-        ).await?;
+        let mut handle = spawner
+            .spawn(
+                cmd,
+                args,
+                self.config.handles.clone(),
+                &id,
+                exit_config,
+                hooks,
+                env_vars,
+                self,
+                rows,
+                cols,
+                dir.as_deref(),
+                pty_raw_log,
+            )
+            .await?;
 
         // Bind certificate to this command for per-command access control
         handle.certificate = certificate;
@@ -150,7 +174,11 @@ impl CommandManager {
     /// // Build a handle via ProcessSpawner or custom code, then:
     /// // manager.add_handle(handle, Some("my-cert".into()))?;
     /// ```
-    pub fn add_handle(&self, mut handle: CommandHandle, certificate: Option<String>) -> Result<CommandId> {
+    pub fn add_handle(
+        &self,
+        mut handle: CommandHandle,
+        certificate: Option<String>,
+    ) -> Result<CommandId> {
         let id = handle.id.clone();
 
         if self.commands.contains_key(&id) {
@@ -162,7 +190,10 @@ impl CommandManager {
 
         self.logger.log(
             "add_handle",
-            &format!("id={} cmd={} pid={} cert={:?}", id, handle.name, handle.pid, handle.certificate),
+            &format!(
+                "id={} cmd={} pid={} cert={:?}",
+                id, handle.name, handle.pid, handle.certificate
+            ),
         );
 
         // Register in the internal command registry
@@ -192,8 +223,16 @@ impl CommandManager {
     ///
     /// Returns an error if the command does not exist or if a sink with
     /// the given name is already registered.
-    pub fn register_sink(&self, id: &CommandId, name: String, sink_type: &str, path: Option<&str>) -> Result<()> {
-        let mut entry = self.commands.get_mut(id)
+    pub fn register_sink(
+        &self,
+        id: &CommandId,
+        name: String,
+        sink_type: &str,
+        path: Option<&str>,
+    ) -> Result<()> {
+        let mut entry = self
+            .commands
+            .get_mut(id)
             .ok_or_else(|| ProcessError::CommandNotFound(id.clone()))?;
 
         let handle = entry.value_mut();
@@ -210,9 +249,7 @@ impl CommandManager {
             "file" => {
                 let resolved = path.unwrap_or("/dev/null");
                 // Substitute {id} and {name} placeholders
-                let resolved = resolved
-                    .replace("{id}", id)
-                    .replace("{name}", &handle.name);
+                let resolved = resolved.replace("{id}", id).replace("{name}", &handle.name);
                 Box::new(FileSink::new(&resolved)?)
             }
             "vtty" => Box::new(VttySink::new()),
@@ -220,7 +257,10 @@ impl CommandManager {
             _ => return Err(ProcessError::UnknownSinkType(sink_type.to_string())),
         };
 
-        self.logger.log("register_sink", &format!("id={} name={} type={}", id, name, sink_type));
+        self.logger.log(
+            "register_sink",
+            &format!("id={} name={} type={}", id, name, sink_type),
+        );
         handle.handle_registry.add(name, sink);
         Ok(())
     }
@@ -284,14 +324,18 @@ impl CommandManager {
                     "data": {
                         "id": &watch_id,
                     }
-                }).to_string();
+                })
+                .to_string();
 
                 let _ = watch_tx.send((watch_id.clone(), msg));
             }
         });
     }
 
-    pub fn get(&self, id: &CommandId) -> Option<dashmap::mapref::one::Ref<'_, CommandId, CommandHandle>> {
+    pub fn get(
+        &self,
+        id: &CommandId,
+    ) -> Option<dashmap::mapref::one::Ref<'_, CommandId, CommandHandle>> {
         self.commands.get(id)
     }
 
@@ -306,7 +350,13 @@ impl CommandManager {
             .iter()
             .map(|entry| {
                 let handle = entry.value();
-                (entry.key().clone(), handle.name.clone(), handle.args.clone(), handle.pid, handle.certificate.clone())
+                (
+                    entry.key().clone(),
+                    handle.name.clone(),
+                    handle.args.clone(),
+                    handle.pid,
+                    handle.certificate.clone(),
+                )
             })
             .collect()
     }
@@ -325,7 +375,9 @@ impl CommandManager {
         self.logger.log("freeze", &format!("id={}", id));
         if let Some(handle) = self.commands.get(id) {
             let pid = handle.pid;
-            handle.frozen.store(true, std::sync::atomic::Ordering::Relaxed);
+            handle
+                .frozen
+                .store(true, std::sync::atomic::Ordering::Relaxed);
             drop(handle);
             #[cfg(unix)]
             {
@@ -353,7 +405,9 @@ impl CommandManager {
         self.logger.log("thaw", &format!("id={}", id));
         if let Some(handle) = self.commands.get(id) {
             let pid = handle.pid;
-            handle.frozen.store(false, std::sync::atomic::Ordering::Relaxed);
+            handle
+                .frozen
+                .store(false, std::sync::atomic::Ordering::Relaxed);
             drop(handle);
             #[cfg(unix)]
             {
@@ -430,13 +484,16 @@ impl CommandManager {
                             timeout_secs = timeout_secs,
                             "Grace period expired, sending SIGKILL"
                         );
-                        unsafe { libc::kill(pid as i32, libc::SIGKILL); }
+                        unsafe {
+                            libc::kill(pid as i32, libc::SIGKILL);
+                        }
                     }
                 }
                 #[cfg(not(unix))]
                 {
                     let _ = std::process::Command::new("kill")
-                        .arg("-9").arg(pid.to_string())
+                        .arg("-9")
+                        .arg(pid.to_string())
                         .spawn();
                 }
             });
@@ -470,7 +527,10 @@ impl CommandManager {
 
     /// Store a named snapshot of a command's current VTTY buffer.
     pub fn store_snapshot(&self, id: &CommandId, name: &str) -> Result<SnapshotMeta> {
-        let entry = self.commands.get(id).ok_or_else(|| ProcessError::CommandNotFound(id.to_string()))?;
+        let entry = self
+            .commands
+            .get(id)
+            .ok_or_else(|| ProcessError::CommandNotFound(id.to_string()))?;
         let buffer = entry.vtty_snapshot_blocking();
         let meta = SnapshotMeta {
             name: name.to_string(),
@@ -481,11 +541,15 @@ impl CommandManager {
             timestamp: chrono::Utc::now(),
             runtime_secs: entry.runtime_secs(),
         };
-        self.snapshots.insert((id.clone(), name.to_string()), StoredSnapshot {
-            meta: meta.clone(),
-            buffer,
-        });
-        self.logger.log("snapshot", &format!("id={} name={}", id, name));
+        self.snapshots.insert(
+            (id.clone(), name.to_string()),
+            StoredSnapshot {
+                meta: meta.clone(),
+                buffer,
+            },
+        );
+        self.logger
+            .log("snapshot", &format!("id={} name={}", id, name));
         Ok(meta)
     }
 
@@ -507,20 +571,32 @@ impl CommandManager {
     }
 
     /// Compute a diff of the current buffer against a stored named snapshot.
-    pub fn diff_snapshot(&self, id: &CommandId, name: &str) -> Result<crate::vtty::buffer::BufferDiff> {
-        let entry = self.commands.get(id).ok_or_else(|| ProcessError::CommandNotFound(id.to_string()))?;
+    pub fn diff_snapshot(
+        &self,
+        id: &CommandId,
+        name: &str,
+    ) -> Result<crate::vtty::buffer::BufferDiff> {
+        let entry = self
+            .commands
+            .get(id)
+            .ok_or_else(|| ProcessError::CommandNotFound(id.to_string()))?;
         let current = entry.vtty_snapshot_blocking();
         drop(entry);
 
         let key = (id.clone(), name.to_string());
-        let stored = self.snapshots.get(&key)
+        let stored = self
+            .snapshots
+            .get(&key)
             .ok_or_else(|| ProcessError::SnapshotNotFound {
                 name: name.to_string(),
                 command_id: id.to_string(),
             })?;
 
         let diff = current.diff(&stored.buffer);
-        self.logger.log("diff", &format!("id={} name={} changed={}", id, name, diff.changed_count));
+        self.logger.log(
+            "diff",
+            &format!("id={} name={} changed={}", id, name, diff.changed_count),
+        );
         Ok(diff)
     }
 
@@ -528,7 +604,8 @@ impl CommandManager {
     pub fn delete_snapshot(&self, id: &CommandId, name: &str) -> Result<()> {
         let key = (id.clone(), name.to_string());
         if self.snapshots.remove(&key).is_some() {
-            self.logger.log("snapshot_delete", &format!("id={} name={}", id, name));
+            self.logger
+                .log("snapshot_delete", &format!("id={} name={}", id, name));
             Ok(())
         } else {
             Err(ProcessError::SnapshotNotFound {
@@ -603,7 +680,8 @@ impl CommandManager {
     }
 
     pub async fn send_keys(&self, id: &CommandId, keys: &str) -> Result<()> {
-        self.logger.log("send_keys", &format!("id={} keys={}", id, keys));
+        self.logger
+            .log("send_keys", &format!("id={} keys={}", id, keys));
         if let Some(handle) = self.commands.get(id) {
             let bytes = encode_keys(keys);
             handle.send_bytes(bytes).await?;
@@ -612,8 +690,6 @@ impl CommandManager {
             Err(ProcessError::CommandNotFound(id.to_string()))
         }
     }
-
-
 }
 
 pub fn encode_keys(keys: &str) -> Vec<u8> {
@@ -771,13 +847,7 @@ mod tests {
         assert_eq!(entry.4.as_deref(), Some("cert-name"));
 
         // Also verify None certificate
-        let no_cert: CommandEntry = (
-            "id2".to_string(),
-            "name2".to_string(),
-            vec![],
-            0,
-            None,
-        );
+        let no_cert: CommandEntry = ("id2".to_string(), "name2".to_string(), vec![], 0, None);
         assert!(no_cert.4.is_none());
     }
 }

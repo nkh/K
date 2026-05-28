@@ -249,10 +249,7 @@ impl LogVttySink {
     /// The file is created if it doesn't exist; new content is appended.
     pub fn new(path: &str) -> std::io::Result<Self> {
         use std::fs::OpenOptions;
-        let file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)?;
+        let file = OpenOptions::new().create(true).append(true).open(path)?;
         Ok(Self {
             file: parking_lot::Mutex::new(file),
         })

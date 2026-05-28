@@ -3,9 +3,7 @@ use anyhow::Result;
 use crate::cli::args::Cli;
 use crate::instance::registry::InstanceRegistry;
 
-use super::common::{
-    build_full_display_string, collect_all_commands, http_client, instance_url,
-};
+use super::common::{build_full_display_string, collect_all_commands, http_client, instance_url};
 
 /// Purge a retained (exited) command by ID or name on any running instance.
 ///
@@ -37,8 +35,11 @@ pub async fn handle_purge_command(_cli: &Cli, target: Option<&str>) -> Result<bo
                     if let Some(cmds) = json["data"].as_array() {
                         for cmd in cmds {
                             let alive = cmd.get("alive").and_then(|v| v.as_bool()).unwrap_or(true);
-                            if alive { continue; }
-                            let cmd_pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                            if alive {
+                                continue;
+                            }
+                            let cmd_pid =
+                                cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
                             if let Some(id) = cmd.get("id").and_then(|v| v.as_str()) {
                                 let (name, full) = build_full_display_string(cmd);
                                 exited.push((info.pid, id.to_string(), cmd_pid, name, full));
@@ -78,7 +79,8 @@ pub async fn handle_purge_command(_cli: &Cli, target: Option<&str>) -> Result<bo
     };
 
     // Fast path: if target matches a command ID prefix.
-    let id_matches: Vec<_> = all_commands.iter()
+    let id_matches: Vec<_> = all_commands
+        .iter()
         .filter(|(_, id, _, _, _)| id.starts_with(target))
         .collect();
     if id_matches.len() == 1 {
@@ -96,7 +98,8 @@ pub async fn handle_purge_command(_cli: &Cli, target: Option<&str>) -> Result<bo
     }
 
     // Name matching: same three-round strategy as stop_command.
-    let exact: Vec<_> = all_commands.iter()
+    let exact: Vec<_> = all_commands
+        .iter()
         .filter(|(_, _, _, name, full)| name == target || full == target)
         .collect();
 
@@ -115,7 +118,8 @@ pub async fn handle_purge_command(_cli: &Cli, target: Option<&str>) -> Result<bo
     }
 
     // Prefix match on full string
-    let prefix_full: Vec<_> = all_commands.iter()
+    let prefix_full: Vec<_> = all_commands
+        .iter()
         .filter(|(_, _, _, _, full)| full.starts_with(target))
         .collect();
 
@@ -134,7 +138,8 @@ pub async fn handle_purge_command(_cli: &Cli, target: Option<&str>) -> Result<bo
     }
 
     // Prefix match on name only
-    let prefix_name: Vec<_> = all_commands.iter()
+    let prefix_name: Vec<_> = all_commands
+        .iter()
         .filter(|(_, _, _, name, _)| name.starts_with(target))
         .collect();
 
@@ -171,12 +176,17 @@ pub(crate) async fn purge_command_by_id(
     match resp {
         Ok(resp) => {
             let status = resp.status();
-            let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::json!({"status": "unknown"}));
+            let body: serde_json::Value = resp
+                .json()
+                .await
+                .unwrap_or(serde_json::json!({"status": "unknown"}));
             if status.is_success() && body.get("status").and_then(|s| s.as_str()) == Some("ok") {
                 println!("Purged: {}", label);
                 Ok(true)
             } else {
-                let err_msg = body.get("error").and_then(|e| e.as_str())
+                let err_msg = body
+                    .get("error")
+                    .and_then(|e| e.as_str())
                     .map(|s| s.to_string())
                     .unwrap_or_else(|| format!("HTTP {}", status));
                 tracing::error!("Failed to purge '{}': {}", label, err_msg);

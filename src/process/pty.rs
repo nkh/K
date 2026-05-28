@@ -60,7 +60,14 @@ pub trait PtyMaster: Send {
 pub trait PtySlave: Send {
     /// Spawn a command attached to this PTY, setting the given TERM value.
     /// If `dir` is provided, the child process will be started in that directory.
-    fn spawn_command(&self, cmd: &str, args: &[String], term: &str, env: &std::collections::HashMap<String, String>, dir: Option<&str>) -> Result<Box<dyn ChildProcess + Send>>;
+    fn spawn_command(
+        &self,
+        cmd: &str,
+        args: &[String],
+        term: &str,
+        env: &std::collections::HashMap<String, String>,
+        dir: Option<&str>,
+    ) -> Result<Box<dyn ChildProcess + Send>>;
 }
 
 /// Abstraction over a spawned child process.
@@ -120,18 +127,12 @@ impl PtyBackend for PortablePtyBackend {
                 pixel_height: 0,
             })
             .map_err(|e| {
-                ProcessError::Io(std::io::Error::other(
-                    format!("openpty failed: {}", e),
-                ))
+                ProcessError::Io(std::io::Error::other(format!("openpty failed: {}", e)))
             })?;
 
         Ok(PtyPair {
-            master: Box::new(PortablePtyMaster {
-                inner: pair.master,
-            }),
-            slave: Box::new(PortablePtySlave {
-                inner: pair.slave,
-            }),
+            master: Box::new(PortablePtyMaster { inner: pair.master }),
+            slave: Box::new(PortablePtySlave { inner: pair.slave }),
         })
     }
 }
@@ -150,9 +151,7 @@ impl PtyMaster for PortablePtyMaster {
             .try_clone_reader()
             .map(|r| Box::new(r) as Box<dyn Read + Send>)
             .map_err(|e| {
-                ProcessError::Io(std::io::Error::other(
-                    format!("clone PTY reader: {}", e),
-                ))
+                ProcessError::Io(std::io::Error::other(format!("clone PTY reader: {}", e)))
             })
     }
 
@@ -160,11 +159,7 @@ impl PtyMaster for PortablePtyMaster {
         self.inner
             .take_writer()
             .map(|w| Box::new(w) as Box<dyn Write + Send>)
-            .map_err(|e| {
-                ProcessError::Io(std::io::Error::other(
-                    format!("take PTY writer: {}", e),
-                ))
-            })
+            .map_err(|e| ProcessError::Io(std::io::Error::other(format!("take PTY writer: {}", e))))
     }
 
     fn resize(&self, rows: u16, cols: u16) -> Result<()> {
@@ -176,9 +171,7 @@ impl PtyMaster for PortablePtyMaster {
                 pixel_height: 0,
             })
             .map_err(|e| {
-                ProcessError::Io(std::io::Error::other(
-                    format!("PTY resize failed: {}", e),
-                ))
+                ProcessError::Io(std::io::Error::other(format!("PTY resize failed: {}", e)))
             })
     }
 }
@@ -216,9 +209,12 @@ impl PtySlave for PortablePtySlave {
         if let Some(d) = dir {
             cmd_builder.cwd(d);
         }
-        let child = self.inner.spawn_command(cmd_builder).map_err(|_| {
-            ProcessError::SpawnFailed { cmd: cmd.to_string() }
-        })?;
+        let child =
+            self.inner
+                .spawn_command(cmd_builder)
+                .map_err(|_| ProcessError::SpawnFailed {
+                    cmd: cmd.to_string(),
+                })?;
         Ok(Box::new(PortableChild { inner: child }))
     }
 }

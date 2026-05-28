@@ -1,5 +1,5 @@
-use clap::{Parser, Subcommand};
 use crate::config::schema::Config;
+use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
 #[command(name = "vrunner")]

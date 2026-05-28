@@ -186,7 +186,8 @@ pub fn validate_config(config: &Config) -> Vec<ValidationIssue> {
         "any" | "none" => {}
         custom => {
             // Validate each comma-separated origin parses as a valid HTTP header value
-            let origins: Vec<_> = custom.split(',')
+            let origins: Vec<_> = custom
+                .split(',')
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
                 .collect();
@@ -216,7 +217,8 @@ pub fn validate_config(config: &Config) -> Vec<ValidationIssue> {
                     issues.push(ValidationIssue {
                         field: "security.cors.policy".into(),
                         level: ValidationLevel::Warning,
-                        message: "No valid CORS origins found; falling back to permissive CORS".into(),
+                        message: "No valid CORS origins found; falling back to permissive CORS"
+                            .into(),
                     });
                 }
             }
@@ -274,7 +276,10 @@ mod tests {
     fn test_valid_config_produces_no_issues() {
         let config = default_config();
         let issues = validate_config(&config);
-        let errors: Vec<_> = issues.iter().filter(|i| i.level == ValidationLevel::Error).collect();
+        let errors: Vec<_> = issues
+            .iter()
+            .filter(|i| i.level == ValidationLevel::Error)
+            .collect();
         assert!(
             errors.is_empty(),
             "Default config should produce no errors, got: {:?}",
@@ -317,9 +322,14 @@ mod tests {
         config.vtty.rows = 0;
         config.vtty.cols = 0;
         let issues = validate_config(&config);
-        let vtty_issues: Vec<_> = issues.iter().filter(|i| i.field.starts_with("vtty")).collect();
+        let vtty_issues: Vec<_> = issues
+            .iter()
+            .filter(|i| i.field.starts_with("vtty"))
+            .collect();
         assert_eq!(vtty_issues.len(), 2);
-        assert!(vtty_issues.iter().all(|i| i.level == ValidationLevel::Error));
+        assert!(vtty_issues
+            .iter()
+            .all(|i| i.level == ValidationLevel::Error));
     }
 
     #[test]
@@ -327,7 +337,10 @@ mod tests {
         let mut config = default_config();
         config.display.refresh_ms = 1;
         let issues = validate_config(&config);
-        let refresh_issues: Vec<_> = issues.iter().filter(|i| i.field == "display.refresh_ms").collect();
+        let refresh_issues: Vec<_> = issues
+            .iter()
+            .filter(|i| i.field == "display.refresh_ms")
+            .collect();
         assert_eq!(refresh_issues.len(), 1);
         assert_eq!(refresh_issues[0].level, ValidationLevel::Error);
     }
@@ -349,7 +362,9 @@ mod tests {
         config.web.rate_limit.max_updates_per_sec = 0;
         let issues = validate_config(&config);
         assert!(
-            issues.iter().all(|i| i.field != "web.rate_limit.max_updates_per_sec"),
+            issues
+                .iter()
+                .all(|i| i.field != "web.rate_limit.max_updates_per_sec"),
             "Rate limit 0 (disabled) should be valid"
         );
     }
@@ -359,7 +374,10 @@ mod tests {
         let mut config = default_config();
         config.web.rate_limit.max_updates_per_sec = 1001;
         let issues = validate_config(&config);
-        let rl_issues: Vec<_> = issues.iter().filter(|i| i.field == "web.rate_limit.max_updates_per_sec").collect();
+        let rl_issues: Vec<_> = issues
+            .iter()
+            .filter(|i| i.field == "web.rate_limit.max_updates_per_sec")
+            .collect();
         assert_eq!(rl_issues.len(), 1);
         assert_eq!(rl_issues[0].level, ValidationLevel::Warning);
     }
@@ -369,7 +387,10 @@ mod tests {
         let mut config = default_config();
         config.web.dirty_check_ms = 0;
         let issues = validate_config(&config);
-        let dc_issues: Vec<_> = issues.iter().filter(|i| i.field == "web.dirty_check_ms").collect();
+        let dc_issues: Vec<_> = issues
+            .iter()
+            .filter(|i| i.field == "web.dirty_check_ms")
+            .collect();
         assert_eq!(dc_issues.len(), 1);
         assert_eq!(dc_issues[0].level, ValidationLevel::Error);
     }
@@ -386,7 +407,9 @@ mod tests {
             .filter(|i| i.field.starts_with("tls."))
             .collect();
         assert_eq!(tls_issues.len(), 2);
-        assert!(tls_issues.iter().all(|i| i.level == ValidationLevel::Warning));
+        assert!(tls_issues
+            .iter()
+            .all(|i| i.level == ValidationLevel::Warning));
     }
 
     #[test]
@@ -471,7 +494,10 @@ mod tests {
             .iter()
             .filter(|i| i.field == "security.cors.policy")
             .collect();
-        assert!(cors_issues.is_empty(), "Valid custom origins should produce no issues");
+        assert!(
+            cors_issues.is_empty(),
+            "Valid custom origins should produce no issues"
+        );
     }
 
     #[test]
@@ -483,7 +509,11 @@ mod tests {
             .iter()
             .filter(|i| i.field == "security.cors.policy" && i.level == ValidationLevel::Error)
             .collect();
-        assert_eq!(cors_issues.len(), 1, "Empty custom policy should be an error");
+        assert_eq!(
+            cors_issues.len(),
+            1,
+            "Empty custom policy should be an error"
+        );
     }
 
     #[test]

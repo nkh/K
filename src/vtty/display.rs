@@ -61,8 +61,8 @@ impl TerminalDisplay {
 
         // Determine the physical terminal size and clamp to it.
         // NOTE: crossterm::terminal::size() returns (columns, rows).
-        let (phys_cols, phys_rows) = crossterm::terminal::size()
-            .unwrap_or((buffer.width as u16, buffer.height as u16));
+        let (phys_cols, phys_rows) =
+            crossterm::terminal::size().unwrap_or((buffer.width as u16, buffer.height as u16));
         let available_rows = phys_rows.saturating_sub(row_offset);
         let render_cols = (buffer.width as u16).min(phys_cols) as usize;
 
@@ -102,9 +102,15 @@ impl TerminalDisplay {
             for cell in &row[..visible_len] {
                 // Fast path: cell is fully default AND we are already in
                 // the default terminal state — no SGR needed at all.
-                if cell == &DEFAULT_CELL && last_fg.is_none() && last_bg.is_none()
-                    && !last_bold && !last_italic && !last_underline
-                    && !last_blink && !last_reverse && !last_strikethrough
+                if cell == &DEFAULT_CELL
+                    && last_fg.is_none()
+                    && last_bg.is_none()
+                    && !last_bold
+                    && !last_italic
+                    && !last_underline
+                    && !last_blink
+                    && !last_reverse
+                    && !last_strikethrough
                 {
                     stdout.queue(Print(cell.ch))?;
                     continue;
@@ -114,11 +120,17 @@ impl TerminalDisplay {
                 // When the cell fg matches the VTTY default we emit
                 // ESC[39m ("default fg") so the terminal uses its own
                 // palette instead of forcing RGB [204,204,204].
-                let cell_fg = if cell.fg == DEFAULT_FG { None } else { Some(cell.fg) };
+                let cell_fg = if cell.fg == DEFAULT_FG {
+                    None
+                } else {
+                    Some(cell.fg)
+                };
                 if cell_fg != last_fg {
                     if let Some(rgb) = cell_fg {
                         stdout.queue(SetForegroundColor(Color::Rgb {
-                            r: rgb[0], g: rgb[1], b: rgb[2],
+                            r: rgb[0],
+                            g: rgb[1],
+                            b: rgb[2],
                         }))?;
                     } else {
                         stdout.queue(Print("\x1b[39m"))?;
@@ -128,11 +140,17 @@ impl TerminalDisplay {
 
                 // ── Background ──
                 // Same strategy as foreground: default bg → ESC[49m.
-                let cell_bg = if cell.bg == DEFAULT_BG { None } else { Some(cell.bg) };
+                let cell_bg = if cell.bg == DEFAULT_BG {
+                    None
+                } else {
+                    Some(cell.bg)
+                };
                 if cell_bg != last_bg {
                     if let Some(rgb) = cell_bg {
                         stdout.queue(SetBackgroundColor(Color::Rgb {
-                            r: rgb[0], g: rgb[1], b: rgb[2],
+                            r: rgb[0],
+                            g: rgb[1],
+                            b: rgb[2],
                         }))?;
                     } else {
                         stdout.queue(Print("\x1b[49m"))?;
@@ -142,27 +160,51 @@ impl TerminalDisplay {
 
                 // ── Text attributes ──
                 if cell.bold != last_bold {
-                    stdout.queue(style::SetAttribute(if cell.bold { Attribute::Bold } else { Attribute::NoBold }))?;
+                    stdout.queue(style::SetAttribute(if cell.bold {
+                        Attribute::Bold
+                    } else {
+                        Attribute::NoBold
+                    }))?;
                     last_bold = cell.bold;
                 }
                 if cell.italic != last_italic {
-                    stdout.queue(style::SetAttribute(if cell.italic { Attribute::Italic } else { Attribute::NoItalic }))?;
+                    stdout.queue(style::SetAttribute(if cell.italic {
+                        Attribute::Italic
+                    } else {
+                        Attribute::NoItalic
+                    }))?;
                     last_italic = cell.italic;
                 }
                 if cell.underline != last_underline {
-                    stdout.queue(style::SetAttribute(if cell.underline { Attribute::Underlined } else { Attribute::NoUnderline }))?;
+                    stdout.queue(style::SetAttribute(if cell.underline {
+                        Attribute::Underlined
+                    } else {
+                        Attribute::NoUnderline
+                    }))?;
                     last_underline = cell.underline;
                 }
                 if cell.blink != last_blink {
-                    stdout.queue(style::SetAttribute(if cell.blink { Attribute::SlowBlink } else { Attribute::NoBlink }))?;
+                    stdout.queue(style::SetAttribute(if cell.blink {
+                        Attribute::SlowBlink
+                    } else {
+                        Attribute::NoBlink
+                    }))?;
                     last_blink = cell.blink;
                 }
                 if cell.reverse != last_reverse {
-                    stdout.queue(style::SetAttribute(if cell.reverse { Attribute::Reverse } else { Attribute::NoReverse }))?;
+                    stdout.queue(style::SetAttribute(if cell.reverse {
+                        Attribute::Reverse
+                    } else {
+                        Attribute::NoReverse
+                    }))?;
                     last_reverse = cell.reverse;
                 }
                 if cell.strikethrough != last_strikethrough {
-                    stdout.queue(style::SetAttribute(if cell.strikethrough { Attribute::CrossedOut } else { Attribute::NotCrossedOut }))?;
+                    stdout.queue(style::SetAttribute(if cell.strikethrough {
+                        Attribute::CrossedOut
+                    } else {
+                        Attribute::NotCrossedOut
+                    }))?;
                     last_strikethrough = cell.strikethrough;
                 }
 
@@ -189,9 +231,14 @@ impl TerminalDisplay {
                 // At the end of each row, reset the style so the next
                 // row starts clean.  This avoids leaking background
                 // colors across rows.
-                if last_fg.is_some() || last_bg.is_some()
-                    || last_bold || last_italic || last_underline
-                    || last_blink || last_reverse || last_strikethrough
+                if last_fg.is_some()
+                    || last_bg.is_some()
+                    || last_bold
+                    || last_italic
+                    || last_underline
+                    || last_blink
+                    || last_reverse
+                    || last_strikethrough
                 {
                     stdout.queue(ResetColor)?;
                     stdout.queue(style::SetAttribute(Attribute::Reset))?;
@@ -253,9 +300,27 @@ impl TerminalDisplay {
         let mut stdout = stdout();
         // DECSCUSR: set cursor style in the hosting terminal
         let ps: u8 = match style {
-            CursorStyle::Block(blink) => if blink { 1 } else { 2 },
-            CursorStyle::Underline(blink) => if blink { 3 } else { 4 },
-            CursorStyle::Bar(blink) => if blink { 5 } else { 6 },
+            CursorStyle::Block(blink) => {
+                if blink {
+                    1
+                } else {
+                    2
+                }
+            }
+            CursorStyle::Underline(blink) => {
+                if blink {
+                    3
+                } else {
+                    4
+                }
+            }
+            CursorStyle::Bar(blink) => {
+                if blink {
+                    5
+                } else {
+                    6
+                }
+            }
         };
         stdout.queue(Print(format!("\x1b[{} q", ps)))?;
         stdout.queue(cursor::Show)?;

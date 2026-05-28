@@ -11,7 +11,7 @@ use vrunner::config::schema::Config;
 use vrunner::config::validation::{validate_config, ValidationLevel};
 use vrunner::daemon;
 use vrunner::instance::registry::InstanceRegistry;
-use vrunner::interactive::display::{run_display_loop, detect_terminal_size, wait_for_child};
+use vrunner::interactive::display::{detect_terminal_size, run_display_loop, wait_for_child};
 use vrunner::process::manager::CommandManager;
 use vrunner::web::auth::AuthManager;
 use vrunner::web::server::start_server;
@@ -38,7 +38,12 @@ fn resolve_config(cli: &Cli) -> Result<Config> {
                 if cfg.profiles.entries.is_empty() {
                     "(none defined in config)".to_string()
                 } else {
-                    cfg.profiles.entries.keys().cloned().collect::<Vec<_>>().join(", ")
+                    cfg.profiles
+                        .entries
+                        .keys()
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 }
             );
         }
@@ -145,7 +150,12 @@ async fn handle_subcommands(cli: &Cli) -> Result<bool> {
             registry.stop_instance(pid).await?;
             Ok(true)
         }
-        Some(Commands::Spawn { cmd, args, rows, cols }) => {
+        Some(Commands::Spawn {
+            cmd,
+            args,
+            rows,
+            cols,
+        }) => {
             subcommands::handle_spawn_command(cli, cmd, args, *rows, *cols).await?;
             Ok(true)
         }
@@ -166,9 +176,7 @@ async fn handle_subcommands(cli: &Cli) -> Result<bool> {
             Ok(true)
         }
         Some(Commands::StopCommand { target }) => {
-            let stopped = subcommands::handle_stop_command(
-                cli, target.as_deref(),
-            ).await?;
+            let stopped = subcommands::handle_stop_command(cli, target.as_deref()).await?;
             if !stopped {
                 match target {
                     Some(t) => tracing::error!(
@@ -183,9 +191,7 @@ async fn handle_subcommands(cli: &Cli) -> Result<bool> {
             Ok(true)
         }
         Some(Commands::Purge { target }) => {
-            let purged = subcommands::handle_purge_command(
-                cli, target.as_deref(),
-            ).await?;
+            let purged = subcommands::handle_purge_command(cli, target.as_deref()).await?;
             if !purged {
                 match target {
                     Some(t) => tracing::error!(
@@ -223,8 +229,19 @@ fn apply_detected_terminal_size(cli: &Cli, cfg: &mut Config) {
         // content fits in the remaining lines.  Without this the
         // last line of terminal output (e.g. btop status bar,
         // vim status line) is clipped.
-        let effective_rows = if cli.tabs { rows.saturating_sub(1) } else { rows };
-        tracing::info!(rows, cols, effective_rows, tabs = cli.tabs, method = "multi", "Detected terminal size for display mode");
+        let effective_rows = if cli.tabs {
+            rows.saturating_sub(1)
+        } else {
+            rows
+        };
+        tracing::info!(
+            rows,
+            cols,
+            effective_rows,
+            tabs = cli.tabs,
+            method = "multi",
+            "Detected terminal size for display mode"
+        );
         if cli.vtty_rows.is_none() {
             cfg.vtty.rows = effective_rows;
         }
@@ -275,12 +292,18 @@ async fn spawn_initial_command(
         None
     };
 
-    let id = manager.spawn(
-        cmd, args, None,
-        per_command_exit,
-        cfg.environment.variables.clone(),
-        None, None, None,
-    ).await?;
+    let id = manager
+        .spawn(
+            cmd,
+            args,
+            None,
+            per_command_exit,
+            cfg.environment.variables.clone(),
+            None,
+            None,
+            None,
+        )
+        .await?;
 
     // Send initial keystrokes if --send-keys was specified.
     if let Some(ref keys) = cli.send_keys {
@@ -350,7 +373,8 @@ async fn async_main(cli: Cli) -> Result<()> {
                 cfg.tls.cert_file.as_deref(),
                 cfg.tls.key_file.as_deref(),
                 &cfg,
-            ).await
+            )
+            .await
         }
     });
 
@@ -379,7 +403,8 @@ async fn async_main(cli: Cli) -> Result<()> {
             &cfg.interactive.keybindings,
             &log_entries,
             cfg.interactive.tabs,
-        ).await;
+        )
+        .await;
         // run_display_loop always returns true (shutdown triggered).
         // The dismissed path now waits for q/Ctrl+C inside the loop.
     } else if let Some(ref id) = spawned_id {
@@ -427,7 +452,6 @@ async fn async_main(cli: Cli) -> Result<()> {
 
     std::process::exit(0);
 }
-
 
 fn main() -> Result<()> {
     // Phase 1: Synchronous pre-runtime (no tokio threads yet)

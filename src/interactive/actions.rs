@@ -8,7 +8,7 @@ use std::io::Write;
 
 use crossterm::terminal;
 
-use super::keybinding::{Action, Binding, format_key};
+use super::keybinding::{format_key, Action, Binding};
 
 /// The result of executing an action in the display loop.
 #[derive(Debug, Clone, PartialEq)]
@@ -64,18 +64,10 @@ pub fn execute_action(
         Action::SpawnCommand => {
             ActionEffect::None // Handled separately by the display loop
         }
-        Action::ShowHelp => {
-            ActionEffect::ShowHelp
-        }
-        Action::KillCommand => {
-            ActionEffect::KillCommand
-        }
-        Action::TogglePause => {
-            ActionEffect::TogglePause
-        }
-        Action::Quit => {
-            ActionEffect::Quit
-        }
+        Action::ShowHelp => ActionEffect::ShowHelp,
+        Action::KillCommand => ActionEffect::KillCommand,
+        Action::TogglePause => ActionEffect::TogglePause,
+        Action::Quit => ActionEffect::Quit,
     }
 }
 
@@ -84,10 +76,7 @@ pub fn execute_action(
 /// The overlay replaces the VTTY display.  Callers should set a flag
 /// (`showing_help = true`) so the display loop knows to re-render the
 /// overlay on tick instead of the VTTY buffer.
-pub fn render_help_overlay(
-    bindings: &[Binding],
-    stdout: &mut std::io::Stdout,
-) {
+pub fn render_help_overlay(bindings: &[Binding], stdout: &mut std::io::Stdout) {
     use std::io::Write;
 
     let _ = terminal::Clear(terminal::ClearType::All);
@@ -97,8 +86,15 @@ pub fn render_help_overlay(
     let w = term_cols as usize;
 
     // Header
-    let _ = write!(stdout, "\x1b[1;34m  vrunner \u{2014} Keybindings\x1b[0m\r\n");
-    let _ = write!(stdout, "\x1b[2m  {}\x1b[0m\r\n\r\n", "\u{2500}".repeat(w.saturating_sub(4).min(76)));
+    let _ = write!(
+        stdout,
+        "\x1b[1;34m  vrunner \u{2014} Keybindings\x1b[0m\r\n"
+    );
+    let _ = write!(
+        stdout,
+        "\x1b[2m  {}\x1b[0m\r\n\r\n",
+        "\u{2500}".repeat(w.saturating_sub(4).min(76))
+    );
 
     // Track which actions we've already displayed to avoid duplicates
     // across groups.  The "Always active" section is handled separately
@@ -117,13 +113,21 @@ pub fn render_help_overlay(
         let mut had_any = false;
         for binding in bindings {
             let action_name = format!("{:?}", binding.action);
-            if !action_names.iter().any(|a| action_name.contains(a)) { continue; }
-            if seen.contains(&binding.action) { continue; }
+            if !action_names.iter().any(|a| action_name.contains(a)) {
+                continue;
+            }
+            if seen.contains(&binding.action) {
+                continue;
+            }
             seen.insert(binding.action.clone());
             had_any = true;
             let key_label = format_key(&binding.bytes);
             let desc = binding.action.description();
-            let _ = write!(stdout, "  \x1b[1;33m{:<18}\x1b[0m  \x1b[2m{}\x1b[0m\r\n", key_label, desc);
+            let _ = write!(
+                stdout,
+                "  \x1b[1;33m{:<18}\x1b[0m  \x1b[2m{}\x1b[0m\r\n",
+                key_label, desc
+            );
         }
         if !had_any {
             let _ = write!(stdout, "  \x1b[2m  (none configured)\x1b[0m\r\n");
@@ -136,7 +140,8 @@ pub fn render_help_overlay(
         stdout,
         "Navigation",
         &["NextCommand", "PrevCommand"],
-        bindings, &mut seen,
+        bindings,
+        &mut seen,
     );
 
     // Group 2: Actions
@@ -144,7 +149,8 @@ pub fn render_help_overlay(
         stdout,
         "Actions",
         &["SpawnCommand", "KillCommand", "TogglePause"],
-        bindings, &mut seen,
+        bindings,
+        &mut seen,
     );
 
     // Group 3: Display
@@ -152,13 +158,22 @@ pub fn render_help_overlay(
         stdout,
         "Display",
         &["ToggleLog", "ShowHelp", "Quit"],
-        bindings, &mut seen,
+        bindings,
+        &mut seen,
     );
 
     // Always-active shortcuts (hardcoded, not from config)
-    let _ = write!(stdout, "\x1b[2m{}\x1b[0m\r\n", "\u{2500}".repeat(w.saturating_sub(4).min(76)));
+    let _ = write!(
+        stdout,
+        "\x1b[2m{}\x1b[0m\r\n",
+        "\u{2500}".repeat(w.saturating_sub(4).min(76))
+    );
     let _ = write!(stdout, "\x1b[1m  Always active\x1b[0m\r\n");
-    let _ = write!(stdout, "  \x1b[1;33m{:<18}\x1b[0m  \x1b[2mQuit display\x1b[0m\r\n", "Ctrl+\\");
+    let _ = write!(
+        stdout,
+        "  \x1b[1;33m{:<18}\x1b[0m  \x1b[2mQuit display\x1b[0m\r\n",
+        "Ctrl+\\"
+    );
     let _ = write!(stdout, "\r\n");
 
     // Footer
@@ -188,8 +203,8 @@ pub fn read_spawn_command() -> Option<String> {
 
     // Move cursor to the last line of the terminal
     let (_, term_rows) = terminal::size().unwrap_or((80, 24));
-    eprint!("\x1b[{};1H", term_rows);  // cursor to (term_rows, 1)
-    // Clear from cursor to end of line
+    eprint!("\x1b[{};1H", term_rows); // cursor to (term_rows, 1)
+                                      // Clear from cursor to end of line
     eprint!("\x1b[2K");
     eprint!("\x1b[1;36m  Spawn:\x1b[0m ");
     let _ = std::io::stderr().flush();

@@ -109,11 +109,21 @@ pub struct KeybindingsConfig {
     pub quit: Option<String>,
 }
 
-fn default_key_next_command() -> Option<String> { Some("ctrl+right".into()) }
-fn default_key_prev_command() -> Option<String> { Some("ctrl+left".into()) }
-fn default_key_toggle_log() -> Option<String> { Some("ctrl+l".into()) }
-fn default_key_spawn_command() -> Option<String> { Some("f12".into()) }
-fn default_key_show_help() -> Option<String> { Some("ctrl+h".into()) }
+fn default_key_next_command() -> Option<String> {
+    Some("ctrl+right".into())
+}
+fn default_key_prev_command() -> Option<String> {
+    Some("ctrl+left".into())
+}
+fn default_key_toggle_log() -> Option<String> {
+    Some("ctrl+l".into())
+}
+fn default_key_spawn_command() -> Option<String> {
+    Some("f12".into())
+}
+fn default_key_show_help() -> Option<String> {
+    Some("ctrl+h".into())
+}
 
 impl Default for KeybindingsConfig {
     fn default() -> Self {
@@ -157,8 +167,14 @@ mod tests {
         let config = InteractiveConfig::default();
         assert!(!config.tabs);
         // Keybindings should have default bindings populated
-        assert_eq!(config.keybindings.next_command.as_deref(), Some("ctrl+right"));
-        assert_eq!(config.keybindings.prev_command.as_deref(), Some("ctrl+left"));
+        assert_eq!(
+            config.keybindings.next_command.as_deref(),
+            Some("ctrl+right")
+        );
+        assert_eq!(
+            config.keybindings.prev_command.as_deref(),
+            Some("ctrl+left")
+        );
         assert_eq!(config.keybindings.toggle_log.as_deref(), Some("ctrl+l"));
         assert_eq!(config.keybindings.spawn_command.as_deref(), Some("f12"));
         assert_eq!(config.keybindings.show_help.as_deref(), Some("ctrl+h"));

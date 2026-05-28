@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use super::sink::Sink;
+use std::collections::HashMap;
 
 pub struct HandleRegistry {
     sinks: HashMap<String, Box<dyn Sink>>,

@@ -9,18 +9,30 @@ pub fn merge_configs(global: Config, local: Config) -> Config {
         server: local.server,
         security: local.security,
         tls: local.tls,
-        certificates: if local.certificates.entries.is_empty() { global.certificates } else { local.certificates },
+        certificates: if local.certificates.entries.is_empty() {
+            global.certificates
+        } else {
+            local.certificates
+        },
         vtty: local.vtty,
         display: local.display,
         command_log: local.command_log,
         daemon: local.daemon,
-        handles: if local.handles.is_empty() { global.handles } else { local.handles },
+        handles: if local.handles.is_empty() {
+            global.handles
+        } else {
+            local.handles
+        },
         interactive: local.interactive,
         default_exit: local.default_exit,
         environment: merge_env(global.environment, local.environment),
         web: local.web,
         hooks: local.hooks,
-        templates: if local.templates.is_empty() { global.templates } else { local.templates },
+        templates: if local.templates.is_empty() {
+            global.templates
+        } else {
+            local.templates
+        },
         profiles: merge_profiles(global.profiles, local.profiles),
     }
 }

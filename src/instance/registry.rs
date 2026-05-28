@@ -81,10 +81,13 @@ impl InstanceRegistry {
             println!("No running vrunner instances.");
             return;
         }
-        println!("{:<10} {:<8} {:<20} {:<10} {:<10} COMMAND",
-            "PID", "PORT", "BIND", "DAEMON", "DISPLAY");
+        println!(
+            "{:<10} {:<8} {:<20} {:<10} {:<10} COMMAND",
+            "PID", "PORT", "BIND", "DAEMON", "DISPLAY"
+        );
         for info in instances {
-            println!("{:<10} {:<8} {:<20} {:<10} {:<10} {}",
+            println!(
+                "{:<10} {:<8} {:<20} {:<10} {:<10} {}",
                 info.pid,
                 info.port,
                 info.bind,
@@ -112,7 +115,10 @@ impl InstanceRegistry {
                     Ok(resp) => {
                         let status = resp.status();
                         tracing::error!("Shutdown request returned HTTP {}", status);
-                        println!("Failed to stop instance {} (HTTP {}). You may need to run: kill {}", pid, status, pid);
+                        println!(
+                            "Failed to stop instance {} (HTTP {}). You may need to run: kill {}",
+                            pid, status, pid
+                        );
                     }
                     Err(e) => {
                         tracing::error!(pid = pid, url = %url, error = %e, "Failed to contact instance");

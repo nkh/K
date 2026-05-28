@@ -2,9 +2,9 @@ use axum::http::HeaderValue;
 use axum::{
     extract::Request,
     http::header::AUTHORIZATION,
+    http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
-    http::StatusCode,
 };
 use serde_json::json;
 use std::time::Instant;
@@ -39,7 +39,9 @@ pub fn cors_layer(config: &CorsConfig) -> tower_http::cors::CorsLayer {
             .allow_headers(tower_http::cors::Any),
         _ => {
             // Parse comma-separated origins
-            let origins: Vec<HeaderValue> = config.policy.split(',')
+            let origins: Vec<HeaderValue> = config
+                .policy
+                .split(',')
                 .filter_map(|s| s.trim().parse::<HeaderValue>().ok())
                 .collect();
             if origins.is_empty() {
@@ -62,10 +64,7 @@ pub fn cors_layer(config: &CorsConfig) -> tower_http::cors::CorsLayer {
 
 /// Authentication middleware: validates Bearer token when auth is enabled.
 /// When the auth_token extension is None (localhost default), all requests are allowed.
-pub async fn auth_middleware(
-    req: Request,
-    next: Next,
-) -> Response {
+pub async fn auth_middleware(req: Request, next: Next) -> Response {
     // Extract the auth token from extensions (set by the router layer)
     let token = req.extensions().get::<Option<String>>().cloned().flatten();
 
@@ -76,7 +75,8 @@ pub async fn auth_middleware(
         }
         Some(expected) => {
             // Auth required — validate Bearer token
-            let provided = req.headers()
+            let provided = req
+                .headers()
                 .get(AUTHORIZATION)
                 .and_then(|v| v.to_str().ok())
                 .and_then(|v| v.strip_prefix("Bearer "));
@@ -138,8 +138,9 @@ pub async fn error_handler(req: Request, next: Next) -> Response {
                         "status": "error",
                         "data": null,
                         "error": format!("HTTP {}", status.as_u16())
-                    }))
-                ).into_response();
+                    })),
+                )
+                    .into_response();
             }
         };
 
@@ -156,8 +157,9 @@ pub async fn error_handler(req: Request, next: Next) -> Response {
                 "status": "error",
                 "data": null,
                 "error": error_msg
-            }))
-        ).into_response();
+            })),
+        )
+            .into_response();
     }
 
     response

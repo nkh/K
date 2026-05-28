@@ -1,4 +1,4 @@
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use std::fs::OpenOptions;
 
 use crate::config::schema::Config;

@@ -9,10 +9,7 @@ use crate::web::state::AppState;
 /// GET /api/commands/:id/resources
 /// Returns CPU, memory, and thread count for a running command by reading /proc/[pid]/stat.
 /// Only works on Linux; returns zeros on other platforms.
-pub async fn get_resources(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Json<Value> {
+pub async fn get_resources(State(state): State<AppState>, Path(id): Path<String>) -> Json<Value> {
     let handle = match state.manager.get(&id) {
         Some(h) => h,
         None => {
@@ -69,7 +66,13 @@ fn read_proc_stats(pid: u32) -> ProcStats {
     let stat_path = format!("/proc/{}/stat", pid);
     let stat_content = match std::fs::read_to_string(&stat_path) {
         Ok(c) => c,
-        Err(_) => return ProcStats { cpu_percent: None, memory_mb: None, threads: None },
+        Err(_) => {
+            return ProcStats {
+                cpu_percent: None,
+                memory_mb: None,
+                threads: None,
+            }
+        }
     };
 
     // Parse fields from /proc/[pid]/stat
@@ -79,7 +82,11 @@ fn read_proc_stats(pid: u32) -> ProcStats {
     let fields: Vec<&str> = if let Some(idx) = stat_content.rfind(')') {
         stat_content[idx + 2..].split_whitespace().collect()
     } else {
-        return ProcStats { cpu_percent: None, memory_mb: None, threads: None };
+        return ProcStats {
+            cpu_percent: None,
+            memory_mb: None,
+            threads: None,
+        };
     };
 
     // After ')', the fields are: state ppid pgrp session tty_nr tpgid flags minflt cminflt majflt cmajflt utime stime cutime cstime priority nice num_threads ...
@@ -93,29 +100,39 @@ fn read_proc_stats(pid: u32) -> ProcStats {
     // Read system boot time and jiffies from /proc/stat
     let hz = match get_clk_tck() {
         Some(v) => v,
-        None => return ProcStats {
-            cpu_percent: Some(0.0),
-            memory_mb: None,
-            threads: Some(threads),
-        },
+        None => {
+            return ProcStats {
+                cpu_percent: Some(0.0),
+                memory_mb: None,
+                threads: Some(threads),
+            }
+        }
     };
 
     // Calculate uptime from /proc/uptime
     let uptime_secs = match std::fs::read_to_string("/proc/uptime") {
-        Ok(content) => content.split_whitespace().next()
+        Ok(content) => content
+            .split_whitespace()
+            .next()
             .and_then(|v| v.parse::<f64>().ok())
             .unwrap_or(0.0),
-        Err(_) => return ProcStats {
-            cpu_percent: Some(0.0),
-            memory_mb: None,
-            threads: Some(threads),
-        },
+        Err(_) => {
+            return ProcStats {
+                cpu_percent: Some(0.0),
+                memory_mb: None,
+                threads: Some(threads),
+            }
+        }
     };
 
     // Read /proc/[pid]/stat for starttime (field 20 after ')', 0-indexed: 19)
     let starttime: u64 = fields.get(19).and_then(|v| v.parse().ok()).unwrap_or(0);
     let elapsed_ticks = (uptime_secs * hz as f64) as u64;
-    let process_ticks = if elapsed_ticks > starttime { elapsed_ticks - starttime } else { 1 };
+    let process_ticks = if elapsed_ticks > starttime {
+        elapsed_ticks - starttime
+    } else {
+        1
+    };
 
     // CPU percentage = (utime + stime) / process_ticks * 100
     // Cap at 100% for single thread, allow more for multi-thread
@@ -150,10 +167,18 @@ fn read_proc_stats(pid: u32) -> ProcStats {
 #[cfg(target_os = "linux")]
 fn get_clk_tck() -> Option<u64> {
     let val = unsafe { libc::sysconf(libc::_SC_CLK_TCK) };
-    if val > 0 { Some(val as u64) } else { None }
+    if val > 0 {
+        Some(val as u64)
+    } else {
+        None
+    }
 }
 
 #[cfg(not(target_os = "linux"))]
 fn read_proc_stats(_pid: u32) -> ProcStats {
-    ProcStats { cpu_percent: None, memory_mb: None, threads: None }
+    ProcStats {
+        cpu_percent: None,
+        memory_mb: None,
+        threads: None,
+    }
 }

@@ -17,8 +17,14 @@ pub fn handle_config_check_command(config_path: Option<&str>) -> Result<()> {
         return Ok(());
     }
 
-    let errors: Vec<_> = issues.iter().filter(|i| i.level == ValidationLevel::Error).collect();
-    let warnings: Vec<_> = issues.iter().filter(|i| i.level == ValidationLevel::Warning).collect();
+    let errors: Vec<_> = issues
+        .iter()
+        .filter(|i| i.level == ValidationLevel::Error)
+        .collect();
+    let warnings: Vec<_> = issues
+        .iter()
+        .filter(|i| i.level == ValidationLevel::Warning)
+        .collect();
 
     if !warnings.is_empty() {
         println!("Warnings ({}):", warnings.len());

@@ -1,13 +1,13 @@
-use std::sync::Arc;
 use anyhow::Result;
+use std::sync::Arc;
 use tokio::sync::broadcast;
 
-use crate::process::manager::CommandManager;
-use crate::web::certs::CertificateStore;
-use crate::config::schema::Config;
 use super::router::create_router;
 use super::state::AppState;
 use super::tls::TlsManager;
+use crate::config::schema::Config;
+use crate::process::manager::CommandManager;
+use crate::web::certs::CertificateStore;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn start_server(
@@ -42,14 +42,24 @@ pub async fn start_server(
             Arc::new(store)
         }
         Err(e) => {
-            tracing::warn!("Failed to initialize certificate store: {}, continuing without certs", e);
+            tracing::warn!(
+                "Failed to initialize certificate store: {}, continuing without certs",
+                e
+            );
             Arc::new(CertificateStore::new())
         }
     };
 
     let vtty_events = manager.vtty_change_sender();
     let log_events = manager.logger().log_sender();
-    let state = AppState::new(manager, shutdown_tx.clone(), auth_token, cert_store, vtty_events, log_events);
+    let state = AppState::new(
+        manager,
+        shutdown_tx.clone(),
+        auth_token,
+        cert_store,
+        vtty_events,
+        log_events,
+    );
     let router = create_router(state, &config.security.cors);
     let app = router.into_make_service();
 

@@ -37,9 +37,12 @@
 //! Raw escape sequences (e.g., `"\x1b[1;5C"`) are still accepted for backward
 //! compatibility, but readable names are strongly preferred.
 
+mod actions;
 pub mod display;
 mod keybinding;
-mod actions;
 
-pub use keybinding::{parse_key_name, resolve_keybindings, check_bindings, Binding, Action};
-pub use actions::{execute_action, render_help_overlay, render_spawn_prompt, ActionEffect, read_spawn_command, restore_raw_mode};
+pub use actions::{
+    execute_action, read_spawn_command, render_help_overlay, render_spawn_prompt, restore_raw_mode,
+    ActionEffect,
+};
+pub use keybinding::{check_bindings, parse_key_name, resolve_keybindings, Action, Binding};

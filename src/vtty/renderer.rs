@@ -94,22 +94,43 @@ impl VttyRenderer {
                 // so the client-side cell grid (buildCellGrid) can index each cell by
                 // position.  Empty cells get a zero-width space to keep the span alive.
                 let mut style = String::from("display:inline-block;width:1ch;");
-                style.push_str(&format!("color:rgb({},{},{});", cell.fg[0], cell.fg[1], cell.fg[2]));
-                style.push_str(&format!("background:rgb({},{},{});", cell.bg[0], cell.bg[1], cell.bg[2]));
+                style.push_str(&format!(
+                    "color:rgb({},{},{});",
+                    cell.fg[0], cell.fg[1], cell.fg[2]
+                ));
+                style.push_str(&format!(
+                    "background:rgb({},{},{});",
+                    cell.bg[0], cell.bg[1], cell.bg[2]
+                ));
 
                 if cell.reverse {
-                    style.push_str(&format!("color:rgb({},{},{});background:rgb({},{},{});",
-                        cell.bg[0], cell.bg[1], cell.bg[2],
-                        cell.fg[0], cell.fg[1], cell.fg[2]));
+                    style.push_str(&format!(
+                        "color:rgb({},{},{});background:rgb({},{},{});",
+                        cell.bg[0], cell.bg[1], cell.bg[2], cell.fg[0], cell.fg[1], cell.fg[2]
+                    ));
                 }
-                if cell.bold { style.push_str("font-weight:bold;"); }
-                if cell.italic { style.push_str("font-style:italic;"); }
-                if cell.underline { style.push_str("text-decoration:underline;"); }
-                if cell.strikethrough { style.push_str("text-decoration:line-through;"); }
-                if cell.blink { style.push_str("animation:blink 1s step-end infinite;"); }
+                if cell.bold {
+                    style.push_str("font-weight:bold;");
+                }
+                if cell.italic {
+                    style.push_str("font-style:italic;");
+                }
+                if cell.underline {
+                    style.push_str("text-decoration:underline;");
+                }
+                if cell.strikethrough {
+                    style.push_str("text-decoration:line-through;");
+                }
+                if cell.blink {
+                    style.push_str("animation:blink 1s step-end infinite;");
+                }
 
                 let ch = if cell.is_empty() { '\u{200b}' } else { cell.ch };
-                html.push_str(&format!("<span style='{}'>{}</span>", style, html_escape(ch)));
+                html.push_str(&format!(
+                    "<span style='{}'>{}</span>",
+                    style,
+                    html_escape(ch)
+                ));
             }
             html.push('\n');
         }
@@ -125,7 +146,11 @@ impl VttyRenderer {
     ///
     /// This allows the web UI to render a scrollback view by setting the
     /// offset and fetching the corresponding HTML slice.
-    pub fn to_html_scrollback(buffer: &Buffer, scrollback_offset: usize, visible_rows: usize) -> String {
+    pub fn to_html_scrollback(
+        buffer: &Buffer,
+        scrollback_offset: usize,
+        visible_rows: usize,
+    ) -> String {
         let total_lines = buffer.total_lines(); // scrollback.len() + rows.len()
         let max_offset = total_lines.saturating_sub(visible_rows);
         let effective_offset = scrollback_offset.min(max_offset);
@@ -134,7 +159,9 @@ impl VttyRenderer {
         let mut html = String::new();
         html.reserve(visible_rows * buffer.width * 60);
 
-        let all_lines: Vec<&Vec<super::cell::Cell>> = buffer.scrollback.iter()
+        let all_lines: Vec<&Vec<super::cell::Cell>> = buffer
+            .scrollback
+            .iter()
             .chain(buffer.rows.iter())
             .skip(effective_offset)
             .take(visible_rows)
@@ -143,22 +170,43 @@ impl VttyRenderer {
         for row in &all_lines {
             for cell in *row {
                 let mut style = String::from("display:inline-block;width:1ch;");
-                style.push_str(&format!("color:rgb({},{},{});", cell.fg[0], cell.fg[1], cell.fg[2]));
-                style.push_str(&format!("background:rgb({},{},{});", cell.bg[0], cell.bg[1], cell.bg[2]));
+                style.push_str(&format!(
+                    "color:rgb({},{},{});",
+                    cell.fg[0], cell.fg[1], cell.fg[2]
+                ));
+                style.push_str(&format!(
+                    "background:rgb({},{},{});",
+                    cell.bg[0], cell.bg[1], cell.bg[2]
+                ));
 
                 if cell.reverse {
-                    style.push_str(&format!("color:rgb({},{},{});background:rgb({},{},{});",
-                        cell.bg[0], cell.bg[1], cell.bg[2],
-                        cell.fg[0], cell.fg[1], cell.fg[2]));
+                    style.push_str(&format!(
+                        "color:rgb({},{},{});background:rgb({},{},{});",
+                        cell.bg[0], cell.bg[1], cell.bg[2], cell.fg[0], cell.fg[1], cell.fg[2]
+                    ));
                 }
-                if cell.bold { style.push_str("font-weight:bold;"); }
-                if cell.italic { style.push_str("font-style:italic;"); }
-                if cell.underline { style.push_str("text-decoration:underline;"); }
-                if cell.strikethrough { style.push_str("text-decoration:line-through;"); }
-                if cell.blink { style.push_str("animation:blink 1s step-end infinite;"); }
+                if cell.bold {
+                    style.push_str("font-weight:bold;");
+                }
+                if cell.italic {
+                    style.push_str("font-style:italic;");
+                }
+                if cell.underline {
+                    style.push_str("text-decoration:underline;");
+                }
+                if cell.strikethrough {
+                    style.push_str("text-decoration:line-through;");
+                }
+                if cell.blink {
+                    style.push_str("animation:blink 1s step-end infinite;");
+                }
 
                 let ch = if cell.is_empty() { '\u{200b}' } else { cell.ch };
-                html.push_str(&format!("<span style='{}'>{}</span>", style, html_escape(ch)));
+                html.push_str(&format!(
+                    "<span style='{}'>{}</span>",
+                    style,
+                    html_escape(ch)
+                ));
             }
             html.push('\n');
         }
@@ -168,7 +216,9 @@ impl VttyRenderer {
 
     /// Serialize buffer to plain text (no formatting).
     pub fn to_plain(buffer: &Buffer) -> String {
-        buffer.rows.iter()
+        buffer
+            .rows
+            .iter()
             .map(|row| row.iter().map(|c| c.ch).collect::<String>())
             .collect::<Vec<_>>()
             .join("\n")
@@ -176,7 +226,9 @@ impl VttyRenderer {
 
     /// Get a range of lines as plain text.
     pub fn lines_plain(buffer: &Buffer, start: usize, count: usize) -> Vec<String> {
-        buffer.rows.iter()
+        buffer
+            .rows
+            .iter()
             .skip(start)
             .take(count)
             .map(|row| row.iter().map(|c| c.ch).collect::<String>())
@@ -185,7 +237,9 @@ impl VttyRenderer {
 
     /// Get a range of lines including scrollback.
     pub fn lines_with_scrollback(buffer: &Buffer, start: usize, count: usize) -> Vec<String> {
-        let all_lines: Vec<_> = buffer.scrollback.iter()
+        let all_lines: Vec<_> = buffer
+            .scrollback
+            .iter()
             .chain(buffer.rows.iter())
             .skip(start)
             .take(count)
@@ -197,8 +251,8 @@ impl VttyRenderer {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::cell::Cell;
+    use super::*;
 
     #[test]
     fn test_to_plain() {
@@ -249,7 +303,11 @@ mod tests {
         // (5 cells each starting with &).  If any cell were not escaped, we'd
         // see extra bare & characters.
         let amp_count = html.matches('&').count();
-        assert_eq!(amp_count, 5, "expected exactly 5 & chars (one per escaped entity), got {}", amp_count);
+        assert_eq!(
+            amp_count, 5,
+            "expected exactly 5 & chars (one per escaped entity), got {}",
+            amp_count
+        );
     }
 
     #[test]

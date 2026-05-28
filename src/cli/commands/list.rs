@@ -39,7 +39,11 @@ pub async fn handle_list_command(cli: &Cli) -> Result<()> {
                 anyhow::bail!(
                     "No vrunner instance found with PID {}. Running instances:\n{}",
                     target_pid,
-                    all_instances.iter().map(|i| format!("  PID: {}", i.pid)).collect::<Vec<_>>().join("\n")
+                    all_instances
+                        .iter()
+                        .map(|i| format!("  PID: {}", i.pid))
+                        .collect::<Vec<_>>()
+                        .join("\n")
                 );
             }
         }
@@ -60,35 +64,48 @@ pub async fn handle_list_command(cli: &Cli) -> Result<()> {
         let url = instance_url(info, &None);
 
         match client.get(format!("{}/api/commands", url)).send().await {
-            Ok(resp) => {
-                match resp.json::<serde_json::Value>().await {
-                    Ok(json) => {
-                        if json["status"] == "ok" {
-                            if let Some(cmds) = json["data"].as_array() {
-                                if cmds.is_empty() {
-                                    println!("  {}", c("(no commands)", Color::Yellow, false));
-                                } else {
-                                    for cmd in cmds {
-                                        if let Some(line) = format_command(cmd) {
-                                            println!("{}", line);
-                                        }
+            Ok(resp) => match resp.json::<serde_json::Value>().await {
+                Ok(json) => {
+                    if json["status"] == "ok" {
+                        if let Some(cmds) = json["data"].as_array() {
+                            if cmds.is_empty() {
+                                println!("  {}", c("(no commands)", Color::Yellow, false));
+                            } else {
+                                for cmd in cmds {
+                                    if let Some(line) = format_command(cmd) {
+                                        println!("{}", line);
                                     }
                                 }
-                            } else {
-                                println!("  {}  Invalid API response: expected array", c("[ERROR]", Color::Red, true));
                             }
                         } else {
-                            let err = json["error"].as_str().unwrap_or("unknown error");
-                            println!("  {}  API returned error: {}", c("[ERROR]", Color::Red, true), err);
+                            println!(
+                                "  {}  Invalid API response: expected array",
+                                c("[ERROR]", Color::Red, true)
+                            );
                         }
-                    }
-                    Err(e) => {
-                        println!("  {}  Invalid API response: {}", c("[ERROR]", Color::Red, true), e);
+                    } else {
+                        let err = json["error"].as_str().unwrap_or("unknown error");
+                        println!(
+                            "  {}  API returned error: {}",
+                            c("[ERROR]", Color::Red, true),
+                            err
+                        );
                     }
                 }
-            }
+                Err(e) => {
+                    println!(
+                        "  {}  Invalid API response: {}",
+                        c("[ERROR]", Color::Red, true),
+                        e
+                    );
+                }
+            },
             Err(e) => {
-                println!("  {}  Instance unreachable: {}", c("[ERROR]", Color::Red, true), e);
+                println!(
+                    "  {}  Instance unreachable: {}",
+                    c("[ERROR]", Color::Red, true),
+                    e
+                );
             }
         }
 
@@ -108,11 +125,16 @@ pub fn format_instance_header(info: &InstanceInfo) -> String {
     format!(
         "{}  {} {}  {} {}  {} {}  {} {}  {} {}",
         c("INSTANCE", Color::Blue, true),
-        c("PID:", Color::DarkGrey, false), info.pid,
-        c("PORT:", Color::DarkGrey, false), info.port,
-        c("BIND:", Color::DarkGrey, false), info.bind,
-        c("DAEMON:", Color::DarkGrey, false), daemon,
-        c("DISPLAY:", Color::DarkGrey, false), display,
+        c("PID:", Color::DarkGrey, false),
+        info.pid,
+        c("PORT:", Color::DarkGrey, false),
+        info.port,
+        c("BIND:", Color::DarkGrey, false),
+        info.bind,
+        c("DAEMON:", Color::DarkGrey, false),
+        daemon,
+        c("DISPLAY:", Color::DarkGrey, false),
+        display,
     )
 }
 
@@ -134,7 +156,10 @@ pub fn format_command(cmd: &serde_json::Value) -> Option<String> {
         display_name
     };
     let pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0);
-    let cert = cmd.get("certificate").and_then(|v| v.as_str()).unwrap_or("-");
+    let cert = cmd
+        .get("certificate")
+        .and_then(|v| v.as_str())
+        .unwrap_or("-");
 
     Some(format!(
         "  {} {}  {}",
@@ -158,8 +183,10 @@ pub async fn handle_list_vrunner_command(cli: &Cli) -> Result<()> {
         let startup = info.command.as_deref().unwrap_or("(idle)");
         let daemon = if info.daemon { "yes" } else { "no" };
         let display = if info.display { "yes" } else { "no" };
-        println!("{}\t{}\t{}\t{}\t{}\t{}",
-            info.pid, info.port, info.bind, daemon, display, startup);
+        println!(
+            "{}\t{}\t{}\t{}\t{}\t{}",
+            info.pid, info.port, info.bind, daemon, display, startup
+        );
     }
     Ok(())
 }
@@ -185,10 +212,15 @@ pub async fn handle_list_commands_command(cli: &Cli) -> Result<()> {
                         for cmd in cmds {
                             let cmd_pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0);
                             let name = cmd.get("name").and_then(|v| v.as_str()).unwrap_or("?");
-                            let args = serde_json::to_string(cmd.get("args").unwrap_or(&serde_json::json!([]))).unwrap_or_else(|_| "[]".to_string());
-                            let cert = cmd.get("certificate").and_then(|v| v.as_str()).unwrap_or("-");
-                            println!("{}\t{}\t{}\t{}\t{}",
-                                info.pid, cmd_pid, name, args, cert);
+                            let args = serde_json::to_string(
+                                cmd.get("args").unwrap_or(&serde_json::json!([])),
+                            )
+                            .unwrap_or_else(|_| "[]".to_string());
+                            let cert = cmd
+                                .get("certificate")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("-");
+                            println!("{}\t{}\t{}\t{}\t{}", info.pid, cmd_pid, name, args, cert);
                         }
                     }
                 }

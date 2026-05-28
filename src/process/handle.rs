@@ -1,14 +1,14 @@
+use crate::process::pty::PtyMaster;
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot, RwLock};
-use crate::process::pty::PtyMaster;
 
 use super::error::{ProcessError, Result};
 
+use super::spawner::{ExitStatus, StdinMessage};
 use crate::config::schema::ExitConfig;
+use crate::handles::registry::HandleRegistry;
 use crate::vtty::emulator::VttyEmulator;
 use crate::vtty::sink::VttyOutput;
-use crate::handles::registry::HandleRegistry;
-use super::spawner::{StdinMessage, ExitStatus};
 
 pub struct CommandHandle {
     pub id: String,
@@ -56,12 +56,16 @@ pub struct CommandHandle {
 
 impl CommandHandle {
     pub async fn send_bytes(&self, data: Vec<u8>) -> Result<()> {
-        self.stdin_tx.send(StdinMessage::Bytes(data)).await
+        self.stdin_tx
+            .send(StdinMessage::Bytes(data))
+            .await
             .map_err(|_| ProcessError::ChannelClosed(self.id.clone()))
     }
 
     pub async fn send_signal(&self, signal: String) -> Result<()> {
-        self.stdin_tx.send(StdinMessage::Signal(signal)).await
+        self.stdin_tx
+            .send(StdinMessage::Signal(signal))
+            .await
             .map_err(|_| ProcessError::ChannelClosed(self.id.clone()))
     }
 
@@ -113,9 +117,17 @@ impl CommandHandle {
     ///
     /// `scrollback_offset` shifts the viewport backward (0 = normal bottom).
     /// `visible_rows` is how many rows of HTML to return.
-    pub async fn vtty_html_scrollback(&self, scrollback_offset: usize, visible_rows: usize) -> String {
+    pub async fn vtty_html_scrollback(
+        &self,
+        scrollback_offset: usize,
+        visible_rows: usize,
+    ) -> String {
         let buf = self.vtty_snapshot().await;
-        crate::vtty::renderer::VttyRenderer::to_html_scrollback(&buf, scrollback_offset, visible_rows)
+        crate::vtty::renderer::VttyRenderer::to_html_scrollback(
+            &buf,
+            scrollback_offset,
+            visible_rows,
+        )
     }
 
     /// Whether the process is currently using the alternate screen buffer.

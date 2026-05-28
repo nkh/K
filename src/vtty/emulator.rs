@@ -1,6 +1,6 @@
 use super::{
     buffer::Buffer,
-    cell::{Cell, char_width},
+    cell::{char_width, Cell},
     color::ColorPalette,
     parser::{AnsiParser, AnsiToken},
 };
@@ -49,9 +49,15 @@ impl Default for Attributes {
 
 impl Attributes {
     fn make_cell(self, ch: char, width: u8) -> Cell {
-        let (fg, bg) = if self.reverse { (self.bg, self.fg) } else { (self.fg, self.bg) };
+        let (fg, bg) = if self.reverse {
+            (self.bg, self.fg)
+        } else {
+            (self.fg, self.bg)
+        };
         Cell {
-            ch, fg, bg,
+            ch,
+            fg,
+            bg,
             bold: self.bold,
             italic: self.italic,
             underline: self.underline,
@@ -129,7 +135,11 @@ pub struct VttyEmulator {
 
 impl VttyEmulator {
     pub fn new(rows: u16, cols: u16, max_scrollback: usize) -> Self {
-        let buffer = Arc::new(RwLock::new(Buffer::new(cols as usize, rows as usize, max_scrollback)));
+        let buffer = Arc::new(RwLock::new(Buffer::new(
+            cols as usize,
+            rows as usize,
+            max_scrollback,
+        )));
         let rows = rows as usize;
         let cols = cols as usize;
         Self {
@@ -191,7 +201,11 @@ impl VttyEmulator {
         match token {
             AnsiToken::Text(text) => self.write_text(&text),
             AnsiToken::Control(byte) => self.process_control(byte),
-            AnsiToken::Csi { params, intermediate, final_byte } => {
+            AnsiToken::Csi {
+                params,
+                intermediate,
+                final_byte,
+            } => {
                 self.process_csi(params, intermediate, final_byte);
             }
             AnsiToken::Osc(ref content) => self.process_osc(content),
@@ -201,7 +215,12 @@ impl VttyEmulator {
                 // (ESC # 3/4/5/6/8), and other escape-with-intermediate
                 // sequences.  Not yet implemented in the emulator.
             }
-            AnsiToken::Dcs { params, intermediate, final_byte, data } => {
+            AnsiToken::Dcs {
+                params,
+                intermediate,
+                final_byte,
+                data,
+            } => {
                 self.process_dcs(&params, &intermediate, final_byte, &data);
             }
         }
@@ -345,7 +364,8 @@ impl VttyEmulator {
     fn process_csi(&mut self, params: Vec<Vec<u16>>, intermediate: Vec<u8>, final_byte: u8) {
         // ECMA-48: a parameter value of 0 or missing means "use default".
         let param = |idx: usize, default: u16| -> u16 {
-            params.get(idx)
+            params
+                .get(idx)
                 .and_then(|p| p.first().copied())
                 .map(|v| if v == 0 { default } else { v })
                 .unwrap_or(default)
@@ -355,7 +375,9 @@ impl VttyEmulator {
         };
 
         // Any explicit cursor-movement sequence clears the wrap-pending flag.
-        let mut clear_wrap = || { self.wrap_pending = false; };
+        let mut clear_wrap = || {
+            self.wrap_pending = false;
+        };
 
         match final_byte {
             b'H' | b'f' => {
@@ -468,14 +490,18 @@ impl VttyEmulator {
                 let n = param(0, 1) as usize;
                 let blank = self.attrs.make_cell(' ', 1);
                 let mut buf = self.buffer.write();
-                for _ in 0..n { buf.insert_line_with(self.cursor_row, Some(self.scroll_bottom), &blank); }
+                for _ in 0..n {
+                    buf.insert_line_with(self.cursor_row, Some(self.scroll_bottom), &blank);
+                }
             }
             b'M' => {
                 clear_wrap();
                 let n = param(0, 1) as usize;
                 let blank = self.attrs.make_cell(' ', 1);
                 let mut buf = self.buffer.write();
-                for _ in 0..n { buf.delete_line_with(self.cursor_row, Some(self.scroll_bottom), &blank); }
+                for _ in 0..n {
+                    buf.delete_line_with(self.cursor_row, Some(self.scroll_bottom), &blank);
+                }
             }
             b'P' => {
                 clear_wrap();
@@ -496,16 +522,22 @@ impl VttyEmulator {
                 let n = param(0, 1) as usize;
                 let blank = self.attrs.make_cell(' ', 1);
                 let mut buf = self.buffer.write();
-                for _ in 0..n { buf.scroll_region_up_with(self.scroll_top, self.scroll_bottom, &blank); }
+                for _ in 0..n {
+                    buf.scroll_region_up_with(self.scroll_top, self.scroll_bottom, &blank);
+                }
             }
             b'T' => {
                 clear_wrap();
                 let n = param(0, 1) as usize;
                 let blank = self.attrs.make_cell(' ', 1);
                 let mut buf = self.buffer.write();
-                for _ in 0..n { buf.scroll_region_down_with(self.scroll_top, self.scroll_bottom, &blank); }
+                for _ in 0..n {
+                    buf.scroll_region_down_with(self.scroll_top, self.scroll_bottom, &blank);
+                }
             }
-            b'm' => { self.process_sgr(&params); }
+            b'm' => {
+                self.process_sgr(&params);
+            }
             b's' => {
                 // CSI s — Save cursor position (ANSI.SYS / SGR-like)
                 clear_wrap();
@@ -525,10 +557,10 @@ impl VttyEmulator {
                 }
             }
             b'h' if intermediate.first() == Some(&b'?') => {
-                    self.process_dec_private_mode(&params, true);
+                self.process_dec_private_mode(&params, true);
             }
             b'l' if intermediate.first() == Some(&b'?') => {
-                    self.process_dec_private_mode(&params, false);
+                self.process_dec_private_mode(&params, false);
             }
             b'r' => {
                 // DECSTBM — Set Top and Bottom Margins.
@@ -607,7 +639,9 @@ impl VttyEmulator {
                 27 => self.attrs.reverse = false,
                 28 => self.attrs.invisible = false,
                 29 => self.attrs.strikethrough = false,
-                30..=37 => { self.attrs.fg = self.palette.resolve(param as u8 - 30); }
+                30..=37 => {
+                    self.attrs.fg = self.palette.resolve(param as u8 - 30);
+                }
                 38 => {
                     if let Some(next) = params.get(i + 1) {
                         match next.first().copied() {
@@ -631,7 +665,9 @@ impl VttyEmulator {
                     }
                 }
                 39 => self.attrs.fg = [204, 204, 204],
-                40..=47 => { self.attrs.bg = self.palette.resolve(param as u8 - 40); }
+                40..=47 => {
+                    self.attrs.bg = self.palette.resolve(param as u8 - 40);
+                }
                 48 => {
                     if let Some(next) = params.get(i + 1) {
                         match next.first().copied() {
@@ -655,8 +691,12 @@ impl VttyEmulator {
                     }
                 }
                 49 => self.attrs.bg = [0, 0, 0],
-                90..=97 => { self.attrs.fg = self.palette.resolve(param as u8 - 90 + 8); }
-                100..=107 => { self.attrs.bg = self.palette.resolve(param as u8 - 100 + 8); }
+                90..=97 => {
+                    self.attrs.fg = self.palette.resolve(param as u8 - 90 + 8);
+                }
+                100..=107 => {
+                    self.attrs.bg = self.palette.resolve(param as u8 - 100 + 8);
+                }
                 _ => {}
             }
             i += 1;
@@ -717,7 +757,9 @@ impl VttyEmulator {
                     self.cursor_row -= 1;
                 }
             }
-            b'c' => { self.full_reset(); }
+            b'c' => {
+                self.full_reset();
+            }
             _ => {}
         }
     }
@@ -741,7 +783,10 @@ impl VttyEmulator {
             attrs: self.attrs,
         });
         let mut buf = self.buffer.write();
-        let old = std::mem::replace(&mut *buf, Buffer::new(self.cols, self.rows, self.max_scrollback));
+        let old = std::mem::replace(
+            &mut *buf,
+            Buffer::new(self.cols, self.rows, self.max_scrollback),
+        );
         self.main_buffer = Some(old);
         self.alt_buffer = None; // Clear any stale alt buffer
         self.cursor_row = 0;
@@ -777,7 +822,9 @@ impl VttyEmulator {
         };
         match code {
             "0" | "2" => self.title = data.to_string(),
-            "4" => { self.palette.apply_osc4(data); }
+            "4" => {
+                self.palette.apply_osc4(data);
+            }
             "777" => {
                 // OSC 777 — desktop notification.  Format: "777;title;body"
                 // Log it as a tracing event for the host to act on.
@@ -805,7 +852,13 @@ impl VttyEmulator {
         }
     }
 
-    fn process_dcs(&mut self, params: &[Vec<u16>], intermediate: &[u8], final_byte: u8, data: &str) {
+    fn process_dcs(
+        &mut self,
+        params: &[Vec<u16>],
+        intermediate: &[u8],
+        final_byte: u8,
+        data: &str,
+    ) {
         if final_byte == b'q' {
             // DCS with final byte 'q' can be:
             // 1. Sixel image protocol: intermediate contains '?' (or no intermediate but no params)
@@ -815,19 +868,27 @@ impl VttyEmulator {
             // Also: if params are all 0 and intermediate is empty and data is non-empty,
             // it could be sixel (the introducer is part of data).
             let is_sixel = intermediate.contains(&b'?')
-                || (intermediate.is_empty() && params.iter().all(|p| p.iter().all(|&v| v == 0)) && !data.is_empty());
+                || (intermediate.is_empty()
+                    && params.iter().all(|p| p.iter().all(|&v| v == 0))
+                    && !data.is_empty());
 
             if is_sixel {
                 // Sixel image data — store with "sixel:" prefix and record position
                 let pos = (self.cursor_row, self.cursor_col);
                 self.dcs_buffer = format!("sixel:{}:{}", data.len(), data);
                 self.sixel_images.push((pos.0, pos.1, data.to_string()));
-                tracing::debug!(row = pos.0, col = pos.1, len = data.len(), "Stored Sixel inline image");
+                tracing::debug!(
+                    row = pos.0,
+                    col = pos.1,
+                    len = data.len(),
+                    "Stored Sixel inline image"
+                );
                 return;
             }
 
             // Kitty image protocol
-            let ps = params.iter()
+            let ps = params
+                .iter()
                 .map(|p| p.first().copied().unwrap_or(0).to_string())
                 .collect::<Vec<_>>()
                 .join(";");
@@ -910,7 +971,8 @@ impl VttyEmulator {
     /// alternate screen is currently active).
     pub fn snapshot_main(&self) -> Buffer {
         if self.alternate_screen {
-            self.main_buffer.clone()
+            self.main_buffer
+                .clone()
                 .unwrap_or_else(|| self.buffer.read().clone())
         } else {
             self.buffer.read().clone()
@@ -924,7 +986,8 @@ impl VttyEmulator {
             self.buffer.read().clone()
         } else {
             // Not on alt screen — return the last saved alt buffer if available.
-            self.alt_buffer.as_ref()
+            self.alt_buffer
+                .as_ref()
                 .cloned()
                 .unwrap_or_else(|| Buffer::new(self.cols, self.rows, self.max_scrollback))
         }
@@ -932,7 +995,8 @@ impl VttyEmulator {
 
     pub fn contents_plain(&self) -> String {
         let buf = self.buffer.read();
-        buf.rows.iter()
+        buf.rows
+            .iter()
             .map(|row| row.iter().map(|c| c.ch).collect::<String>())
             .collect::<Vec<_>>()
             .join("\n")
@@ -951,18 +1015,27 @@ impl VttyEmulator {
             for cell in row {
                 let mut codes = Vec::new();
                 if cell.bold != last_bold {
-                    if cell.bold { codes.push("1".to_string()); }
-                    else { codes.push("22".to_string()); }
+                    if cell.bold {
+                        codes.push("1".to_string());
+                    } else {
+                        codes.push("22".to_string());
+                    }
                     last_bold = cell.bold;
                 }
                 if cell.italic != last_italic {
-                    if cell.italic { codes.push("3".to_string()); }
-                    else { codes.push("23".to_string()); }
+                    if cell.italic {
+                        codes.push("3".to_string());
+                    } else {
+                        codes.push("23".to_string());
+                    }
                     last_italic = cell.italic;
                 }
                 if cell.underline != last_underline {
-                    if cell.underline { codes.push("4".to_string()); }
-                    else { codes.push("24".to_string()); }
+                    if cell.underline {
+                        codes.push("4".to_string());
+                    } else {
+                        codes.push("24".to_string());
+                    }
                     last_underline = cell.underline;
                 }
                 if Some(cell.fg) != last_fg {
@@ -988,7 +1061,8 @@ impl VttyEmulator {
         let buf = self.buffer.read();
         let start = start_row.min(buf.rows.len());
         let end = (start + row_count).min(buf.rows.len());
-        buf.rows[start..end].iter()
+        buf.rows[start..end]
+            .iter()
             .map(|row| row.iter().map(|c| c.ch).collect::<String>())
             .collect::<Vec<_>>()
             .join("\n")
@@ -1438,7 +1512,7 @@ mod tests {
         assert_eq!(buf.rows[0][0].width, 1);
         assert_eq!(buf.rows[0][1].ch, '中');
         assert_eq!(buf.rows[0][1].width, 2); // wide char lead
-        assert_eq!(buf.rows[0][2].width, 0);  // continuation
+        assert_eq!(buf.rows[0][2].width, 0); // continuation
         assert_eq!(buf.rows[0][3].ch, 'B');
         assert_eq!(buf.rows[0][3].width, 1);
         assert_eq!(emu.cursor(), (0, 4));
@@ -1562,7 +1636,7 @@ mod tests {
         // CSI r with no params resets to full screen
         let mut emu = VttyEmulator::new(10, 10, 100);
         emu.feed_str("\x1b[2;4r"); // Set scroll region
-        emu.feed_str("\x1b[r");     // Reset
+        emu.feed_str("\x1b[r"); // Reset
         assert_eq!(emu.cursor(), (0, 0));
     }
 
@@ -1580,7 +1654,7 @@ mod tests {
         let mut emu = VttyEmulator::new(5, 10, 100);
         emu.feed_str("\x1b[2;4r"); // Set scroll region rows 2-4 (1-based)
         emu.feed_str("\x1b[2;1H"); // Move to row 2 (1-based)
-        // Fill lines 2-4, the 4th line should push line 2 out and scroll within region
+                                   // Fill lines 2-4, the 4th line should push line 2 out and scroll within region
         emu.feed_str("AAAAAA\r\nBBBBBB\r\nCCCCCC\r\nDDDDDD");
         // Row 0 (outside region) should be unaffected
         let buf = emu.buffer();
@@ -1596,7 +1670,7 @@ mod tests {
         let mut emu = VttyEmulator::new(3, 5, 100);
         emu.feed_str("ABCDE"); // Fill entire first line
         assert_eq!(emu.cursor(), (0, 4)); // At last col
-        // wrap_pending should be true (check by writing next char)
+                                          // wrap_pending should be true (check by writing next char)
         emu.feed_str("X");
         assert_eq!(emu.cursor(), (1, 1));
         let buf = emu.buffer();
@@ -1612,7 +1686,7 @@ mod tests {
         let mut emu = VttyEmulator::new(5, 5, 100);
         emu.feed_str("ABCDE"); // Fill line, wrap_pending
         emu.feed_str("\x1b[A"); // Cursor up (clears wrap_pending)
-        emu.feed_str("X");      // Should go at (0, 4), not wrap
+        emu.feed_str("X"); // Should go at (0, 4), not wrap
         assert_eq!(emu.cursor(), (0, 4));
         let buf = emu.buffer();
         assert_eq!(buf.rows[0][4].ch, 'X');
@@ -1622,7 +1696,7 @@ mod tests {
     fn test_deferred_wrap_cleared_by_cr() {
         let mut emu = VttyEmulator::new(3, 5, 100);
         emu.feed_str("ABCDE"); // Fill line, wrap_pending
-        emu.feed_str("\r");     // CR clears wrap_pending
+        emu.feed_str("\r"); // CR clears wrap_pending
         assert_eq!(emu.cursor(), (0, 0));
     }
 
@@ -1631,7 +1705,7 @@ mod tests {
         let mut emu = VttyEmulator::new(3, 20, 100);
         emu.feed_str("12345678901234567890"); // Fill line, wrap_pending
         emu.feed_str("\t"); // Tab clears wrap_pending
-        // Cursor should stay on row 0 (not wrap)
+                            // Cursor should stay on row 0 (not wrap)
         assert!(emu.cursor().0 == 0); // Still on row 0
     }
 

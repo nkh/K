@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State, Query},
+    extract::{Path, Query, State},
     Json,
 };
 use serde_json::Value;
@@ -7,10 +7,7 @@ use std::collections::HashMap;
 
 use crate::web::state::AppState;
 
-pub async fn get_vtty_full(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Json<Value> {
+pub async fn get_vtty_full(State(state): State<AppState>, Path(id): Path<String>) -> Json<Value> {
     match state.manager.get(&id) {
         Some(handle) => {
             let ansi = handle.vtty_ansi().await;
@@ -33,7 +30,10 @@ pub async fn get_vtty_html(
     Path(id): Path<String>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Json<Value> {
-    let scrollback_offset = params.get("scrollback_offset").and_then(|v| v.parse::<usize>().ok()).unwrap_or(0);
+    let scrollback_offset = params
+        .get("scrollback_offset")
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(0);
 
     match state.manager.get(&id) {
         Some(handle) => {
@@ -94,7 +94,10 @@ pub async fn get_vtty_buffer(
     Path(id): Path<String>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Json<Value> {
-    let screen = params.get("screen").map(|s| s.as_str()).unwrap_or("current");
+    let screen = params
+        .get("screen")
+        .map(|s| s.as_str())
+        .unwrap_or("current");
 
     match state.manager.get(&id) {
         Some(handle) => {
@@ -130,8 +133,14 @@ pub async fn get_vtty_partial(
     Path(id): Path<String>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Json<Value> {
-    let offset = params.get("offset").and_then(|v| v.parse::<usize>().ok()).unwrap_or(0);
-    let limit = params.get("limit").and_then(|v| v.parse::<usize>().ok()).unwrap_or(50);
+    let offset = params
+        .get("offset")
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(0);
+    let limit = params
+        .get("limit")
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(50);
 
     match state.manager.get(&id) {
         Some(handle) => {
@@ -177,7 +186,10 @@ pub async fn resize_vtty(
             // AND resizes the in-memory VTTY buffer.
             match handle.resize_pty(rows, cols).await {
                 Ok(_) => {
-                    state.manager.logger().log("resize", &format!("id={} rows={} cols={}", id, rows, cols));
+                    state
+                        .manager
+                        .logger()
+                        .log("resize", &format!("id={} rows={} cols={}", id, rows, cols));
                     Json(serde_json::json!({
                         "status": "ok",
                         "data": { "id": id, "rows": rows, "cols": cols },
@@ -206,10 +218,7 @@ pub async fn resize_vtty(
 /// Returns `{ "changed": true/false }` — no HTML, no diff data.
 /// The client should call `GET /api/commands/:id/vtty/html` when this
 /// returns `true` to get the updated buffer content.
-pub async fn vtty_changed(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Json<Value> {
+pub async fn vtty_changed(State(state): State<AppState>, Path(id): Path<String>) -> Json<Value> {
     match state.manager.has_changed(&id) {
         Ok(changed) => Json(serde_json::json!({
             "status": "ok",

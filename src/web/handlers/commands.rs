@@ -5,33 +5,43 @@ use axum::{
 use serde_json::Value;
 use std::collections::HashMap;
 
-use crate::web::state::AppState;
 use crate::config::merge::merge_command_env;
+use crate::web::state::AppState;
 
-pub async fn list_commands(
-    State(state): State<AppState>,
-) -> Json<Value> {
+pub async fn list_commands(State(state): State<AppState>) -> Json<Value> {
     let commands = state.manager.list();
-    let data: Vec<Value> = commands.into_iter()
+    let data: Vec<Value> = commands
+        .into_iter()
         .map(|(id, name, args, pid, certificate)| {
             // Look up exit config for the command
-            let exit_info = state.manager.get(&id).map(|h| {
-                serde_json::json!({
-                    "on_exit": h.exit_config.on_exit.as_deref().unwrap_or(""),
-                    "on_error": h.exit_config.on_error.as_deref().unwrap_or(""),
-                    "exit_timeout": h.exit_config.timeout_secs,
-                    "retain_on_exit": h.exit_config.retain_on_exit,
-                    "snapshot_on_exit": h.exit_config.snapshot_on_exit,
+            let exit_info = state
+                .manager
+                .get(&id)
+                .map(|h| {
+                    serde_json::json!({
+                        "on_exit": h.exit_config.on_exit.as_deref().unwrap_or(""),
+                        "on_error": h.exit_config.on_error.as_deref().unwrap_or(""),
+                        "exit_timeout": h.exit_config.timeout_secs,
+                        "retain_on_exit": h.exit_config.retain_on_exit,
+                        "snapshot_on_exit": h.exit_config.snapshot_on_exit,
+                    })
                 })
-            }).unwrap_or(serde_json::json!(null));
+                .unwrap_or(serde_json::json!(null));
             // Check alive status and compute runtime
-            let (alive, runtime_secs, exit_code, exit_time, frozen) = state.manager.get(&id).map(|h| {
-                let ec = h.exit_code.lock().ok().and_then(|c| *c);
-                let et = h.exit_time.lock().ok()
-                    .and_then(|guard| *guard)
-                    .map(|t| t.elapsed().as_secs());
-                (h.is_alive(), h.runtime_secs(), ec, et, h.is_frozen())
-            }).unwrap_or((false, 0.0, None, None, false));
+            let (alive, runtime_secs, exit_code, exit_time, frozen) = state
+                .manager
+                .get(&id)
+                .map(|h| {
+                    let ec = h.exit_code.lock().ok().and_then(|c| *c);
+                    let et = h
+                        .exit_time
+                        .lock()
+                        .ok()
+                        .and_then(|guard| *guard)
+                        .map(|t| t.elapsed().as_secs());
+                    (h.is_alive(), h.runtime_secs(), ec, et, h.is_frozen())
+                })
+                .unwrap_or((false, 0.0, None, None, false));
             serde_json::json!({
                 "id": id,
                 "name": name,
@@ -51,33 +61,44 @@ pub async fn list_commands(
     Json(serde_json::json!({ "status": "ok", "data": data, "error": null }))
 }
 
-pub async fn start_command(
-    State(state): State<AppState>,
-    Json(body): Json<Value>,
-) -> Json<Value> {
-    let cmd = body.get("cmd").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let args: Vec<String> = body.get("args")
+pub async fn start_command(State(state): State<AppState>, Json(body): Json<Value>) -> Json<Value> {
+    let cmd = body
+        .get("cmd")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let args: Vec<String> = body
+        .get("args")
         .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
-    let certificate: Option<String> = body.get("certificate")
+    let certificate: Option<String> = body
+        .get("certificate")
         .and_then(|v| v.as_str())
         .map(String::from);
 
-    let on_exit: Option<String> = body.get("on_exit")
+    let on_exit: Option<String> = body
+        .get("on_exit")
         .and_then(|v| v.as_str())
         .map(String::from);
 
-    let on_error: Option<String> = body.get("on_error")
+    let on_error: Option<String> = body
+        .get("on_error")
         .and_then(|v| v.as_str())
         .map(String::from);
 
-    let exit_timeout: u64 = body.get("exit_timeout")
+    let exit_timeout: u64 = body
+        .get("exit_timeout")
         .and_then(|v| v.as_u64())
         .unwrap_or(10);
 
     // Parse per-command environment variables from the API request
-    let command_env: HashMap<String, String> = body.get("env")
+    let command_env: HashMap<String, String> = body
+        .get("env")
         .and_then(|v| v.as_object())
         .map(|obj| {
             obj.iter()
@@ -95,7 +116,10 @@ pub async fn start_command(
     }
 
     // Check for no_env flag — when true, skip config-level environment variables
-    let no_env: bool = body.get("no_env").and_then(|v| v.as_bool()).unwrap_or(false);
+    let no_env: bool = body
+        .get("no_env")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
     // Validate certificate name if provided
     if let Some(ref cert_name) = certificate {
@@ -113,9 +137,7 @@ pub async fn start_command(
     let cols: Option<u16> = body.get("cols").and_then(|v| v.as_u64()).map(|v| v as u16);
 
     // Working directory override (optional)
-    let dir: Option<String> = body.get("dir")
-        .and_then(|v| v.as_str())
-        .map(String::from);
+    let dir: Option<String> = body.get("dir").and_then(|v| v.as_str()).map(String::from);
 
     // Validate dimensions if provided
     if let (Some(r), Some(c)) = (rows, cols) {
@@ -148,7 +170,8 @@ pub async fn start_command(
     };
     let merged_env = merge_command_env(&config_env, command_env);
 
-    let snapshot_on_exit: Option<String> = body.get("snapshot_on_exit")
+    let snapshot_on_exit: Option<String> = body
+        .get("snapshot_on_exit")
         .and_then(|v| v.as_str())
         .map(String::from);
 
@@ -156,10 +179,26 @@ pub async fn start_command(
         on_exit,
         on_error,
         timeout_secs: exit_timeout,
-        retain_on_exit: body.get("retain_on_exit").and_then(|v| v.as_bool()).unwrap_or(false),
+        retain_on_exit: body
+            .get("retain_on_exit")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
         snapshot_on_exit,
     };
-    match state.manager.spawn(cmd, args, certificate, Some(exit_config), merged_env, rows, cols, dir).await {
+    match state
+        .manager
+        .spawn(
+            cmd,
+            args,
+            certificate,
+            Some(exit_config),
+            merged_env,
+            rows,
+            cols,
+            dir,
+        )
+        .await
+    {
         Ok(id) => {
             // Look up the child's OS PID for the response.
             let pid = state.manager.get(&id).map(|h| h.pid).unwrap_or(0);
@@ -182,7 +221,10 @@ pub async fn kill_command(
     Path(id): Path<String>,
     Json(body): Json<Value>,
 ) -> Json<Value> {
-    let signal = body.get("signal").and_then(|v| v.as_str()).map(String::from);
+    let signal = body
+        .get("signal")
+        .and_then(|v| v.as_str())
+        .map(String::from);
     match state.manager.kill(&id, signal).await {
         Ok(_) => Json(serde_json::json!({
             "status": "ok",
@@ -218,10 +260,7 @@ pub async fn kill_command_by_pid(
 }
 
 /// Freeze (suspend) a running command via SIGSTOP.
-pub async fn freeze_command(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Json<Value> {
+pub async fn freeze_command(State(state): State<AppState>, Path(id): Path<String>) -> Json<Value> {
     match state.manager.freeze(&id) {
         Ok(_) => Json(serde_json::json!({
             "status": "ok",
@@ -237,10 +276,7 @@ pub async fn freeze_command(
 }
 
 /// Thaw (resume) a frozen command via SIGCONT.
-pub async fn thaw_command(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Json<Value> {
+pub async fn thaw_command(State(state): State<AppState>, Path(id): Path<String>) -> Json<Value> {
     match state.manager.thaw(&id) {
         Ok(_) => Json(serde_json::json!({
             "status": "ok",
@@ -255,9 +291,7 @@ pub async fn thaw_command(
     }
 }
 
-pub async fn shutdown(
-    State(state): State<AppState>,
-) -> Json<Value> {
+pub async fn shutdown(State(state): State<AppState>) -> Json<Value> {
     let _ = state.shutdown_tx.send(());
     Json(serde_json::json!({
         "status": "ok",
@@ -266,9 +300,7 @@ pub async fn shutdown(
     }))
 }
 
-pub async fn get_info(
-    State(state): State<AppState>,
-) -> Json<Value> {
+pub async fn get_info(State(state): State<AppState>) -> Json<Value> {
     let commands = state.manager.list();
     let certs = state.cert_store.list();
     let cert_names: Vec<&str> = certs.iter().map(|c| c.name.as_str()).collect();
@@ -299,7 +331,11 @@ pub async fn snapshot_command(
     Path(id): Path<String>,
     Json(body): Json<Value>,
 ) -> Json<Value> {
-    let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("default").to_string();
+    let name = body
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("default")
+        .to_string();
 
     match state.manager.store_snapshot(&id, &name) {
         Ok(meta) => Json(serde_json::json!({
@@ -325,10 +361,7 @@ pub async fn snapshot_command(
 
 /// GET /api/commands/:id/snapshots
 /// List all snapshots for a command.
-pub async fn list_snapshots(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Json<Value> {
+pub async fn list_snapshots(State(state): State<AppState>, Path(id): Path<String>) -> Json<Value> {
     let snapshots = state.manager.list_snapshots(&id);
     Json(serde_json::json!({
         "status": "ok",
@@ -345,7 +378,11 @@ pub async fn diff_command(
     Path(id): Path<String>,
     Json(body): Json<Value>,
 ) -> Json<Value> {
-    let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("default").to_string();
+    let name = body
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("default")
+        .to_string();
 
     match state.manager.diff_snapshot(&id, &name) {
         Ok(diff) => Json(serde_json::json!({
@@ -408,9 +445,11 @@ pub async fn lookup_command(
                     .unwrap_or(false)
         })
         .map(|(id, cmd_name, args, pid, certificate)| {
-            let (alive, frozen, runtime) = state.manager.get(&id).map(|h| {
-                (h.is_alive(), h.is_frozen(), h.runtime_secs())
-            }).unwrap_or((false, false, 0.0));
+            let (alive, frozen, runtime) = state
+                .manager
+                .get(&id)
+                .map(|h| (h.is_alive(), h.is_frozen(), h.runtime_secs()))
+                .unwrap_or((false, false, 0.0));
             serde_json::json!({
                 "id": id,
                 "name": cmd_name,
@@ -434,10 +473,7 @@ pub async fn lookup_command(
 /// DELETE /api/commands/:id
 /// Purge a retained (exited) command from the manager.
 /// This permanently discards the VTTY buffer and all associated state.
-pub async fn purge_command(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Json<Value> {
+pub async fn purge_command(State(state): State<AppState>, Path(id): Path<String>) -> Json<Value> {
     match state.manager.purge(&id) {
         Ok(_) => Json(serde_json::json!({
             "status": "ok",

@@ -7,7 +7,13 @@ use super::common::{http_client, instance_url, resolve_instance, resolve_pid_to_
 
 /// Handle the `vrunner spawn` subcommand.
 /// Discovers a running vrunner instance and sends a spawn request via HTTP API.
-pub async fn handle_spawn_command(cli: &Cli, cmd: &str, args: &[String], rows: Option<u16>, cols: Option<u16>) -> Result<()> {
+pub async fn handle_spawn_command(
+    cli: &Cli,
+    cmd: &str,
+    args: &[String],
+    rows: Option<u16>,
+    cols: Option<u16>,
+) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let info = resolve_instance(cli, &registry)?;
 
@@ -63,7 +69,11 @@ pub async fn handle_spawn_command(cli: &Cli, cmd: &str, args: &[String], rows: O
         .await
         .map_err(|e| {
             tracing::error!(url = %url, error = %e, "Failed to connect to vrunner instance");
-            anyhow::anyhow!("Cannot connect to vrunner instance at {} — is it running? Error: {}", url, e)
+            anyhow::anyhow!(
+                "Cannot connect to vrunner instance at {} — is it running? Error: {}",
+                url,
+                e
+            )
         })?;
 
     let status = resp.status();
@@ -72,7 +82,10 @@ pub async fn handle_spawn_command(cli: &Cli, cmd: &str, args: &[String], rows: O
     if status.is_success() {
         let cmd_pid = result["data"]["pid"].as_u64().unwrap_or(0);
         let cmd_id = result["data"]["id"].as_str().unwrap_or("?");
-        println!("Command spawned successfully on instance {} (PID {})", info.pid, info.pid);
+        println!(
+            "Command spawned successfully on instance {} (PID {})",
+            info.pid, info.pid
+        );
         println!("  PID:       {}", cmd_pid);
         println!("  VTTY:      {}/api/commands/{}/vtty/html", url, cmd_id);
     } else {
@@ -103,7 +116,10 @@ pub async fn handle_freeze_command(cli: &Cli, pid: u32) -> Result<()> {
     let result: serde_json::Value = resp.json().await?;
 
     if status.is_success() {
-        println!("Command with PID {} frozen (SIGSTOP) on instance {}", pid, info.pid);
+        println!(
+            "Command with PID {} frozen (SIGSTOP) on instance {}",
+            pid, info.pid
+        );
     } else {
         let error = result["error"].as_str().unwrap_or("Unknown error");
         tracing::error!("Failed to freeze command: {}", error);
@@ -132,7 +148,10 @@ pub async fn handle_thaw_command(cli: &Cli, pid: u32) -> Result<()> {
     let result: serde_json::Value = resp.json().await?;
 
     if status.is_success() {
-        println!("Command with PID {} thawed (SIGCONT) on instance {}", pid, info.pid);
+        println!(
+            "Command with PID {} thawed (SIGCONT) on instance {}",
+            pid, info.pid
+        );
     } else {
         let error = result["error"].as_str().unwrap_or("Unknown error");
         tracing::error!("Failed to thaw command: {}", error);

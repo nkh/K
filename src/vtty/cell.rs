@@ -19,7 +19,9 @@ pub struct Cell {
     pub width: u8,
 }
 
-fn default_width() -> u8 { 1 }
+fn default_width() -> u8 {
+    1
+}
 
 impl Default for Cell {
     fn default() -> Self {
@@ -41,11 +43,19 @@ impl Default for Cell {
 
 impl Cell {
     pub fn new(ch: char) -> Self {
-        Self { ch, ..Default::default() }
+        Self {
+            ch,
+            ..Default::default()
+        }
     }
 
     pub fn with_colors(ch: char, fg: [u8; 3], bg: [u8; 3]) -> Self {
-        Self { ch, fg, bg, ..Default::default() }
+        Self {
+            ch,
+            fg,
+            bg,
+            ..Default::default()
+        }
     }
 
     pub fn reset_attrs(&mut self) {

@@ -1,5 +1,8 @@
 use axum::{
-    extract::{ws::{Message, WebSocket}, Path, Query, State, WebSocketUpgrade},
+    extract::{
+        ws::{Message, WebSocket},
+        Path, Query, State, WebSocketUpgrade,
+    },
     response::{IntoResponse, Response},
 };
 use futures::{SinkExt, StreamExt};
@@ -101,7 +104,8 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
                 "dimensions": {"rows": rows, "cols": cols},
                 "alternate_screen": alt_screen,
             }
-        }).to_string();
+        })
+        .to_string();
         if ws_tx.send(Message::Text(full_msg)).await.is_err() {
             tracing::warn!(?id, "ws_vtty: failed to send initial snapshot");
             return;
@@ -221,9 +225,11 @@ async fn handle_vtty_client_message(
             let keys = msg.get("keys").and_then(|v| v.as_str()).unwrap_or("");
             if !keys.is_empty() {
                 if let Err(e) = manager.send_keys(id, keys).await {
-                    let _ = ws_tx.send(Message::Text(
-                        json!({"type": "error", "message": e.to_string()}).to_string()
-                    )).await;
+                    let _ = ws_tx
+                        .send(Message::Text(
+                            json!({"type": "error", "message": e.to_string()}).to_string(),
+                        ))
+                        .await;
                 }
             }
         }
@@ -233,29 +239,35 @@ async fn handle_vtty_client_message(
             if let Some(handle) = manager.get(id) {
                 match handle.resize(rows, cols).await {
                     Ok(()) => {
-                        manager.logger().log("resize", &format!("id={} rows={} cols={}", id, rows, cols));
+                        manager
+                            .logger()
+                            .log("resize", &format!("id={} rows={} cols={}", id, rows, cols));
                     }
                     Err(e) => {
-                        let _ = ws_tx.send(Message::Text(
-                            json!({"type": "error", "message": e.to_string()}).to_string()
-                        )).await;
+                        let _ = ws_tx
+                            .send(Message::Text(
+                                json!({"type": "error", "message": e.to_string()}).to_string(),
+                            ))
+                            .await;
                     }
                 }
             }
         }
         "ping" => {
-            let _ = ws_tx.send(Message::Text(
-                json!({"type": "pong"}).to_string()
-            )).await;
+            let _ = ws_tx
+                .send(Message::Text(json!({"type": "pong"}).to_string()))
+                .await;
         }
         "paste" => {
             let text = msg.get("text").and_then(|v| v.as_str()).unwrap_or("");
             if !text.is_empty() {
                 if let Some(handle) = manager.get(id) {
                     if let Err(e) = handle.send_paste(text).await {
-                        let _ = ws_tx.send(Message::Text(
-                            json!({"type": "error", "message": e.to_string()}).to_string()
-                        )).await;
+                        let _ = ws_tx
+                            .send(Message::Text(
+                                json!({"type": "error", "message": e.to_string()}).to_string(),
+                            ))
+                            .await;
                     }
                 }
             }
@@ -277,10 +289,7 @@ async fn handle_vtty_client_message(
 /// 2. Subscribes to the command logger's broadcast channel and forwards
 ///    `{"type":"log_entry","data":"..."}` messages as log entries arrive.
 /// 3. Handles pings from the client.
-pub async fn ws_log_stream(
-    State(state): State<AppState>,
-    ws: WebSocketUpgrade,
-) -> Response {
+pub async fn ws_log_stream(State(state): State<AppState>, ws: WebSocketUpgrade) -> Response {
     ws.on_upgrade(move |socket| handle_log_socket(socket, state))
 }
 

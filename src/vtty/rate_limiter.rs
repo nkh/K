@@ -66,7 +66,10 @@ impl RateLimiter {
     /// [`disabled`](Self::disabled) instead).
     #[track_caller]
     pub fn new(max_updates_per_sec: u32) -> Self {
-        assert!(max_updates_per_sec > 0, "max_updates_per_sec must be > 0; use RateLimiter::disabled() for unlimited");
+        assert!(
+            max_updates_per_sec > 0,
+            "max_updates_per_sec must be > 0; use RateLimiter::disabled() for unlimited"
+        );
         Self {
             max_rate: max_updates_per_sec,
             tokens: 1.0, // Allow the first notification immediately

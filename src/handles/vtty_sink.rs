@@ -1,5 +1,5 @@
-use async_trait::async_trait;
 use super::sink::Sink;
+use async_trait::async_trait;
 
 /// A sink that merges output into the VTTY stream.
 /// Currently a placeholder - in a full implementation this would

@@ -1,29 +1,26 @@
-use std::io::{Read, Write};
 use std::fmt::Write as FmtWrite;
+use std::io::{Read, Write};
 
 use super::error::Result;
-use super::pty::{PtyBackend, PortablePtyBackend, PtySize};
-use tokio::sync::{mpsc, oneshot};
+use super::pty::{PortablePtyBackend, PtyBackend, PtySize};
 use std::sync::Arc;
+use tokio::sync::{mpsc, oneshot};
 
 use std::collections::HashMap;
 
-use crate::config::schema::{VttyConfig, HandleConfig, ExitConfig, RateLimitConfig};
+use super::handle::CommandHandle;
 use crate::config::hooks::HooksConfig;
-use crate::hooks::runner::run_hook;
+use crate::config::schema::{ExitConfig, HandleConfig, RateLimitConfig, VttyConfig};
 use crate::handles::{
-    file_sink::FileSink,
-    null_sink::NullSink,
-    registry::HandleRegistry,
-    sink::Sink,
+    file_sink::FileSink, null_sink::NullSink, registry::HandleRegistry, sink::Sink,
     vtty_sink::VttySink,
 };
+use crate::hooks::runner::run_hook;
+use crate::process::manager::CommandManager;
 use crate::vtty::buffer::Buffer;
 use crate::vtty::emulator::VttyEmulator;
 use crate::vtty::rate_limiter::RateLimiter;
-use crate::vtty::sink::{VttyOutput, BroadcastVttySink};
-use crate::process::manager::CommandManager;
-use super::handle::CommandHandle;
+use crate::vtty::sink::{BroadcastVttySink, VttyOutput};
 
 pub struct ProcessSpawner {
     vtty_cfg: VttyConfig,
@@ -140,20 +137,16 @@ impl ProcessSpawner {
 
         // --- Phase 1: Open PTY + fork child process ---
         let _cmd_display = cmd.clone(); // for error reporting
-        // Use per-command overrides if provided, otherwise fall back to config defaults
+                                        // Use per-command overrides if provided, otherwise fall back to config defaults
         let rows = rows.unwrap_or(self.vtty_cfg.rows);
         let cols = cols.unwrap_or(self.vtty_cfg.cols);
 
         let pair = self.pty_backend.openpty(PtySize { rows, cols })?;
 
         // Spawn the child process via the PTY slave
-        let child = pair.slave.spawn_command(
-            &cmd,
-            &args,
-            &self.vtty_cfg.term,
-            &env_vars,
-            dir,
-        )?;
+        let child = pair
+            .slave
+            .spawn_command(&cmd, &args, &self.vtty_cfg.term, &env_vars, dir)?;
         let pid = child.process_id().unwrap_or(0);
 
         // Run on_spawn hook if configured
@@ -206,12 +199,9 @@ impl ProcessSpawner {
         // notifications via the same broadcast channel used by the existing
         // diff watcher.  This provides an immediate, push-based notification
         // path that complements the polling-based watcher.
-        let vtty_output: Arc<VttyOutput> = Arc::new(VttyOutput::with_sinks(vec![
-            Arc::new(BroadcastVttySink::new(
-                manager.vtty_change_sender(),
-                command_id.to_string(),
-            )),
-        ]));
+        let vtty_output: Arc<VttyOutput> = Arc::new(VttyOutput::with_sinks(vec![Arc::new(
+            BroadcastVttySink::new(manager.vtty_change_sender(), command_id.to_string()),
+        )]));
 
         // Wrap PTY writer in Arc<Mutex> for shared access between the stdin
         // writer task and the PTY output consumer (which needs to write
@@ -302,19 +292,20 @@ fn spawn_pty_reader(
         let start = std::time::Instant::now();
 
         // Open the raw PTY log file if configured.
-        let mut log_file: Option<std::fs::File> = pty_raw_log_owned.as_deref().and_then(|path| {
-            match std::fs::File::create(path) {
-                Ok(f) => {
-                    tracing::info!(path = path, "PTY raw log opened");
-                    Some(f)
-                }
-                Err(e) => {
-                    tracing::warn!(path = path, error = %e,
+        let mut log_file: Option<std::fs::File> =
+            pty_raw_log_owned
+                .as_deref()
+                .and_then(|path| match std::fs::File::create(path) {
+                    Ok(f) => {
+                        tracing::info!(path = path, "PTY raw log opened");
+                        Some(f)
+                    }
+                    Err(e) => {
+                        tracing::warn!(path = path, error = %e,
                         "Failed to open PTY raw log, skipping");
-                    None
-                }
-            }
-        });
+                        None
+                    }
+                });
 
         loop {
             match reader.read(&mut buf) {
@@ -472,107 +463,114 @@ fn spawn_process_waiter(
     tokio::task::spawn_blocking({
         let child_exit_tx = child_exit_tx.clone();
         move || {
-        let status = child.wait().ok().flatten();
-        let exit_status = ExitStatus {
-            code: status,
-            signal: None,
-        };
+            let status = child.wait().ok().flatten();
+            let exit_status = ExitStatus {
+                code: status,
+                signal: None,
+            };
 
-        tracing::info!(
-            id = %watch_id,
-            code = ?exit_status.code,
-            "Command exited"
-        );
+            tracing::info!(
+                id = %watch_id,
+                code = ?exit_status.code,
+                "Command exited"
+            );
 
-        // Run per-command on_exit or on_error handler if configured
-        let per_cmd_hook = if exit_status.success() {
-            on_exit.as_ref()
-        } else {
-            on_error.as_ref()
-        };
+            // Run per-command on_exit or on_error handler if configured
+            let per_cmd_hook = if exit_status.success() {
+                on_exit.as_ref()
+            } else {
+                on_error.as_ref()
+            };
 
-        if let Some(on_cmd_str) = per_cmd_hook {
-            let parts: Vec<&str> = on_cmd_str.split_whitespace().collect();
-            if !parts.is_empty() {
-                let binary = parts[0];
-                let cmd_args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
-                tracing::info!(
-                    id = %watch_id,
-                    trigger = if exit_status.success() { "on_exit" } else { "on_error" },
-                    command = binary,
-                    args = ?cmd_args,
-                    "Running per-command exit handler"
-                );
-                match std::process::Command::new(binary).args(&cmd_args).spawn() {
-                    Ok(mut child) => {
-                        let _ = child.try_wait();
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            id = %watch_id,
-                            error = %e,
-                            "Failed to run per-command exit handler"
-                        );
+            if let Some(on_cmd_str) = per_cmd_hook {
+                let parts: Vec<&str> = on_cmd_str.split_whitespace().collect();
+                if !parts.is_empty() {
+                    let binary = parts[0];
+                    let cmd_args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+                    tracing::info!(
+                        id = %watch_id,
+                        trigger = if exit_status.success() { "on_exit" } else { "on_error" },
+                        command = binary,
+                        args = ?cmd_args,
+                        "Running per-command exit handler"
+                    );
+                    match std::process::Command::new(binary).args(&cmd_args).spawn() {
+                        Ok(mut child) => {
+                            let _ = child.try_wait();
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                id = %watch_id,
+                                error = %e,
+                                "Failed to run per-command exit handler"
+                            );
+                        }
                     }
                 }
             }
-        }
 
-        // Run global on_exit or on_error hook if configured
-        let global_hook = if exit_status.success() {
-            global_on_exit.as_ref()
-        } else {
-            global_on_error.as_ref()
-        };
+            // Run global on_exit or on_error hook if configured
+            let global_hook = if exit_status.success() {
+                global_on_exit.as_ref()
+            } else {
+                global_on_error.as_ref()
+            };
 
-        if let Some(global_hook_str) = global_hook {
-            let mut vars = HashMap::new();
-            vars.insert("name", watch_id.clone());
-            vars.insert("id", watch_id.clone());
-            vars.insert("pid", 0.to_string());
-            vars.insert("exit_code", exit_status.code.map(|c| c.to_string()).unwrap_or("unknown".to_string()));
-            tracing::info!(
-                id = %watch_id,
-                trigger = if exit_status.success() { "global on_exit" } else { "global on_error" },
-                "Running global hook"
-            );
-            run_hook(global_hook_str, &vars);
-        }
+            if let Some(global_hook_str) = global_hook {
+                let mut vars = HashMap::new();
+                vars.insert("name", watch_id.clone());
+                vars.insert("id", watch_id.clone());
+                vars.insert("pid", 0.to_string());
+                vars.insert(
+                    "exit_code",
+                    exit_status
+                        .code
+                        .map(|c| c.to_string())
+                        .unwrap_or("unknown".to_string()),
+                );
+                tracing::info!(
+                    id = %watch_id,
+                    trigger = if exit_status.success() { "global on_exit" } else { "global on_error" },
+                    "Running global hook"
+                );
+                run_hook(global_hook_str, &vars);
+            }
 
-        let _ = child_exit_tx.send(true);
+            let _ = child_exit_tx.send(true);
 
-        // Save snapshot to file if snapshot_on_exit is configured.
-        // This must happen before the command is removed from the manager
-        // (which drops the handle and its emulator).
-        if let Some(ref snapshot_path) = snapshot_on_exit {
-            // Use block_in_place to safely acquire the async RwLock from
-            // a blocking context.
-            let snapshot_result = tokio::task::block_in_place(|| {
-                let emu = snapshot_emulator.blocking_read();
-                let buf = emu.snapshot();
-                let mut text = String::new();
-                // Write scrollback lines first
-                for line in &buf.scrollback {
-                    let line_str: String = line.iter()
-                        .map(|c| if c.width > 0 { c.ch } else { '\0' })
-                        .collect();
-                    text.push_str(line_str.trim_end());
-                    text.push('\n');
-                }
-                // Write visible screen rows
-                for line in &buf.rows {
-                    let line_str: String = line.iter()
-                        .map(|c| if c.width > 0 { c.ch } else { '\0' })
-                        .collect();
-                    text.push_str(line_str.trim_end());
-                    text.push('\n');
-                }
-                Ok::<String, std::io::Error>(text)
-            });
+            // Save snapshot to file if snapshot_on_exit is configured.
+            // This must happen before the command is removed from the manager
+            // (which drops the handle and its emulator).
+            if let Some(ref snapshot_path) = snapshot_on_exit {
+                // Use block_in_place to safely acquire the async RwLock from
+                // a blocking context.
+                let snapshot_result = tokio::task::block_in_place(|| {
+                    let emu = snapshot_emulator.blocking_read();
+                    let buf = emu.snapshot();
+                    let mut text = String::new();
+                    // Write scrollback lines first
+                    for line in &buf.scrollback {
+                        let line_str: String = line
+                            .iter()
+                            .map(|c| if c.width > 0 { c.ch } else { '\0' })
+                            .collect();
+                        text.push_str(line_str.trim_end());
+                        text.push('\n');
+                    }
+                    // Write visible screen rows
+                    for line in &buf.rows {
+                        let line_str: String = line
+                            .iter()
+                            .map(|c| if c.width > 0 { c.ch } else { '\0' })
+                            .collect();
+                        text.push_str(line_str.trim_end());
+                        text.push('\n');
+                    }
+                    Ok::<String, std::io::Error>(text)
+                });
 
-            match snapshot_result {
-                Ok(snapshot_text) => {
-                    match std::fs::write(snapshot_path, &snapshot_text) {
+                match snapshot_result {
+                    Ok(snapshot_text) => match std::fs::write(snapshot_path, &snapshot_text) {
                         Ok(_) => {
                             tracing::info!(
                                 id = %watch_id,
@@ -589,40 +587,40 @@ fn spawn_process_waiter(
                                 "Failed to save snapshot on exit"
                             );
                         }
+                    },
+                    Err(e) => {
+                        tracing::warn!(
+                            id = %watch_id,
+                            error = %e,
+                            "Failed to acquire emulator for snapshot"
+                        );
                     }
                 }
-                Err(e) => {
-                    tracing::warn!(
-                        id = %watch_id,
-                        error = %e,
-                        "Failed to acquire emulator for snapshot"
-                    );
-                }
             }
-        }
 
-        // Store exit metadata in the handle (if still in the manager)
-        if let Some(handle) = manager_cmds.get(&watch_id) {
-            let code = exit_status.code;
-            let now = std::time::Instant::now();
-            *handle.exit_code.lock().unwrap() = code;
-            *handle.exit_time.lock().unwrap() = Some(now);
-            drop(handle); // release DashMap guard
-        }
+            // Store exit metadata in the handle (if still in the manager)
+            if let Some(handle) = manager_cmds.get(&watch_id) {
+                let code = exit_status.code;
+                let now = std::time::Instant::now();
+                *handle.exit_code.lock().unwrap() = code;
+                *handle.exit_time.lock().unwrap() = Some(now);
+                drop(handle); // release DashMap guard
+            }
 
-        // Remove from manager unless retain_on_exit is set
-        let retain = manager_cmds.get(&watch_id)
-            .map(|h| h.exit_config.retain_on_exit)
-            .unwrap_or(false);
-        if retain {
-            tracing::info!(id = %watch_id, "Command retained after exit (retain_on_exit)");
-        } else {
-            manager_cmds.remove(&watch_id);
-            tracing::info!(id = %watch_id, "Command removed from manager after exit");
-        }
+            // Remove from manager unless retain_on_exit is set
+            let retain = manager_cmds
+                .get(&watch_id)
+                .map(|h| h.exit_config.retain_on_exit)
+                .unwrap_or(false);
+            if retain {
+                tracing::info!(id = %watch_id, "Command retained after exit (retain_on_exit)");
+            } else {
+                manager_cmds.remove(&watch_id);
+                tracing::info!(id = %watch_id, "Command removed from manager after exit");
+            }
 
-        let _ = exit_tx.send(exit_status);
-    }
+            let _ = exit_tx.send(exit_status);
+        }
     });
 }
 
@@ -655,7 +653,10 @@ mod tests {
 
     #[test]
     fn test_escape_bytes_control_chars() {
-        assert_eq!(escape_bytes(&[0x00, 0x01, 0x1b, 0x7f]), "\\x00\\x01\\x1b\\x7f");
+        assert_eq!(
+            escape_bytes(&[0x00, 0x01, 0x1b, 0x7f]),
+            "\\x00\\x01\\x1b\\x7f"
+        );
     }
 
     #[test]
@@ -670,20 +671,29 @@ mod tests {
 
     #[test]
     fn test_exit_status_success() {
-        let status = ExitStatus { code: Some(0), signal: None };
+        let status = ExitStatus {
+            code: Some(0),
+            signal: None,
+        };
         assert!(status.success());
     }
 
     #[test]
     fn test_exit_status_error() {
-        let status = ExitStatus { code: Some(1), signal: None };
+        let status = ExitStatus {
+            code: Some(1),
+            signal: None,
+        };
         assert!(status.is_error());
         assert!(!status.success());
     }
 
     #[test]
     fn test_exit_status_signal_none() {
-        let status = ExitStatus { code: None, signal: None };
+        let status = ExitStatus {
+            code: None,
+            signal: None,
+        };
         assert!(!status.success());
     }
 }

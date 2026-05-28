@@ -44,17 +44,23 @@ impl AppState {
         vtty_events: broadcast::Sender<(String, String)>,
         log_events: broadcast::Sender<String>,
     ) -> Self {
-        Self { manager, shutdown_tx, auth_token, cert_store, vtty_events, log_events, share_tokens: Arc::new(DashMap::new()) }
+        Self {
+            manager,
+            shutdown_tx,
+            auth_token,
+            cert_store,
+            vtty_events,
+            log_events,
+            share_tokens: Arc::new(DashMap::new()),
+        }
     }
 
     /// Remove expired share tokens. Call periodically from a background task.
     pub fn cleanup_expired_share_tokens(&self) {
         let now = Instant::now();
-        self.share_tokens.retain(|_, v| {
-            match v.expires_at {
-                Some(exp) => exp > now,
-                None => true,
-            }
+        self.share_tokens.retain(|_, v| match v.expires_at {
+            Some(exp) => exp > now,
+            None => true,
         });
     }
 }

@@ -17,7 +17,9 @@ pub async fn handle_resize_command(_cli: &Cli, target: &str, rows: u16, cols: u1
     let instances = registry.list_instances();
 
     if instances.is_empty() {
-        anyhow::bail!("No running vrunner instances found. Start one first with: vrunner -- <command>");
+        anyhow::bail!(
+            "No running vrunner instances found. Start one first with: vrunner -- <command>"
+        );
     }
 
     // If rows/cols are 0 (default), detect from the current terminal.
@@ -53,7 +55,8 @@ pub async fn handle_resize_command(_cli: &Cli, target: &str, rows: u16, cols: u1
     }
 
     // Exact match on name alone or full "name args" string.
-    let exact: Vec<_> = all_commands.iter()
+    let exact: Vec<_> = all_commands
+        .iter()
         .filter(|(_, _, _, name, full)| name == target || full == target)
         .collect();
 
@@ -72,7 +75,8 @@ pub async fn handle_resize_command(_cli: &Cli, target: &str, rows: u16, cols: u1
     }
 
     // Prefix match on full string, then on name only (same as stop-command).
-    let prefix_full: Vec<_> = all_commands.iter()
+    let prefix_full: Vec<_> = all_commands
+        .iter()
         .filter(|(_, _, _, _, full)| full.starts_with(target))
         .collect();
     if prefix_full.len() == 1 {
@@ -82,7 +86,8 @@ pub async fn handle_resize_command(_cli: &Cli, target: &str, rows: u16, cols: u1
         return resize_command_by_id(&client, &url, cmd_id, *cmd_pid, *inst_pid, rows, cols).await;
     }
 
-    let prefix_name: Vec<_> = all_commands.iter()
+    let prefix_name: Vec<_> = all_commands
+        .iter()
         .filter(|(_, _, _, name, _)| name.starts_with(target))
         .collect();
     if prefix_name.len() == 1 {
@@ -92,7 +97,10 @@ pub async fn handle_resize_command(_cli: &Cli, target: &str, rows: u16, cols: u1
         return resize_command_by_id(&client, &url, cmd_id, *cmd_pid, *inst_pid, rows, cols).await;
     }
 
-    anyhow::bail!("No command matching '{}' found. Use `vrunner list` to see running commands.", target);
+    anyhow::bail!(
+        "No command matching '{}' found. Use `vrunner list` to see running commands.",
+        target
+    );
 }
 
 /// Resize a command by its UUID via the instance's HTTP API.
@@ -115,10 +123,15 @@ pub async fn resize_command_by_id(
     let body: serde_json::Value = resp.json().await?;
 
     if status.is_success() && body.get("status").and_then(|s| s.as_str()) == Some("ok") {
-        println!("Resized command with PID {} to {}x{} on instance {} (PID {})", cmd_pid, rows, cols, inst_pid, inst_pid);
+        println!(
+            "Resized command with PID {} to {}x{} on instance {} (PID {})",
+            cmd_pid, rows, cols, inst_pid, inst_pid
+        );
         Ok(())
     } else {
-        let err_msg = body.get("error").and_then(|e| e.as_str())
+        let err_msg = body
+            .get("error")
+            .and_then(|e| e.as_str())
             .map(|s| s.to_string())
             .unwrap_or_else(|| format!("HTTP {}", status));
         anyhow::bail!("Failed to resize command with PID {}: {}", cmd_pid, err_msg);
@@ -137,10 +150,14 @@ pub async fn handle_resize_by_pid(
         let url = instance_url(info, &None);
         match resolve_pid_to_id(client, &url, pid).await {
             Ok(cmd_id) => {
-                return resize_command_by_id(client, &url, &cmd_id, pid, info.pid, rows, cols).await;
+                return resize_command_by_id(client, &url, &cmd_id, pid, info.pid, rows, cols)
+                    .await;
             }
             Err(_) => continue,
         }
     }
-    anyhow::bail!("No command found with PID {}. Use `vrunner list` to see running commands.", pid);
+    anyhow::bail!(
+        "No command found with PID {}. Use `vrunner list` to see running commands.",
+        pid
+    );
 }

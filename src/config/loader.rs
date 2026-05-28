@@ -2,12 +2,17 @@ use anyhow::Result;
 use config::{Config as ConfigBuilder, File, FileFormat};
 use std::path::Path;
 
-use super::schema::Config;
 use super::merge::merge_configs;
+use super::schema::Config;
 
 /// Try to detect the format of a config file from its extension.
 fn detect_format(path: &Path) -> Option<FileFormat> {
-    match path.extension().and_then(|e| e.to_str())?.to_lowercase().as_str() {
+    match path
+        .extension()
+        .and_then(|e| e.to_str())?
+        .to_lowercase()
+        .as_str()
+    {
         "yaml" | "yml" => Some(FileFormat::Yaml),
         "toml" => Some(FileFormat::Toml),
         "json" => Some(FileFormat::Json),

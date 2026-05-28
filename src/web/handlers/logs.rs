@@ -17,8 +17,14 @@ pub async fn get_log(
     Query(params): Query<HashMap<String, String>>,
 ) -> Json<Value> {
     let search = params.get("search").map(|s| s.as_str()).unwrap_or("");
-    let limit = params.get("limit").and_then(|v| v.parse::<usize>().ok()).unwrap_or(200);
-    let offset = params.get("offset").and_then(|v| v.parse::<usize>().ok()).unwrap_or(0);
+    let limit = params
+        .get("limit")
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(200);
+    let offset = params
+        .get("offset")
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(0);
 
     let cfg = &state.manager.config().command_log;
 
@@ -54,7 +60,8 @@ pub async fn get_log(
 
             // Filter by search term if provided
             let filtered: Vec<String> = if !search.is_empty() {
-                lines.iter()
+                lines
+                    .iter()
                     .filter(|line| line.to_lowercase().contains(&search.to_lowercase()))
                     .cloned()
                     .collect()
@@ -63,11 +70,7 @@ pub async fn get_log(
             };
 
             let filtered_total = filtered.len();
-            let page: Vec<String> = filtered
-                .into_iter()
-                .skip(offset)
-                .take(limit)
-                .collect();
+            let page: Vec<String> = filtered.into_iter().skip(offset).take(limit).collect();
 
             Json(serde_json::json!({
                 "status": "ok",
@@ -105,7 +108,8 @@ pub async fn get_log(
             let total = mem_lines.len();
 
             let filtered: Vec<String> = if !search.is_empty() {
-                mem_lines.iter()
+                mem_lines
+                    .iter()
                     .filter(|line| line.to_lowercase().contains(&search.to_lowercase()))
                     .cloned()
                     .collect()
@@ -114,11 +118,7 @@ pub async fn get_log(
             };
 
             let filtered_total = filtered.len();
-            let page: Vec<String> = filtered
-                .into_iter()
-                .skip(offset)
-                .take(limit)
-                .collect();
+            let page: Vec<String> = filtered.into_iter().skip(offset).take(limit).collect();
 
             Json(serde_json::json!({
                 "status": "ok",

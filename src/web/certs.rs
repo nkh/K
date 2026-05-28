@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use sha2::{Sha256, Digest};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 /// A named certificate entry in the certificate pool.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,11 +80,7 @@ impl CertificateStore {
 
             if !cert_path.exists() || !key_path.exists() {
                 // Auto-generate if missing
-                Self::generate_named_certificate(
-                    &entry.name,
-                    &cert_path,
-                    &key_path,
-                )?;
+                Self::generate_named_certificate(&entry.name, &cert_path, &key_path)?;
             }
 
             entry.cert_file = cert_path.to_string_lossy().to_string();
@@ -145,8 +141,12 @@ impl CertificateStore {
 
         let mut params = rcgen::CertificateParams::default();
         params.distinguished_name = rcgen::DistinguishedName::new();
-        params.distinguished_name.push(rcgen::DnType::CommonName, name);
-        params.distinguished_name.push(rcgen::DnType::OrganizationName, "vrunner");
+        params
+            .distinguished_name
+            .push(rcgen::DnType::CommonName, name);
+        params
+            .distinguished_name
+            .push(rcgen::DnType::OrganizationName, "vrunner");
 
         params.key_usages = vec![
             rcgen::KeyUsagePurpose::DigitalSignature,
@@ -165,18 +165,17 @@ impl CertificateStore {
         let san_entries = vec![
             rcgen::SanType::DnsName(rcgen::Ia5String::try_from("localhost").unwrap()),
             rcgen::SanType::DnsName(
-                rcgen::Ia5String::try_from(name).unwrap_or(
-                    rcgen::Ia5String::try_from("localhost").unwrap()
-                )
+                rcgen::Ia5String::try_from(name)
+                    .unwrap_or(rcgen::Ia5String::try_from("localhost").unwrap()),
             ),
             rcgen::SanType::IpAddress(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)),
             rcgen::SanType::IpAddress(std::net::IpAddr::V6(std::net::Ipv6Addr::LOCALHOST)),
         ];
         params.subject_alt_names = san_entries;
 
-        let key_pair = rcgen::KeyPair::generate()
-            .context("Failed to generate key pair")?;
-        let cert = params.self_signed(&key_pair)
+        let key_pair = rcgen::KeyPair::generate().context("Failed to generate key pair")?;
+        let cert = params
+            .self_signed(&key_pair)
             .context("Failed to create certificate")?;
 
         let cert_pem = cert.pem();
@@ -197,7 +196,9 @@ impl CertificateStore {
 
         tracing::info!(
             "Certificate '{}' generated: cert={}, key={}",
-            name, cert_path.display(), key_path.display()
+            name,
+            cert_path.display(),
+            key_path.display()
         );
 
         Ok(())

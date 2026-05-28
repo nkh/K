@@ -50,10 +50,7 @@ pub enum ProcessError {
     UnknownSinkType(String),
 
     /// A sink with this name already exists for the given command.
-    SinkAlreadyExists {
-        name: String,
-        command_id: String,
-    },
+    SinkAlreadyExists { name: String, command_id: String },
 
     /// An OS signal operation (SIGSTOP / SIGCONT / SIGKILL) failed.
     SignalFailed {
@@ -69,10 +66,7 @@ pub enum ProcessError {
     ChannelClosed(String),
 
     /// A named buffer snapshot was not found.
-    SnapshotNotFound {
-        name: String,
-        command_id: String,
-    },
+    SnapshotNotFound { name: String, command_id: String },
 
     /// Operation not supported on this platform.
     PlatformNotSupported(String),
@@ -90,11 +84,7 @@ impl fmt::Display for ProcessError {
                 write!(f, "Failed to spawn process '{}'", cmd)
             }
             Self::UnknownSinkType(t) => {
-                write!(
-                    f,
-                    "Unknown sink type '{}'. Supported: file, vtty, null",
-                    t
-                )
+                write!(f, "Unknown sink type '{}'. Supported: file, vtty, null", t)
             }
             Self::SinkAlreadyExists { name, command_id } => {
                 write!(
@@ -113,10 +103,7 @@ impl fmt::Display for ProcessError {
             Self::ChannelClosed(id) => {
                 write!(f, "stdin channel closed for command {}", id)
             }
-            Self::SnapshotNotFound {
-                name,
-                command_id,
-            } => {
+            Self::SnapshotNotFound { name, command_id } => {
                 write!(
                     f,
                     "Snapshot '{}' not found for command {}",
@@ -174,9 +161,7 @@ mod tests {
 
     #[test]
     fn test_display_spawn_failed() {
-        let err = ProcessError::SpawnFailed {
-            cmd: "ls".into(),
-        };
+        let err = ProcessError::SpawnFailed { cmd: "ls".into() };
         assert_eq!(format!("{}", err), "Failed to spawn process 'ls'");
     }
 
@@ -214,10 +199,7 @@ mod tests {
     #[test]
     fn test_display_channel_closed() {
         let err = ProcessError::ChannelClosed("c1".into());
-        assert_eq!(
-            format!("{}", err),
-            "stdin channel closed for command c1"
-        );
+        assert_eq!(format!("{}", err), "stdin channel closed for command c1");
     }
 
     #[test]

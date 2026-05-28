@@ -8,9 +8,7 @@ use crate::web::state::AppState;
 ///
 /// Returns the list of command templates defined in the server configuration.
 /// These are the `[[templates]]` entries from the config file.
-pub async fn list_templates(
-    State(state): State<AppState>,
-) -> Json<Value> {
+pub async fn list_templates(State(state): State<AppState>) -> Json<Value> {
     let config = state.manager.config();
     let templates = &config.templates;
 

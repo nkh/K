@@ -75,7 +75,8 @@ pub async fn handle_stop_command(_cli: &Cli, target: Option<&str>) -> Result<boo
     }
 
     // Round 1: exact match on name alone or full "name args" string.
-    let exact: Vec<_> = all_commands.iter()
+    let exact: Vec<_> = all_commands
+        .iter()
         .filter(|(_, _, _, name, full)| name == target || full == target)
         .collect();
 
@@ -95,7 +96,8 @@ pub async fn handle_stop_command(_cli: &Cli, target: Option<&str>) -> Result<boo
     }
 
     // Round 2: prefix match on full "name args" string.
-    let prefix_full: Vec<_> = all_commands.iter()
+    let prefix_full: Vec<_> = all_commands
+        .iter()
         .filter(|(_, _, _, _, full)| full.starts_with(target))
         .collect();
 
@@ -115,7 +117,8 @@ pub async fn handle_stop_command(_cli: &Cli, target: Option<&str>) -> Result<boo
     }
 
     // Round 3: prefix match on name alone.
-    let prefix_name: Vec<_> = all_commands.iter()
+    let prefix_name: Vec<_> = all_commands
+        .iter()
         .filter(|(_, _, _, name, _)| name.starts_with(target))
         .collect();
 
@@ -155,12 +158,20 @@ pub async fn stop_command_by_id(
     match resp {
         Ok(resp) => {
             let status = resp.status();
-            let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::json!({"status": "unknown"}));
+            let body: serde_json::Value = resp
+                .json()
+                .await
+                .unwrap_or(serde_json::json!({"status": "unknown"}));
             if status.is_success() && body.get("status").and_then(|s| s.as_str()) == Some("ok") {
-                println!("Command with PID {} stopped on instance {} (PID {})", cmd_pid, inst_pid, inst_pid);
+                println!(
+                    "Command with PID {} stopped on instance {} (PID {})",
+                    cmd_pid, inst_pid, inst_pid
+                );
                 Ok(true)
             } else {
-                let err_msg = body.get("error").and_then(|e| e.as_str())
+                let err_msg = body
+                    .get("error")
+                    .and_then(|e| e.as_str())
                     .map(|s| s.to_string())
                     .unwrap_or_else(|| format!("HTTP {}", status));
                 tracing::error!("Failed to stop command with PID {}: {}", cmd_pid, err_msg);
@@ -197,12 +208,21 @@ pub async fn handle_stop_command_by_pid_on_instances(
         match resp {
             Ok(resp) => {
                 let status = resp.status();
-                let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::json!({"status": "unknown"}));
-                if status.is_success() && body.get("status").and_then(|s| s.as_str()) == Some("ok") {
-                    println!("Command with PID {} stopped on instance {} (PID {})", pid, info.pid, info.pid);
+                let body: serde_json::Value = resp
+                    .json()
+                    .await
+                    .unwrap_or(serde_json::json!({"status": "unknown"}));
+                if status.is_success() && body.get("status").and_then(|s| s.as_str()) == Some("ok")
+                {
+                    println!(
+                        "Command with PID {} stopped on instance {} (PID {})",
+                        pid, info.pid, info.pid
+                    );
                     return Ok(true);
                 } else {
-                    let err_msg = body.get("error").and_then(|e| e.as_str())
+                    let err_msg = body
+                        .get("error")
+                        .and_then(|e| e.as_str())
                         .map(|s| s.to_string())
                         .unwrap_or_else(|| format!("HTTP {}", status));
                     tracing::error!("Failed to stop command with PID {}: {}", pid, err_msg);

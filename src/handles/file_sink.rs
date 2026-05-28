@@ -1,7 +1,7 @@
+use super::sink::Sink;
 use async_trait::async_trait;
 use std::fs::OpenOptions;
 use std::io::Write;
-use super::sink::Sink;
 
 pub struct FileSink {
     #[allow(dead_code)]
@@ -11,10 +11,7 @@ pub struct FileSink {
 
 impl FileSink {
     pub fn new(path: &str) -> std::io::Result<Self> {
-        let file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)?;
+        let file = OpenOptions::new().create(true).append(true).open(path)?;
         Ok(Self {
             path: path.to_string(),
             file,

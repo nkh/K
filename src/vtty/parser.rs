@@ -9,7 +9,11 @@ const MAX_STRING_LENGTH: usize = 8192;
 pub enum AnsiToken {
     Text(String),
     Control(u8),
-    Csi { params: Vec<Vec<u16>>, intermediate: Vec<u8>, final_byte: u8 },
+    Csi {
+        params: Vec<Vec<u16>>,
+        intermediate: Vec<u8>,
+        final_byte: u8,
+    },
     Osc(String),
     Escape(u8),
     /// ESC followed by one or more intermediate bytes (0x20-0x2f) and a
@@ -19,8 +23,16 @@ pub enum AnsiToken {
     ///   ESC ) 0  — designate G1 charset as line drawing
     ///   ESC # 3  — DECDHL (double-height line, top half)
     ///   ESC SP F — S7C1T (7-bit C1 mode)
-    EscSequence { intermediate: Vec<u8>, final_byte: u8 },
-    Dcs { params: Vec<Vec<u16>>, intermediate: Vec<u8>, final_byte: u8, data: String },
+    EscSequence {
+        intermediate: Vec<u8>,
+        final_byte: u8,
+    },
+    Dcs {
+        params: Vec<Vec<u16>>,
+        intermediate: Vec<u8>,
+        final_byte: u8,
+        data: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -59,7 +71,9 @@ pub struct AnsiParser {
 }
 
 impl Default for AnsiParser {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AnsiParser {
@@ -120,7 +134,8 @@ impl AnsiParser {
                 if e.error_len().is_some() {
                     // The byte at valid_up_to is an invalid start byte, not just truncation.
                     // Replace it with U+FFFD and skip it.
-                    self.text_bytes = self.text_bytes[valid_up_to + e.error_len().unwrap()..].to_vec();
+                    self.text_bytes =
+                        self.text_bytes[valid_up_to + e.error_len().unwrap()..].to_vec();
                 } else {
                     self.text_bytes = self.text_bytes[valid_up_to..].to_vec();
                 }
@@ -157,7 +172,9 @@ impl AnsiParser {
                 tokens.push(AnsiToken::Control(byte));
             }
             0x7f => {}
-            _ => { self.text_bytes.push(byte); }
+            _ => {
+                self.text_bytes.push(byte);
+            }
         }
     }
 
@@ -314,7 +331,9 @@ impl AnsiParser {
     /// Returns false if the byte should be reprocessed from Ground.
     fn handle_csi_intermediate_byte(&mut self, byte: u8, tokens: &mut Vec<AnsiToken>) -> bool {
         match byte {
-            0x20..=0x2f => { self.intermediate.push(byte); }
+            0x20..=0x2f => {
+                self.intermediate.push(byte);
+            }
             0x40..=0x7e => {
                 tokens.push(AnsiToken::Csi {
                     params: self.csi_params.clone(),
@@ -495,33 +514,21 @@ impl AnsiParser {
                         self.process_ground_byte(byte, &mut tokens);
                         true
                     }
-                    ParseState::Escape => {
-                        self.handle_escape_byte(byte, &mut tokens)
-                    }
+                    ParseState::Escape => self.handle_escape_byte(byte, &mut tokens),
                     ParseState::EscapeIntermediate => {
                         self.handle_escape_intermediate_byte(byte, &mut tokens)
                     }
-                    ParseState::CsiParam => {
-                        self.handle_csi_param_byte(byte, &mut tokens)
-                    }
+                    ParseState::CsiParam => self.handle_csi_param_byte(byte, &mut tokens),
                     ParseState::CsiIntermediate => {
                         self.handle_csi_intermediate_byte(byte, &mut tokens)
                     }
-                    ParseState::OscString => {
-                        self.handle_osc_string_byte(byte, &mut tokens)
-                    }
-                    ParseState::DcsEntry => {
-                        self.handle_dcs_entry_byte(byte, &mut tokens)
-                    }
+                    ParseState::OscString => self.handle_osc_string_byte(byte, &mut tokens),
+                    ParseState::DcsEntry => self.handle_dcs_entry_byte(byte, &mut tokens),
                     ParseState::DcsParam | ParseState::DcsIntermediate => {
                         self.handle_dcs_param_byte(byte, &mut tokens)
                     }
-                    ParseState::DcsString => {
-                        self.handle_dcs_string_byte(byte, &mut tokens)
-                    }
-                    ParseState::String => {
-                        self.handle_string_byte(byte)
-                    }
+                    ParseState::DcsString => self.handle_dcs_string_byte(byte, &mut tokens),
+                    ParseState::String => self.handle_string_byte(byte),
                 };
             }
 
@@ -558,9 +565,12 @@ impl AnsiParser {
                 // intermediate bytes are discarded.
                 self.reset_to_ground();
             }
-            ParseState::OscString | ParseState::DcsString
-            | ParseState::String | ParseState::DcsEntry
-            | ParseState::DcsParam | ParseState::DcsIntermediate => {
+            ParseState::OscString
+            | ParseState::DcsString
+            | ParseState::String
+            | ParseState::DcsEntry
+            | ParseState::DcsParam
+            | ParseState::DcsIntermediate => {
                 // Incomplete string/DCS — discard entirely.
                 self.reset_to_ground();
             }
@@ -625,7 +635,12 @@ mod tests {
     fn test_parse_csi_cursor_move() {
         let tokens = parse_ansi(b"\x1b[10;20H");
         assert_eq!(tokens.len(), 1);
-        if let AnsiToken::Csi { params, intermediate, final_byte } = &tokens[0] {
+        if let AnsiToken::Csi {
+            params,
+            intermediate,
+            final_byte,
+        } = &tokens[0]
+        {
             assert_eq!(params, &vec![vec![10], vec![20]]);
             assert!(intermediate.is_empty());
             assert_eq!(*final_byte, b'H');
@@ -637,7 +652,12 @@ mod tests {
         // CSI ?1049h — DEC private mode (alternate screen)
         let tokens = parse_ansi(b"\x1b[?1049h");
         assert_eq!(tokens.len(), 1);
-        if let AnsiToken::Csi { params, intermediate, final_byte } = &tokens[0] {
+        if let AnsiToken::Csi {
+            params,
+            intermediate,
+            final_byte,
+        } = &tokens[0]
+        {
             assert_eq!(params, &vec![vec![1049]]);
             assert_eq!(intermediate, &[b'?']);
             assert_eq!(*final_byte, b'h');
@@ -649,7 +669,12 @@ mod tests {
         // CSI ?25l — hide cursor (DEC private mode)
         let tokens = parse_ansi(b"\x1b[?25l");
         assert_eq!(tokens.len(), 1);
-        if let AnsiToken::Csi { params, intermediate, final_byte } = &tokens[0] {
+        if let AnsiToken::Csi {
+            params,
+            intermediate,
+            final_byte,
+        } = &tokens[0]
+        {
             assert_eq!(params, &vec![vec![25]]);
             assert_eq!(intermediate, &[b'?']);
             assert_eq!(*final_byte, b'l');
@@ -661,7 +686,10 @@ mod tests {
         let tokens = parse_ansi(b"\x1b[38;2;255;128;64m");
         assert_eq!(tokens.len(), 1);
         if let AnsiToken::Csi { params, .. } = &tokens[0] {
-            assert_eq!(params, &vec![vec![38], vec![2], vec![255], vec![128], vec![64]]);
+            assert_eq!(
+                params,
+                &vec![vec![38], vec![2], vec![255], vec![128], vec![64]]
+            );
         }
     }
 
@@ -670,7 +698,13 @@ mod tests {
         let tokens = parse_ansi(b"Hello\x1b[31mRed\x1b[0mNormal");
         assert_eq!(tokens.len(), 5);
         assert!(matches!(&tokens[0], AnsiToken::Text(s) if s == "Hello"));
-        assert!(matches!(&tokens[1], AnsiToken::Csi { final_byte: b'm', .. }));
+        assert!(matches!(
+            &tokens[1],
+            AnsiToken::Csi {
+                final_byte: b'm',
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -681,7 +715,13 @@ mod tests {
         assert!(matches!(&tokens1[0], AnsiToken::Text(s) if s == "Hello"));
         let tokens2 = parser.parse(b"31mWorld");
         assert_eq!(tokens2.len(), 2);
-        assert!(matches!(&tokens2[0], AnsiToken::Csi { final_byte: b'm', .. }));
+        assert!(matches!(
+            &tokens2[0],
+            AnsiToken::Csi {
+                final_byte: b'm',
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -715,7 +755,13 @@ mod tests {
         let tokens = parse_ansi(input.as_bytes());
         assert_eq!(tokens.len(), 2);
         assert!(matches!(&tokens[0], AnsiToken::Text(s) if s == "\u{2500}\u{253c}\u{2500}"));
-        assert!(matches!(&tokens[1], AnsiToken::Csi { final_byte: b'm', .. }));
+        assert!(matches!(
+            &tokens[1],
+            AnsiToken::Csi {
+                final_byte: b'm',
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -779,7 +825,13 @@ mod tests {
         // Token 1: CSI 31m
         // Token 2: Text "[\nRed"
         assert_eq!(tokens.len(), 2);
-        assert!(matches!(&tokens[0], AnsiToken::Csi { final_byte: b'm', .. }));
+        assert!(matches!(
+            &tokens[0],
+            AnsiToken::Csi {
+                final_byte: b'm',
+                ..
+            }
+        ));
         assert!(matches!(&tokens[1], AnsiToken::Text(s) if s == "[\nRed"));
     }
 
@@ -843,7 +895,13 @@ mod tests {
         let input = b"\x1bP1$r\x1b\\";
         let tokens = parse_ansi(input);
         assert_eq!(tokens.len(), 1);
-        if let AnsiToken::Dcs { params, intermediate, final_byte, data } = &tokens[0] {
+        if let AnsiToken::Dcs {
+            params,
+            intermediate,
+            final_byte,
+            data,
+        } = &tokens[0]
+        {
             assert_eq!(params, &vec![vec![1]]);
             assert_eq!(intermediate, &[b'$']);
             assert_eq!(*final_byte, b'r');
@@ -859,7 +917,10 @@ mod tests {
         let input = b"\x1bPqhello world\x1b\\";
         let tokens = parse_ansi(input);
         assert_eq!(tokens.len(), 1);
-        if let AnsiToken::Dcs { final_byte, data, .. } = &tokens[0] {
+        if let AnsiToken::Dcs {
+            final_byte, data, ..
+        } = &tokens[0]
+        {
             assert_eq!(*final_byte, b'q');
             assert_eq!(data, "hello world");
         } else {
@@ -873,7 +934,13 @@ mod tests {
         let input = b"\x1bP1;2rABCDEF\x1b\\";
         let tokens = parse_ansi(input);
         assert_eq!(tokens.len(), 1);
-        if let AnsiToken::Dcs { params, final_byte, data, .. } = &tokens[0] {
+        if let AnsiToken::Dcs {
+            params,
+            final_byte,
+            data,
+            ..
+        } = &tokens[0]
+        {
             assert_eq!(params, &vec![vec![1], vec![2]]);
             assert_eq!(*final_byte, b'r');
             assert_eq!(data, "ABCDEF");
@@ -977,7 +1044,9 @@ mod tests {
         let tokens = parse_ansi(input);
         // CSI is aborted, CAN is emitted as Control, then text "After".
         assert!(tokens.iter().any(|t| matches!(t, AnsiToken::Control(0x18))));
-        assert!(tokens.iter().any(|t| matches!(t, AnsiToken::Text(s) if s == "After")));
+        assert!(tokens
+            .iter()
+            .any(|t| matches!(t, AnsiToken::Text(s) if s == "After")));
     }
 
     #[test]
@@ -986,7 +1055,9 @@ mod tests {
         let input = b"\x1b]0;title\x1aAfter";
         let tokens = parse_ansi(input);
         assert!(tokens.iter().any(|t| matches!(t, AnsiToken::Control(0x1a))));
-        assert!(tokens.iter().any(|t| matches!(t, AnsiToken::Text(s) if s == "After")));
+        assert!(tokens
+            .iter()
+            .any(|t| matches!(t, AnsiToken::Text(s) if s == "After")));
     }
 
     #[test]
@@ -995,7 +1066,9 @@ mod tests {
         let input = b"\x1b\x18After";
         let tokens = parse_ansi(input);
         assert!(tokens.iter().any(|t| matches!(t, AnsiToken::Control(0x18))));
-        assert!(tokens.iter().any(|t| matches!(t, AnsiToken::Text(s) if s == "After")));
+        assert!(tokens
+            .iter()
+            .any(|t| matches!(t, AnsiToken::Text(s) if s == "After")));
     }
 
     #[test]
@@ -1004,7 +1077,9 @@ mod tests {
         let input = b"\x1bPqdata\x18After";
         let tokens = parse_ansi(input);
         assert!(tokens.iter().any(|t| matches!(t, AnsiToken::Control(0x18))));
-        assert!(tokens.iter().any(|t| matches!(t, AnsiToken::Text(s) if s == "After")));
+        assert!(tokens
+            .iter()
+            .any(|t| matches!(t, AnsiToken::Text(s) if s == "After")));
     }
 
     #[test]
@@ -1013,7 +1088,9 @@ mod tests {
         let input = b"\x1bPqdata\x1aAfter";
         let tokens = parse_ansi(input);
         assert!(tokens.iter().any(|t| matches!(t, AnsiToken::Control(0x1a))));
-        assert!(tokens.iter().any(|t| matches!(t, AnsiToken::Text(s) if s == "After")));
+        assert!(tokens
+            .iter()
+            .any(|t| matches!(t, AnsiToken::Text(s) if s == "After")));
     }
 
     #[test]
@@ -1022,7 +1099,9 @@ mod tests {
         let input = b"\x1b(\x18After";
         let tokens = parse_ansi(input);
         assert!(tokens.iter().any(|t| matches!(t, AnsiToken::Control(0x18))));
-        assert!(tokens.iter().any(|t| matches!(t, AnsiToken::Text(s) if s == "After")));
+        assert!(tokens
+            .iter()
+            .any(|t| matches!(t, AnsiToken::Text(s) if s == "After")));
     }
 
     #[test]
@@ -1095,10 +1174,7 @@ mod tests {
     fn test_string_length_limit_osc() {
         // Feed an OSC with more than MAX_STRING_LENGTH bytes without terminator.
         let long_data: Vec<u8> = (0..MAX_STRING_LENGTH + 100).map(|_| b'X').collect();
-        let input: Vec<u8> = [
-            b"\x1b]0;".to_vec(),
-            long_data,
-        ].concat();
+        let input: Vec<u8> = [b"\x1b]0;".to_vec(), long_data].concat();
         let tokens = parse_ansi(&input);
         // The OSC was never terminated, so no token emitted.
         assert!(tokens.is_empty());
@@ -1118,7 +1194,13 @@ mod tests {
 
         let t3 = parser.parse(b"llo\x1b\\");
         assert_eq!(t3.len(), 1);
-        if let AnsiToken::Dcs { params, final_byte, data, .. } = &t3[0] {
+        if let AnsiToken::Dcs {
+            params,
+            final_byte,
+            data,
+            ..
+        } = &t3[0]
+        {
             assert_eq!(params, &vec![vec![1]]);
             assert_eq!(*final_byte, b'r');
             assert_eq!(data, "hello");

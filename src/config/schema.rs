@@ -3,16 +3,18 @@ use serde::{Deserialize, Serialize};
 // Re-export all domain modules so that `config::schema::*` still works
 // for every existing import site.
 pub use super::daemon::DaemonConfig;
-pub use super::templates::{TemplateConfig, TemplatesConfig};
 pub use super::display::{DisplayConfig, InteractiveConfig, KeybindingsConfig};
 pub use super::environment::EnvironmentConfig;
 pub use super::handles::HandleConfig;
 pub use super::hooks::{CommandLogConfig, DefaultExitConfig, ExitConfig, HooksConfig};
-pub use super::security::{CertificateEntryConfig, CertificatesConfig, CorsConfig, SecurityConfig, TlsConfig};
+pub use super::profiles::ProfilesConfig;
+pub use super::security::{
+    CertificateEntryConfig, CertificatesConfig, CorsConfig, SecurityConfig, TlsConfig,
+};
 pub use super::server::ServerConfig;
+pub use super::templates::{TemplateConfig, TemplatesConfig};
 pub use super::vtty::VttyConfig;
 pub use super::web::{RateLimitConfig, WebConfig};
-pub use super::profiles::ProfilesConfig;
 
 /// Top-level configuration for vrunner.
 ///

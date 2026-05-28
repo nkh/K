@@ -27,7 +27,9 @@ pub async fn admin_page() -> Response {
         None => Response::builder()
             .status(StatusCode::OK)
             .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
-            .body(Body::from("<html><body><h1>vrunner Admin</h1><p>Assets not found.</p></body></html>"))
+            .body(Body::from(
+                "<html><body><h1>vrunner Admin</h1><p>Assets not found.</p></body></html>",
+            ))
             .unwrap(),
     }
 }
@@ -52,21 +54,16 @@ pub async fn admin_assets(Path(path): Path<String>) -> Response {
 
     match AdminAssets::get(asset_path) {
         Some(content) => no_cache_response(guess_mime_type(asset_path), content.data.to_vec()),
-        None => {
-            Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Body::from("Asset not found"))
-                .unwrap()
-        }
+        None => Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::from("Asset not found"))
+            .unwrap(),
     }
 }
 
 fn guess_mime_type(path: &str) -> &'static str {
     let path_buf = PathBuf::from(path);
-    let ext = path_buf
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("");
+    let ext = path_buf.extension().and_then(|e| e.to_str()).unwrap_or("");
 
     match ext {
         "html" | "htm" => "text/html; charset=utf-8",
@@ -88,10 +85,7 @@ fn guess_mime_type(path: &str) -> &'static str {
 
 /// Serve the minimal share page for `/share/{token}`.
 /// This is a public, standalone page — no sidebar, no topbar, just the terminal.
-pub async fn share_page(
-    State(state): State<AppState>,
-    Path(token): Path<String>,
-) -> Response {
+pub async fn share_page(State(state): State<AppState>, Path(token): Path<String>) -> Response {
     // Validate token
     let Some(entry) = state.share_tokens.get(&token) else {
         return Response::builder()
@@ -134,7 +128,8 @@ pub async fn share_page(
     let cmd_id = share.cmd_id.clone();
     drop(entry);
 
-    let html = format!(r#"<!DOCTYPE html>
+    let html = format!(
+        r#"<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -273,7 +268,11 @@ pub async fn smart_fallback(uri: Uri) -> Response {
     let path = uri.path().trim_start_matches('/');
 
     // Skip empty paths and already-handled prefixes
-    if path.is_empty() || path.starts_with("api/") || path.starts_with("admin") || path.starts_with("share/") {
+    if path.is_empty()
+        || path.starts_with("api/")
+        || path.starts_with("admin")
+        || path.starts_with("share/")
+    {
         return admin_page().await;
     }
 

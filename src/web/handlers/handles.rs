@@ -23,10 +23,7 @@ pub struct AddHandleRequest {
     pub path: Option<String>,
 }
 
-pub async fn list_handles(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Json<Value> {
+pub async fn list_handles(State(state): State<AppState>, Path(id): Path<String>) -> Json<Value> {
     match state.manager.get(&id) {
         Some(handle) => {
             let handles = handle.list_handles();
@@ -75,10 +72,16 @@ pub async fn add_handle(
 
     state.manager.logger().log(
         "add_handle",
-        &format!("id={} name={} sink={} path={:?}", id, req.name, req.sink, req.path),
+        &format!(
+            "id={} name={} sink={} path={:?}",
+            id, req.name, req.sink, req.path
+        ),
     );
 
-    match state.manager.register_sink(&id, req.name.clone(), &req.sink, req.path.as_deref()) {
+    match state
+        .manager
+        .register_sink(&id, req.name.clone(), &req.sink, req.path.as_deref())
+    {
         Ok(()) => Json(serde_json::json!({
             "status": "ok",
             "data": {
