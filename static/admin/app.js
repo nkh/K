@@ -1825,7 +1825,7 @@ function renderPanels() {
         html += `
             <div class="welcome-panel">
                 <div class="welcome-card">
-                    <h2>vrunner</h2>
+                    <img src="favicon.ico" alt="vrunner" style="height:2rem;width:auto;margin-bottom:0.75rem;">
                     <p>Spawn a command to get started. Your terminal output will appear here.</p>
                     <div class="welcome-form">
                         <input type="text" id="welcomeCmd" placeholder="/usr/bin/htop" onkeydown="if(event.key==='Enter'){event.preventDefault();spawnFromWelcome()}">

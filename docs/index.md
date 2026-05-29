@@ -2,6 +2,10 @@
 
 A virtual terminal runner with web control plane.
 
+## Overview
+
+![vrunner web UI overview](screenshots/01-overview.png)
+
 ## Where to Start
 
 | You want to... | Read this first |
