@@ -228,6 +228,7 @@ function releaseCurrentFocusTrap() {
         const killBtn = e.target.closest('.cmd-kill-btn');
         if (killBtn) {
             e.stopPropagation();
+            if (killBtn.disabled) return; // don't kill commands on unreachable instances
             killCommand(killBtn.dataset.instUrl, killBtn.dataset.cmdId);
         }
     });
@@ -241,6 +242,7 @@ function releaseCurrentFocusTrap() {
             url: u,
             label: params.getAll('label')[i] || `Instance ${i + 1}`,
             token: params.getAll('token')[i] || '',
+            reachable: undefined, // not yet checked
         }));
     } else {
         // Default: current origin
@@ -248,6 +250,7 @@ function releaseCurrentFocusTrap() {
             url: window.location.origin,
             label: 'Local',
             token: '',
+            reachable: undefined, // not yet checked
         }];
     }
 
@@ -618,7 +621,8 @@ function switchSidebarTab(tab, el) {
 function updateSidebarTabsVisibility() {
     const spawnTab = document.querySelector('.sidebar-tab:nth-child(2)');
     const spawnContent = document.getElementById('tab-spawn');
-    if (state.serverReachable) {
+    const anyReachable = state.instanceUrls.some(i => i.reachable === true);
+    if (anyReachable) {
         if (spawnTab) spawnTab.style.display = '';
         if (spawnContent) spawnContent.style.display = '';
     } else {
@@ -630,6 +634,56 @@ function updateSidebarTabsVisibility() {
             const cmdsTab = document.querySelector('.sidebar-tab:first-child');
             if (cmdsTab) switchSidebarTab('commands', cmdsTab);
         }
+    }
+}
+
+// ─── Disconnected state ───
+
+/// Central function that updates all UI elements when instance reachability changes.
+/// Called by loadCommands() when any instance's reachable flag changes.
+function updateDisconnectedUI() {
+    updateSidebarBanner();
+    updateSidebarTabsVisibility();
+    updateTerminalDisconnectedOverlay();
+}
+
+/// Show/hide a disconnected banner in the sidebar header area.
+function updateSidebarBanner() {
+    let banner = document.getElementById('disconnectedBanner');
+    const unreachable = state.instanceUrls.filter(i => i.reachable === false);
+    if (unreachable.length > 0) {
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'disconnectedBanner';
+            banner.className = 'disconnected-banner';
+            const content = document.getElementById('sidebarContent');
+            content.insertBefore(banner, content.firstChild);
+        }
+        const labels = unreachable.map(i => i.label).join(', ');
+        banner.innerHTML = '<span class="disconnected-icon">&#9888;</span> Server disconnected: ' +
+            escHtml(labels) + ' &mdash; output may be stale';
+    } else {
+        if (banner) banner.remove();
+    }
+}
+
+/// Show/hide a "Server unreachable" overlay on the terminal panel when
+/// the currently selected command belongs to a disconnected instance.
+function updateTerminalDisconnectedOverlay() {
+    const panel = document.querySelector('.panel');
+    if (!panel) return;
+    let overlay = panel.querySelector('.disconnected-overlay');
+    const inst = state.instanceUrls.find(i => i.url === state.selectedInstUrl);
+    if (inst && inst.reachable === false) {
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.className = 'disconnected-overlay';
+            overlay.innerHTML = '<span>&#9888; Server unreachable &mdash; output is stale</span>';
+            const vttyEl = panel.querySelector('.vtty-container');
+            if (vttyEl) vttyEl.appendChild(overlay);
+        }
+    } else {
+        if (overlay) overlay.remove();
     }
 }
 
@@ -661,17 +715,28 @@ function switchViewTab(view, el) {
 
 // ─── Commands ───
 async function loadCommands() {
-    // Load commands from all instances
+    // Load commands from all instances and track reachability.
+    let anyReachableChanged = false;
     for (const inst of state.instanceUrls) {
         try {
             const res = await fetch(apiUrl('/api/commands', inst), { headers: authHeadersForInstance(inst) });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
             const json = await res.json();
             inst._commands = json.status === 'ok' ? json.data : [];
+            const wasReachable = inst.reachable;
+            inst.reachable = true;
             inst._lastError = null;
+            if (wasReachable !== true) anyReachableChanged = true;
         } catch (e) {
-            inst._commands = [];
+            inst._commands = inst._commands || [];
+            const wasReachable = inst.reachable;
+            inst.reachable = false;
             inst._lastError = 'connection lost (instance may have exited)';
+            if (wasReachable !== false) anyReachableChanged = true;
         }
+    }
+    if (anyReachableChanged) {
+        updateDisconnectedUI();
     }
 
     // Check if welcome-panel state changed and re-render panels if so
@@ -692,6 +757,8 @@ async function loadCommands() {
     const filterLower = filter.toLowerCase();
     let fingerprint = '';
     for (const inst of state.instanceUrls) {
+        // Include reachability in fingerprint so UI updates when status changes
+        fingerprint += inst.url + ':reachable=' + inst.reachable + '|';
         for (const cmd of (inst._commands || [])) {
             const cmdName = cmd.name || cmd.id;
             if (filterLower && !cmdName.toLowerCase().includes(filterLower) &&
@@ -817,6 +884,9 @@ async function loadCommands() {
             const isPinned = pinnedNames.includes(cmdName);
             const frozenClass = isFrozen ? ' frozen' : '';
             const exitedClass = (!isAlive && !isFrozen) ? ' exited' : '';
+            const instUnreachable = inst.reachable === false;
+            const dimStyle = instUnreachable ? 'opacity:0.4;' : ((isAlive || isFrozen) ? '' : 'opacity:0.6;');
+            const killDisabled = instUnreachable ? ' disabled title="Server disconnected"' : ' title="Kill"';
             // Build inline detail: "12s 3.2% 128MB pid:1234"
             const detailParts = [];
             if (runtimeStr) detailParts.push(runtimeStr);
@@ -824,10 +894,11 @@ async function loadCommands() {
             if (resourceStr) detailParts.push(resourceStr);
             if (cmd.pid) detailParts.push('pid:' + cmd.pid);
             const detailStr = detailParts.join(' ');
+            const unreachableTitle = instUnreachable ? ` [disconnected]` : '';
             out += `
-                <div class="cmd-item${selected}${frozenClass}${exitedClass}" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" onclick="selectCommand(this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)}" style="${(isAlive || isFrozen) ? '' : 'opacity:0.6;'}">
+                <div class="cmd-item${selected}${frozenClass}${exitedClass}${instUnreachable ? ' unreachable' : ''}" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" onclick="selectCommand(this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)}${unreachableTitle}" style="${dimStyle}">
                     <div class="cmd-item-row">
-                        <button class="btn btn-xs btn-danger cmd-kill-btn" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" title="Kill">&#x2715;</button>
+                        <button class="btn btn-xs btn-danger cmd-kill-btn" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}"${killDisabled}>&#x2715;</button>
                         <button class="pin-btn${isPinned ? ' active' : ''}" onclick="event.stopPropagation();togglePinCmd('${escHtml(cmdName)}')" title="${isPinned ? 'Unpin' : 'Pin'}">&#9734;</button>
                         <span class="name">${escHtml(cmdName)}</span>
                         <span class="cmd-detail-inline">${escHtml(detailStr)}</span>
@@ -907,6 +978,7 @@ function selectCommand(instUrl, cmdId, name) {
     state.panels.forEach(p => p.scrollbackOffset = restoredOffset);
 
     updatePanelCommandInfo();
+    updateTerminalDisconnectedOverlay();
     loadCommands(); // Re-render to update selection
     // Immediately load VTTY content via HTTP
     loadVttyHttp(instUrl, cmdId);
@@ -1326,19 +1398,36 @@ function connectVttyWs(instUrl, cmdId) {
                 state._wsLatency = 0;
                 document.getElementById('connStatus').textContent = 'WS Disconnected';
                 updateWsQualityIndicator();
+                // Mark instance as potentially unreachable when WS drops
+                if (state.vttyWsUrl) {
+                    const wsInst = state.instanceUrls.find(i => i.url === state.vttyWsUrl);
+                    if (wsInst && wsInst.reachable) {
+                        // Don't immediately mark unreachable — the server might just
+                        // have closed this particular WS.  A failed /api/commands
+                        // fetch in the next loadCommands() cycle will confirm it.
+                        // But bump reconnect count so we stop retrying aggressively.
+                    }
+                }
                 // When WebSocket disconnects, schedule an HTTP fetch to keep display alive
                 if (state.selectedInstUrl && state.selectedCmdId) {
                     scheduleVttyHttp(state.selectedInstUrl, state.selectedCmdId, 0);
                 }
                 // Auto-reconnect after 2 seconds if the command is still selected and alive
+                // Cap reconnect attempts to avoid hammering a dead server
                 if (state.selectedInstUrl && state.selectedCmdId && !state._wsReconnectTimer) {
                     state._wsReconnectCount++;
-                    state._wsReconnectTimer = setTimeout(() => {
-                        state._wsReconnectTimer = null;
-                        if (state.selectedInstUrl && state.selectedCmdId && state.updateMode === 'push') {
-                            connectVttyWs(state.selectedInstUrl, state.selectedCmdId);
-                        }
-                    }, 2000);
+                    if (state._wsReconnectCount <= 5) {
+                        state._wsReconnectTimer = setTimeout(() => {
+                            state._wsReconnectTimer = null;
+                            if (state.selectedInstUrl && state.selectedCmdId && state.updateMode === 'push') {
+                                // Only reconnect if the instance is still reachable
+                                const inst = state.instanceUrls.find(i => i.url === state.selectedInstUrl);
+                                if (inst && inst.reachable !== false) {
+                                    connectVttyWs(state.selectedInstUrl, state.selectedCmdId);
+                                }
+                            }
+                        }, 2000);
+                    }
                 }
             }
         };
@@ -1361,6 +1450,7 @@ function disconnectVttyWs() {
     state._wsPingInterval = null;
     state._wsPingSendTime = 0;
     state._wsLatency = 0;
+    state._wsReconnectCount = 0;
     if (state.vttyWs) {
         state.vttyWs.onclose = null; // prevent re-entry
         state.vttyWs.close();
