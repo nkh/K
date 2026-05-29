@@ -7,7 +7,11 @@ The web UI provides several keyboard shortcuts for common actions.
 | Shortcut | Action |
 |----------|--------|
 | `Ctrl+Shift+F` | Open global search across all command output |
+| `Ctrl+Shift+C` | Copy terminal text selection to clipboard |
+| `Ctrl+Shift+S` / `Alt+S` | Toggle selection mode in the terminal panel |
 | `L` | Toggle log viewer (when no input is focused) |
+| `?` | Show keyboard shortcuts overlay |
+| `Shift+F10` / Context Menu key | Open context menu for the selected command |
 | `+` / `=` | Increase global font size |
 | `-` | Decrease global font size |
 | `Escape` | Close any open modal, overlay, or search bar |

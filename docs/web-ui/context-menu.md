@@ -6,6 +6,12 @@ Right-clicking on a command in the sidebar opens a context menu with additional 
 
 ## Menu Items
 
+### View Terminal
+Selects the command and switches to its terminal panel. Equivalent to clicking the command in the sidebar.
+
+### Copy URL
+Copies the vrunner instance URL for the command to the clipboard. Useful when working with multi-instance setups.
+
 ### Kill
 Terminates the selected command. Equivalent to clicking the red kill button (`✕`) in the command list.
 
@@ -15,23 +21,8 @@ Toggles the command between paused (SIGSTOP) and running (SIGCONT) states. When 
 ### Restart
 Restarts the command with the same configuration (command, arguments, working directory, environment).
 
-### Copy Name
-Copies the command name to the clipboard.
-
-### Copy Command Line
-Copies the full command line (name + arguments) to the clipboard.
-
-### Copy Terminal
-Copies the terminal output to the clipboard.
-
-### Export Terminal
-Downloads the full terminal buffer as a text file.
-
 ### Purge (exited commands only)
 Permanently removes an exited command from the manager. This discards the VTTY buffer and all associated state. Only available for commands that have already exited.
-
-### Pin / Unpin
-Pins or unpins the command. Pinned commands always appear at the top of the command list, regardless of filter or sort order.
 
 ## Keyboard Navigation
 

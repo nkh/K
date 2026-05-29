@@ -8,8 +8,8 @@ The terminal view is the main content area that renders command output in real t
 
 Terminal output is rendered inside a `<pre>` element using monospace fonts. The content is updated via two transport modes:
 
-- **Push (WebSocket)**: The server sends VTTY diffs in real time as the command produces output. This is the default and most efficient mode.
-- **Poll (HTTP)**: The client periodically requests the current terminal state from the server. The poll interval is configurable in the bottom bar.
+- **Push (WebSocket)**: The server sends lightweight `vtty_dirty` notifications when the buffer changes. The client then fetches fresh HTML via `GET /api/commands/{id}/vtty/html`. This is the default and most efficient mode.
+- **Poll (HTTP)**: The client periodically calls `GET /api/commands/{id}/vtty/changed` to check if the buffer has changed, then fetches updated HTML. The poll interval is configurable in the bottom bar.
 
 ## Buffer Support
 
