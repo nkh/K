@@ -64,6 +64,9 @@ vrunner \- virtual terminal runner and process orchestrator with web control pla
 .B vrunner
 \fBscreenshot\fR [\fITARGET\fR] [\fIOPTIONS\fR]
 
+.B vrunner
+\fBcompletions\fR \fISHELL\fR
+
 .SH DESCRIPTION
 \fBvrunner\fR executes commands inside virtual TTYs (VTTYs), exposes their output through a web API, and provides a built-in administrative interface for remote control. By default, it runs silently with no terminal output, making it ideal for background development servers, CI pipelines, or headless environments.
 
@@ -479,6 +482,22 @@ Path to a TTF/OTF font file. When omitted, the server searches common system pat
 .RE
 .RE
 
+.SS completions
+Generate a shell completion script for vrunner. Outputs the script to standard output; redirect to a file or source directly. Supports bash, zsh, fish, elvish, and powershell.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner completions \fISHELL\fR
+.RE
+.PP
+.B Example (bash):
+.RS
+vrunner completions bash > /etc/bash_completion.d/vrunner
+.RE
+.RE
+
 .SS resize
 Resize a command's virtual terminal. When used without explicit \fB\-\-rows\fR or \fB\-\-cols\fR flags, the terminal is automatically resized to match the dimensions of the current terminal (auto-detect mode). When one dimension is specified, the other is auto-detected from the current terminal.
 
@@ -555,7 +574,7 @@ Get paginated VTTY content. Default offset is 0, default limit is 50.
 
 .TP
 .B POST /api/commands/:id/resize
-Resize a command's virtual terminal. Request body: \fB{"rows": N, "cols": N}\fR. Valid ranges: rows 1-200, cols 1-500.
+Resize a command's virtual terminal. Request body: \fB{"rows": N, "cols": N}\fR. Valid ranges: rows 1-10000, cols 1-1000.
 
 .TP
 .B POST /api/commands/:id/freeze
@@ -955,6 +974,7 @@ Child command exited with a non-zero status (when running a command directly).
 .BR vrunner\-config\-check (1),
 .BR vrunner\-cat (1),
 .BR vrunner\-screenshot (1),
+.BR vrunner\-completions (1),
 .BR curl (1),
 .BR kill (1),
 .BR lsof (8)

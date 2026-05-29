@@ -6,6 +6,9 @@
 //! freeze, thaw, cat, screenshot, resize, purge) and returns `true` if one was handled.
 
 use anyhow::Result;
+use std::io::stdout;
+
+use clap::CommandFactory;
 
 use crate::cli::args::{Cli, Commands};
 use crate::cli::subcommands;
@@ -133,6 +136,12 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
         Some(Commands::Screenshot { .. }) => {
             // screenshot is async (needs HTTP), fall through to async phase
         }
+        Some(Commands::Completions { shell }) => {
+            // Generate shell completions synchronously and print to stdout
+            let mut cmd = <Cli as CommandFactory>::command();
+            clap_complete::generate(*shell, &mut cmd, "vrunner", &mut stdout());
+            return Ok(None);
+        }
         None => {}
     }
 
@@ -238,9 +247,9 @@ pub async fn handle_subcommands(cli: &Cli) -> Result<bool> {
             .await?;
             Ok(true)
         }
-        // Cert and ConfigCheck are handled synchronously in pre_runtime()
+        // Cert, ConfigCheck, and Completions are handled synchronously in pre_runtime()
         // and never reach the async phase.
-        Some(Commands::Cert { .. }) | Some(Commands::ConfigCheck) => unreachable!(),
+        Some(Commands::Cert { .. }) | Some(Commands::ConfigCheck) | Some(Commands::Completions { .. }) => unreachable!(),
         None => Ok(false),
     }
 }

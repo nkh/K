@@ -469,6 +469,42 @@ vrunner screenshot --output capture.png --font-size 16 htop
 
 ---
 
+### `completions`
+
+Generate shell completion scripts for vrunner. Outputs the completion
+script to stdout, which can be redirected to a file or sourced directly.
+
+```bash
+# Generate and install bash completions
+vrunner completions bash > /etc/bash_completion.d/vrunner
+source /etc/bash_completion.d/vrunner
+
+# Generate zsh completions
+vrunner completions zsh > ~/.zsh/functions/_vrunner
+mkdir -p ~/.zsh/completions
+mv ~/.zsh/functions/_vrunner ~/.zsh/completions/_vrunner
+
+# Generate fish completions
+vrunner completions fish > ~/.config/fish/completions/vrunner.fish
+
+# Generate elvish completions
+vrunner completions elvish > ~/.elvish/lib/vrunner.elv
+```
+
+| Argument | Description |
+|----------|-------------|
+| `shell` | The shell to generate completions for. Supported: `bash`, `zsh`, `fish`, `elvish`, `powershell`. |
+
+The completion scripts provide tab-completion for all vrunner subcommands,
+global options (`--config`, `--bind`, `--port`, etc.), subcommand-specific
+flags, and shell names where applicable.
+
+To persist completions across sessions, add the `source` command to your
+shell's startup file (`~/.bashrc`, `~/.zshrc`, etc.) or install the output
+file to your system's completion directory.
+
+---
+
 ## Special Key Notation
 
 The `--send-keys` flag and the `keys` field in the API accept key
