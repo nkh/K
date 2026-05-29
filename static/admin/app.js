@@ -34,6 +34,9 @@ const state = {
     serverUpdateMode: null,
     serverPollMs: null,
     serverDirtyMs: null,
+    // Server-configured screenshot defaults
+    serverScreenshotFontSize: 12,
+    serverScreenshotFontName: 'monospace',
     // WebSocket for real-time log streaming
     logWs: null,
     logWsReconnectTimer: null,
@@ -236,6 +239,7 @@ function releaseCurrentFocusTrap() {
     // Fetch server config and apply update mode defaults
     fetchServerConfig();
     applyUpdateModeUI();
+    updateSidebarTabsVisibility();
 
     // Auto-collapse sidebar on small screens
     if (window.innerWidth <= 768) {
@@ -564,6 +568,26 @@ function switchSidebarTab(tab, el) {
     document.getElementById('tab-templates').style.display = tab === 'templates' ? '' : 'none';
     document.getElementById('tab-certs').style.display = tab === 'certs' ? '' : 'none';
     if (tab === 'templates') renderTemplates();
+}
+
+// Update sidebar tab visibility based on server reachability.
+// When no vrunner instance is reachable, hide the Spawn tab.
+function updateSidebarTabsVisibility() {
+    const spawnTab = document.querySelector('.sidebar-tab:nth-child(2)');
+    const spawnContent = document.getElementById('tab-spawn');
+    if (state.serverReachable) {
+        if (spawnTab) spawnTab.style.display = '';
+        if (spawnContent) spawnContent.style.display = '';
+    } else {
+        if (spawnTab) spawnTab.style.display = 'none';
+        if (spawnContent) spawnContent.style.display = 'none';
+        // If spawn tab was active, switch to commands
+        const activeTab = document.querySelector('.sidebar-tab.active');
+        if (activeTab && activeTab === spawnTab) {
+            const cmdsTab = document.querySelector('.sidebar-tab:first-child');
+            if (cmdsTab) switchSidebarTab('commands', cmdsTab);
+        }
+    }
 }
 
 // ─── View Tabs ───
@@ -1046,6 +1070,7 @@ async function fetchServerConfig() {
         // Re-render panels if reachability changed (e.g. "not running" -> welcome)
         if (wasReachable !== state.serverReachable) {
             renderPanels();
+            updateSidebarTabsVisibility();
         }
         if (json.status === 'ok' && json.data && json.data.web) {
             state.serverUpdateMode = json.data.web.update_mode;
@@ -1059,11 +1084,16 @@ async function fetchServerConfig() {
                 state.pollInterval = state.serverPollMs || 500;
             }
         }
+        if (json.status === 'ok' && json.data && json.data.vtty) {
+            state.serverScreenshotFontSize = json.data.vtty.screenshot_font_size || 12;
+            state.serverScreenshotFontName = json.data.vtty.screenshot_font_name || 'monospace';
+        }
     } catch (e) {
         const wasReachable = state.serverReachable;
         state.serverReachable = false;
         if (wasReachable !== state.serverReachable) {
             renderPanels();
+            updateSidebarTabsVisibility();
         }
     }
 }
@@ -1857,7 +1887,7 @@ function renderPanels() {
             html += `
             <div class="welcome-panel">
                 <div class="welcome-card">
-                    <img src="favicon.ico" alt="vrunner" style="height:2rem;width:auto;margin-bottom:0.75rem;">
+                    <img src="favicon.png" alt="vrunner" style="height:2rem;width:auto;margin-bottom:0.75rem;">
                     <p>Spawn a command to get started. Your terminal output will appear here.</p>
                     <div class="welcome-form">
                         <input type="text" id="welcomeCmd" placeholder="/usr/bin/htop" onkeydown="if(event.key==='Enter'){event.preventDefault();spawnFromWelcome()}">
@@ -1876,7 +1906,7 @@ function renderPanels() {
             html += `
             <div class="welcome-panel">
                 <div class="welcome-card">
-                    <img src="favicon.ico" alt="vrunner" style="height:2rem;width:auto;margin-bottom:0.75rem;">
+                    <img src="favicon.png" alt="vrunner" style="height:2rem;width:auto;margin-bottom:0.75rem;">
                     <p class="welcome-not-running">vrunner is not running</p>
                     <p style="margin-top:0.25rem;">No vrunner instance could be reached at <span class="welcome-url">${escHtml(getBaseUrl())}</span></p>
                     <p>Start vrunner and refresh this page to connect.</p>
@@ -1907,9 +1937,9 @@ function renderPanels() {
                         </span>
                         <span class="panel-resize-controls" id="resizeControls-${panel.id}">
                             <label>Rows</label>
-                            <input type="number" id="resizeRows-${panel.id}" value="24" min="1" max="200" title="Terminal rows">
+                            <input type="number" id="resizeRows-${panel.id}" value="24" min="1" max="10000" title="Terminal rows">
                             <label>Cols</label>
-                            <input type="number" id="resizeCols-${panel.id}" value="80" min="1" max="500" title="Terminal columns">
+                            <input type="number" id="resizeCols-${panel.id}" value="80" min="1" max="1000" title="Terminal columns">
                             <button class="btn btn-xs" onclick="resizeTerminalPanel('${panel.id}')">Resize</button>
                         </span>
                         <select id="bufferSelect-${panel.id}" class="select-xs" onchange="switchBufferPanel('${panel.id}', this.value)" title="Which terminal buffer to view">
@@ -1928,6 +1958,7 @@ function renderPanels() {
                         ${hasMultiplePanels ? `<button class="btn btn-xs btn-danger" onclick="removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
                         <button class="btn btn-xs" onclick="copyTerminalSelection('${panel.id}')" title="Copy selected text to clipboard">Copy</button>
                         <button class="btn btn-xs" onclick="exportTerminal('${panel.id}')" title="Export terminal as text">&#x2913;</button>
+                        <button class="btn btn-xs" onclick="screenshotPanel('${panel.id}')" title="Download screenshot as PNG">&#x1F4F7;</button>
                         <button class="btn btn-xs" id="panelThemeBtn-${panel.id}" onclick="togglePanelTheme('${panel.id}')" title="Panel theme: inherit (click to toggle)">${panel.theme === 'light' ? '\u263E' : panel.theme === 'dark' ? '\u2600' : '\u25D0'}</button>
                     </div>
                     <div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px;">
@@ -3215,6 +3246,59 @@ function exportTerminal(panelId) {
     a.download = cmdName + '.txt';
     a.click();
     URL.revokeObjectURL(url);
+}
+
+/// Download a PNG screenshot of the currently selected command's VTTY buffer.
+/// Uses server-configured default font size and font name.
+async function screenshotPanel(panelId) {
+    // Determine which command is shown in this panel
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj) return;
+    const instUrl = panelObj.instUrl;
+    const isSelectedPanel = (instUrl === state.selectedInstUrl);
+    const cmdId = isSelectedPanel ? state.selectedCmdId : null;
+    if (!cmdId) {
+        alert('No command selected to screenshot.');
+        return;
+    }
+
+    // Use server-configured defaults for font
+    const fontSize = state.serverScreenshotFontSize || 12;
+    const fontName = state.serverScreenshotFontName || 'monospace';
+
+    // Build the PNG endpoint URL
+    const params = new URLSearchParams({ font_size: fontSize });
+    if (fontName && fontName !== 'monospace') {
+        params.set('font_name', fontName);
+    }
+    const url = apiUrl(`/api/commands/${cmdId}/vtty/png?${params}`, { url: instUrl });
+
+    try {
+        const res = await fetch(url, { headers: authHeadersForInstance({ url: instUrl }) });
+        if (!res.ok) {
+            const json = await res.json().catch(() => null);
+            const error = (json && json.error) || `HTTP ${res.status}`;
+            alert('Screenshot failed: ' + error);
+            return;
+        }
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        // Use command name for the filename
+        let cmdName = 'screenshot';
+        for (const inst of state.instanceUrls) {
+            if (inst._commands) {
+                const cmd = inst._commands.find(c => c.id === cmdId);
+                if (cmd) { cmdName = (cmd.name || cmd.id).replace(/\//g, '_'); break; }
+            }
+        }
+        a.href = blobUrl;
+        a.download = cmdName + '.png';
+        a.click();
+        URL.revokeObjectURL(blobUrl);
+    } catch (e) {
+        alert('Screenshot failed: ' + e.message);
+    }
 }
 
 // ─── Right-click Context Menu ───

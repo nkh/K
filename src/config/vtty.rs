@@ -17,6 +17,27 @@ pub struct VttyConfig {
     pub truecolor: bool,
     /// Enable mouse event forwarding.
     pub mouse: bool,
+    /// Default font size (in points) for PNG screenshot rendering.
+    /// Used by the `vrunner screenshot` CLI command and the web UI
+    /// screenshot button when no explicit size is specified.
+    /// Default: 12.
+    #[serde(default = "default_screenshot_font_size")]
+    pub screenshot_font_size: f32,
+    /// Default font name/path for PNG screenshot rendering.
+    /// When set to "monospace" (the default), the renderer searches common
+    /// system paths for a monospace TTF font. Set to an absolute path to
+    /// use a specific font file.
+    /// Default: "monospace".
+    #[serde(default = "default_screenshot_font_name")]
+    pub screenshot_font_name: String,
+}
+
+fn default_screenshot_font_size() -> f32 {
+    12.0
+}
+
+fn default_screenshot_font_name() -> String {
+    "monospace".to_string()
 }
 
 impl Default for VttyConfig {
@@ -28,6 +49,8 @@ impl Default for VttyConfig {
             scrollback: 5000,
             truecolor: true,
             mouse: false,
+            screenshot_font_size: default_screenshot_font_size(),
+            screenshot_font_name: default_screenshot_font_name(),
         }
     }
 }

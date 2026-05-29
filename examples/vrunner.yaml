@@ -51,6 +51,13 @@ vtty:
   truecolor: true
   # Enable mouse event forwarding to child processes.
   mouse: false
+  # Default font size (in points) for PNG screenshot rendering.
+  # Used by the web UI screenshot button and `vrunner screenshot` CLI.
+  screenshot_font_size: 12
+  # Default font name/path for PNG screenshots.
+  # "monospace" searches common system paths for a monospace TTF font.
+  # Set to an absolute path to use a specific font file.
+  screenshot_font_name: "monospace"
 
 display:
   # Show VTTY output on the local terminal screen.

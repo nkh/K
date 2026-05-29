@@ -43,6 +43,11 @@ term = "xterm-256color"
 scrollback = 5000
 truecolor = true
 mouse = false
+# Default font size for PNG screenshot rendering (points).
+screenshot_font_size = 12
+# Default font name/path for PNG screenshots.
+# "monospace" = search system paths. Set to a path for a specific font.
+screenshot_font_name = "monospace"
 
 [display]
 enabled = false

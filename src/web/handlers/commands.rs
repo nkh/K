@@ -141,11 +141,11 @@ pub async fn start_command(State(state): State<AppState>, Json(body): Json<Value
 
     // Validate dimensions if provided
     if let (Some(r), Some(c)) = (rows, cols) {
-        if r < 1 || c < 1 || r > 200 || c > 500 {
+        if r < 1 || c < 1 || r > 10000 || c > 1000 {
             return Json(serde_json::json!({
                 "status": "error",
                 "data": null,
-                "error": "Invalid dimensions: rows must be 1-200, cols must be 1-500"
+                "error": "Invalid dimensions: rows must be 1-10000, cols must be 1-1000"
             }));
         }
     }
@@ -305,6 +305,7 @@ pub async fn get_info(State(state): State<AppState>) -> Json<Value> {
     let certs = state.cert_store.list();
     let cert_names: Vec<&str> = certs.iter().map(|c| c.name.as_str()).collect();
     let web_config = &state.manager.config().web;
+    let vtty_config = &state.manager.config().vtty;
 
     Json(serde_json::json!({
         "status": "ok",
@@ -317,6 +318,10 @@ pub async fn get_info(State(state): State<AppState>) -> Json<Value> {
                 "update_mode": web_config.update_mode,
                 "dirty_check_ms": web_config.dirty_check_ms,
                 "default_poll_ms": web_config.default_poll_ms,
+            },
+            "vtty": {
+                "screenshot_font_size": vtty_config.screenshot_font_size,
+                "screenshot_font_name": vtty_config.screenshot_font_name,
             },
         },
         "error": null

@@ -15,7 +15,7 @@
 <div class="app">
     <!-- Top bar -->
     <div class="topbar">
-        <img src="favicon.ico" alt="vrunner" style="height:1.1rem;width:auto;margin-right:0.15rem;">
+        <img src="favicon.png" alt="vrunner" style="height:1.1rem;width:auto;margin-right:0.15rem;">
         <div class="topbar-group topbar-group-left">
             <button class="btn btn-xs" onclick="toggleSidebar()" title="Toggle sidebar">&#9776;</button>
             <button class="btn btn-xs" onclick="addPanel()" title="Add panel">+ Panel</button>
@@ -78,11 +78,11 @@
                         <div class="autofit-row">
                             <div class="field">
                                 <label>Rows</label>
-                                <input type="number" id="spawnRows" value="" min="1" max="200" placeholder="default">
+                                <input type="number" id="spawnRows" value="" min="1" max="10000" placeholder="default">
                             </div>
                             <div class="field">
                                 <label>Cols</label>
-                                <input type="number" id="spawnCols" value="" min="1" max="500" placeholder="default">
+                                <input type="number" id="spawnCols" value="" min="1" max="1000" placeholder="default">
                             </div>
                             <button class="btn btn-xs" onclick="autofitTerminalSize()" title="Calculate optimal terminal size from the panel container" style="align-self:flex-end;margin-bottom:0.2rem;">Auto-fit</button>
                         </div>

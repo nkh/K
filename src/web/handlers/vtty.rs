@@ -178,11 +178,11 @@ pub async fn resize_vtty(
     let rows = body.get("rows").and_then(|v| v.as_u64()).unwrap_or(24) as u16;
     let cols = body.get("cols").and_then(|v| v.as_u64()).unwrap_or(80) as u16;
 
-    if rows < 1 || cols < 1 || rows > 200 || cols > 500 {
+    if rows < 1 || cols < 1 || rows > 10000 || cols > 1000 {
         return Json(serde_json::json!({
             "status": "error",
             "data": null,
-            "error": "Invalid dimensions: rows must be 1-200, cols must be 1-500"
+            "error": "Invalid dimensions: rows must be 1-10000, cols must be 1-1000"
         }));
     }
 
@@ -265,20 +265,24 @@ pub async fn get_vtty_text(State(state): State<AppState>, Path(id): Path<String>
 /// Render the VTTY buffer as a PNG image using a TrueType/OpenType font
 /// and return it as binary data.
 /// Query parameters:
-/// - `font_size`: pixel height per character cell (default 14, clamped 6–48)
-/// - `font_name`: path to a TTF/OTF font file.  When omitted, the server
+/// - `font_size`: pixel height per character cell (default from config, clamped 6–48)
+/// - `font_name`: path to a TTF/OTF font file.  When omitted or "monospace", the server
 ///   searches common system paths for a monospace font.
 pub async fn get_vtty_png(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Response {
+    let config = &state.manager.config().vtty;
     let font_size: f32 = params
         .get("font_size")
         .and_then(|v| v.parse::<f32>().ok())
-        .unwrap_or(14.0)
+        .unwrap_or(config.screenshot_font_size)
         .clamp(6.0, 48.0);
-    let font_path: Option<String> = params.get("font_name").cloned();
+    let font_path: Option<String> = params
+        .get("font_name")
+        .cloned()
+        .filter(|v| !v.is_empty() && v != "monospace");
 
     match state.manager.get(&id) {
         Some(handle) => match handle.vtty_png(font_size, font_path.as_deref()).await {
