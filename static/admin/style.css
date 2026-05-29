@@ -332,6 +332,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .welcome-card .welcome-form button { width:100%;margin-top:0.3rem; }
 .welcome-card .welcome-tips { margin-top:1rem;text-align:left;font-size:0.65rem;color:var(--text-muted); }
 .welcome-card .welcome-tips li { margin-bottom:0.25rem; }
+.welcome-card .welcome-not-running { font-size:1.1rem;color:var(--red);font-weight:600;margin-bottom:0.5rem; }
+.welcome-card .welcome-url { font-family:var(--font-mono);color:var(--text-muted); }
 
 /* View tabs — hidden by default, only used for docs overlay */
 .view-tabs { display: none; }

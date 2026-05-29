@@ -49,6 +49,8 @@ const state = {
     _resourceInterval: null,
     // Sound notifications
     soundEnabled: localStorage.getItem('vrunner_sound') !== 'false',
+    // Whether the primary instance is reachable (fetched from /api/info)
+    serverReachable: false,
 };
 
 // ─── Theme ───
@@ -1021,10 +1023,17 @@ async function togglePauseRunPanel(panelId) {
 //   This mode is useful when WebSocket connections are unreliable.
 
 /// Fetch server-side web config (update_mode, poll defaults) from /api/info.
+/// Also tracks whether the server is reachable at all.
 async function fetchServerConfig() {
     try {
         const res = await fetch(apiUrl('/api/info'), { headers: authHeaders() });
         const json = await res.json();
+        const wasReachable = state.serverReachable;
+        state.serverReachable = !!json.status;
+        // Re-render panels if reachability changed (e.g. "not running" -> welcome)
+        if (wasReachable !== state.serverReachable) {
+            renderPanels();
+        }
         if (json.status === 'ok' && json.data && json.data.web) {
             state.serverUpdateMode = json.data.web.update_mode;
             state.serverPollMs = json.data.web.default_poll_ms;
@@ -1037,7 +1046,13 @@ async function fetchServerConfig() {
                 state.pollInterval = state.serverPollMs || 500;
             }
         }
-    } catch (e) { /* ignore — use client defaults */ }
+    } catch (e) {
+        const wasReachable = state.serverReachable;
+        state.serverReachable = false;
+        if (wasReachable !== state.serverReachable) {
+            renderPanels();
+        }
+    }
 }
 
 /// Apply the current updateMode to the UI controls.
@@ -1823,9 +1838,10 @@ function renderPanels() {
     }
 
     if (state.panels.length === 1 && !hasAnyCommands && !state.selectedCmdId) {
-        // Show welcome panel
         _showingWelcome = true;
-        html += `
+        if (state.serverReachable) {
+            // Server is reachable but no commands running — show spawn form
+            html += `
             <div class="welcome-panel">
                 <div class="welcome-card">
                     <img src="favicon.ico" alt="vrunner" style="height:2rem;width:auto;margin-bottom:0.75rem;">
@@ -1842,6 +1858,18 @@ function renderPanels() {
                     </ul>
                 </div>
             </div>`;
+        } else {
+            // Server is unreachable — vrunner is not running
+            html += `
+            <div class="welcome-panel">
+                <div class="welcome-card">
+                    <img src="favicon.ico" alt="vrunner" style="height:2rem;width:auto;margin-bottom:0.75rem;">
+                    <p class="welcome-not-running">vrunner is not running</p>
+                    <p style="margin-top:0.25rem;">No vrunner instance could be reached at <span class="welcome-url">${escHtml(getBaseUrl())}</span></p>
+                    <p>Start vrunner and refresh this page to connect.</p>
+                </div>
+            </div>`;
+        }
     } else {
         _showingWelcome = false;
         for (const panel of state.panels) {
