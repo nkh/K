@@ -970,9 +970,14 @@ fn regression_merge_command_env() {
 
 #[test]
 fn regression_instance_registry_new() {
-    let reg = vrunner::instance::registry::InstanceRegistry::new()
-        .expect("InstanceRegistry::new should succeed");
+    // Use a temp directory to avoid interference from stale instance files
+    // left by previous vrunner runs in the shared system data dir.
+    let dir = std::env::temp_dir().join("vrunner-test-registry");
+    let _ = std::fs::remove_dir_all(&dir); // clean up any previous test run
+    let reg = vrunner::instance::registry::InstanceRegistry::with_dir(dir.clone())
+        .expect("InstanceRegistry::with_dir should succeed");
     assert!(reg.list_instances().is_empty());
+    let _ = std::fs::remove_dir_all(&dir); // cleanup
 }
 
 // ═══════════════════════════════════════════════════════════════════════

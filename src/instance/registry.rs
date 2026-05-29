@@ -13,11 +13,23 @@ pub struct InstanceRegistry {
 }
 
 impl InstanceRegistry {
+    /// Create a new registry using the system data directory.
+    ///
+    /// On Linux this resolves to `~/.local/share/vrunner/instances/`.
+    /// The directory is created if it doesn't exist.
     pub fn new() -> Result<Self> {
         let dir = dirs::data_dir()
             .unwrap_or_else(|| PathBuf::from("/tmp"))
             .join("vrunner")
             .join("instances");
+        Self::with_dir(dir)
+    }
+
+    /// Create a registry backed by a specific directory.
+    ///
+    /// Useful for tests to avoid polluting the shared system directory.
+    /// The directory is created if it doesn't exist.
+    pub fn with_dir(dir: PathBuf) -> Result<Self> {
         fs::create_dir_all(&dir)?;
         Ok(Self { dir })
     }
