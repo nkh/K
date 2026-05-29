@@ -19,6 +19,7 @@ Complete reference for all configuration entries, CLI flags, and their relations
    - [default_exit](#default_exit)
    - [command_log](#command_log)
    - [daemon](#daemon)
+   - [hooks](#hooks)
    - [web](#web)
    - [handles](#handles)
    - [templates](#templates)
@@ -214,6 +215,37 @@ command_log:
   file: null
 ```
 
+### `hooks`
+
+Global lifecycle event hooks. When a hook is set, vrunner executes the specified shell command when the corresponding event occurs. Hooks are fire-and-forget — vrunner does not wait for them to complete. The hook command string supports placeholder expansion at runtime.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `on_spawn` | `string?` | `null` | Shell command to run when a new command is spawned. |
+| `on_exit` | `string?` | `null` | Shell command to run when a command exits cleanly (exit code 0). |
+| `on_error` | `string?` | `null` | Shell command to run when a command exits with a non-zero code. |
+| `on_kill` | `string?` | `null` | Shell command to run when a command is killed (SIGTERM or SIGKILL). |
+
+**Available placeholders:**
+
+| Placeholder | Expanded to |
+|------------|-------------|
+| `{name}` | Command name (executable path) |
+| `{id}` | Command UUID |
+| `{pid}` | OS process ID |
+| `{exit_code}` | Exit code (only available in `on_exit` and `on_error`) |
+
+**Example:**
+
+```yaml
+hooks:
+  on_spawn: "echo 'Started {name} (pid={pid})' >> /var/log/vrunner.log"
+  on_error: "notify-send 'vrunner' '{name} exited with code {exit_code}'"
+  on_kill: "echo 'Killed {name}' >> /var/log/vrunner.log"
+```
+
+Hooks set here are **global defaults**. Per-command hooks set via the spawn API (`on_exit`, `on_error` fields) override these global values for that specific command.
+
 ### `daemon`
 
 Controls Unix daemon (background process) behavior.
@@ -320,6 +352,7 @@ Controls how the web UI discovers terminal buffer changes.
 | `update_mode` | string | `"push"` | How the web UI detects changes: `"push"` (server notifies via WebSocket) or `"poll"` (client polls) |
 | `dirty_check_ms` | number | `200` | Server-side dirty-check interval in ms (push mode) |
 | `default_poll_ms` | number | `500` | Client-side polling interval in ms (poll mode) |
+| `rate_limit.max_updates_per_sec` | `u32` | `30` | Maximum WebSocket dirty notifications per second per command. Token-bucket rate limiter. Set to `0` to disable. |
 
 **Note:** These fields are config-file-only; there are no corresponding CLI flags.
 
@@ -329,6 +362,8 @@ web:
   update_mode: "push"
   dirty_check_ms: 200
   default_poll_ms: 500
+  rate_limit:
+    max_updates_per_sec: 30
 ```
 
 ### `handles`
@@ -664,6 +699,7 @@ Every configuration file entry has a corresponding CLI flag. This table summariz
 | `templates` | *(array)* | Config only — no CLI equivalent |
 | `certificates` | `directory` | Config only — no CLI equivalent |
 | `certificates` | `entries` | `--certificate NAME:CERT:KEY` |
+| `hooks` | *(all fields)* | Config only — no CLI equivalent |
 | `web` | *(all fields)* | Config only — no CLI equivalent |
 | `interactive` | `tabs` | `--tabs` |
 | `command_log` | `pty_raw_log` | `--log-pty-raw <FILE>` |
@@ -842,6 +878,8 @@ web:
   update_mode: "push"       # "push" (server notifies via WebSocket) or "poll" (client polls)
   dirty_check_ms: 200       # server-side dirty-check interval in ms (push mode)
   default_poll_ms: 500      # client-side polling interval in ms (poll mode)
+  rate_limit:
+    max_updates_per_sec: 30  # max WS dirty notifications per sec per command (0 = disabled)
 
 # Interactive display options
 interactive:
