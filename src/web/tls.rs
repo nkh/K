@@ -28,6 +28,14 @@ impl TlsManager {
         cert_file: Option<&str>,
         key_file: Option<&str>,
     ) -> Result<Arc<rustls::ServerConfig>> {
+        // rustls 0.23 requires an explicit process-level CryptoProvider.
+        // The `ring` feature is enabled in Cargo.toml but the default
+        // provider is not set automatically — calling `install_default()`
+        // before any TLS operation prevents the runtime panic.
+        rustls::crypto::ring::default_provider()
+            .install_default()
+            .expect("failed to install rustls crypto provider");
+
         let (cert_pem, key_pem) = Self::load_or_generate(cert_file, key_file)?;
 
         let cert_slice = &mut cert_pem.as_slice();
