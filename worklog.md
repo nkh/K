@@ -213,3 +213,19 @@ Stage Summary:
 - Committed as a1133d0: fix: install rustls crypto provider before TLS operations
 - test-remote-tls.sh can now run (was skipped due to this bug)
 - Change: +8 lines in src/web/tls.rs
+
+---
+Task ID: 7
+Agent: main
+Task: Unskip test-remote-tls.sh — fix test assertions to match actual behavior
+
+Work Log:
+- Fixed server readiness probe: check for 401 instead of 200 (--remote enables auth)
+- Fixed HTTPS connectivity test: verify TLS responds, don't expect unauthenticated /api/info to return ok
+- Fixed kill endpoint: added Content-Type + JSON body (required by API)
+- Fixed ((PASS++)) arithmetic breaking set -e on zero-to-one transition
+- Result: 8/8 assertions pass, 0 failures
+
+Stage Summary:
+- Committed as d1fd8a9: fix: unskip test-remote-tls.sh
+- All 5 cookbook tests now pass (was 4/5 with TLS skipped)
