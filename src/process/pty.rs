@@ -205,10 +205,15 @@ impl PtySlave for PortablePtySlave {
         for (key, value) in env {
             cmd_builder.env(key, value);
         }
-        // Set working directory if provided
-        if let Some(d) = dir {
-            cmd_builder.cwd(d);
-        }
+        // Set working directory — ALWAYS explicitly.
+        // portable-pty 0.8.x falls back to $HOME when cwd is None
+        // (cmdbuilder.rs:as_command → unwrap_or(home)), so we must
+        // supply the actual current directory ourselves.
+        let cwd: std::path::PathBuf = match dir {
+            Some(d) => std::path::PathBuf::from(d),
+            None => std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+        };
+        cmd_builder.cwd(&cwd);
         let child =
             self.inner
                 .spawn_command(cmd_builder)

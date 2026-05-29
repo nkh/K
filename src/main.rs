@@ -108,6 +108,11 @@ async fn async_main(cli: Cli) -> Result<()> {
     // Initialize tracing (after daemonize, so logs go to the right place)
     tracing_subscriber::fmt::init();
 
+    // Log working directory at startup for diagnostics
+    if let Ok(cwd) = std::env::current_dir() {
+        tracing::info!(cwd = %cwd.display(), "Working directory");
+    }
+
     // Dispatch async subcommands (list, stop, spawn, etc.)
     if dispatch::handle_subcommands(&cli).await? {
         return Ok(());
