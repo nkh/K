@@ -58,6 +58,12 @@ vrunner \- virtual terminal runner and process orchestrator with web control pla
 .B vrunner
 \fBconfig-check\fR
 
+.B vrunner
+\fBcat\fR [\fITARGET\fR] [\fB\-\-color-always\fR]
+
+.B vrunner
+\fBscreenshot\fR [\fITARGET\fR] [\fIOPTIONS\fR]
+
 .SH DESCRIPTION
 \fBvrunner\fR executes commands inside virtual TTYs (VTTYs), exposes their output through a web API, and provides a built-in administrative interface for remote control. By default, it runs silently with no terminal output, making it ideal for background development servers, CI pipelines, or headless environments.
 
@@ -220,14 +226,6 @@ Save the VTTY buffer to \fIFILE\fR as plain text when the command exits. This is
 .TP
 .B \-\-send\-keys \fIKEYS\fR
 Send keystrokes to the command after it starts. Uses the same key notation as the API's \fBsend_keys\fR endpoint. Plain text is sent as-is; special keys use \fB<...>\fR notation: \fB<Enter>\fR, \fB<Tab>\fR, \fB<Esc>\fR, \fB<Up>\fR, \fB<Down>\fR, \fB<Left>\fR, \fB<Right>\fR, \fB<F1>\fR through \fB<F12>\fR, \fB<C\-c>\fR (Ctrl+C), \fB<C\-d>\fR (Ctrl+D), \fB<A\-x>\fR (Alt+x). Example: \fB\-\-send\-keys "ls<Enter>"\fR.
-
-.TP
-.B \-\-snapshot\-on\-exit \fIFILE\fR
-Save the VTTY buffer to a file as plain text when the command exits. The output includes scrollback content followed by the visible screen rows, with each line trimmed of trailing whitespace. The snapshot is taken after the process exits but before the command is removed from the manager. This is a per-command option.
-
-.TP
-.B \-\-send\-keys \fIKEYS\fR
-Send keystrokes to the command after it starts. Uses the same key notation as the API's send_keys endpoint. Plain text is sent as-is; special keys use <...> notation: <Enter>, <Tab>, <Esc>, <Up>, <Down>, <Left>, <Right>, <F1>\-<F12>, <C\-c>, <C\-d>, <A\-x> (Alt+x). Example: \fB\-\-send\-keys "ls<Enter>\fR.
 
 .TP
 .B \-\-log\-pty\-raw \fIFILE\fR
@@ -439,6 +437,48 @@ vrunner stop-command [\fITARGET\fR]
 .RE
 .RE
 
+.SS cat
+Print the VTTY buffer of a running command to stdout. By default the output is plain text with all ANSI formatting stripped. Use \fB\-\-color-always\fR to preserve ANSI color escape sequences. When no target is given and exactly one command is running, that command is used automatically.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner cat [\fITARGET\fR] [\fB\-\-color-always\fR]
+.RE
+.PP
+.B Options:
+.RS
+.TP
+.B \-\-color-always
+Preserve ANSI color escape sequences in the output.
+.RE
+.RE
+
+.SS screenshot
+Capture the VTTY buffer of a running command as a PNG screenshot. The terminal content is rendered using a TrueType/OpenType font.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner screenshot [\fITARGET\fR] [\fIOPTIONS\fR]
+.RE
+.PP
+.B Options:
+.RS
+.TP
+.BR \-\-output \fIFILE\fR
+Output file path (default: \fBscreenshot.png\fR).
+.TP
+.BR \-\-font-size \fIN\fR
+Font size in pixels per character cell (default: \fB14\fR, range: 6\[en]48).
+.TP
+.BR \-\-font-name \fIPATH\fR
+Path to a TTF/OTF font file. When omitted, the server searches common system paths for a monospace font.
+.RE
+.RE
+
 .SS resize
 Resize a command's virtual terminal. When used without explicit \fB\-\-rows\fR or \fB\-\-cols\fR flags, the terminal is automatically resized to match the dimensions of the current terminal (auto-detect mode). When one dimension is specified, the other is auto-detected from the current terminal.
 
@@ -456,9 +496,9 @@ The built-in web admin dashboard is available at \fB/admin\fR on the running ins
 
 .PP
 .RS
-\fBhttp://localhost:8080/admin\fR (HTTP mode)
+\fBhttp://localhost:9090/admin\fR (HTTP mode)
 .br
-\fBhttps://localhost:8080/admin\fR (TLS mode)
+\fBhttps://localhost:9090/admin\fR (TLS mode)
 .RE
 
 .PP
@@ -716,7 +756,7 @@ Connect from a remote machine with curl:
 .nf
 \fB$ curl \-\-cacert ~/.config/vrunner/cert.pem \e\fR
      \fB\-H "Authorization: Bearer <token>" \e\fR
-     \fBhttps://server:8080/api/commands\fR
+     \fBhttps://server:9090/api/commands\fR
 .fi
 .RE
 
@@ -727,7 +767,7 @@ Spawn a command:
 .RS
 .PP
 .nf
-\fB$ curl \-s \-X POST http://localhost:8080/api/commands \e\fR
+\fB$ curl \-s \-X POST http://localhost:9090/api/commands \e\fR
      \fB\-H "Content-Type: application/json" \e\fR
      \fB\-d '{"cmd": "htop", "args": []}'\fR
 .fi
@@ -738,7 +778,7 @@ List running commands:
 .RS
 .PP
 .nf
-\fB$ curl http://localhost:8080/api/commands\fR
+\fB$ curl http://localhost:9090/api/commands\fR
 .fi
 .RE
 
@@ -747,7 +787,7 @@ Send keystrokes to a command:
 .RS
 .PP
 .nf
-\fB$ curl \-s \-X POST http://localhost:8080/api/commands/<id>/keys \e\fR
+\fB$ curl \-s \-X POST http://localhost:9090/api/commands/<id>/keys \e\fR
      \fB\-H "Content-Type: application/json" \e\fR
      \fB\-d '{"keys": "q"}'\fR
 .fi
@@ -758,7 +798,7 @@ View VTTY output:
 .RS
 .PP
 .nf
-\fB$ curl http://localhost:8080/api/commands/<id>/vtty/html\fR
+\fB$ curl http://localhost:9090/api/commands/<id>/vtty/html\fR
 .fi
 .RE
 
@@ -767,7 +807,7 @@ Kill a command:
 .RS
 .PP
 .nf
-\fB$ curl \-s \-X POST http://localhost:8080/api/commands/<id>/kill \e\fR
+\fB$ curl \-s \-X POST http://localhost:9090/api/commands/<id>/kill \e\fR
      \fB\-H "Content-Type: application/json" \-d '{}'\fR
 .fi
 .RE
@@ -777,7 +817,7 @@ Search command logs:
 .RS
 .PP
 .nf
-\fB$ curl "http://localhost:8080/api/log?search=spawn&limit=50"\fR
+\fB$ curl "http://localhost:9090/api/log?search=spawn&limit=50"\fR
 .fi
 .RE
 
@@ -826,7 +866,7 @@ Spawn a command bound to a certificate:
 .RS
 .PP
 .nf
-\fB$ curl \-s \-X POST http://localhost:8080/api/commands \e\fR
+\fB$ curl \-s \-X POST http://localhost:9090/api/commands \e\fR
      \fB\-H "Content-Type: application/json" \e\fR
      \fB\-d '{"cmd": "node", "args": ["server.js"], "certificate": "my-app"}'\fR
 .fi
@@ -899,8 +939,9 @@ Child command exited with a non-zero status (when running a command directly).
 .SH SEE ALSO
 
 .BR vrunnerctrl (1),
-.BR vrunner\-list (1),
-.BR vrunner\-stop (1),
+.BR vrunner\-list\-vrunner (1),
+.BR vrunner\-list\-commands (1),
+.BR vrunner\-stop\-command (1),
 .BR vrunner\-spawn (1),
 .BR vrunner\-freeze (1),
 .BR vrunner\-thaw (1),
@@ -909,12 +950,11 @@ Child command exited with a non-zero status (when running a command directly).
 .BR vrunner\-cert\-list (1),
 .BR vrunner\-cert\-show (1),
 .BR vrunner\-cert\-remove (1),
-.BR vrunner\-list\-vrunner (1),
-.BR vrunner\-list\-commands (1),
-.BR vrunner\-stop\-command (1),
 .BR vrunner\-purge (1),
 .BR vrunner\-resize (1),
 .BR vrunner\-config\-check (1),
+.BR vrunner\-cat (1),
+.BR vrunner\-screenshot (1),
 .BR curl (1),
 .BR kill (1),
 .BR lsof (8)

@@ -281,7 +281,14 @@ impl VttyRenderer {
         // Measure a typical character to determine cell width.
         let (metrics, _) = font.rasterize('M', font_size);
         let cell_width = (metrics.advance_width + 0.5).ceil() as u32;
-        let cell_height = font_size.ceil() as u32;
+
+        // Use the font's line metrics for correct baseline alignment.
+        // ascent = distance from baseline to top of line (positive).
+        // descent = distance from baseline to bottom of line (typically negative).
+        let line_metrics = font
+            .horizontal_line_metrics(font_size)
+            .ok_or_else(|| "Font lacks horizontal line metrics".to_string())?;
+        let cell_height = (line_metrics.ascent - line_metrics.descent).ceil() as u32;
         let padding = 4u32;
 
         let cols = buffer.width;
@@ -343,8 +350,14 @@ impl VttyRenderer {
 
                 // Center glyph horizontally in the cell.
                 let glyph_x = x + cell_width.saturating_sub(glyph_w) / 2;
-                // Position vertically near bottom (baseline).
-                let glyph_y = y + cell_height.saturating_sub(glyph_h);
+                // Position glyph on the shared baseline using fontdue's line metrics.
+                // ymin is the baseline-relative offset of the bitmap bottom edge
+                // (negative = below baseline). The bitmap top is at ymin + height.
+                // glyph_y from cell top = ascent - (ymin + height).
+                let glyph_y = (line_metrics.ascent
+                    - (m.ymin as f32 + m.height as f32))
+                .round()
+                .max(0.0) as u32;
 
                 blend_glyph(
                     &mut img, &bitmap, glyph_w, fg, glyph_x, glyph_y, img_width, img_height,

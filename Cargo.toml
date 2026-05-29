@@ -2,10 +2,10 @@
 name = "vrunner"
 version = "0.1.0"
 edition = "2021"
-authors = ["Your Name <you@example.com>"]
+authors = ["nkh"]
 description = "A virtual terminal runner with web control plane"
 license = "GPL-3.0-or-later OR Artistic-2.0"
-repository = "https://github.com/yourusername/vrunner"
+repository = "https://github.com/nkh/K"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }

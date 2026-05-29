@@ -99,7 +99,7 @@ Example output:
 .PP
 .nf
 PID        PORT     BIND                 DAEMON     DISPLAY    COMMAND
-12345      8080     127.0.0.1            yes        no         (idle)
+12345      9090     127.0.0.1            yes        no         (idle)
 12346      9090     127.0.0.1            no         yes        vim
 .fi
 .RE
@@ -126,7 +126,7 @@ Example:
 .nf
 \fB$ vrunner list\fR
 PID        PORT     BIND        DAEMON     COMMAND
-12345      8080     127.0.0.1   yes        (idle)
+12345      9090     127.0.0.1   yes        (idle)
 12346      9090     127.0.0.1   yes        htop
 
 \fB$ vrunner stop 12346\fR
@@ -290,7 +290,7 @@ Equivalent curl:
 .RS
 .PP
 .nf
-curl -s -X POST http://localhost:8080/api/commands \e
+curl -s -X POST http://localhost:9090/api/commands \e
   -H "Content-Type: application/json" \e
   -d '{"cmd": "htop", "args": [], "rows": 50, "cols": 160}'
 .fi
@@ -346,7 +346,7 @@ Equivalent curl:
 .RS
 .PP
 .nf
-curl -s -X POST "http://localhost:8080/api/commands/abc123/resize" \e
+curl -s -X POST "http://localhost:9090/api/commands/abc123/resize" \e
   -H "Content-Type: application/json" \e
   -d '{"rows": 40, "cols": 120}'
 .fi
@@ -382,7 +382,7 @@ Equivalent curl:
 .RS
 .PP
 .nf
-curl -s -X POST "http://localhost:8080/api/commands/abc123/freeze" \e
+curl -s -X POST "http://localhost:9090/api/commands/abc123/freeze" \e
   -H "Content-Type: application/json" \e
   -d '{}'
 .fi
@@ -418,7 +418,7 @@ Equivalent curl:
 .RS
 .PP
 .nf
-curl -s -X POST "http://localhost:8080/api/commands/abc123/thaw" \e
+curl -s -X POST "http://localhost:9090/api/commands/abc123/thaw" \e
   -H "Content-Type: application/json" \e
   -d '{}'
 .fi
@@ -442,7 +442,7 @@ Output format:
 .PP
 .nf
 PID  PORT  BIND         DAEMON  DISPLAY  COMMAND
-12345 8080 127.0.0.1    1      0        (idle)
+12345 9090 127.0.0.1    1      0        (idle)
 .fi
 .RE
 
@@ -504,7 +504,7 @@ Equivalent curl:
 .RS
 .PP
 .nf
-curl -s -X POST "http://localhost:8080/api/commands/abc123/kill" \e
+curl -s -X POST "http://localhost:9090/api/commands/abc123/kill" \e
   -H "Content-Type: application/json" \e
   -d '{}'
 .fi
@@ -522,7 +522,7 @@ When the server has auth enabled (via \fB\-\-auth\fR, \fB\-\-remote\fR, or confi
 .PP
 .nf
 export TOKEN=$(cat ~/.config/vrunner/token)
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/commands
+curl -H "Authorization: Bearer $TOKEN" http://localhost:9090/api/commands
 .fi
 .RE
 
@@ -532,15 +532,15 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/commands
 .PP
 .nf
 \fB# Plain HTTP (localhost, no auth)\fR
-curl http://localhost:8080/api/commands
+curl http://localhost:9090/api/commands
 
 \fB# HTTPS with auth (remote)\fR
 curl --cacert ~/.config/vrunner/cert.pem \e
      -H "Authorization: Bearer $TOKEN" \e
-     https://server:8080/api/commands
+     https://server:9090/api/commands
 
 \fB# Pretty-print JSON\fR
-curl -s http://localhost:8080/api/commands | python -m json.tool
+curl -s http://localhost:9090/api/commands | python -m json.tool
 .fi
 .RE
 
@@ -550,22 +550,22 @@ curl -s http://localhost:8080/api/commands | python -m json.tool
 .PP
 .nf
 \fB# Start htop\fR
-curl -s -X POST http://localhost:8080/api/commands \e
+curl -s -X POST http://localhost:9090/api/commands \e
   -H "Content-Type: application/json" \e
   -d '{"cmd": "htop", "args": []}'
 
 \fB# Start with arguments\fR
-curl -s -X POST http://localhost:8080/api/commands \e
+curl -s -X POST http://localhost:9090/api/commands \e
   -H "Content-Type: application/json" \e
   -d '{"cmd": "python", "args": ["-m", "http.server", "8000"]}'
 
 \fB# Start bound to a certificate\fR
-curl -s -X POST http://localhost:8080/api/commands \e
+curl -s -X POST http://localhost:9090/api/commands \e
   -H "Content-Type: application/json" \e
   -d '{"cmd": "node", "args": ["server.js"], "certificate": "my-app"}'
 
 \fB# Start with exit handlers and timeout\fR
-curl -s -X POST http://localhost:8080/api/commands \e
+curl -s -X POST http://localhost:9090/api/commands \e
   -H "Content-Type: application/json" \e
   -d '{"cmd": "cargo", "args": ["test"], \e
        "on_exit": "notify-send Tests Passed", \e
@@ -573,18 +573,18 @@ curl -s -X POST http://localhost:8080/api/commands \e
        "exit_timeout": 30}'
 
 \fB# Start with a custom terminal size\fR
-curl -s -X POST http://localhost:8080/api/commands \e
+curl -s -X POST http://localhost:9090/api/commands \e
   -H "Content-Type: application/json" \e
   -d '{"cmd": "vim", "args": ["Makefile"], "rows": 50, "cols": 160}'
 
 \fB# Start with environment variables\fR
-curl -s -X POST http://localhost:8080/api/commands \e
+curl -s -X POST http://localhost:9090/api/commands \e
   -H "Content-Type: application/json" \e
   -d '{"cmd": "cargo", "args": ["build", "\-\-release"], \e
        "env": {"RUST_LOG": "debug", "CARGO_TARGET_DIR": "/tmp/build"}}'
 
 \fB# Save the command ID for later use\fR
-ID=$(curl -s -X POST http://localhost:8080/api/commands \e
+ID=$(curl -s -X POST http://localhost:9090/api/commands \e
   -H "Content-Type: application/json" \e
   -d '{"cmd": "htop", "args": []}' | python -c "import sys,json; print(json.load(sys.stdin)['data']['id'])")
 .fi
@@ -596,22 +596,22 @@ ID=$(curl -s -X POST http://localhost:8080/api/commands \e
 .PP
 .nf
 \fB# Quit htop\fR
-curl -s -X POST "http://localhost:8080/api/commands/$ID/keys" \e
+curl -s -X POST "http://localhost:9090/api/commands/$ID/keys" \e
   -H "Content-Type: application/json" \e
   -d '{"keys": "q"}'
 
 \fB# Type text and press Enter\fR
-curl -s -X POST "http://localhost:8080/api/commands/$ID/keys" \e
+curl -s -X POST "http://localhost:9090/api/commands/$ID/keys" \e
   -H "Content-Type: application/json" \e
   -d '{"keys": "ls -la\\r"}'
 
 \fB# Send Ctrl+C\fR
-curl -s -X POST "http://localhost:8080/api/commands/$ID/keys" \e
+curl -s -X POST "http://localhost:9090/api/commands/$ID/keys" \e
   -H "Content-Type: application/json" \e
   -d '{"keys": "\\x03"}'
 
 \fB# Quit vim: Escape, then :q! Enter\fR
-curl -s -X POST "http://localhost:8080/api/commands/$ID/keys" \e
+curl -s -X POST "http://localhost:9090/api/commands/$ID/keys" \e
   -H "Content-Type: application/json" \e
   -d '{"keys": "\\x1b:q!\\r"}'
 .fi
@@ -657,16 +657,16 @@ Left arrow
 .PP
 .nf
 \fB# Raw ANSI output\fR
-curl http://localhost:8080/api/commands/$ID/vtty
+curl http://localhost:9090/api/commands/$ID/vtty
 
 \fB# HTML-rendered output (with cursor position and dimensions)\fR
-curl http://localhost:8080/api/commands/$ID/vtty/html
+curl http://localhost:9090/api/commands/$ID/vtty/html
 
 \fB# Partial content (paginated)\fR
-curl "http://localhost:8080/api/commands/$ID/vtty/partial?offset=0&limit=50"
+curl "http://localhost:9090/api/commands/$ID/vtty/partial?offset=0&limit=50"
 
 \fB# Extract just the HTML for embedding\fR
-curl -s http://localhost:8080/api/commands/$ID/vtty/html | \e
+curl -s http://localhost:9090/api/commands/$ID/vtty/html | \e
   python -c "import sys,json; print(json.load(sys.stdin)['data']['html'])"
 .fi
 .RE
@@ -681,7 +681,7 @@ $ vrunner resize \fICOMMAND_ID\fR \-\-rows 40 \-\-cols 120
 Resized command abc123 to 40x120
 
 \fB# Resize via curl\fR
-curl -s -X POST "http://localhost:8080/api/commands/$ID/resize" \e
+curl -s -X POST "http://localhost:9090/api/commands/$ID/resize" \e
   -H "Content-Type: application/json" \e
   -d '{"rows": 40, "cols": 120}'
 .fi
@@ -697,7 +697,7 @@ When a kill request is received, vrunner performs a graceful shutdown: SIGINT is
 .PP
 .nf
 \fB# Graceful kill (SIGINT, then SIGKILL after timeout)\fR
-curl -s -X POST "http://localhost:8080/api/commands/$ID/kill" \e
+curl -s -X POST "http://localhost:9090/api/commands/$ID/kill" \e
   -H "Content-Type: application/json" \e
   -d '{}'
 .fi
@@ -709,14 +709,14 @@ curl -s -X POST "http://localhost:8080/api/commands/$ID/kill" \e
 .PP
 .nf
 \fB# Get recent logs\fR
-curl "http://localhost:8080/api/log?limit=50"
+curl "http://localhost:9090/api/log?limit=50"
 
 \fB# Search for spawn events\fR
-curl "http://localhost:8080/api/log?search=spawn&limit=100"
+curl "http://localhost:9090/api/log?search=spawn&limit=100"
 
 \fB# Paginated search\fR
-curl "http://localhost:8080/api/log?search=kill&offset=0&limit=50"
-curl "http://localhost:8080/api/log?search=kill&offset=50&limit=50"
+curl "http://localhost:9090/api/log?search=kill&offset=0&limit=50"
+curl "http://localhost:9090/api/log?search=kill&offset=50&limit=50"
 .fi
 .RE
 
@@ -725,7 +725,7 @@ curl "http://localhost:8080/api/log?search=kill&offset=50&limit=50"
 .RS
 .PP
 .nf
-curl http://localhost:8080/api/info
+curl http://localhost:9090/api/info
 .fi
 .RE
 
@@ -736,7 +736,7 @@ Returns command count, certificate count, certificate names, and whether auth is
 .RS
 .PP
 .nf
-curl http://localhost:8080/api/certificates
+curl http://localhost:9090/api/certificates
 .fi
 .RE
 
@@ -745,7 +745,7 @@ curl http://localhost:8080/api/certificates
 .RS
 .PP
 .nf
-curl -s -X POST http://localhost:8080/api/shutdown
+curl -s -X POST http://localhost:9090/api/shutdown
 .fi
 .RE
 
@@ -768,10 +768,10 @@ WebSocket connection example with \fBwebsocat\fR(1):
 .PP
 .nf
 \fB# Stream VTTY output in real time\fR
-websocat "ws://localhost:8080/api/commands/$ID/ws"
+websocat "ws://localhost:9090/api/commands/$ID/ws"
 
 \fB# Stream logs in real time\fR
-websocat "ws://localhost:8080/api/ws/logs"
+websocat "ws://localhost:9090/api/ws/logs"
 .fi
 .RE
 
@@ -783,7 +783,7 @@ websocat "ws://localhost:8080/api/ws/logs"
 .PP
 .nf
 #!/bin/bash
-HOST="http://localhost:8080"
+HOST="http://localhost:9090"
 
 # Start a build
 ID=$(curl -s -X POST "$HOST/api/commands" \e
@@ -837,7 +837,7 @@ done
 .PP
 .nf
 #!/bin/bash
-HOST="http://localhost:8080"
+HOST="http://localhost:9090"
 
 # Generate a certificate for this deployment
 vrunner cert generate "deploy-$(date +%Y%m%d)"

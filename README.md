@@ -79,7 +79,7 @@ Documentation is organized using the [Diataxis framework](https://diataxis.fr/) 
 |----------|-------------|------------|
 | [Tutorials](docs/tutorials/getting-started.md) | Hands-on lessons for new users | Lesson 1: Your First Command |
 | [How-To Guides](docs/how-to-guides/) | Task-oriented recipes for specific goals | Pick the task you want |
-| [Reference](docs/reference/configuration.md) | Authoritative specs: config, API, CLI, protocol | Look up a value |
+| [Reference](docs/configuration.md) | Authoritative specs: config, API, CLI, protocol | Look up a value |
 | [Explanation](docs/explanation/architecture.md) | Concepts, architecture, design decisions | Understand why |
 
 **Other resources:**
