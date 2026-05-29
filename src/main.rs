@@ -86,7 +86,7 @@ async fn spawn_initial_command(
             cfg.environment.variables.clone(),
             None,
             None,
-            None,
+            cli.working_directory.clone(),
         )
         .await?;
 
@@ -181,12 +181,11 @@ async fn async_main(cli: Cli) -> Result<()> {
     } else if let Some(ref id) = spawned_id {
         // ── Headless mode with direct child ──
         wait_for_child(&manager, id).await;
-        if manager.list().is_empty() {
-            let _ = shutdown_tx.send(());
-        } else {
-            let mut rx = shutdown_tx.subscribe();
-            let _ = rx.recv().await;
-        }
+        // Do NOT auto-shutdown when the last command exits — the web UI
+        // and API are still active and can spawn new commands.  Wait for
+        // an explicit shutdown signal (SIGINT, SIGTERM, /api/shutdown).
+        let mut rx = shutdown_tx.subscribe();
+        let _ = rx.recv().await;
     } else {
         // ── Idle server mode ──
         let mut rx = shutdown_tx.subscribe();

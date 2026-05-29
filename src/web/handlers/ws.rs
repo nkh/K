@@ -245,7 +245,7 @@ async fn handle_vtty_client_message(
             let rows = msg.get("rows").and_then(|v| v.as_u64()).unwrap_or(24) as u16;
             let cols = msg.get("cols").and_then(|v| v.as_u64()).unwrap_or(80) as u16;
             if let Some(handle) = manager.get(id) {
-                match handle.resize(rows, cols).await {
+                match handle.resize_pty(rows, cols).await {
                     Ok(()) => {
                         manager
                             .logger()

@@ -1219,7 +1219,7 @@ pub async fn run_display_loop(
     // Architecture: tokio select! event loop with 4 async branches:
     //   1. Exit notification (watch channel) → transition or break
     //   2. Periodic tick → render, detect exits, handle overlays/mouse
-    //   3. SIGWINCH (mpsc bridge) → resize PTY/VTTY
+    //   3. SIGWINCH (mpsc bridge) → wake the loop (display adapts on next tick)
     //   4. Keystroke (AsyncFd /dev/tty) → keybinding match or forward
     // Duplicated action dispatch (spawn, kill, switch, etc.) is extracted
     // into shared helper functions to avoid repetition.
@@ -1363,11 +1363,11 @@ pub async fn run_display_loop(
     let mut ctx_menu_target_id: Option<String> = None;
     // ── End context menu state ──
 
-    // Set up SIGWINCH handler for terminal resize.
-    // When the user resizes their terminal emulator, the kernel delivers
-    // SIGWINCH to the foreground process group.  We catch it here and
-    // propagate the new size to both the PTY master (so the child gets
-    // its own SIGWINCH) and the in-memory VTTY buffer.
+    // Set up SIGWINCH handler for terminal resize notification.
+    // The handler simply wakes the select! loop — the actual display
+    // re-renders on its next tick, detecting the new terminal size
+    // automatically.  We do NOT resize VTTY buffers or PTYs on WINCH;
+    // those dimensions are fixed at spawn time (CLI args or web UI).
     //
     // SIGWINCH handling is optional — if signal() fails we bridge through
     // an mpsc channel that never fires so the select! branch is simply
@@ -1685,24 +1685,15 @@ pub async fn run_display_loop(
             }
 
             // ── SIGWINCH — terminal resize ──
+            // The display rendering (render_vtty) already detects the
+            // terminal size on each tick via detect_terminal_size(), so
+            // the alternate screen content reflows automatically.
+            // We do NOT resize the VTTY buffer or PTY here — those
+            // dimensions are set once at spawn time (CLI args or web
+            // UI) and should not change when the user resizes their
+            // terminal emulator.
             _ = winch_rx.recv() => {
-                if let Some((rows, cols)) = detect_terminal_size() {
-                    // Subtract 1 row for the tab bar so the VTTY content
-                    // fits the visible area.
-                    let effective_rows = if show_tabs { rows.saturating_sub(1) } else { rows };
-                    tracing::debug!(rows, cols, effective_rows, show_tabs, "SIGWINCH: terminal resized");
-                    for entry in manager.list() {
-                        let id = &entry.0;
-                        if let Some(handle) = manager.get(id) {
-                            if let Err(e) = handle.resize_pty(effective_rows, cols).await {
-                                tracing::warn!(
-                                    id = %id, effective_rows, cols, error = %e,
-                                    "Failed to resize command on WINCH"
-                                );
-                            }
-                        }
-                    }
-                }
+                tracing::debug!("SIGWINCH: display will adapt on next render tick");
             }
 
             // ── Keystroke forwarding with keybinding support ──

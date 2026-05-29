@@ -16,6 +16,12 @@ use crate::config::schema::Config;
 /// 3. The grandchild (daemon) is adopted by init/systemd, is a session leader,
 ///    has no controlling terminal, and runs in the background
 pub fn daemonize(cfg: &Config) -> Result<()> {
+    // Capture the current working directory before forking so the daemon
+    // can restore it afterward.  After the double-fork, the daemon process
+    // needs a CWD that won't be unmounted — the invocation directory is
+    // usually safe, but /tmp is the traditional fallback.
+    let saved_cwd = std::env::current_dir().context("Failed to determine current directory")?;
+
     // Open log files BEFORE forking — if they fail, we can report the error
     let stdout_file = OpenOptions::new()
         .create(true)
@@ -59,9 +65,20 @@ pub fn daemonize(cfg: &Config) -> Result<()> {
         }
     }
 
-    // Daemon process (grandchild): set working directory
-    if let Err(e) = std::env::set_current_dir("/tmp") {
-        anyhow::bail!("Failed to set working directory: {}", e);
+    // Daemon process (grandchild): restore the invocation directory.
+    // We prefer the saved CWD (where the user invoked vrunner) over /tmp
+    // because relative paths in commands should work relative to that
+    // directory.  Fall back to /tmp only if the saved CWD is no longer
+    // accessible (e.g. it was a tmpfs that got unmounted).
+    if let Err(e) = std::env::set_current_dir(&saved_cwd) {
+        tracing::warn!(
+            error = %e,
+            cwd = %saved_cwd.display(),
+            "Failed to restore working directory, falling back to /tmp"
+        );
+        if let Err(e) = std::env::set_current_dir("/tmp") {
+            anyhow::bail!("Failed to set working directory to /tmp: {}", e);
+        }
     }
 
     // Redirect stdin/stdout/stderr

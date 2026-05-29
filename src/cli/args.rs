@@ -166,6 +166,13 @@ pub struct Cli {
     #[arg(long, value_name = "PID")]
     pub target: Option<u32>,
 
+    /// Set the working directory for spawned commands.
+    /// The child process will have this as its CWD.
+    /// When daemonized, defaults to the directory from which vrunner
+    /// was invoked (instead of /tmp) if this option is not set.
+    #[arg(long, value_name = "DIR")]
+    pub working_directory: Option<String>,
+
     /// Subcommand
     #[command(subcommand)]
     pub command: Option<Commands>,

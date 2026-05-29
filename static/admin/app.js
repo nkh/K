@@ -2236,7 +2236,7 @@ function renderPanels() {
             html += `
             <div class="welcome-panel">
                 <div class="welcome-card">
-                    <img src="favicon.png" alt="vrunner" style="height:2rem;width:auto;margin-bottom:0.75rem;">
+                    <img src="/favicon.png" alt="vrunner" style="height:2rem;width:auto;margin-bottom:0.75rem;">
                     <p>Spawn a command to get started. Your terminal output will appear here.</p>
                     <div class="welcome-form">
                         <input type="text" id="welcomeCmd" placeholder="/usr/bin/htop" onkeydown="if(event.key==='Enter'){event.preventDefault();spawnFromWelcome()}">
@@ -2255,7 +2255,7 @@ function renderPanels() {
             html += `
             <div class="welcome-panel">
                 <div class="welcome-card">
-                    <img src="favicon.png" alt="vrunner" style="height:2rem;width:auto;margin-bottom:0.75rem;">
+                    <img src="/favicon.png" alt="vrunner" style="height:2rem;width:auto;margin-bottom:0.75rem;">
                     <p class="welcome-not-running">vrunner is not running</p>
                     <p style="margin-top:0.25rem;">No vrunner instance could be reached at <span class="welcome-url">${escHtml(getBaseUrl())}</span></p>
                     <p>Start vrunner and refresh this page to connect.</p>
