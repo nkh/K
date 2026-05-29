@@ -195,3 +195,21 @@ Stage Summary:
 - TLS test skipped: pre-existing rustls CryptoProvider configuration issue
 - Key findings: kill is destructive, retain_on_exit only for natural exits,
   freeze/thaw need no body, kill needs JSON body
+
+---
+Task ID: 6
+Agent: main
+Task: Fix rustls CryptoProvider panic on TLS startup
+
+Work Log:
+- Reproduced the panic: `rustls::crypto::CryptoProvider` not auto-installed despite `ring` feature
+- rustls 0.23 requires explicit `ring::default_provider().install_default()` before any TLS operation
+- Added 6-line fix (provider install + comment) at top of TlsManager::load_or_generate_config()
+- This is the sole entry point called only when --tls is enabled — non-TLS unaffected
+- Verified: cargo build (clean), cargo clippy (0 warnings), cargo test (67+2 pass)
+- Verified: vrunner --tls starts without panic, certs auto-generated, HTTPS responds, clean exit
+
+Stage Summary:
+- Committed as a1133d0: fix: install rustls crypto provider before TLS operations
+- test-remote-tls.sh can now run (was skipped due to this bug)
+- Change: +8 lines in src/web/tls.rs
