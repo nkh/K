@@ -15,6 +15,7 @@ pub mod config;
 pub mod list;
 pub mod purge;
 pub mod resize;
+pub mod screenshot;
 pub mod spawn;
 pub mod stop;
 
@@ -33,5 +34,6 @@ pub use list::{
 };
 pub use purge::handle_purge_command;
 pub use resize::{handle_resize_by_pid, handle_resize_command, resize_command_by_id};
+pub use screenshot::handle_screenshot_command;
 pub use spawn::{handle_freeze_command, handle_spawn_command, handle_thaw_command};
 pub use stop::{handle_stop_command, handle_stop_command_by_pid_on_instances, stop_command_by_id};

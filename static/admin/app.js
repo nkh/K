@@ -47,6 +47,8 @@ const state = {
     // Resource usage cache: { cmdId: { cpu, memory_mb } }
     _resourceCache: {},
     _resourceInterval: null,
+    // Whether to show CPU/memory resource badges in panel headers
+    showResources: localStorage.getItem('vrunner_show_resources') === 'true',
     // Sound notifications
     soundEnabled: localStorage.getItem('vrunner_sound') !== 'false',
     // Whether the primary instance is reachable (fetched from /api/info)
@@ -494,6 +496,15 @@ function toggleSidebar() {
     }
 }
 
+// ─── Resource toggle ───
+function toggleResources() {
+    state.showResources = !state.showResources;
+    localStorage.setItem('vrunner_show_resources', state.showResources.toString());
+    document.querySelectorAll('.resource-badge').forEach(el => {
+        el.style.display = state.showResources ? '' : 'none';
+    });
+}
+
 // ─── Bottom bar toggle ───
 function toggleBottombar() {
     const bar = document.getElementById('bottomBar');
@@ -616,7 +627,7 @@ async function loadCommands() {
                 !(cmd.args || []).join(' ').toLowerCase().includes(filterLower) &&
                 !String(cmd.pid).includes(filterLower)) continue;
             const isAlive = cmd.alive !== false;
-            fingerprint += inst.url + ':' + cmd.id + ':' + isAlive + ':' + (cmd.runtime_secs || 0) + '|';
+            fingerprint += inst.url + ':' + cmd.id + ':' + isAlive + ':' + (cmd.exit_code != null ? cmd.exit_code : '') + ':' + (cmd.runtime_secs || 0) + '|';
         }
     }
 
@@ -874,12 +885,14 @@ function updatePanelCommandInfo() {
         const resourceBadgeEl = panel.querySelector(`[id^="resourceBadge-"]`);
         if (resourceBadgeEl) {
             const res = state._resourceCache[cmd.id];
-            if (res && (res.cpu_percent != null || res.memory_mb != null)) {
+            if (state.showResources && res && (res.cpu_percent != null || res.memory_mb != null)) {
+                resourceBadgeEl.style.display = '';
                 resourceBadgeEl.textContent = (res.cpu_percent != null ? 'CPU ' + res.cpu_percent.toFixed(1) + '%' : '') +
                     (res.cpu_percent != null && res.memory_mb != null ? ' | ' : '') +
                     (res.memory_mb != null ? res.memory_mb.toFixed(1) + 'MB' : '');
             } else {
                 resourceBadgeEl.textContent = '';
+                if (!state.showResources) resourceBadgeEl.style.display = 'none';
             }
         }
 
@@ -1884,7 +1897,8 @@ function renderPanels() {
                             <span class="cmd-fullname" id="cmdName-${panel.id}"></span>
                             <span class="cmd-args" id="cmdArgs-${panel.id}"></span>
                         </div>
-                        <span class="resource-badge" id="resourceBadge-${panel.id}"></span>
+                        <button class="btn btn-xs" onclick="toggleResources()" title="Toggle resource info">&#x2699;</button>
+                        <span class="resource-badge" id="resourceBadge-${panel.id}" style="${state.showResources ? '' : 'display:none;'}"></span>
                         <span class="instance-url">${escHtml(panel.instUrl.replace(/^https?:\/\//, ''))}</span>
                         <span class="panel-font-size-ctrl">
                             <button class="btn btn-xs" onclick="changePanelFontSize('${panel.id}', -1)" title="Decrease font size">A-</button>

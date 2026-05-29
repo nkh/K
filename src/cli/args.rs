@@ -261,6 +261,28 @@ pub enum Commands {
         #[arg(long)]
         color_always: bool,
     },
+
+    /// Capture the VTTY buffer as a PNG screenshot
+    Screenshot {
+        /// PID or name of the command to screenshot
+        target: Option<String>,
+
+        /// Output file path (default: screenshot.png)
+        #[arg(long, default_value = "screenshot.png")]
+        output: String,
+
+        /// Character cell width in pixels (default: 8)
+        #[arg(long, default_value_t = 8)]
+        cell_w: u32,
+
+        /// Character cell height in pixels (default: 16)
+        #[arg(long, default_value_t = 16)]
+        cell_h: u32,
+
+        /// Scaling factor for HiDPI/retina (default: 2)
+        #[arg(long, default_value_t = 2)]
+        scale: u32,
+    },
 }
 
 #[derive(Subcommand, Debug)]

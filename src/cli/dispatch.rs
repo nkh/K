@@ -3,7 +3,7 @@
 //! `pre_runtime()` handles subcommands that don't need the tokio runtime
 //! (cert, config-check) and falls through for everything else.
 //! `handle_subcommands()` dispatches async subcommands (list, stop, spawn,
-//! freeze, thaw, cat, resize, purge) and returns `true` if one was handled.
+//! freeze, thaw, cat, screenshot, resize, purge) and returns `true` if one was handled.
 
 use anyhow::Result;
 
@@ -130,6 +130,9 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
         }) => {
             // cat is async (needs HTTP), fall through to async phase
         }
+        Some(Commands::Screenshot { .. }) => {
+            // screenshot is async (needs HTTP), fall through to async phase
+        }
         None => {}
     }
 
@@ -217,6 +220,24 @@ pub async fn handle_subcommands(cli: &Cli) -> Result<bool> {
             color_always,
         }) => {
             subcommands::handle_cat_command(cli, target.as_deref(), *color_always).await?;
+            Ok(true)
+        }
+        Some(Commands::Screenshot {
+            target,
+            output,
+            cell_w,
+            cell_h,
+            scale,
+        }) => {
+            subcommands::handle_screenshot_command(
+                cli,
+                target.as_deref(),
+                output,
+                *cell_w,
+                *cell_h,
+                *scale,
+            )
+            .await?;
             Ok(true)
         }
         // Cert and ConfigCheck are handled synchronously in pre_runtime()

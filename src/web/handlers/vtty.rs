@@ -1,5 +1,7 @@
 use axum::{
     extract::{Path, Query, State},
+    http::StatusCode,
+    response::IntoResponse,
     Json,
 };
 use serde_json::Value;
@@ -255,5 +257,52 @@ pub async fn get_vtty_text(State(state): State<AppState>, Path(id): Path<String>
             "data": null,
             "error": format!("Command {} not found", id)
         })),
+    }
+}
+
+/// GET /api/commands/:id/vtty/png?cell_w=8&cell_h=16&scale=2
+///
+/// Render the VTTY buffer as a PNG image and return it as binary data.
+/// Query parameters:
+/// - `cell_w`: character cell width in pixels (default 8)
+/// - `cell_h`: character cell height in pixels (default 16)
+/// - `scale`: scaling factor for HiDPI/retina (default 2)
+pub async fn get_vtty_png(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let cell_w = params
+        .get("cell_w")
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or(8);
+    let cell_h = params
+        .get("cell_h")
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or(16);
+    let scale = params
+        .get("scale")
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or(2);
+
+    match state.manager.get(&id) {
+        Some(handle) => {
+            let buf = handle.vtty_snapshot().await;
+            let png_bytes = crate::vtty::renderer::VttyRenderer::to_png(&buf, cell_w, cell_h, scale);
+            let headers = [
+                ("content-type", "image/png"),
+                ("content-disposition", &format!("attachment; filename=\"{}.png\"", id)),
+            ];
+            (headers, png_bytes).into_response()
+        }
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "status": "error",
+                "data": null,
+                "error": format!("Command {} not found", id)
+            })),
+        )
+            .into_response(),
     }
 }

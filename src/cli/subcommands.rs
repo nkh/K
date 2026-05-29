@@ -20,6 +20,7 @@ pub use crate::cli::commands::purge::handle_purge_command;
 pub use crate::cli::commands::resize::{
     handle_resize_by_pid, handle_resize_command, resize_command_by_id,
 };
+pub use crate::cli::commands::screenshot::handle_screenshot_command;
 pub use crate::cli::commands::spawn::{
     handle_freeze_command, handle_spawn_command, handle_thaw_command,
 };
