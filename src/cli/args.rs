@@ -271,17 +271,14 @@ pub enum Commands {
         #[arg(long, default_value = "screenshot.png")]
         output: String,
 
-        /// Character cell width in pixels (default: 8)
-        #[arg(long, default_value_t = 8)]
-        cell_w: u32,
+        /// Font size in pixels per character cell (default: 14, range: 6–48)
+        #[arg(long, default_value_t = 14.0)]
+        font_size: f32,
 
-        /// Character cell height in pixels (default: 16)
-        #[arg(long, default_value_t = 16)]
-        cell_h: u32,
-
-        /// Scaling factor for HiDPI/retina (default: 2)
-        #[arg(long, default_value_t = 2)]
-        scale: u32,
+        /// Path to a TTF/OTF font file.  When omitted, the server searches
+        /// common system paths for a monospace font.
+        #[arg(long)]
+        font_name: Option<String>,
     },
 }
 

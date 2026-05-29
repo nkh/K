@@ -43,6 +43,8 @@ rand = "0.8"
 unicode-width = "0.2.2"
 regex = "1"
 image = { version = "0.25", default-features = false, features = ["png"] }
+fontdue = "0.9"
+urlencoding = "2"
 
 [dev-dependencies]
 tokio-test = "0.4"

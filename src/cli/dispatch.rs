@@ -225,17 +225,15 @@ pub async fn handle_subcommands(cli: &Cli) -> Result<bool> {
         Some(Commands::Screenshot {
             target,
             output,
-            cell_w,
-            cell_h,
-            scale,
+            font_size,
+            font_name,
         }) => {
             subcommands::handle_screenshot_command(
                 cli,
                 target.as_deref(),
                 output,
-                *cell_w,
-                *cell_h,
-                *scale,
+                *font_size,
+                font_name.as_deref(),
             )
             .await?;
             Ok(true)

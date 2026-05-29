@@ -1,20 +1,22 @@
 use anyhow::Result;
 
 use crate::cli::args::Cli;
-use crate::cli::commands::common::{collect_all_commands, http_client, instance_url, resolve_targeted_instances};
+use crate::cli::commands::common::{
+    collect_all_commands, http_client, instance_url, resolve_targeted_instances,
+};
 use crate::instance::registry::InstanceRegistry;
 
 /// Handle the `vrunner screenshot [TARGET]` subcommand.
 ///
 /// Fetches the VTTY buffer of the specified (or sole) running command,
-/// renders it as a PNG image, and writes it to the output file.
+/// renders it as a PNG image using a TrueType font, and writes it to
+/// the output file.
 pub async fn handle_screenshot_command(
     cli: &Cli,
     target: Option<&str>,
     output: &str,
-    cell_w: u32,
-    cell_h: u32,
-    scale: u32,
+    font_size: f32,
+    font_name: Option<&str>,
 ) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let all_instances = registry.list_instances();
@@ -78,11 +80,15 @@ pub async fn handle_screenshot_command(
 
     let url = instance_url(info, &None);
 
-    // Fetch the PNG from the REST API
-    let png_url = format!(
-        "{}/api/commands/{}/vtty/png?cell_w={}&cell_h={}&scale={}",
-        url, cmd_id, cell_w, cell_h, scale
+    // Build the PNG endpoint URL with font parameters.
+    let mut png_url = format!(
+        "{}/api/commands/{}/vtty/png?font_size={}",
+        url, cmd_id, font_size
     );
+    if let Some(font) = font_name {
+        png_url.push_str(&format!("&font_name={}", urlencoding::encode(font)));
+    }
+
     let resp = client.get(&png_url).send().await?;
 
     if !resp.status().is_success() {
@@ -95,12 +101,10 @@ pub async fn handle_screenshot_command(
     tokio::fs::write(output, &bytes).await?;
 
     tracing::info!(
-        "Screenshot saved to '{}' ({} bytes, {}x{}px, scale {}x) for command '{}'",
+        "Screenshot saved to '{}' ({} bytes, font_size={}) for command '{}'",
         output,
         bytes.len(),
-        cell_w,
-        cell_h,
-        scale,
+        font_size,
         name
     );
 

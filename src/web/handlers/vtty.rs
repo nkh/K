@@ -1,7 +1,7 @@
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
-    response::IntoResponse,
+    response::{IntoResponse, Response},
     Json,
 };
 use serde_json::Value;
@@ -260,41 +260,48 @@ pub async fn get_vtty_text(State(state): State<AppState>, Path(id): Path<String>
     }
 }
 
-/// GET /api/commands/:id/vtty/png?cell_w=8&cell_h=16&scale=2
+/// GET /api/commands/:id/vtty/png?font_size=14&font_name=
 ///
-/// Render the VTTY buffer as a PNG image and return it as binary data.
+/// Render the VTTY buffer as a PNG image using a TrueType/OpenType font
+/// and return it as binary data.
 /// Query parameters:
-/// - `cell_w`: character cell width in pixels (default 8)
-/// - `cell_h`: character cell height in pixels (default 16)
-/// - `scale`: scaling factor for HiDPI/retina (default 2)
+/// - `font_size`: pixel height per character cell (default 14, clamped 6–48)
+/// - `font_name`: path to a TTF/OTF font file.  When omitted, the server
+///   searches common system paths for a monospace font.
 pub async fn get_vtty_png(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Query(params): Query<HashMap<String, String>>,
-) -> impl IntoResponse {
-    let cell_w = params
-        .get("cell_w")
-        .and_then(|v| v.parse::<u32>().ok())
-        .unwrap_or(8);
-    let cell_h = params
-        .get("cell_h")
-        .and_then(|v| v.parse::<u32>().ok())
-        .unwrap_or(16);
-    let scale = params
-        .get("scale")
-        .and_then(|v| v.parse::<u32>().ok())
-        .unwrap_or(2);
+) -> Response {
+    let font_size: f32 = params
+        .get("font_size")
+        .and_then(|v| v.parse::<f32>().ok())
+        .unwrap_or(14.0)
+        .clamp(6.0, 48.0);
+    let font_path: Option<String> = params.get("font_name").cloned();
 
     match state.manager.get(&id) {
-        Some(handle) => {
-            let buf = handle.vtty_snapshot().await;
-            let png_bytes = crate::vtty::renderer::VttyRenderer::to_png(&buf, cell_w, cell_h, scale);
-            let headers = [
-                ("content-type", "image/png"),
-                ("content-disposition", &format!("attachment; filename=\"{}.png\"", id)),
-            ];
-            (headers, png_bytes).into_response()
-        }
+        Some(handle) => match handle.vtty_png(font_size, font_path.as_deref()).await {
+            Ok(png_bytes) => {
+                let headers = [
+                    ("content-type", "image/png"),
+                    (
+                        "content-disposition",
+                        &format!("attachment; filename=\"{}.png\"", id),
+                    ),
+                ];
+                (StatusCode::OK, headers, png_bytes).into_response()
+            }
+            Err(e) => (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "status": "error",
+                    "data": null,
+                    "error": e.to_string()
+                })),
+            )
+                .into_response(),
+        },
         None => (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({

@@ -1,5 +1,5 @@
 use super::buffer::Buffer;
-use image::{ImageBuffer, Rgb};
+use image::RgbaImage;
 
 /// HTML-escape the five XML/HTML metacharacters so that VTTY cell content
 /// never corrupts the DOM.  Programs that output `<`, `>`, `&`, `'`, or
@@ -249,182 +249,228 @@ impl VttyRenderer {
         all_lines
     }
 
-    /// Render buffer to a PNG image.
+    /// Render the buffer as a PNG image using a TrueType/OpenType font.
     ///
-    /// Each character cell is `cell_w` × `cell_h` pixels.  The `scale` factor
-    /// multiplies both dimensions (1 = 1x, 2 = retina/HiDPI).  The image is
-    /// returned as a PNG byte vector.
+    /// `font_size`: pixel height for each character cell (default 14).
+    /// `font_path`: path to a TTF/OTF font file.  When `None`, the renderer
+    ///   searches common system paths for a monospace font.
     ///
-    /// Uses a built-in 8×16 bitmap font covering ASCII printable characters
-    /// (32–126) and a few box-drawing glyphs.  Characters outside this range
-    /// are rendered as the replacement character `?`.
-    pub fn to_png(buffer: &Buffer, cell_w: u32, cell_h: u32, scale: u32) -> Vec<u8> {
-        let cw = cell_w * scale;
-        let ch = cell_h * scale;
-        let img_w = buffer.width as u32 * cw;
-        let img_h = buffer.rows.len() as u32 * ch;
-        let mut img = ImageBuffer::new(img_w, img_h);
+    /// Returns the PNG bytes or an error string.
+    pub fn to_png(
+        buffer: &Buffer,
+        font_size: f32,
+        font_path: Option<&str>,
+    ) -> Result<Vec<u8>, String> {
+        let path = match font_path {
+            Some(p) if !p.is_empty() => p.to_string(),
+            _ => find_default_font()
+                .ok_or_else(|| {
+                    "No font found. Provide --font-path or install a TTF monospace font."
+                        .to_string()
+                })?
+                .to_string(),
+        };
 
-        // Fill with default background (black)
+        let font_data =
+            std::fs::read(&path).map_err(|e| format!("Failed to read font '{}': {}", path, e))?;
+
+        let font =
+            fontdue::Font::from_bytes(font_data.as_slice(), fontdue::FontSettings::default())
+                .map_err(|e| format!("Failed to parse font '{}': {}", path, e))?;
+
+        // Measure a typical character to determine cell width.
+        let (metrics, _) = font.rasterize('M', font_size);
+        let cell_width = (metrics.advance_width + 0.5).ceil() as u32;
+        let cell_height = font_size.ceil() as u32;
+        let padding = 4u32;
+
+        let cols = buffer.width;
+        let rows = buffer.rows.len();
+        let img_width = cols as u32 * cell_width + 2 * padding;
+        let img_height = rows as u32 * cell_height + 2 * padding;
+
+        let mut img = RgbaImage::new(img_width, img_height);
+
+        // Fill background with black (opaque).
         for pixel in img.pixels_mut() {
-            *pixel = Rgb([0, 0, 0]);
+            *pixel = image::Rgba([0, 0, 0, 255]);
         }
 
         for (row_idx, row) in buffer.rows.iter().enumerate() {
             for (col_idx, cell) in row.iter().enumerate() {
-                let (fg, bg) = if cell.reverse {
-                    (cell.bg, cell.fg)
-                } else {
-                    (cell.fg, cell.bg)
-                };
-                let base_x = col_idx as u32 * cw;
-                let base_y = row_idx as u32 * ch;
+                let x = padding + col_idx as u32 * cell_width;
+                let y = padding + row_idx as u32 * cell_height;
 
-                // Fill background
-                for dy in 0..ch {
-                    for dx in 0..cw {
-                        img.put_pixel(base_x + dx, base_y + dy, Rgb(bg));
-                    }
-                }
-
-                // Render glyph
-                if !cell.invisible {
-                    let glyph = get_glyph(cell.ch, cell.bold);
-                    for gy in 0..8u32 {
-                        let row_bits = glyph[gy as usize];
-                        for gx in 0..8u32 {
-                            if (row_bits & (0x80 >> gx)) == 0 {
-                                continue;
-                            }
-                            // Plot the scaled pixel
-                            for sy in 0..scale {
-                                for sx in 0..scale {
-                                    let px = base_x + gx * scale + sx;
-                                    let py = base_y + gy * scale + sy;
-                                    if px < img_w && py < img_h {
-                                        img.put_pixel(px, py, Rgb(fg));
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Underline: draw a line at the bottom of the cell
-                    if cell.underline {
-                        for dy in (ch - scale)..ch {
-                            for dx in 0..cw {
-                                img.put_pixel(base_x + dx, base_y + dy, Rgb(fg));
-                            }
-                        }
-                    }
-
-                    // Strikethrough: draw a line through the middle
-                    if cell.strikethrough {
-                        let mid_y = ch / 2;
-                        for dy in mid_y..(mid_y + scale).min(ch) {
-                            for dx in 0..cw {
-                                img.put_pixel(base_x + dx, base_y + dy, Rgb(fg));
-                            }
+                // Cell background
+                let bg = if cell.reverse { cell.fg } else { cell.bg };
+                for dy in 0..cell_height {
+                    for dx in 0..cell_width {
+                        let px = x + dx;
+                        let py = y + dy;
+                        if px < img_width && py < img_height {
+                            img.put_pixel(px, py, image::Rgba([bg[0], bg[1], bg[2], 255]));
                         }
                     }
                 }
+
+                // Skip invisible cells (cursor hidden)
+                if cell.invisible {
+                    continue;
+                }
+
+                let ch = if cell.is_empty() { ' ' } else { cell.ch };
+                let (m, bitmap) = font.rasterize(ch, font_size);
+                let glyph_w = m.width as u32;
+                let glyph_h = m.height as u32;
+
+                // Guard: skip zero-size glyphs (space, combiners, missing chars).
+                // chunks(0) would panic, and bitmap may be shorter than expected.
+                if glyph_w == 0 || glyph_h == 0 || bitmap.len() < (glyph_w * glyph_h) as usize {
+                    render_deco(
+                        &mut img,
+                        cell,
+                        x,
+                        y,
+                        cell_width,
+                        cell_height,
+                        img_width,
+                        img_height,
+                    );
+                    continue;
+                }
+
+                let fg = if cell.reverse { cell.bg } else { cell.fg };
+
+                // Center glyph horizontally in the cell.
+                let glyph_x = x + cell_width.saturating_sub(glyph_w) / 2;
+                // Position vertically near bottom (baseline).
+                let glyph_y = y + cell_height.saturating_sub(glyph_h);
+
+                blend_glyph(
+                    &mut img, &bitmap, glyph_w, fg, glyph_x, glyph_y, img_width, img_height,
+                );
+
+                // Bold: overstrike 1px to the right.
+                if cell.bold {
+                    let bx = glyph_x.saturating_add(1);
+                    blend_glyph(
+                        &mut img, &bitmap, glyph_w, fg, bx, glyph_y, img_width, img_height,
+                    );
+                }
+
+                render_deco(
+                    &mut img,
+                    cell,
+                    x,
+                    y,
+                    cell_width,
+                    cell_height,
+                    img_width,
+                    img_height,
+                );
             }
         }
 
         let mut png_buf = Vec::new();
-        img.write_to(&mut std::io::Cursor::new(&mut png_buf), image::ImageFormat::Png)
-            .ok();
-        png_buf
+        img.write_to(
+            &mut std::io::Cursor::new(&mut png_buf),
+            image::ImageFormat::Png,
+        )
+        .map_err(|e| format!("PNG encoding failed: {}", e))?;
+
+        Ok(png_buf)
     }
 }
 
-// ─── Built-in 8×16 bitmap font ───
-//
-// Each glyph is 16 bytes (2 rows of 8 pixels, stored row-first).
-// We use the upper 8 rows for an 8×8 cell that we scale to cell_h.
-// Bold characters use the same data (no weight difference in bitmap font).
+// ─── PNG helper functions ───
 
-/// Returns 8 rows of 8 bits each for the given character.
-/// Characters outside the printable ASCII range render as '?'.
-fn get_glyph(ch: char, _bold: bool) -> [u8; 8] {
-    // Compact 8×8 font — only ASCII printable (0x20–0x7E) plus a few extras.
-    // Each entry is 8 bytes: row 0 (top) through row 7 (bottom).
-    // Bits are MSB-first (bit 7 = leftmost pixel).
-    const FONT: &[[u8; 8]] = &[
-        [0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00], // ' ' (0x20)
-        [0x18,0x18,0x18,0x18,0x18,0x00,0x18,0x00], // '!'
-        [0x66,0x66,0x66,0x00,0x00,0x00,0x00,0x00], // '"'
-        [0x66,0x66,0xff,0x66,0xff,0x66,0x00,0x00], // '#'
-        [0x18,0x3e,0x60,0x3c,0x06,0x7c,0x18,0x00], // '$'
-        [0x62,0x66,0x0c,0x18,0x30,0x66,0x46,0x00], // '%'
-        [0x3c,0x66,0x3c,0x38,0x67,0x6f,0x6b,0x00], // '&'
-        [0x18,0x18,0x30,0x00,0x00,0x00,0x00,0x00], // '''
-        [0x0e,0x18,0x18,0x70,0x18,0x18,0x0e,0x00], // '('
-        [0x70,0x18,0x18,0x0e,0x18,0x18,0x70,0x00], // ')'
-        [0x66,0x3c,0xff,0x3c,0xff,0x66,0x00,0x00], // '*'
-        [0x18,0x18,0x18,0x7e,0x18,0x18,0x18,0x00], // '+'
-        [0x00,0x00,0x00,0x00,0x00,0x18,0x18,0x30], // ','
-        [0x00,0x00,0x00,0x7e,0x00,0x00,0x00,0x00], // '-'
-        [0x00,0x00,0x00,0x00,0x00,0x18,0x18,0x00], // '.'
-        [0x06,0x0c,0x18,0x30,0x60,0x00,0x00,0x00], // '/'
-        [0x3c,0x66,0x6e,0x76,0x66,0x66,0x3c,0x00], // '0'
-        [0x18,0x38,0x18,0x18,0x18,0x18,0x7e,0x00], // '1'
-        [0x3c,0x66,0x06,0x0c,0x30,0x60,0x7e,0x00], // '2'
-        [0x3c,0x66,0x06,0x1c,0x06,0x66,0x3c,0x00], // '3'
-        [0x0c,0x1c,0x3c,0x6c,0x7e,0x0c,0x0c,0x00], // '4'
-        [0x7e,0x60,0x7c,0x06,0x06,0x66,0x3c,0x00], // '5'
-        [0x3c,0x66,0x60,0x7c,0x66,0x66,0x3c,0x00], // '6'
-        [0x7e,0x06,0x0c,0x18,0x30,0x30,0x30,0x00], // '7'
-        [0x3c,0x66,0x66,0x3c,0x66,0x66,0x3c,0x00], // '8'
-        [0x3c,0x66,0x66,0x3e,0x06,0x66,0x3c,0x00], // '9'
-        [0x00,0x00,0x18,0x00,0x00,0x18,0x00,0x00], // ':'
-        [0x00,0x00,0x18,0x00,0x00,0x18,0x18,0x30], // ';'
-        [0x0c,0x18,0x30,0x60,0x30,0x18,0x0c,0x00], // '<'
-        [0x00,0x00,0x7e,0x00,0x7e,0x00,0x00,0x00], // '='
-        [0x30,0x18,0x0c,0x06,0x0c,0x18,0x30,0x00], // '>'
-        [0x3c,0x66,0x06,0x0c,0x18,0x00,0x18,0x00], // '?'
-        [0x3c,0x66,0x6e,0x6e,0x60,0x62,0x3c,0x00], // '@'
-        [0x18,0x3c,0x66,0x66,0x7e,0x66,0x66,0x00], // 'A'
-        [0x7c,0x66,0x66,0x7c,0x66,0x66,0x7c,0x00], // 'B'
-        [0x3c,0x66,0x60,0x60,0x60,0x66,0x3c,0x00], // 'C'
-        [0x78,0xcc,0x66,0x66,0x66,0xcc,0x78,0x00], // 'D'
-        [0x7e,0x60,0x60,0x78,0x60,0x60,0x7e,0x00], // 'E'
-        [0x7e,0x60,0x60,0x78,0x60,0x60,0x60,0x00], // 'F'
-        [0x3c,0x66,0x60,0x6e,0x66,0x66,0x3c,0x00], // 'G'
-        [0x66,0x66,0x66,0x7e,0x66,0x66,0x66,0x00], // 'H'
-        [0x3c,0x18,0x18,0x18,0x18,0x18,0x3c,0x00], // 'I'
-        [0x1e,0x0c,0x0c,0x0c,0x0c,0x6c,0x38,0x00], // 'J'
-        [0x66,0x6c,0x78,0x70,0x78,0x6c,0x66,0x00], // 'K'
-        [0x60,0x60,0x60,0x60,0x60,0x60,0x7e,0x00], // 'L'
-        [0x63,0x77,0x7f,0x7f,0x6b,0x6b,0x63,0x00], // 'M'
-        [0x66,0x76,0x7e,0x7e,0x6e,0x66,0x66,0x00], // 'N'
-        [0x3c,0x66,0x66,0x66,0x66,0x66,0x3c,0x00], // 'O'
-        [0x7c,0x66,0x66,0x7c,0x60,0x60,0x60,0x00], // 'P'
-        [0x3c,0x66,0x66,0x66,0x6a,0x6c,0x36,0x00], // 'Q'
-        [0x7c,0x66,0x66,0x7c,0x6c,0x66,0x66,0x00], // 'R'
-        [0x3c,0x66,0x60,0x3c,0x06,0x66,0x3c,0x00], // 'S'
-        [0x7e,0x18,0x18,0x18,0x18,0x18,0x18,0x00], // 'T'
-        [0x66,0x66,0x66,0x66,0x66,0x66,0x3c,0x00], // 'U'
-        [0x66,0x66,0x66,0x66,0x66,0x3c,0x18,0x00], // 'V'
-        [0x63,0x63,0x63,0x6b,0x6b,0x7f,0x77,0x00], // 'W'
-        [0x66,0x66,0x3c,0x18,0x3c,0x66,0x66,0x00], // 'X'
-        [0x66,0x66,0x66,0x3c,0x18,0x18,0x18,0x00], // 'Y'
-        [0x7e,0x06,0x0c,0x18,0x30,0x60,0x7e,0x00], // 'Z'
-        [0x3c,0x30,0x30,0x30,0x30,0x30,0x3c,0x00], // '['
-        [0x60,0x30,0x18,0x0c,0x06,0x03,0x00,0x00], // '\'
-        [0x3c,0x0c,0x0c,0x0c,0x0c,0x0c,0x3c,0x00], // ']'
-        [0x08,0x1c,0x36,0x63,0x00,0x00,0x00,0x00], // '^'
-        [0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xff], // '_'
-    ];
+const DEFAULT_FONT_PATHS: &[&str] = &[
+    "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+    "/usr/share/fonts/truetype/freefont/FreeMono.ttf",
+    "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
+];
 
-    let idx = ch as usize;
-    if idx >= 0x20 && idx <= 0x5F {
-        FONT[idx - 0x20]
-    } else if idx >= 0x60 && idx <= 0x7E {
-        FONT[idx - 0x20]
-    } else {
-        // '?' glyph for non-ASCII
-        FONT[0x3F - 0x20]
+fn find_default_font() -> Option<&'static str> {
+    DEFAULT_FONT_PATHS
+        .iter()
+        .find(|&path| std::path::Path::new(path).exists())
+        .copied()
+}
+
+use super::cell::Cell;
+
+#[allow(clippy::too_many_arguments)]
+/// Blend a glyph bitmap onto the image with alpha compositing.
+fn blend_glyph(
+    img: &mut RgbaImage,
+    bitmap: &[u8],
+    glyph_w: u32,
+    fg: [u8; 3],
+    glyph_x: u32,
+    glyph_y: u32,
+    img_w: u32,
+    img_h: u32,
+) {
+    for (row, row_pixels) in bitmap.chunks(glyph_w as usize).enumerate() {
+        let py = glyph_y + row as u32;
+        if py >= img_h {
+            break;
+        }
+        for (col, &alpha) in row_pixels.iter().enumerate() {
+            let px = glyph_x + col as u32;
+            if px >= img_w {
+                break;
+            }
+            if alpha > 0 {
+                let a = alpha as f32 / 255.0;
+                let existing = img.get_pixel(px, py);
+                let r = (fg[0] as f32 * a + existing[0] as f32 * (1.0 - a)) as u8;
+                let g = (fg[1] as f32 * a + existing[1] as f32 * (1.0 - a)) as u8;
+                let b = (fg[2] as f32 * a + existing[2] as f32 * (1.0 - a)) as u8;
+                img.put_pixel(px, py, image::Rgba([r, g, b, 255]));
+            }
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+/// Render underline and/or strikethrough decorations for a cell.
+fn render_deco(
+    img: &mut RgbaImage,
+    cell: &Cell,
+    x: u32,
+    y: u32,
+    cell_w: u32,
+    cell_h: u32,
+    img_w: u32,
+    img_h: u32,
+) {
+    let fg = if cell.reverse { cell.bg } else { cell.fg };
+
+    if cell.underline {
+        let line_y = y + cell_h.saturating_sub(1);
+        if line_y < img_h {
+            for dx in 0..cell_w {
+                let px = x + dx;
+                if px < img_w {
+                    img.put_pixel(px, line_y, image::Rgba([fg[0], fg[1], fg[2], 255]));
+                }
+            }
+        }
+    }
+
+    if cell.strikethrough {
+        let mid = cell_h / 2;
+        for dy in mid..(mid + 1).min(cell_h) {
+            for dx in 0..cell_w {
+                let px = x + dx;
+                let py = y + dy;
+                if px < img_w && py < img_h {
+                    img.put_pixel(px, py, image::Rgba([fg[0], fg[1], fg[2], 255]));
+                }
+            }
+        }
     }
 }
 
@@ -498,5 +544,163 @@ mod tests {
         assert_eq!(lines.len(), 3); // 1 scrollback + 2 visible
         assert!(lines[0].starts_with('S'));
         assert!(lines[1].starts_with('V'));
+    }
+
+    // ─── PNG rendering tests ───
+
+    fn require_font() -> &'static str {
+        find_default_font().expect("no system monospace font found")
+    }
+
+    #[test]
+    fn test_to_png_simple_text() {
+        let mut buf = Buffer::new(10, 3, 100);
+        buf.rows[0][0].ch = 'H';
+        buf.rows[0][1].ch = 'e';
+        buf.rows[0][2].ch = 'l';
+        buf.rows[0][3].ch = 'l';
+        buf.rows[0][4].ch = 'o';
+        buf.rows[1][0].ch = 'W';
+        buf.rows[1][1].ch = 'o';
+        buf.rows[1][2].ch = 'r';
+        buf.rows[1][3].ch = 'l';
+        buf.rows[1][4].ch = 'd';
+        let png = VttyRenderer::to_png(&buf, 14.0, None).unwrap();
+        assert_eq!(
+            &png[0..8],
+            &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+        );
+        assert!(png.len() > 200);
+    }
+
+    #[test]
+    fn test_to_png_bold_underline_reverse() {
+        let mut buf = Buffer::new(8, 3, 100);
+        buf.rows[0][0].ch = 'B';
+        buf.rows[0][0].bold = true;
+        buf.rows[0][1].ch = 'U';
+        buf.rows[0][1].underline = true;
+        buf.rows[0][2].ch = 'R';
+        buf.rows[0][2].reverse = true;
+        buf.rows[0][2].fg = [255, 255, 255];
+        buf.rows[0][2].bg = [0, 0, 128];
+        buf.rows[1][0].ch = 'X';
+        buf.rows[1][0].bold = true;
+        buf.rows[1][0].underline = true;
+        buf.rows[1][0].fg = [255, 0, 0];
+        let png = VttyRenderer::to_png(&buf, 16.0, None).unwrap();
+        assert_eq!(
+            &png[0..8],
+            &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+        );
+        assert!(png.len() > 200);
+    }
+
+    #[test]
+    fn test_to_png_colored_cells() {
+        let mut buf = Buffer::new(5, 4, 100);
+        for (i, color) in [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 0]]
+            .iter()
+            .enumerate()
+        {
+            buf.rows[i][0].ch = '#';
+            buf.rows[i][0].fg = *color;
+        }
+        let png = VttyRenderer::to_png(&buf, 12.0, None).unwrap();
+        assert_eq!(
+            &png[0..8],
+            &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+        );
+    }
+
+    #[test]
+    fn test_to_png_box_drawing_chars() {
+        let mut buf = Buffer::new(10, 5, 100);
+        let box_chars = ['┌', '─', '┐', '│', '└', '┘', '├', '┤', '┬', '┴', '┼'];
+        for (i, &ch) in box_chars.iter().enumerate() {
+            let row = i / 5;
+            let col = i % 5;
+            buf.rows[row][col * 2].ch = ch;
+        }
+        let png = VttyRenderer::to_png(&buf, 14.0, None).unwrap();
+        assert_eq!(
+            &png[0..8],
+            &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+        );
+        assert!(png.len() > 200);
+    }
+
+    #[test]
+    fn test_to_png_wide_chars() {
+        let mut buf = Buffer::new(6, 2, 100);
+        buf.rows[0][0].ch = 'A';
+        buf.rows[0][1].ch = 'B';
+        buf.rows[0][2].ch = '你';
+        buf.rows[0][2].width = 2;
+        buf.rows[0][3].ch = ' ';
+        buf.rows[0][3].width = 0;
+        buf.rows[0][4].ch = 'Z';
+        let png = VttyRenderer::to_png(&buf, 14.0, None).unwrap();
+        assert_eq!(
+            &png[0..8],
+            &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+        );
+    }
+
+    #[test]
+    fn test_to_png_empty_buffer() {
+        let buf = Buffer::new(80, 24, 100);
+        let png = VttyRenderer::to_png(&buf, 14.0, None).unwrap();
+        assert_eq!(
+            &png[0..8],
+            &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+        );
+        assert!(png.len() > 1000);
+    }
+
+    #[test]
+    fn test_to_png_font_size_variants() {
+        let mut buf = Buffer::new(5, 1, 100);
+        buf.rows[0][0].ch = 'A';
+        for &size in &[8.0, 12.0, 14.0, 20.0, 32.0] {
+            let png = VttyRenderer::to_png(&buf, size, None).unwrap();
+            assert_eq!(
+                &png[0..8],
+                &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+            );
+        }
+    }
+
+    #[test]
+    fn test_to_png_with_explicit_font() {
+        let font_path = require_font();
+        let mut buf = Buffer::new(5, 1, 100);
+        buf.rows[0][0].ch = 'Z';
+        let png = VttyRenderer::to_png(&buf, 14.0, Some(font_path)).unwrap();
+        assert_eq!(
+            &png[0..8],
+            &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+        );
+    }
+
+    #[test]
+    fn test_to_png_no_font_error() {
+        let buf = Buffer::new(5, 2, 100);
+        let result = VttyRenderer::to_png(&buf, 14.0, Some("/nonexistent/font.ttf"));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Failed to read font"));
+    }
+
+    #[test]
+    fn test_to_png_strikethrough() {
+        let mut buf = Buffer::new(5, 2, 100);
+        buf.rows[0][0].ch = 'S';
+        buf.rows[0][0].strikethrough = true;
+        buf.rows[0][0].fg = [255, 0, 0];
+        let png = VttyRenderer::to_png(&buf, 14.0, None).unwrap();
+        assert_eq!(
+            &png[0..8],
+            &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+        );
     }
 }
