@@ -61,7 +61,7 @@ Open `http://127.0.0.1:8080/admin` in your browser.
 - **Restart** — Kill a service and re-spawn it via the web UI or `vrunner spawn`.
 - **Debug** — Use the scrollback feature to review past output by scrolling up in the terminal viewer.
 - **Kill all** — Use the "Kill All" button in the top bar to stop everything at once.
-- **Shutdown** — `vrunner stop $(vrunner list | grep <PID>)` or `curl -X POST http://127.0.0.1:8080/api/shutdown`.
+- **Shutdown** — `vrunner stop-command <PID>` or `curl -X POST http://127.0.0.1:8080/api/shutdown`.
 
 ## Tips
 

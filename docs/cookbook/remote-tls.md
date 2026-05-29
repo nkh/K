@@ -120,7 +120,12 @@ Navigate to `https://vrunner.example.com/admin`. For self-signed certificates, t
 const ws = new WebSocket('wss://vrunner.example.com/api/commands/UUID/ws?token=YOUR_TOKEN');
 ws.onmessage = (e) => {
   const msg = JSON.parse(e.data);
-  if (msg.type === 'vtty_diff') applyDiff(msg.data);
+  if (msg.type === 'vtty_dirty') {
+    // Buffer changed — fetch fresh HTML via HTTP
+    fetch('/api/commands/' + msg.data.id + '/vtty/html')
+      .then(r => r.json())
+      .then(data => renderHtml(data.data.html));
+  }
 };
 ws.send(JSON.stringify({ type: 'keys', keys: 'ls\r' }));
 ```

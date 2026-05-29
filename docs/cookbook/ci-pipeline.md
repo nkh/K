@@ -79,7 +79,7 @@ Developers can navigate to `https://ci-server:8443/admin` in their browsers. Aft
 ```bash
 # Get the last 50 lines of output
 curl -sk -H "Authorization: Bearer $TOKEN" \
-  "$VRUNNER_URL/api/commands/$JOB_ID/vtty/partial?offset=-50&limit=50"
+  "$VRUNNER_URL/api/commands/$JOB_ID/vtty/partial?offset=0&limit=50"
 
 # Take a snapshot before a risky step
 curl -sk -X POST -H "Authorization: Bearer $TOKEN" \

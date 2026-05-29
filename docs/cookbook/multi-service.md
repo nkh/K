@@ -24,7 +24,9 @@ vrunner spawn -- nginx -g daemon off -c /etc/nginx/nginx.conf
 vrunner spawn -- node /var/www/api/server.js
 
 # Redis (with retain to inspect crash output)
-vrunner spawn --retain-on-exit -- redis-server --appendonly yes
+curl -X POST http://localhost:9090/api/commands \
+  -H "Content-Type: application/json" \
+  -d '{"cmd": "redis-server", "args": ["--appendonly", "yes"], "retain_on_exit": true}'
 ```
 
 ### 3. Open the dashboard
@@ -51,15 +53,15 @@ curl --cacert /path/to/cert.pem \
 
 ## Workflow
 
-- **Check status** — The `status` field in the API response shows `"running"` or `"exited"` for each command.
-- **Monitor specific output** — Use `GET /api/commands/:id/vtty/html` to get the rendered terminal output.
-- **Pause for maintenance** — Use `POST /api/commands/:id/freeze` to SIGSTOP a service before maintenance.
+- **Check status** — The `status` field in the API response shows `"running"`, `"frozen"`, or `"exited"` for each command.
+- **Monitor specific output** — Use `GET /api/commands/{id}/vtty/html` to get the rendered terminal output.
+- **Pause for maintenance** — Use `POST /api/commands/{id}/freeze` to SIGSTOP a service before maintenance.
 - **Restart** — Kill the command, then re-spawn it.
-- **Review crash output** — With `--retain-on-exit`, crashed services remain visible. Use the web UI to scroll through their final output.
-- **Purge old outputs** — After reviewing, use `DELETE /api/commands/:id` to free memory.
+- **Review crash output** — With `retain_on_exit: true` in the spawn body, crashed services remain visible. Use the web UI to scroll through their final output.
+- **Purge old outputs** — After reviewing, use `DELETE /api/commands/{id}` to free memory.
 
 ## Tips
 
 - Use `--log --log-file` to maintain an audit trail of all API operations.
-- Set `exit_timeout` high (30+) for services that need graceful shutdown.
+- Set `exit_timeout` high (30+) for services that need graceful shutdown. For example: `--exit-timeout 30` or `{"exit_timeout": 30}` in the spawn body.
 - Use `curl -s "http://.../api/log?search=kill&limit=20"` to quickly find recent kill operations.

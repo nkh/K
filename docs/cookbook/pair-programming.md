@@ -83,5 +83,5 @@ vrunner cert generate backend-pair
 
 - The web UI supports WebSocket streaming, so both developers see output with sub-second latency.
 - Use the split-pane view (`Ctrl+S` in interactive display) to monitor multiple sessions.
-- Use `--retain-on-exit` to keep the session accessible if both developers disconnect temporarily.
+- Use `"retain_on_exit": true` in the spawn request body to keep the session accessible if both developers disconnect temporarily.
 - Mouse interaction works in the web UI — both developers can scroll through output history independently.
