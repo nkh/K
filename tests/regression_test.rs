@@ -46,6 +46,8 @@ fn test_config() -> Config {
             scrollback: 100,
             truecolor: true,
             mouse: false,
+            screenshot_font_size: 12.0,
+            screenshot_font_name: "monospace".to_string(),
         },
         display: DisplayConfig {
             enabled: false,
