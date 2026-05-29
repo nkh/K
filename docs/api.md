@@ -118,7 +118,7 @@ Spawn a new command.
 
 ---
 
-#### `POST /api/commands/:id/keys`
+#### `POST /api/commands/{id}/keys`
 
 Send keystrokes to a running command's PTY stdin.
 
@@ -154,7 +154,7 @@ The `keys` string supports special key notation:
 
 ---
 
-#### `POST /api/commands/:id/kill`
+#### `POST /api/commands/{id}/kill`
 
 Kill a running command (sends SIGINT by default, equivalent to Ctrl+C).
 
@@ -188,7 +188,7 @@ Kill a command by its OS PID (as opposed to command UUID).
 
 ---
 
-#### `POST /api/commands/:id/freeze`
+#### `POST /api/commands/{id}/freeze`
 
 Suspend a running command via `SIGSTOP`.
 
@@ -200,7 +200,7 @@ Suspend a running command via `SIGSTOP`.
 
 ---
 
-#### `POST /api/commands/:id/thaw`
+#### `POST /api/commands/{id}/thaw`
 
 Resume a frozen command via `SIGCONT`.
 
@@ -214,7 +214,7 @@ Resume a frozen command via `SIGCONT`.
 
 ### VTTY (Virtual Terminal)
 
-#### `GET /api/commands/:id/vtty`
+#### `GET /api/commands/{id}/vtty`
 
 Get the VTTY output as raw ANSI text.
 
@@ -226,7 +226,7 @@ Get the VTTY output as raw ANSI text.
 
 ---
 
-#### `GET /api/commands/:id/vtty/html`
+#### `GET /api/commands/{id}/vtty/html`
 
 Get the VTTY output as rendered HTML with inline styles. This is the primary endpoint
 used by the web UI to display terminal content. Each cell is a `<span>` with per-cell
@@ -257,7 +257,7 @@ color and style attributes.
 
 ---
 
-#### `GET /api/commands/:id/vtty/buffer?screen=current`
+#### `GET /api/commands/{id}/vtty/buffer?screen=current`
 
 Fetch a specific screen buffer as HTML.
 
@@ -284,7 +284,19 @@ Fetch a specific screen buffer as HTML.
 
 ---
 
-#### `GET /api/commands/:id/vtty/changed`
+#### `GET /api/commands/{id}/vtty/text`
+
+Get the VTTY output as plain text with ANSI formatting stripped.
+
+**Response:**
+
+```json
+{ "status": "ok", "data": { "id": "...", "text": "plain text content" } }
+```
+
+---
+
+#### `GET /api/commands/{id}/vtty/changed`
 
 Lightweight dirty check for poll mode. Returns whether the buffer has changed
 since the last call, without returning any HTML.
@@ -297,7 +309,7 @@ since the last call, without returning any HTML.
 
 ---
 
-#### `GET /api/commands/:id/vtty/partial?offset=0&limit=50`
+#### `GET /api/commands/{id}/vtty/partial?offset=0&limit=50`
 
 Get a paginated portion of the VTTY output as ANSI text.
 
@@ -319,7 +331,7 @@ Get a paginated portion of the VTTY output as ANSI text.
 
 ---
 
-#### `POST /api/commands/:id/resize`
+#### `POST /api/commands/{id}/resize`
 
 Resize a command's virtual terminal. This resizes both the PTY master (sending
 `SIGWINCH` to the child process) and the in-memory VTTY buffer.
@@ -343,9 +355,101 @@ Resize a command's virtual terminal. This resizes both the PTY master (sending
 
 ---
 
+### Resources
+
+#### `GET /api/commands/{id}/resources`
+
+Get CPU and memory usage for a running command. Linux only (reads from `/proc/[pid]/stat`).
+
+**Response (process alive):**
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "pid": 12345,
+    "cpu_percent": 2.5,
+    "memory_mb": 14.3,
+    "threads": 4,
+    "alive": true
+  }
+}
+```
+
+**Response (process exited):**
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "pid": 12345,
+    "cpu_percent": null,
+    "memory_mb": null,
+    "threads": null,
+    "alive": false
+  }
+}
+```
+
+---
+
+### Share
+
+#### `POST /api/commands/{id}/share`
+
+Create a time-limited share token for read-only (or read-write) terminal access via a public URL.
+
+**Request body:**
+
+```json
+{ "keyboard": false, "expires_hours": 24 }
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `keyboard` | boolean | `false` | Allow keyboard input via the share link |
+| `expires_hours` | number | `24` | Hours until expiry; `0` = never expires |
+
+**Response:**
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "token": "uuid-v4-string",
+    "url": "/share/uuid-v4-string",
+    "expires_at": "2026-05-25T12:00:00+00:00",
+    "keyboard": false
+  }
+}
+```
+
+The share URL `/share/<token>` is publicly accessible without authentication.
+
+---
+
+#### `GET /api/share/{token}`
+
+Validate a share token and retrieve the command's VTTY HTML. Expired tokens are automatically deleted.
+
+**Response:**
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "cmd_id": "...",
+    "html": "<pre>...</pre>",
+    "keyboard": false
+  }
+}
+```
+
+---
+
 ### Snapshots
 
-#### `POST /api/commands/:id/snapshot`
+#### `POST /api/commands/{id}/snapshot`
 
 Store a named snapshot of the command's current VTTY buffer. Snapshots are kept
 in memory and can be used for diff comparisons.
@@ -379,7 +483,7 @@ in memory and can be used for diff comparisons.
 
 ---
 
-#### `GET /api/commands/:id/snapshots`
+#### `GET /api/commands/{id}/snapshots`
 
 List all stored snapshots for a command.
 
@@ -394,7 +498,7 @@ List all stored snapshots for a command.
 
 ---
 
-#### `POST /api/commands/:id/diff`
+#### `POST /api/commands/{id}/diff`
 
 Compute a cell-by-cell diff of the current VTTY buffer against a stored snapshot.
 
@@ -422,7 +526,7 @@ Compute a cell-by-cell diff of the current VTTY buffer against a stored snapshot
 
 ---
 
-#### `DELETE /api/commands/:id/snapshots/{name}`
+#### `DELETE /api/commands/{id}/snapshots/{name}`
 
 Delete a stored snapshot.
 
@@ -436,7 +540,7 @@ Delete a stored snapshot.
 
 ### Handles
 
-#### `GET /api/commands/:id/handles`
+#### `GET /api/commands/{id}/handles`
 
 List output handles attached to a command.
 
@@ -451,7 +555,7 @@ List output handles attached to a command.
 
 ---
 
-#### `POST /api/commands/:id/handles`
+#### `POST /api/commands/{id}/handles`
 
 Attach a new output handle to a command.
 
@@ -578,7 +682,7 @@ Initiate a graceful server shutdown.
 
 ## WebSocket Endpoints
 
-### `GET /api/commands/:id/ws?token=<token>`
+### `GET /api/commands/{id}/ws?token=<token>`
 
 Real-time VTTY streaming. This is the primary mechanism for push-mode terminal updates.
 
@@ -587,7 +691,7 @@ Real-time VTTY streaming. This is the primary mechanism for push-mode terminal u
 1. Server sends `{"type":"connected","id":"<command-id>"}`
 2. Server sends `{"type":"vtty_full","data":{"html":"...","cursor":{...},"dimensions":{...},"alternate_screen":false}}`
 3. Server sends `{"type":"vtty_dirty","data":{"id":"..."}}` whenever the buffer changes
-4. Client should fetch full HTML via `GET /api/commands/:id/vtty/html` after receiving `vtty_dirty`
+4. Client should fetch full HTML via `GET /api/commands/{id}/vtty/html` after receiving `vtty_dirty`
 5. Server sends `{"type":"command_ended","id":"..."}` when the command exits
 
 **Client-to-server messages:**
@@ -595,6 +699,7 @@ Real-time VTTY streaming. This is the primary mechanism for push-mode terminal u
 | Type | Body | Description |
 |------|------|-------------|
 | `keys` | `{"type":"keys","keys":"q"}` | Send keystrokes (same syntax as HTTP endpoint) |
+| `paste` | `{"type":"paste","text":"pasted content"}` | Paste text (uses bracketed-paste mode if supported) |
 | `resize` | `{"type":"resize","rows":40,"cols":120}` | Resize the terminal |
 | `ping` | `{"type":"ping"}` | Keep-alive; server responds with `{"type":"pong"}` |
 
@@ -605,6 +710,7 @@ Real-time VTTY streaming. This is the primary mechanism for push-mode terminal u
 | `connected` | Connection established |
 | `vtty_full` | Full HTML snapshot (sent on connect and after broadcast lag) |
 | `vtty_dirty` | Buffer has changed; client should fetch HTML via HTTP |
+| `paste` | Paste text acknowledgment |
 | `command_ended` | The command has exited |
 | `error` | An error occurred (e.g. failed to send keys) |
 | `pong` | Response to `ping` |
@@ -712,7 +818,7 @@ state (`"running"` or `"exited"`) instead of always returning `"running"`.
 
 ### Purge (Delete Retained Commands)
 
-#### `DELETE /api/commands/:id`
+#### `DELETE /api/commands/{id}`
 
 Permanently remove a retained (exited) command from the manager. This discards the VTTY buffer, scrollback, and all associated state. Only commands that have exited and were spawned with `retain_on_exit: true` can be purged.
 
@@ -732,7 +838,7 @@ Error (command not found or not retained):
 
 ### Mouse Events
 
-#### `POST /api/commands/:id/mouse`
+#### `POST /api/commands/{id}/mouse`
 
 Forward a mouse event to a command's PTY. Used by the web UI to send mouse clicks, drags, and wheel events to the child process.
 
