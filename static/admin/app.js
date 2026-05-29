@@ -1654,11 +1654,14 @@ async function resizeTerminal() {
 
 async function resizeTerminalPanel(panelId) {
     const panelObj = state.panels.find(p => p.id === panelId);
-    if (!panelObj || !panelObj.cmdId) return;
+    if (!panelObj) return;
+    // Use the globally selected command when the panel matches the selected instance
+    const cmdId = (panelObj.instUrl === state.selectedInstUrl) ? state.selectedCmdId : null;
+    if (!cmdId) return;
     const rows = parseInt(document.getElementById('resizeRows-' + panelId)?.value) || 24;
     const cols = parseInt(document.getElementById('resizeCols-' + panelId)?.value) || 80;
     try {
-        await fetch(apiUrl(`/api/commands/${panelObj.cmdId}/resize`, { url: panelObj.instUrl }), {
+        await fetch(apiUrl(`/api/commands/${cmdId}/resize`, { url: panelObj.instUrl }), {
             method: 'POST',
             headers: authHeadersForInstance({ url: panelObj.instUrl, token: panelObj.token }),
             body: JSON.stringify({ rows, cols }),
@@ -1673,7 +1676,7 @@ function switchBufferPanel(panelId, view) {
     const sel = document.getElementById('bufferSelect-' + panelId);
     if (sel) sel.value = view;
     // If this is the currently selected panel, apply the buffer switch
-    if (panelObj.instUrl === state.selectedInstUrl && panelObj.cmdId === state.selectedCmdId) {
+    if (panelObj.instUrl === state.selectedInstUrl && state.selectedCmdId) {
         state.bufferView = view;
         state.panels.forEach(p => p.scrollbackOffset = 0);
         sessionStorage.removeItem('vrunner_scrollback_' + state.selectedCmdId);
@@ -1681,7 +1684,7 @@ function switchBufferPanel(panelId, view) {
             startUpdateMode();
         } else {
             stopUpdateMode();
-            loadVttyHttp(panelObj.instUrl, panelObj.cmdId);
+            loadVttyHttp(panelObj.instUrl, state.selectedCmdId);
         }
     }
 }
