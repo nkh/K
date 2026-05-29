@@ -285,6 +285,10 @@ function releaseCurrentFocusTrap() {
     applyUpdateModeUI();
     updateSidebarTabsVisibility();
 
+    // Fetch registered peers from the server and add them to instanceUrls.
+    // Peers registered via WS push will be handled in the WS onmessage handler.
+    fetchPeers();
+
     // Auto-collapse sidebar on small screens
     if (window.innerWidth <= 768) {
         const sidebar = document.getElementById('sidebar');
@@ -684,6 +688,81 @@ function updateTerminalDisconnectedOverlay() {
         }
     } else {
         if (overlay) overlay.remove();
+    }
+}
+
+// ─── Peer instances (registration & failover) ───
+
+/// Fetch the list of registered peers from the primary server.
+/// Peers discovered this way are added to instanceUrls so the UI
+/// shows commands from all registered instances.
+async function fetchPeers() {
+    try {
+        const res = await fetch(apiUrl('/api/peers'), { headers: authHeaders() });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json.status !== 'ok' || !Array.isArray(json.data)) return;
+
+        for (const peer of json.data) {
+            // Skip if already known
+            if (state.instanceUrls.some(i => i.url === peer.url)) continue;
+            addDiscoveredPeer(peer.url, peer.label || peer.url, peer.token || '');
+        }
+
+        // Save peers to localStorage for the reload edge case
+        savePeersToStorage();
+
+        if (json.data.length > 0) {
+            loadCommands(); // Re-render sidebar with peer commands
+        }
+    } catch (e) {
+        // Not critical — peers can also be discovered via WS push
+    }
+}
+
+/// Add a peer instance to instanceUrls and create a panel for it.
+function addDiscoveredPeer(url, label, token) {
+    state.instanceUrls.push({
+        url,
+        label,
+        token,
+        reachable: undefined, // not yet checked
+    });
+    // Add a panel so the user can see this instance's commands
+    addPanelDirect(url, label, token);
+    console.log('[vrunner] Peer discovered:', label, '(' + url + ')');
+}
+
+/// Handle a peer_registered or peer_unregistered WS message.
+function handlePeerEvent(msg) {
+    if (msg.type === 'peer_registered' && msg.data) {
+        const { url, label, token } = msg.data;
+        addDiscoveredPeer(url, label, token);
+        savePeersToStorage();
+    } else if (msg.type === 'peer_unregistered' && msg.data) {
+        const { url } = msg.data;
+        const idx = state.instanceUrls.findIndex(i => i.url === url);
+        if (idx !== -1) {
+            state.instanceUrls.splice(idx, 1);
+            removePanelByInstUrl(url);
+            loadCommands();
+        }
+        savePeersToStorage();
+    }
+}
+
+/// Save known peer URLs to localStorage so that if the primary dies
+/// and the page is reloaded pointing to a peer, the peer list survives.
+function savePeersToStorage() {
+    const peers = state.instanceUrls.filter(i => i.url !== window.location.origin);
+    if (peers.length > 0) {
+        try {
+            localStorage.setItem('vrunner_peers', JSON.stringify(
+                peers.map(p => ({ url: p.url, label: p.label, token: p.token }))
+            ));
+        } catch (e) { /* quota exceeded — not critical */ }
+    } else {
+        localStorage.removeItem('vrunner_peers');
     }
 }
 
@@ -1383,6 +1462,9 @@ function connectVttyWs(instUrl, cmdId) {
                     }
                 } else if (msg.type === 'connected') {
                     // Server confirms connection. A vtty_full follows immediately.
+                } else if (msg.type === 'peer_registered' || msg.type === 'peer_unregistered') {
+                    // Server-level peer notification — forward to handler
+                    handlePeerEvent(msg);
                 }
             } catch (e) {
                 console.error('WS message parse error:', e);

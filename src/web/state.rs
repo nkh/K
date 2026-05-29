@@ -4,6 +4,7 @@ use tokio::sync::broadcast;
 
 use crate::process::manager::CommandManager;
 use crate::web::certs::CertificateStore;
+use crate::web::handlers::peers::PeerInfo;
 use dashmap::DashMap;
 
 /// A share token that grants read-only (or interactive) access to a command's terminal.
@@ -33,6 +34,11 @@ pub struct AppState {
     pub log_events: broadcast::Sender<String>,
     /// In-memory store of share tokens keyed by token string.
     pub share_tokens: Arc<DashMap<String, ShareToken>>,
+    /// Registered peer vrunner instances (url -> peer info).
+    pub peers: Arc<DashMap<String, PeerInfo>>,
+    /// Broadcast sender for peer registration/unregistration events.
+    /// Messages are pre-serialized JSON strings forwarded to WS clients.
+    pub peer_events: broadcast::Sender<String>,
 }
 
 impl AppState {
@@ -44,6 +50,7 @@ impl AppState {
         vtty_events: broadcast::Sender<(String, String)>,
         log_events: broadcast::Sender<String>,
     ) -> Self {
+        let (peer_events_tx, _) = broadcast::channel::<String>(16);
         Self {
             manager,
             shutdown_tx,
@@ -52,6 +59,8 @@ impl AppState {
             vtty_events,
             log_events,
             share_tokens: Arc::new(DashMap::new()),
+            peers: Arc::new(DashMap::new()),
+            peer_events: peer_events_tx,
         }
     }
 

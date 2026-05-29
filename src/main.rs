@@ -149,6 +149,7 @@ async fn async_main(cli: Cli) -> Result<()> {
         let manager = manager.clone();
         let shutdown_tx = shutdown_tx.clone();
         let cfg = cfg.clone();
+        let auth_token = auth_token.clone(); // keep original for registration below
         async move {
             start_server(
                 cfg.server.bind.clone(),
@@ -167,6 +168,54 @@ async fn async_main(cli: Cli) -> Result<()> {
 
     // Brief pause to let the server bind before we enter the display loop.
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // Register with a primary vrunner instance if --register-with is set.
+    if let Some(register_port) = cli.register_with {
+        let my_url = format!("http://{}:{}", cfg.server.bind, cfg.server.port);
+        let my_label = format!("vrunner:{}", std::process::id());
+        let my_token = auth_token.clone().unwrap_or_default();
+        let primary_url = format!("http://{}:{}/api/peers", cfg.server.bind, register_port);
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            let body = serde_json::json!({
+                "url": my_url,
+                "label": my_label,
+                "token": my_token,
+            });
+            let client = reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(3))
+                .timeout(std::time::Duration::from_secs(5))
+                .build();
+            match client {
+                Ok(c) => match c.post(&primary_url).json(&body).send().await {
+                    Ok(resp) if resp.status().is_success() => {
+                        tracing::info!(
+                            primary = %primary_url,
+                            my_url = %my_url,
+                            "Registered with primary instance"
+                        );
+                    }
+                    Ok(resp) => {
+                        tracing::warn!(
+                            primary = %primary_url,
+                            status = %resp.status(),
+                            "Failed to register with primary instance (HTTP error)"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            primary = %primary_url,
+                            error = %e,
+                            "Failed to register with primary instance (connection error)"
+                        );
+                    }
+                },
+                Err(e) => {
+                    tracing::warn!(error = %e, "Failed to build HTTP client for registration");
+                }
+            }
+        });
+    }
 
     if cfg.display.enabled {
         // ── Display mode ──

@@ -28,6 +28,15 @@ pub struct Cli {
     #[arg(long)]
     pub auth: bool,
 
+    /// Register this instance with another vrunner server.
+    /// Takes a port number — the new instance registers with the
+    /// server running on that port (on the same bind address).
+    /// The primary's web UI will be notified and can show commands
+    /// from both instances. When the primary exits, the browser can
+    /// fail over to this instance directly.
+    #[arg(long, value_name = "PORT")]
+    pub register_with: Option<u16>,
+
     /// Path to the bearer token file (default: ~/.config/vrunner/token)
     #[arg(long, value_name = "FILE")]
     pub token_file: Option<String>,

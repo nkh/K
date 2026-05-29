@@ -119,6 +119,9 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
     // Subscribe to VTTY change notifications (diff messages).
     let mut vtty_rx = state.vtty_events.subscribe();
 
+    // Subscribe to peer registration events for server-level notifications.
+    let mut peer_rx = state.peer_events.subscribe();
+
     // We need to hold a reference to the manager for sending keys and resize.
     let manager = state.manager.clone();
     let watch_id = id.clone();
@@ -183,6 +186,24 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => {
                         tracing::debug!(?watch_id, "ws_vtty: broadcast channel closed");
                         break;
+                    }
+                }
+            }
+
+            // --- Outgoing: peer registration events ---
+            result = peer_rx.recv() => {
+                match result {
+                    Ok(msg) => {
+                        if ws_tx.send(Message::Text(msg)).await.is_err() {
+                            tracing::debug!(?watch_id, "ws_vtty: client disconnected (peer event)");
+                            break;
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                        // Missed peer events — not critical, client will poll /api/peers
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                        // Channel closed during shutdown — ignore
                     }
                 }
             }
@@ -348,6 +369,9 @@ async fn handle_log_socket(socket: WebSocket, state: AppState) {
     // Subscribe to log events.
     let mut log_rx = state.log_events.subscribe();
 
+    // Subscribe to peer events for server-level notifications.
+    let mut peer_rx = state.peer_events.subscribe();
+
     loop {
         tokio::select! {
             // --- Outgoing: log entries ---
@@ -370,6 +394,20 @@ async fn handle_log_socket(socket: WebSocket, state: AppState) {
                         tracing::debug!("ws_log: broadcast channel closed");
                         break;
                     }
+                }
+            }
+
+            // --- Outgoing: peer registration events ---
+            result = peer_rx.recv() => {
+                match result {
+                    Ok(msg) => {
+                        if ws_tx.send(Message::Text(msg)).await.is_err() {
+                            tracing::debug!("ws_log: client disconnected (peer event)");
+                            break;
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => {}
                 }
             }
 

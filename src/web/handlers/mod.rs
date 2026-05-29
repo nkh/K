@@ -4,6 +4,7 @@ pub mod commands;
 pub mod handles;
 pub mod keys;
 pub mod logs;
+pub mod peers;
 pub mod resources;
 pub mod share;
 pub mod templates;

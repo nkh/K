@@ -28,6 +28,15 @@ pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
         .route("/api/info", get(handlers::commands::get_info))
         .route("/api/templates", get(handlers::templates::list_templates))
         .route("/api/log", get(handlers::logs::get_log))
+        // Peers — registration and discovery for multi-instance failover
+        .route(
+            "/api/peers",
+            get(handlers::peers::list_peers).post(handlers::peers::register_peer),
+        )
+        .route(
+            "/api/peers/:url",
+            delete(handlers::peers::unregister_peer),
+        )
         .route(
             "/api/commands/kill-pid/:pid",
             post(handlers::commands::kill_command_by_pid),
