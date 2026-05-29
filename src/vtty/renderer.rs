@@ -352,10 +352,11 @@ impl VttyRenderer {
                 // ymin is the baseline-relative offset of the bitmap bottom edge
                 // (negative = below baseline). The bitmap top is at ymin + height.
                 // glyph_y from cell top = ascent - (ymin + height).
-                let glyph_y = (line_metrics.ascent
-                    - (m.ymin as f32 + m.height as f32))
-                .round()
-                .max(0.0) as u32;
+                let glyph_y = y
+                    + (line_metrics.ascent
+                        - (m.ymin as f32 + m.height as f32))
+                    .round()
+                    .max(0.0) as u32;
 
                 blend_glyph(
                     &mut img, &bitmap, glyph_w, fg, glyph_x, glyph_y, img_width, img_height,
@@ -968,4 +969,53 @@ mod tests {
             &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
         );
     }
+}
+// Regression test: verify PNG renderer places each row's glyphs at the
+// correct vertical position (not all stacked on top of each other).
+#[test]
+fn test_png_multiline_row_positioning() {
+    let path = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf";
+    let data = std::fs::read(path).unwrap();
+    let font = fontdue::Font::from_bytes(data, fontdue::FontSettings::default()).unwrap();
+    let size = 14.0;
+
+    let lm = font.horizontal_line_metrics(size).unwrap();
+    eprintln!("line_metrics.ascent  = {:?}", lm.ascent);
+    eprintln!("line_metrics.descent = {:?}", lm.descent);
+    eprintln!("cell_height = {:?}", (lm.ascent - lm.descent).ceil());
+
+    for &ch in &['M', 'g', 'A', 'j', 'p'] {
+        let (m, _) = font.rasterize(ch, size);
+        let offset = (lm.ascent - (m.ymin as f32 + m.height as f32)).round().max(0.0) as u32;
+        eprintln!("'{}': ymin={:.0} h={} offset={}", ch, m.ymin, m.height, offset);
+    }
+
+    // Verify multi-row rendering: each row should be cell_height apart
+    let mut buf = crate::vtty::buffer::Buffer::new(80, 24, 100);
+    buf.rows[0][0].ch = 'R'; buf.rows[0][1].ch = '0';
+    buf.rows[1][0].ch = 'R'; buf.rows[1][1].ch = '1';
+    buf.rows[2][0].ch = 'R'; buf.rows[2][1].ch = '2';
+    let png = crate::vtty::renderer::VttyRenderer::to_png(&buf, size, None).unwrap();
+    let img = image::load(std::io::Cursor::new(&png), image::ImageFormat::Png).unwrap();
+    let (w, h) = (img.width(), img.height());
+    let rgba = img.to_rgba8();
+    let mut content_rows = Vec::new();
+    for y in 0..h {
+        for x in 0..w {
+            let p = rgba.get_pixel(x, y);
+            if p[0] > 5 || p[1] > 5 || p[2] > 5 {
+                content_rows.push(y);
+                break;
+            }
+        }
+    }
+    let ch = (lm.ascent - lm.descent).ceil() as u32;
+    let band0 = content_rows.iter().filter(|&&y| y < 4 + ch).count();
+    let band1 = content_rows.iter().filter(|&&y| y >= 4 + ch && y < 4 + 2 * ch).count();
+    let band2 = content_rows.iter().filter(|&&y| y >= 4 + 2 * ch && y < 4 + 3 * ch).count();
+    eprintln!("Rendered {}x{}, cell_height={}", w, h, ch);
+    eprintln!("Content in band 0 (row 0): {} px rows, band 1 (row 1): {}, band 2 (row 2): {}", band0, band1, band2);
+    assert!(band0 > 0, "Row 0 should have visible content");
+    assert!(band1 > 0, "Row 1 should have visible content");
+    assert!(band2 > 0, "Row 2 should have visible content");
 }
