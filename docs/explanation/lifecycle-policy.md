@@ -198,7 +198,7 @@ exist. So a retained command keeps the daemon alive.
 To remove a retained command, the client must explicitly call:
 
 ```
-DELETE /api/commands/:id
+DELETE /api/commands/{id}
 ```
 
 This frees the registry entry and, if it was the last one, triggers daemon

@@ -301,9 +301,9 @@ The layout uses a consistent button sizing system: `btn-xs` (compact), `btn-sm` 
 
 **Terminal Interaction:**
 
-- **Real-time VTTY Viewer** — Streams terminal output via the incremental diff WebSocket protocol (`GET /api/commands/:id/ws`). Falls back to 1-second HTTP polling if WebSocket is unavailable. Automatically selects the first running command on load.
+- **Real-time VTTY Viewer** — Streams terminal output via the incremental diff WebSocket protocol (`GET /api/commands/{id}/ws`). Falls back to 1-second HTTP polling if WebSocket is unavailable. Automatically selects the first running command on load.
 - **Click to Focus** — Click anywhere on the terminal pane to immediately capture keyboard input for sending keystrokes.
-- **Mouse Event Forwarding** — Clicks, drags, and wheel events are forwarded to the child process via `POST /api/commands/:id/mouse` when mouse tracking is enabled by the child application.
+- **Mouse Event Forwarding** — Clicks, drags, and wheel events are forwarded to the child process via `POST /api/commands/{id}/mouse` when mouse tracking is enabled by the child application.
 - **Mouse Wheel Scrollback** — Scroll through command history; when the child application has mouse tracking enabled, wheel events are forwarded to it, otherwise they scroll the view.
 - **Terminal Search** — Press `Ctrl+F` to open a search bar inside the terminal viewer. Matches are highlighted in the output buffer.
 - **Scroll-to-Bottom** — When scrolled up, a floating button appears in the bottom-right corner of the terminal. Click it to jump back to live output.
@@ -435,7 +435,7 @@ This is useful for implementing scrollback in a web viewer or for scripts that o
 
 vrunner provides two WebSocket endpoints that push updates in real time, eliminating the need for REST polling. WebSocket connections are upgraded from standard HTTP requests and use JSON text frames for all messages.
 
-#### VTTY WebSocket — `ws://host:port/api/commands/:id/ws`
+#### VTTY WebSocket — `ws://host:port/api/commands/{id}/ws`
 
 Connect to this endpoint to receive push-based VTTY updates for a specific command. The connection is bidirectional: the server sends terminal content updates and the client can send keystrokes and resize commands.
 
@@ -1043,7 +1043,7 @@ When `--retain-on-exit` is set, the command stays in the manager after exiting (
 
 ### Graceful Shutdown with Timeout
 
-When you kill a command via the API (`POST /api/commands/:id/kill`), vrunner performs a graceful shutdown sequence:
+When you kill a command via the API (`POST /api/commands/{id}/kill`), vrunner performs a graceful shutdown sequence:
 
 1. **SIGINT (Ctrl+C)** is sent to the child process, giving it a chance to exit cleanly.
 2. vrunner waits up to `exit_timeout` seconds (default: 10) for the process to terminate.
@@ -2036,5 +2036,5 @@ vrunner supports **HTTP, HTTPS (TLS), WebSocket (ws://), and secure WebSocket (w
 | HTTPS (localhost) | `--tls` | HTTPS on `127.0.0.1:8080`, auto-generated self-signed cert |
 | HTTPS (remote) | `--remote --tls` | HTTPS on `0.0.0.0:8080`, auth required, self-signed cert |
 | HTTPS (custom cert) | `--tls --cert-file X --key-file Y` | HTTPS with your own certificate and key |
-| WebSocket | *(auto-upgrade)* | `ws://host:port/api/commands/:id/ws` for VTTY streaming |
-| Secure WebSocket | `--tls` + wss:// | `wss://host:port/api/commands/:id/ws` for encrypted streaming |
+| WebSocket | *(auto-upgrade)* | `ws://host:port/api/commands/{id}/ws` for VTTY streaming |
+| Secure WebSocket | `--tls` + wss:// | `wss://host:port/api/commands/{id}/ws` for encrypted streaming |

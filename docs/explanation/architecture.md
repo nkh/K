@@ -454,10 +454,10 @@ Defines all routes and wires them to handlers:
 |---|---|---|---|
 | `/api/commands` | POST | `start_command` | Start a new named command |
 | `/api/commands` | GET | `list_commands` | List all running commands |
-| `/api/commands/:id` | DELETE | `stop_command` | Stop a specific command |
-| `/api/commands/:id` | GET | `get_command` | Get command metadata |
-| `/api/commands/:id/resize` | POST | `resize_command` | Resize a command's PTY |
-| `/api/commands/:id/keys` | POST | `send_keys` | Send keystrokes to a command |
+| `/api/commands/{id}` | DELETE | `stop_command` | Stop a specific command |
+| `/api/commands/{id}` | GET | `get_command` | Get command metadata |
+| `/api/commands/{id}/resize` | POST | `resize_command` | Resize a command's PTY |
+| `/api/commands/{id}/keys` | POST | `send_keys` | Send keystrokes to a command |
 | `/api/instances` | GET | `list_instances` | List all instance metadata |
 | `/ws/:id` | GET (upgrade) | `ws_handler` | WebSocket for terminal I/O |
 | `/` | GET | `static_handler` | Serve the admin UI |
@@ -539,7 +539,7 @@ simple and allows the interface to be replaced without recompiling vrunner.
 ```
  Client                    CLI / API              Instance Registry       Process Mgmt        VTTY
    │                          │                          │                      │                 │
-   │  DELETE /api/commands/:id │                          │                      │                 │
+   │  DELETE /api/commands/{id} │                          │                      │                 │
    │─────────────────────────►│                          │                      │                 │
    │                          │  registry.get(id)       │                      │                 │
    │                          │─────────────────────────►│                      │                 │

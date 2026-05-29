@@ -161,11 +161,11 @@
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FR-72 | vrunner must support storing named snapshots of a command's VTTY buffer via `POST /api/commands/:id/snapshot`. | Must |
+| FR-72 | vrunner must support storing named snapshots of a command's VTTY buffer via `POST /api/commands/{id}/snapshot`. | Must |
 | FR-73 | Each snapshot must include metadata: name, command name, command arguments, PID, timestamp, and wall-clock runtime. | Must |
-| FR-74 | vrunner must support listing all snapshots for a command via `GET /api/commands/:id/snapshots`. | Must |
-| FR-75 | vrunner must support computing a cell-level diff between the current buffer and a stored snapshot via `POST /api/commands/:id/diff`. | Must |
-| FR-76 | vrunner must support deleting snapshots via `DELETE /api/commands/:id/snapshots/:name`. | Must |
+| FR-74 | vrunner must support listing all snapshots for a command via `GET /api/commands/{id}/snapshots`. | Must |
+| FR-75 | vrunner must support computing a cell-level diff between the current buffer and a stored snapshot via `POST /api/commands/{id}/diff`. | Must |
+| FR-76 | vrunner must support deleting snapshots via `DELETE /api/commands/{id}/snapshots/:name`. | Must |
 | FR-77 | All snapshots for a command must be automatically cleaned up when the command is killed. | Should |
 
 ### 2.18 Kill by PID

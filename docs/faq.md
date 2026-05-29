@@ -181,7 +181,7 @@ Use `--retain-on-exit`:
 vrunner --retain-on-exit -- cargo test
 ```
 
-The VTTY buffer stays in memory and the command remains visible in the tab bar and web UI with an `[EXITED]` status. Purge it later with `vrunner purge` or `DELETE /api/commands/:id`.
+The VTTY buffer stays in memory and the command remains visible in the tab bar and web UI with an `[EXITED]` status. Purge it later with `vrunner purge` or `DELETE /api/commands/{id}`.
 
 ### How do I save output to a file when a command exits?
 

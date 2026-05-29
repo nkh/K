@@ -117,4 +117,4 @@ done
 - Use `--retain-on-exit` on all CI builds so developers can inspect failed builds after the fact.
 - Set `--log-pty-raw` to capture raw PTY output for post-mortem debugging with `ansi-replay`.
 - Use certificates to isolate different CI pipelines: `vrunner cert generate pipeline-a` then `"certificate": "pipeline-a"` in the spawn request.
-- The WebSocket endpoint (`/api/commands/:id/ws`) provides real-time streaming for custom CI dashboard integrations.
+- The WebSocket endpoint (`/api/commands/{id}/ws`) provides real-time streaming for custom CI dashboard integrations.

@@ -266,7 +266,7 @@ For environments where WebSocket is unavailable (e.g., behind restrictive proxie
 the client can poll the REST endpoint:
 
 ```
-GET /api/commands/:id/snapshot?seq=<last_seq>
+GET /api/commands/{id}/snapshot?seq=<last_seq>
 ```
 
 If `seq` matches the server's current sequence number, the response is `204 No

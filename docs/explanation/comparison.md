@@ -99,7 +99,7 @@ vrunner run --tls --auth-token my-secret -- web-server --port 3000
 
 Your automation pipeline needs to start, stop, and query processes via HTTP. With
 vrunner you get a full JSON API (`POST /api/commands`, `GET /api/instances`,
-`DELETE /api/commands/:id`) alongside the live terminal stream.
+`DELETE /api/commands/{id}`) alongside the live terminal stream.
 
 ### You Need Fine-Grained Lifecycle Control
 

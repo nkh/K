@@ -194,19 +194,19 @@ pub fn create_router(state: AppState) -> Router {
     Router::new()
         .route("/api/commands", get(list_commands).post(start_command))
         .route("/api/commands/kill-pid/{pid}", post(kill_command_by_pid))
-        .route("/api/commands/:id/keys", post(send_keys))
-        .route("/api/commands/:id/kill", post(kill_command))
-        .route("/api/commands/:id/freeze", post(freeze_command))
-        .route("/api/commands/:id/thaw", post(thaw_command))
-        .route("/api/commands/:id/vtty", get(get_vtty_full))
-        .route("/api/commands/:id/vtty/html", get(get_vtty_html))
-        .route("/api/commands/:id/vtty/partial", get(get_vtty_partial))
-        .route("/api/commands/:id/resize", post(resize_vtty))
-        .route("/api/commands/:id/snapshot", post(snapshot_command))
-        .route("/api/commands/:id/snapshots", get(list_snapshots))
-        .route("/api/commands/:id/diff", post(diff_command))
-        .route("/api/commands/:id/snapshots/{name}", delete(delete_snapshot))
-        .route("/api/commands/:id/handles", get(list_handles).post(add_handle))
+        .route("/api/commands/{id}/keys", post(send_keys))
+        .route("/api/commands/{id}/kill", post(kill_command))
+        .route("/api/commands/{id}/freeze", post(freeze_command))
+        .route("/api/commands/{id}/thaw", post(thaw_command))
+        .route("/api/commands/{id}/vtty", get(get_vtty_full))
+        .route("/api/commands/{id}/vtty/html", get(get_vtty_html))
+        .route("/api/commands/{id}/vtty/partial", get(get_vtty_partial))
+        .route("/api/commands/{id}/resize", post(resize_vtty))
+        .route("/api/commands/{id}/snapshot", post(snapshot_command))
+        .route("/api/commands/{id}/snapshots", get(list_snapshots))
+        .route("/api/commands/{id}/diff", post(diff_command))
+        .route("/api/commands/{id}/snapshots/{name}", delete(delete_snapshot))
+        .route("/api/commands/{id}/handles", get(list_handles).post(add_handle))
         .route("/api/shutdown", post(shutdown))
         .route("/admin", get(admin_page))
         .route("/admin/*path", get(admin_assets))
@@ -241,7 +241,7 @@ The WebSocket VTTY streaming uses an incremental diff protocol to minimize bandw
 
 ### 3.15 Snapshot and Diff System
 
-The command manager maintains an in-memory store of named VTTY buffer snapshots using `DashMap<(CommandId, String), StoredSnapshot>`. Snapshots are created via `POST /api/commands/:id/snapshot`, listed via `GET /api/commands/:id/snapshots`, compared against the current buffer via `POST /api/commands/:id/diff`, and deleted via `DELETE /api/commands/:id/snapshots/:name`. All snapshots for a command are automatically cleaned up when the command is killed.
+The command manager maintains an in-memory store of named VTTY buffer snapshots using `DashMap<(CommandId, String), StoredSnapshot>`. Snapshots are created via `POST /api/commands/{id}/snapshot`, listed via `GET /api/commands/{id}/snapshots`, compared against the current buffer via `POST /api/commands/{id}/diff`, and deleted via `DELETE /api/commands/{id}/snapshots/:name`. All snapshots for a command are automatically cleaned up when the command is killed.
 
 ### 3.16 Certificate System (`src/web/certs.rs`)
 
