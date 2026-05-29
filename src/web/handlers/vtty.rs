@@ -62,6 +62,7 @@ pub async fn get_vtty_html(
             let mouse_tracking = handle.mouse_tracking_enabled().await;
             let mouse_sgr = handle.mouse_sgr_enabled().await;
             let cursor_visible = handle.is_cursor_visible().await;
+            let generation = handle.buffer_generation().await;
             Json(serde_json::json!({
                 "status": "ok",
                 "data": {
@@ -75,6 +76,7 @@ pub async fn get_vtty_html(
                     "cursor_visible": cursor_visible,
                     "mouse_tracking": mouse_tracking,
                     "mouse_sgr": mouse_sgr,
+                    "generation": generation,
                 },
                 "error": null
             }))

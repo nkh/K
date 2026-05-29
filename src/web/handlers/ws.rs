@@ -86,7 +86,7 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
         let emulator = handle.emulator.clone();
         drop(handle); // Release DashMap lock immediately
 
-        let (html, cursor_row, cursor_col, rows, cols, alt_screen, cursor_visible) = {
+        let (html, cursor_row, cursor_col, rows, cols, alt_screen, cursor_visible, generation) = {
             let emu = emulator.read().await;
             let buf = emu.snapshot();
             let html = crate::vtty::renderer::VttyRenderer::to_html(&buf);
@@ -94,7 +94,8 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
             let (r, c) = emu.dimensions();
             let alt = emu.is_alternate_screen();
             let cv = emu.is_cursor_visible();
-            (html, cr, cc, r, c, alt, cv)
+            let gen = emu.buffer_generation();
+            (html, cr, cc, r, c, alt, cv, gen)
         };
         let full_msg = json!({
             "type": "vtty_full",
@@ -105,6 +106,7 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
                 "dimensions": {"rows": rows, "cols": cols},
                 "alternate_screen": alt_screen,
                 "cursor_visible": cursor_visible,
+                "generation": generation,
             }
         })
         .to_string();
@@ -152,7 +154,7 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
                             let emulator = handle.emulator.clone();
                             drop(handle); // Release DashMap lock before .await
 
-                            let (html, cursor_row, cursor_col, rows, cols, alt_screen, cursor_visible) = {
+                            let (html, cursor_row, cursor_col, rows, cols, alt_screen, cursor_visible, generation) = {
                                 let emu = emulator.read().await;
                                 let buf = emu.snapshot();
                                 let html = crate::vtty::renderer::VttyRenderer::to_html(&buf);
@@ -160,7 +162,8 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
                                 let (r, c) = emu.dimensions();
                                 let alt = emu.is_alternate_screen();
                                 let cv = emu.is_cursor_visible();
-                                (html, cr, cc, r, c, alt, cv)
+                                let gen = emu.buffer_generation();
+                                (html, cr, cc, r, c, alt, cv, gen)
                             };
                             let resync_msg = json!({
                                 "type": "vtty_full",
@@ -171,6 +174,7 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
                                     "dimensions": {"rows": rows, "cols": cols},
                                     "alternate_screen": alt_screen,
                                     "cursor_visible": cursor_visible,
+                                    "generation": generation,
                                 }
                             }).to_string();
                             let _ = ws_tx.send(Message::Text(resync_msg)).await;

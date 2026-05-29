@@ -25,6 +25,12 @@ const state = {
     bufferView: 'current',
     // Debounce timer for throttled HTTP VTTY fetches.
     _vttyHttpTimer: null,
+    // Last-known buffer generation per command ID. Used to skip redundant
+    // DOM updates when the server reports no change (Level 2 optimization).
+    _lastGeneration: {},
+    // Whether the user is currently viewing the live buffer (not scrolled
+    // into scrollback history). Used for auto-scroll decisions.
+    _userAtBottom: true,
     // VTTY update mode: 'push' (server sends dirty signals via WS)
     // or 'poll' (client polls /api/commands/:id/vtty/changed)
     updateMode: localStorage.getItem('vrunner_update_mode') || 'push',
@@ -1343,10 +1349,40 @@ function updateVttyDisplay(data) {
     const pre = vttyEl ? vttyEl.querySelector('pre') : null;
     if (!pre) return;
 
-    if (data.html !== undefined && data.html !== null) {
-        pre.innerHTML = data.html;
+    // Level 2: Skip redundant DOM updates if generation hasn't changed.
+    const cmdId = state.selectedCmdId;
+    if (cmdId && data.generation !== undefined) {
+        if (state._lastGeneration[cmdId] === data.generation) {
+            // Generation unchanged — only update metadata, skip DOM replacement
+            updateVttyMetadata(data, panel, vttyEl);
+            return;
+        }
+        state._lastGeneration[cmdId] = data.generation;
     }
 
+    if (data.html !== undefined && data.html !== null) {
+        // Level 1: Save scroll position before innerHTML replacement
+        const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
+        const oldScrollHeight = vttyEl.scrollHeight;
+
+        pre.innerHTML = data.html;
+
+        // Level 1: Restore scroll position after DOM replacement.
+        // If user was at bottom, snap to new bottom (auto-scroll).
+        // Otherwise, adjust for content height change to maintain view position.
+        if (wasAtBottom) {
+            vttyEl.scrollTop = vttyEl.scrollHeight;
+        } else {
+            vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
+        }
+    }
+
+    updateVttyMetadata(data, panel, vttyEl);
+}
+
+/// Update cursor, dimensions, mouse state, etc. without touching the DOM content.
+/// Called both after innerHTML replacement and when generation is unchanged (skip path).
+function updateVttyMetadata(data, panel, vttyEl) {
     // Cursor position
     const cursor = data.cursor || {};
     const dims = data.dimensions || {};
@@ -1432,54 +1468,84 @@ async function loadVttyHttp(instUrl, cmdId) {
         }
         const json = await res.json();
         if (json.status === 'ok' && json.data) {
+            // Level 2: Skip redundant DOM updates if generation hasn't changed.
+            if (json.data.generation !== undefined && state._lastGeneration[cmdId] === json.data.generation) {
+                // Only update metadata (cursor position, dimensions, etc.)
+                updateVttyMetadataFromHttp(json.data, panel, panelObj, sbOffset);
+                return;
+            }
+            if (json.data.generation !== undefined) {
+                state._lastGeneration[cmdId] = json.data.generation;
+            }
+
             const vttyEl = panel.querySelector('.vtty-container');
             const pre = vttyEl ? vttyEl.querySelector('pre') : null;
             if (pre && json.data.html !== undefined) {
+                // Level 1: Save scroll position before innerHTML replacement
+                const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
+                const oldScrollHeight = vttyEl.scrollHeight;
+
                 pre.innerHTML = json.data.html;
-            }
 
-            const cursor = json.data.cursor || {};
-            const dims = json.data.dimensions || {};
-            document.getElementById('cursorPos').textContent = `Cursor: ${(cursor.row + 1) || '-'},${(cursor.col + 1) || '-'}`;
-            document.getElementById('termDims').textContent = `${dims.rows || '-'}x${dims.cols || '-'}`;
-
-            // Update alt screen badge
-            const badge = document.getElementById('altScreenBadge-' + panel.id);
-            if (badge) {
-                badge.classList.toggle('visible', !!json.data.alternate_screen);
-            }
-
-            // Update mouse state
-            if (panelObj) {
-                panelObj.mouseTracking = !!json.data.mouse_tracking;
-                panelObj.mouseSgr = !!json.data.mouse_sgr;
-            }
-
-            // Toggle selectable class on vtty container (enable text selection when mouse tracking is off)
-            if (vttyEl) {
-                const mt = panelObj ? panelObj.mouseTracking : false;
-                vttyEl.classList.toggle('selectable', !mt);
-            }
-
-            // Hide cursor when in scrollback view or app hid it via ?25l
-            const cursorVisible = json.data.cursor_visible !== false;
-            const cursorEl = vttyEl ? vttyEl.querySelector('.cursor-indicator') : null;
-            if (cursorEl) {
-                if (sbOffset > 0 || !cursorVisible) {
-                    cursorEl.style.display = 'none';
+                // Level 1: Restore scroll position.
+                // Only auto-scroll when user was viewing the bottom.
+                if (wasAtBottom) {
+                    vttyEl.scrollTop = vttyEl.scrollHeight;
                 } else {
-                    cursorEl.style.display = '';
+                    vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
                 }
             }
 
-            // Show/hide scrollback indicator in bottom bar
-            const sbIndicator = document.getElementById('scrollbackIndicator');
-            if (sbIndicator) {
-                sbIndicator.style.display = sbOffset > 0 ? '' : 'none';
-            }
+            updateVttyMetadataFromHttp(json.data, panel, panelObj, sbOffset);
         }
     } catch (e) {
         console.error('Failed to load VTTY:', e);
+    }
+}
+
+/// Update cursor, dimensions, mouse state, alt screen badge, and scrollback indicator
+/// from an HTTP response, without touching the DOM content. Shared by both the
+/// generation-skip path and the full-update path in loadVttyHttp.
+function updateVttyMetadataFromHttp(data, panel, panelObj, sbOffset) {
+    const vttyEl = panel.querySelector('.vtty-container');
+    const cursor = data.cursor || {};
+    const dims = data.dimensions || {};
+    document.getElementById('cursorPos').textContent = `Cursor: ${(cursor.row + 1) || '-'},${(cursor.col + 1) || '-'}`;
+    document.getElementById('termDims').textContent = `${dims.rows || '-'}x${dims.cols || '-'}`;
+
+    // Update alt screen badge
+    const badge = document.getElementById('altScreenBadge-' + panel.id);
+    if (badge) {
+        badge.classList.toggle('visible', !!data.alternate_screen);
+    }
+
+    // Update mouse state
+    if (panelObj) {
+        panelObj.mouseTracking = !!data.mouse_tracking;
+        panelObj.mouseSgr = !!data.mouse_sgr;
+    }
+
+    // Toggle selectable class on vtty container (enable text selection when mouse tracking is off)
+    if (vttyEl) {
+        const mt = panelObj ? panelObj.mouseTracking : false;
+        vttyEl.classList.toggle('selectable', !mt);
+    }
+
+    // Hide cursor when in scrollback view or app hid it via ?25l
+    const cursorVisible = data.cursor_visible !== false;
+    const cursorEl = vttyEl ? vttyEl.querySelector('.cursor-indicator') : null;
+    if (cursorEl) {
+        if (sbOffset > 0 || !cursorVisible) {
+            cursorEl.style.display = 'none';
+        } else {
+            cursorEl.style.display = '';
+        }
+    }
+
+    // Show/hide scrollback indicator in bottom bar
+    const sbIndicator = document.getElementById('scrollbackIndicator');
+    if (sbIndicator) {
+        sbIndicator.style.display = sbOffset > 0 ? '' : 'none';
     }
 }
 
@@ -2762,10 +2828,16 @@ document.addEventListener('click', (e) => {
     }
 });
 
-// ─── Mouse wheel scrollback on terminal ───
-// Debounce wheel-triggered scrollback fetches using requestAnimationFrame.
-// Without debouncing, every wheel tick causes an HTTP round-trip + full DOM
-// replacement (pre.innerHTML), which makes scrolling painfully slow.
+// ─── Mouse wheel handling on terminal ───
+// Level 1 optimization: Don't block native scroll when viewing the live buffer.
+// Only intercept wheel events at the top edge (scroll into scrollback history)
+// or when mouse tracking is enabled (forward to PTY).
+//
+// When in scrollback view (scrollbackOffset > 0), scroll wheel navigates
+// scrollback history via server-side offset (debounced with rAF).
+//
+// Native scroll provides smooth inertia and momentum — the browser handles
+// repaint timing, which is far more efficient than per-tick HTTP round-trips.
 let _wheelScrollRafId = null;
 let _wheelScrollPanel = null;   // panel object for the pending rAF callback
 let _wheelScrollAccum = 0;      // accumulated signed vertical delta
@@ -2780,17 +2852,40 @@ document.addEventListener('wheel', (e) => {
     const panelObj = state.panels.find(p => p.id === panelEl.id);
     if (!panelObj || !state.selectedCmdId) return;
 
-    e.preventDefault();
-
     // If selection mode is active, let browser handle wheel natively (no scrollback, no PTY)
     if (panelObj.selectionMode) return;
 
     // If the child has mouse tracking enabled, forward wheel events to the PTY
     if (panelObj.mouseTracking) {
+        e.preventDefault();
         const wheelEvent = e.deltaY < 0 ? 'wheel_up' : 'wheel_down';
         sendMouseEvent(panelObj, wheelEvent, 0, e);
         return;
     }
+
+    // ── Live buffer view (scrollbackOffset === 0) ──
+    // Allow native scroll. Only intercept when user scrolls up past the top
+    // edge, which means they want to enter scrollback history.
+    if (panelObj.scrollbackOffset === 0) {
+        const atTop = vttyContainer.scrollTop <= 0;
+        if (e.deltaY < 0 && atTop) {
+            // User scrolled up at the top edge — enter scrollback history
+            e.preventDefault();
+            panelObj.scrollbackOffset += 3;
+            sessionStorage.setItem('vrunner_scrollback_' + state.selectedCmdId, panelObj.scrollbackOffset.toString());
+            loadVttyHttp(panelObj.instUrl, state.selectedCmdId);
+            // Show scrollback indicator
+            const sbIndicator = document.getElementById('scrollbackIndicator');
+            if (sbIndicator) sbIndicator.style.display = '';
+            const btn = panelEl.querySelector('.scroll-bottom-btn');
+            if (btn) btn.classList.add('visible');
+        }
+        // else: let browser handle native scroll (no preventDefault)
+        return;
+    }
+
+    // ── Scrollback history view (scrollbackOffset > 0) ──
+    e.preventDefault();
 
     // Accumulate scroll delta — will be processed in the next animation frame.
     // This coalesces rapid wheel ticks into a single HTTP round-trip.
@@ -2810,19 +2905,29 @@ document.addEventListener('wheel', (e) => {
         // Convert accumulated pixel delta to scrollback lines.
         // ~100px of scroll ≈ 3 lines (same ratio as the previous per-tick behavior).
         const lines = Math.max(1, Math.round(Math.abs(accum) / 100) * 3);
+
         if (accum > 0) {
-            p.scrollbackOffset = Math.max(0, p.scrollbackOffset - lines);
+            // Wheel down: decrease scrollback offset (move toward live view)
+            const newOffset = Math.max(0, p.scrollbackOffset - lines);
+            if (newOffset === 0) {
+                // Reached the live buffer — restore native scroll
+                p.scrollbackOffset = 0;
+                sessionStorage.removeItem('vrunner_scrollback_' + state.selectedCmdId);
+                loadVttyHttp(p.instUrl, state.selectedCmdId);
+                // Scroll to bottom after returning to live view
+                const vtty = panelEl.querySelector('.vtty-container');
+                if (vtty) vtty.scrollTop = vtty.scrollHeight;
+            } else {
+                p.scrollbackOffset = newOffset;
+                sessionStorage.setItem('vrunner_scrollback_' + state.selectedCmdId, p.scrollbackOffset.toString());
+                loadVttyHttp(p.instUrl, state.selectedCmdId);
+            }
         } else {
+            // Wheel up: increase scrollback offset (move into history)
             p.scrollbackOffset += lines;
-        }
-
-        // Persist scrollback offset to sessionStorage
-        if (state.selectedCmdId) {
             sessionStorage.setItem('vrunner_scrollback_' + state.selectedCmdId, p.scrollbackOffset.toString());
+            loadVttyHttp(p.instUrl, state.selectedCmdId);
         }
-
-        // Fetch updated HTML with new scrollback offset
-        loadVttyHttp(p.instUrl, state.selectedCmdId);
 
         // Update scroll-to-bottom button visibility and scrollback indicator
         const btn = panelEl.querySelector('.scroll-bottom-btn');

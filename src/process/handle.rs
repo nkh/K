@@ -203,6 +203,13 @@ impl CommandHandle {
         emu.dimensions()
     }
 
+    /// Return the current buffer generation counter (O(1) read).
+    /// Used by the web UI to skip redundant DOM updates when nothing changed.
+    pub async fn buffer_generation(&self) -> u64 {
+        let emu = self.emulator.read().await;
+        emu.buffer_generation()
+    }
+
     pub async fn scrollback_count(&self) -> usize {
         let emu = self.emulator.read().await;
         emu.snapshot().scrollback.len()

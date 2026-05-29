@@ -290,6 +290,44 @@ degradation path.
 
 ## Performance Characteristics
 
+### Server-Side Rendering Benchmarks (measured)
+
+Server-side HTML rendering and diff computation benchmarks (`cargo test --lib
+vtty::renderer::tests::benchmark -- --nocapture`) on a debug build:
+
+| Metric | 80×24 | 120×40 | 200×50 |
+|---|---:|---:|---:|
+| `to_html()` per frame | ~1.4 ms | ~3.3 ms | ~7.1 ms |
+| HTML payload per frame | ~208 KB | ~520 KB | ~1,083 KB |
+| `Buffer::diff()` per frame | ~61 µs | ~151 µs | ~310 µs |
+| Diff computation per tick | ~0.05 ms (80×24 grid) |
+| Diff computation per tick | ~0.2 ms (200×60 grid) |
+
+### Client-Side Optimization Levels
+
+The web admin interface implements two levels of optimization:
+
+**Level 1 — Native Scroll + Scroll Position Preservation:**
+- The browser's native scroll is no longer blocked for the live buffer view.
+- Wheel events are intercepted only at the top edge (to enter scrollback history)
+  or when in scrollback view (to navigate history via server-side offset).
+- Native scroll provides smooth inertia, momentum, and GPU-accelerated compositing
+  — the browser handles repaint timing, which is far more efficient than per-tick
+  HTTP round-trips.
+- `scrollTop` is saved before `innerHTML` replacement and restored after, using
+  height-delta adjustment. Auto-scroll to bottom only happens when the user was
+  already viewing the bottom.
+
+**Level 2 — Generation-Based Skip:**
+- The server includes a `generation` counter (monotonic `u64`) in every
+  `vtty_full` WebSocket message and `GET /vtty/html` HTTP response.
+- The client tracks `state._lastGeneration[cmdId]` and skips the entire DOM
+  update (no `innerHTML`, no cursor repositioning) if the generation matches.
+- This eliminates redundant work when multiple dirty signals arrive between
+  client fetch cycles, or when the 50ms debounce window coalesces signals.
+- Metadata-only updates (cursor position, dimensions, mouse state) are still
+  applied even when the generation is unchanged.
+
 ### Bandwidth
 
 | Metric | Value |

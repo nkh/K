@@ -794,6 +794,103 @@ mod tests {
         assert!(result.unwrap_err().contains("Failed to read font"));
     }
 
+    // ─── Performance benchmarks ───
+
+    /// Populate a buffer with realistic terminal content (mixed chars, colors, styles).
+    fn populate_buffer(buf: &mut Buffer) {
+        let chars: &[char] = &[
+            'A', 'B', 'C', 'a', 'b', 'c', '0', '1', '2', '3',
+            ' ', ' ', ' ', '>', '<', '|', '-', '_', '=', '+',
+            '#', '@', '!', '$', '%', '^', '&', '*', '(', ')',
+            '/', '\\', ':', ';', '.', ',', '[', ']', '{', '}',
+            '~', '`', '\'', '"', '\t', 'X', 'Y', 'Z', 'W',
+        ];
+        let colors: &[[u8; 3]] = &[
+            [196, 50, 50], [50, 196, 50], [50, 50, 196],
+            [196, 196, 50], [196, 50, 196], [50, 196, 196],
+            [200, 200, 200], [100, 100, 100], [0, 0, 0],
+        ];
+        for (row_idx, row) in buf.rows.iter_mut().enumerate() {
+            for (col_idx, cell) in row.iter_mut().enumerate() {
+                let ci = (row_idx * buf.width + col_idx) % chars.len();
+                cell.ch = chars[ci];
+                let fg_i = (row_idx + col_idx) % colors.len();
+                let bg_i = (row_idx * 3 + col_idx * 7) % colors.len();
+                cell.fg = colors[fg_i];
+                cell.bg = colors[bg_i];
+                cell.bold = (row_idx + col_idx) % 7 == 0;
+                cell.italic = (row_idx * 2 + col_idx) % 11 == 0;
+                cell.underline = (row_idx + col_idx * 3) % 13 == 0;
+                cell.reverse = (row_idx * 5 + col_idx) % 17 == 0;
+            }
+        }
+    }
+
+    #[test]
+    fn benchmark_to_html() {
+        let sizes: &[(usize, usize, &str)] = &[
+            (80, 24, "80x24 (small)"),
+            (120, 40, "120x40 (medium)"),
+            (200, 50, "200x50 (large)"),
+        ];
+
+        for &(cols, rows, label) in sizes {
+            let mut buf = Buffer::new(cols, rows, 5000);
+            populate_buffer(&mut buf);
+
+            let iterations = 100;
+            let start = std::time::Instant::now();
+            let mut total_bytes = 0usize;
+            for _ in 0..iterations {
+                let html = VttyRenderer::to_html(&buf);
+                total_bytes += html.len();
+            }
+            let elapsed = start.elapsed();
+            let avg_us = elapsed.as_micros() as f64 / iterations as f64;
+            let avg_kb = total_bytes as f64 / iterations as f64 / 1024.0;
+            eprintln!(
+                "  to_html({}) — {} iterations, total {:.1?}, avg {:.0} µs/frame, {:.1} KB/frame",
+                label, iterations, elapsed, avg_us, avg_kb
+            );
+        }
+    }
+
+    #[test]
+    fn benchmark_buffer_diff() {
+        let sizes: &[(usize, usize, &str)] = &[
+            (80, 24, "80x24 (small)"),
+            (120, 40, "120x40 (medium)"),
+            (200, 50, "200x50 (large)"),
+        ];
+
+        for &(cols, rows, label) in sizes {
+            let mut buf_a = Buffer::new(cols, rows, 5000);
+            populate_buffer(&mut buf_a);
+
+            let mut buf_b = buf_a.clone();
+            // Change ~5% of cells (realistic for interactive editing)
+            let change_count = (cols * rows) / 20;
+            for i in 0..change_count {
+                let r = i / cols;
+                let c = i % cols;
+                buf_b.rows[r][c].ch = '█';
+                buf_b.rows[r][c].fg = [255, 0, 0];
+            }
+
+            let iterations = 10000;
+            let start = std::time::Instant::now();
+            for _ in 0..iterations {
+                let _diff = buf_b.diff(&buf_a);
+            }
+            let elapsed = start.elapsed();
+            let avg_ns = elapsed.as_nanos() as f64 / iterations as f64;
+            eprintln!(
+                "  diff({}) — {} iterations, total {:.1?}, avg {:.0} ns/diff",
+                label, iterations, elapsed, avg_ns
+            );
+        }
+    }
+
     #[test]
     fn test_to_png_strikethrough() {
         let mut buf = Buffer::new(5, 2, 100);

@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>vrunner Terminal DOM Benchmark</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: monospace; background: #1a1a2e; color: #e0e0e0; padding: 2rem; }
+h1 { color: #7f8aaa; margin-bottom: 1rem; font-size: 1.2rem; }
+h2 { color: #7f8aaa; margin: 1.5rem 0 0.5rem; font-size: 1rem; }
+table { width: 100%; border-collapse: collapse; margin: 0.5rem 0 1.5rem; font-size: 0.85rem; }
+th, td { padding: 4px 10px; border: 1px solid #333; text-align: right; }
+th { background: #2a2a4a; color: #aaa; text-align: left; }
+td:first-child { text-align: left; }
+.better { color: #50fa7b; }
+.worse { color: #ff5555; }
+.controls { margin: 1rem 0; display: flex; gap: 0.5rem; }
+.controls button { padding: 6px 16px; cursor: pointer; background: #3a3a5a; color: #e0e0e0; border: 1px solid #555; }
+.controls button:hover { background: #4a4a6a; }
+#status { color: #f1fa8c; margin: 0.5rem 0; }
+.hidden { position: absolute; left: -9999px; top: -9999px; width: 80ch; }
+.hidden pre { font-family: monospace; font-size: 14px; line-height: 1.2; margin: 0; padding: 0; }
+.note { color: #666; font-size: 0.75rem; margin-top: 0.5rem; }
+</style>
+</head>
+<body>
+<h1>vrunner Terminal DOM Performance Benchmark</h1>
+
+<div class="controls">
+  <button onclick="runAllBenchmarks()">Run All Benchmarks</button>
+  <button onclick="runBenchmark('innerHTML')">innerHTML Only</button>
+  <button onclick="runBenchmark('incremental')">Incremental Patch</button>
+  <button onclick="runBenchmark('scroll')">Scroll Performance</button>
+</div>
+
+<div id="status">Ready.</div>
+
+<div id="results"></div>
+
+<!-- Hidden terminal container for benchmarking -->
+<div class="hidden">
+  <div id="benchContainer" style="overflow: auto; height: 600px; width: 80ch;"></div>
+</div>
+
+<script>
+// ─── Helper: generate realistic terminal HTML ───
+function generateTerminalHTML(cols, rows) {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 >|-_=+#@!$%^&*()/:.;,[]{}~`\'" \t';
+    const colors = [
+        [196,50,50],[50,196,50],[50,50,196],[196,196,50],
+        [196,50,196],[50,196,196],[200,200,200],[100,100,100]
+    ];
+    let html = '';
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const ch = chars[(r * cols + c) % chars.length];
+            const fg = colors[(r + c) % colors.length];
+            const bg = colors[(r * 3 + c * 7) % colors.length];
+            let style = "display:inline-block;width:1ch;";
+            style += `color:rgb(${fg[0]},${fg[1]},${fg[2]});`;
+            style += `background:rgb(${bg[0]},${bg[1]},${bg[2]});`;
+            if ((r + c) % 7 === 0) style += 'font-weight:bold;';
+            if ((r * 2 + c) % 11 === 0) style += 'font-style:italic;';
+            if ((r + c * 3) % 13 === 0) style += 'text-decoration:underline;';
+            const esc = ch === '<' ? '&lt;' : ch === '>' ? '&gt;' : ch === '&' ? '&amp;' : ch === '"' ? '&quot;' : ch;
+            html += `<span style='${style}'>${esc}</span>`;
+        }
+        html += '\n';
+    }
+    return html;
+}
+
+// ─── Helper: generate HTML with 5% changed cells ───
+function generateChangedHTML(cols, rows, prevHTML) {
+    // Parse previous HTML to extract spans and change 5%
+    const totalCells = cols * rows;
+    const changeCount = Math.floor(totalCells / 20);
+
+    // Simple approach: regenerate with specific cells changed
+    const changedSet = new Set();
+    for (let i = 0; i < changeCount; i++) {
+        const r = Math.floor(i / cols);
+        const c = i % cols;
+        changedSet.add(r * cols + c);
+    }
+
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 >|-_=+#@!$%^&*()/:.;,[]{}~`\'" \t';
+    const colors = [
+        [196,50,50],[50,196,50],[50,50,196],[196,196,50],
+        [196,50,196],[50,196,196],[200,200,200],[100,100,100]
+    ];
+    let html = '';
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const idx = r * cols + c;
+            let ch, fg, bg;
+            if (changedSet.has(idx)) {
+                // Changed cell: use different char and red foreground
+                ch = '\u2588'; // block char
+                fg = [255, 80, 80];
+                bg = colors[(r * 3 + c * 7) % colors.length];
+            } else {
+                ch = chars[(r * cols + c) % chars.length];
+                fg = colors[(r + c) % colors.length];
+                bg = colors[(r * 3 + c * 7) % colors.length];
+            }
+            let style = "display:inline-block;width:1ch;";
+            style += `color:rgb(${fg[0]},${fg[1]},${fg[2]});`;
+            style += `background:rgb(${bg[0]},${bg[1]},${bg[2]});`;
+            if ((r + c) % 7 === 0) style += 'font-weight:bold;';
+            const esc = ch === '<' ? '&lt;' : ch === '>' ? '&gt;' : ch === '&' ? '&amp;' : ch === '"' ? '&quot;' : ch;
+            html += `<span style='${style}'>${esc}</span>`;
+        }
+        html += '\n';
+    }
+    return html;
+}
+
+// ─── Benchmark: innerHTML full replacement ───
+function benchmarkInnerHTML(cols, rows, iterations) {
+    const container = document.getElementById('benchContainer');
+    container.innerHTML = '<pre id="benchPre"></pre>';
+    const pre = document.getElementById('benchPre');
+
+    const baseHTML = generateTerminalHTML(cols, rows);
+    const changedHTML = generateChangedHTML(cols, rows, baseHTML);
+
+    // Warm-up
+    for (let i = 0; i < 3; i++) {
+        pre.innerHTML = baseHTML;
+        pre.innerHTML = changedHTML;
+    }
+
+    const times = [];
+    for (let i = 0; i < iterations; i++) {
+        const start = performance.now();
+        pre.innerHTML = changedHTML;
+        const elapsed = performance.now() - start;
+        times.push(elapsed);
+    }
+
+    return {
+        avg: times.reduce((a, b) => a + b, 0) / times.length,
+        min: Math.min(...times),
+        max: Math.max(...times),
+        p50: percentile(times, 50),
+        p95: percentile(times, 95),
+        p99: percentile(times, 99),
+        htmlSize: (changedHTML.length / 1024).toFixed(1),
+        spanCount: cols * rows,
+        iterations
+    };
+}
+
+// ─── Benchmark: incremental DOM patching ───
+function benchmarkIncremental(cols, rows, iterations) {
+    const container = document.getElementById('benchContainer');
+    container.innerHTML = '<pre id="benchPre"></pre>';
+    const pre = document.getElementById('benchPre');
+
+    // Build initial DOM
+    const baseHTML = generateTerminalHTML(cols, rows);
+    pre.innerHTML = baseHTML;
+
+    // Build cell index: Map<"row-col", HTMLSpanElement>
+    const cellGrid = new Map();
+    const spans = pre.querySelectorAll('span');
+    let spanIdx = 0;
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            if (spans[spanIdx]) {
+                cellGrid.set(`${r}-${c}`, spans[spanIdx]);
+            }
+            spanIdx++;
+        }
+    }
+
+    // Determine which 5% of cells to change
+    const totalCells = cols * rows;
+    const changeCount = Math.floor(totalCells / 20);
+    const changes = [];
+    for (let i = 0; i < changeCount; i++) {
+        const r = Math.floor(i / cols);
+        const c = i % cols;
+        changes.push({ r, c, ch: '\u2588', fg: 'rgb(255,80,80)', bold: false });
+    }
+
+    // Warm-up
+    for (let i = 0; i < 3; i++) {
+        for (const change of changes) {
+            const span = cellGrid.get(`${change.r}-${change.c}`);
+            if (span) {
+                span.textContent = change.ch;
+                span.style.color = change.fg;
+            }
+        }
+    }
+
+    const times = [];
+    for (let i = 0; i < iterations; i++) {
+        const start = performance.now();
+        for (const change of changes) {
+            const span = cellGrid.get(`${change.r}-${change.c}`);
+            if (span) {
+                span.textContent = change.ch;
+                span.style.color = change.fg;
+            }
+        }
+        const elapsed = performance.now() - start;
+        times.push(elapsed);
+    }
+
+    return {
+        avg: times.reduce((a, b) => a + b, 0) / times.length,
+        min: Math.min(...times),
+        max: Math.max(...times),
+        p50: percentile(times, 50),
+        p95: percentile(times, 95),
+        p99: percentile(times, 99),
+        changedCells: changeCount,
+        totalCells,
+        iterations
+    };
+}
+
+// ─── Benchmark: scroll performance ───
+function benchmarkScroll(cols, rows, iterations) {
+    const container = document.getElementById('benchContainer');
+    container.innerHTML = '<pre id="benchPre"></pre>';
+    const pre = document.getElementById('benchPre');
+    container.style.height = '400px';
+
+    // Fill with scrollable content (5x the visible rows)
+    const scrollLines = rows * 5;
+    let html = '';
+    for (let r = 0; r < scrollLines; r++) {
+        for (let c = 0; c < cols; c++) {
+            const ch = String.fromCharCode(65 + ((r + c) % 26));
+            html += `<span style="display:inline-block;width:1ch;color:rgb(${150+r%100},${150+c%100},200);background:rgb(20,20,30);">${ch}</span>`;
+        }
+        html += '\n';
+    }
+    pre.innerHTML = html;
+
+    // Measure wheel-event scroll (simulated via scrollTop changes)
+    // This tests how fast the browser can repaint during scroll
+    container.scrollTop = 0;
+    const maxScroll = container.scrollHeight - container.clientHeight;
+    const step = 30; // pixels per scroll step
+
+    const times = [];
+    for (let i = 0; i < iterations; i++) {
+        container.scrollTop = 0;
+        const start = performance.now();
+        // Simulate 20 scroll steps (like a mouse wheel flick)
+        for (let s = 0; s < 20; s++) {
+            container.scrollTop = Math.min(container.scrollTop + step, maxScroll);
+        }
+        // Force layout/paint
+        void container.offsetHeight;
+        const elapsed = performance.now() - start;
+        times.push(elapsed);
+    }
+
+    // Also measure single-step repaint time
+    const singleStepTimes = [];
+    container.scrollTop = maxScroll / 2;
+    for (let i = 0; i < iterations * 10; i++) {
+        const start = performance.now();
+        container.scrollTop += step;
+        void container.offsetHeight;
+        const elapsed = performance.now() - start;
+        singleStepTimes.push(elapsed);
+    }
+
+    return {
+        avg20Steps: times.reduce((a, b) => a + b, 0) / times.length,
+        avgSingleStep: singleStepTimes.reduce((a, b) => a + b, 0) / singleStepTimes.length,
+        totalSpans: cols * scrollLines,
+        maxScrollPx: maxScroll,
+        iterations
+    };
+}
+
+function percentile(arr, p) {
+    const sorted = [...arr].sort((a, b) => a - b);
+    const idx = Math.ceil(sorted.length * p / 100) - 1;
+    return sorted[Math.max(0, idx)];
+}
+
+// ─── Run and display results ───
+const results = {};
+
+function runBenchmark(type) {
+    const status = document.getElementById('status');
+    status.textContent = `Running ${type} benchmark...`;
+
+    setTimeout(() => {
+        const configs = [
+            { cols: 80, rows: 24, label: '80x24' },
+            { cols: 120, rows: 40, label: '120x40' },
+            { cols: 200, rows: 50, label: '200x50' },
+        ];
+
+        if (type === 'innerHTML') {
+            results.innerHTML = {};
+            for (const cfg of configs) {
+                const r = benchmarkInnerHTML(cfg.cols, cfg.rows, 50);
+                results.innerHTML[cfg.label] = r;
+            }
+            displayInnerHTMLResults();
+        } else if (type === 'incremental') {
+            results.incremental = {};
+            for (const cfg of configs) {
+                const r = benchmarkIncremental(cfg.cols, cfg.rows, 50);
+                results.incremental[cfg.label] = r;
+            }
+            displayIncrementalResults();
+        } else if (type === 'scroll') {
+            results.scroll = {};
+            for (const cfg of configs) {
+                const r = benchmarkScroll(cfg.cols, cfg.rows, 50);
+                results.scroll[cfg.label] = r;
+            }
+            displayScrollResults();
+        }
+
+        status.textContent = `Done. ${new Date().toLocaleTimeString()}`;
+    }, 50);
+}
+
+function runAllBenchmarks() {
+    const status = document.getElementById('status');
+    status.textContent = 'Running all benchmarks...';
+
+    setTimeout(() => {
+        const configs = [
+            { cols: 80, rows: 24, label: '80x24' },
+            { cols: 120, rows: 40, label: '120x40' },
+            { cols: 200, rows: 50, label: '200x50' },
+        ];
+
+        results.innerHTML = {};
+        results.incremental = {};
+        results.scroll = {};
+
+        for (const cfg of configs) {
+            results.innerHTML[cfg.label] = benchmarkInnerHTML(cfg.cols, cfg.rows, 50);
+            results.incremental[cfg.label] = benchmarkIncremental(cfg.cols, cfg.rows, 50);
+            results.scroll[cfg.label] = benchmarkScroll(cfg.cols, cfg.rows, 50);
+        }
+
+        displayInnerHTMLResults();
+        displayIncrementalResults();
+        displayScrollResults();
+        displayComparison();
+
+        status.textContent = `All benchmarks complete. ${new Date().toLocaleTimeString()}`;
+    }, 50);
+}
+
+function displayInnerHTMLResults() {
+    let html = '<h2>1. innerHTML Full Replacement (current approach)</h2>';
+    html += '<table><tr><th>Size</th><th>Spans</th><th>HTML Size</th><th>Avg (ms)</th><th>P50</th><th>P95</th><th>P99</th><th>Min</th><th>Max</th></tr>';
+    for (const [label, r] of Object.entries(results.innerHTML)) {
+        html += `<tr><td>${label}</td><td>${r.spanCount}</td><td>${r.htmlSize} KB</td><td>${r.avg.toFixed(2)}</td><td>${r.p50.toFixed(2)}</td><td>${r.p95.toFixed(2)}</td><td>${r.p99.toFixed(2)}</td><td>${r.min.toFixed(2)}</td><td>${r.max.toFixed(2)}</td></tr>`;
+    }
+    html += '</table>';
+    html += '<p class="note">Measures: pre.innerHTML = html (destroys all spans, re-parses HTML, creates new DOM nodes)</p>';
+    document.getElementById('results').innerHTML += html;
+}
+
+function displayIncrementalResults() {
+    let html = '<h2>2. Incremental DOM Patching (5% cells changed)</h2>';
+    html += '<table><tr><th>Size</th><th>Changed/Total</th><th>Avg (ms)</th><th>P50</th><th>P95</th><th>P99</th><th>Min</th><th>Max</th></tr>';
+    for (const [label, r] of Object.entries(results.incremental)) {
+        html += `<tr><td>${label}</td><td>${r.changedCells}/${r.totalCells} (${(r.changedCells/r.totalCells*100).toFixed(0)}%)</td><td>${r.avg.toFixed(2)}</td><td>${r.p50.toFixed(2)}</td><td>${r.p95.toFixed(2)}</td><td>${r.p99.toFixed(2)}</td><td>${r.min.toFixed(2)}</td><td>${r.max.toFixed(2)}</td></tr>`;
+    }
+    html += '</table>';
+    html += '<p class="note">Measures: direct span.textContent + span.style updates (no DOM destruction)</p>';
+    document.getElementById('results').innerHTML += html;
+}
+
+function displayScrollResults() {
+    let html = '<h2>3. Native Scroll Performance</h2>';
+    html += '<table><tr><th>Size</th><th>Total Spans</th><th>20 Steps (ms)</th><th>Single Step (ms)</th><th>Max Scroll (px)</th></tr>';
+    for (const [label, r] of Object.entries(results.scroll)) {
+        html += `<tr><td>${label}</td><td>${r.totalSpans}</td><td>${r.avg20Steps.toFixed(2)}</td><td>${r.avgSingleStep.toFixed(3)}</td><td>${r.maxScrollPx}</td></tr>`;
+    }
+    html += '</table>';
+    html += '<p class="note">Measures: scrollTop manipulation + forced reflow (simulates wheel scroll)</p>';
+    document.getElementById('results').innerHTML += html;
+}
+
+function displayComparison() {
+    if (!results.innerHTML || !results.incremental) return;
+    let html = '<h2>4. Comparison: innerHTML vs Incremental</h2>';
+    html += '<table><tr><th>Size</th><th>innerHTML Avg</th><th>Incremental Avg</th><th>Speedup</th><th>Reduction</th></tr>';
+    for (const label of Object.keys(results.innerHTML)) {
+        const ih = results.innerHTML[label];
+        const inc = results.incremental[label];
+        if (!inc) continue;
+        const speedup = ih.avg / inc.avg;
+        const reduction = ((1 - inc.avg / ih.avg) * 100).toFixed(1);
+        const cls = speedup > 1 ? 'better' : 'worse';
+        html += `<tr><td>${label}</td><td>${ih.avg.toFixed(2)} ms</td><td>${inc.avg.toFixed(2)} ms</td><td class="${cls}">${speedup.toFixed(1)}x</td><td class="${cls}">${reduction}%</td></tr>`;
+    }
+    html += '</table>';
+    document.getElementById('results').innerHTML += html;
+}
+</script>
+</body>
+</html>
