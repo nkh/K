@@ -18,8 +18,8 @@ BASE_URL="https://127.0.0.1:${PORT}"
 PASS=0
 FAIL=0
 
-pass() { echo "  PASS: $1"; ((PASS++)); }
-fail() { echo "  FAIL: $1"; ((FAIL++)); }
+pass() { echo "  PASS: $1"; ((PASS++)) || true; }
+fail() { echo "  FAIL: $1"; ((FAIL++)) || true; }
 section() { echo ""; echo "=== $1 ==="; }
 
 cleanup() {
@@ -51,8 +51,10 @@ VRUNNER_PID=$!
 # Wait for server (may take a bit longer for cert generation)
 echo "Waiting for TLS server..."
 for i in $(seq 1 40); do
-    curl -skf "${BASE_URL}/api/info" >/dev/null 2>&1 && {
-        echo "TLS server ready!"
+    # --remote enables auth, so check for 401 (server is up) instead of 200
+    CODE=$(curl -sk -o /dev/null -w '%{http_code}' "${BASE_URL}/api/info" 2>/dev/null) || true
+    [ "$CODE" = "401" ] || [ "$CODE" = "403" ] && {
+        echo "TLS server ready! (auth required, as expected)"
         break
     }
     sleep 0.2
@@ -61,9 +63,11 @@ done
 # ── 1. Verify HTTPS works ──
 section "HTTPS connectivity"
 
-RESP=$(curl -sk "${BASE_URL}/api/info")
-STATUS=$(echo "$RESP" | jq -r '.status')
-[ "$STATUS" = "ok" ] && pass "HTTPS GET /api/info works" || fail "HTTPS failed: $RESP"
+# /api/info requires auth with --remote — verify the server responds (not a connection error)
+CODE=$(curl -sk -o /dev/null -w '%{http_code}' "${BASE_URL}/api/info")
+[ "$CODE" = "401" ] || [ "$CODE" = "403" ] \
+    && pass "HTTPS responds (auth required, code $CODE)" \
+    || fail "HTTPS failed: expected 401/403, got $CODE"
 
 # ── 2. Verify auth is required (remote implies auth) ──
 section "Authentication (remote auto-enables auth)"
@@ -134,7 +138,7 @@ HAS_TEXT=$(echo "$RESP" | jq '.data | has("text")')
 # ── 7. Kill and shutdown ──
 section "Kill & shutdown"
 
-curl -sk -X POST -H "Authorization: Bearer ${TOKEN}" \
-    "${BASE_URL}/api/commands/${ID}/kill" >/dev/null 2>&1 || true
+curl -sk -X POST -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json" \
+    -d '{}' "${BASE_URL}/api/commands/${ID}/kill" >/dev/null 2>&1 || true
 curl -sk -X POST -H "Authorization: Bearer ${TOKEN}" \
     "${BASE_URL}/api/shutdown" >/dev/null 2>&1 || true
