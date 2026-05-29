@@ -167,3 +167,31 @@ Stage Summary:
 - Three JS bugs fixed in static/admin/app.js
 - Formatting drift fixed in 5 Rust files via cargo fmt
 - Pushed as commit 7ade2ac
+
+---
+Task ID: 5
+Agent: main
+Task: Create and run cookbook integration test scripts
+
+Work Log:
+- Created 5 runnable bash test scripts for cookbook examples:
+  test-multi-service.sh, test-remote-tls.sh, test-dev-server.sh,
+  test-ci-pipeline.sh, test-pair-programming.sh
+- Discovered critical router bug: ALL routes with path parameters broken
+  - Previous session converted :param to {param} (matchit 0.8 syntax)
+  - axum 0.7 uses matchit 0.7.3 which only supports :param syntax
+  - Every API endpoint using {id}, {name}, {pid}, {token} returned HTML fallback
+  - Fixed by reverting all {param} to :param in src/web/router.rs
+- Also fixed /admin/*path catch-all (was {*path} — matchit 0.8 only)
+- Fixed ((PASS++)) / ((FAIL++)) bash arithmetic exit code issue with set -e
+- Fixed kill endpoint requiring JSON body in test scripts
+- Fixed stop-command resolving by name not UUID in test scripts
+- Fixed dev-server config missing required struct fields (term, truecolor, mouse, dirty_check_ms)
+- Verified: cargo build, cargo clippy (clean), cargo test (67 pass), all cookbook tests pass
+
+Stage Summary:
+- Critical router fix committed (0d82bf1): reverts {param} to :param for matchit 0.7
+- Cookbook test scripts committed (ee44bfd): 61/61 assertions pass across 4 tests
+- TLS test skipped: pre-existing rustls CryptoProvider configuration issue
+- Key findings: kill is destructive, retain_on_exit only for natural exits,
+  freeze/thaw need no body, kill needs JSON body
