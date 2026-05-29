@@ -31,6 +31,15 @@ const state = {
     // Whether the user is currently viewing the live buffer (not scrolled
     // into scrollback history). Used for auto-scroll decisions.
     _userAtBottom: true,
+    // Whether the user is actively scrolling the terminal container.
+    // DOM updates are paused while this is true, then flushed on scroll-end.
+    _userScrolling: false,
+    _userScrollTimer: null,
+    // Buffered VTTY update received while terminal was not visible or while
+    // the user was scrolling.  Stored so it can be applied once conditions
+    // allow (terminal visible, user stopped scrolling).
+    _pendingVttyData: null,
+    _pendingVttyDirty: false,
     // Level 3: Cell grid for incremental DOM patching.
     // Maps cmdId → { grid: [[span, ...], ...], rows: number, cols: number }
     // Built after each full HTML replacement; used by applyVttyDiff.
@@ -244,6 +253,25 @@ function releaseCurrentFocusTrap() {
 
     // Create initial panels
     state.instanceUrls.forEach(inst => addPanelDirect(inst.url, inst.label, inst.token));
+
+    // ── Scroll detection: pause VTTY DOM updates while user is scrolling ──
+    // Listens on scroll events bubbling from .vtty-container elements.
+    // When the user scrolls, _userScrolling is set to true and a 200ms
+    // inactivity timer starts.  Once the timer fires, scrolling is
+    // considered finished and any buffered updates are flushed.
+    document.addEventListener('scroll', (e) => {
+        const vttyEl = e.target.closest ? e.target.closest('.vtty-container') : null;
+        if (!vttyEl) return;
+        state._userScrolling = true;
+        if (state._userScrollTimer) clearTimeout(state._userScrollTimer);
+        state._userScrollTimer = setTimeout(() => {
+            state._userScrolling = false;
+            state._userScrollTimer = null;
+            if (state._pendingVttyDirty && _isTerminalVisible()) {
+                _flushPendingVttyUpdate();
+            }
+        }, 200);
+    }, true);
 
     // Start refresh
     startRefresh();
@@ -560,6 +588,8 @@ function toggleLogsView() {
         log.style.display = 'none';
         if (btn) { btn.style.background = ''; btn.style.color = ''; }
         disconnectLogWs();
+        // Flush any VTTY updates that arrived while logs were shown
+        _flushPendingVttyUpdate();
     } else {
         // Switch to logs
         state.currentView = 'log';
@@ -622,6 +652,10 @@ function switchViewTab(view, el) {
         if (!document.getElementById('logSearch').value) {
             connectLogWs();
         }
+    }
+    // Flush any VTTY updates that arrived while viewing logs/docs
+    if (view === 'vtty' && prevView !== 'vtty') {
+        _flushPendingVttyUpdate();
     }
 }
 
@@ -855,6 +889,9 @@ function selectCommand(instUrl, cmdId, name) {
 
     state.selectedInstUrl = instUrl;
     state.selectedCmdId = cmdId;
+    // Clear any buffered update — we fetch fresh data below
+    state._pendingVttyData = null;
+    state._pendingVttyDirty = false;
     state.bufferView = 'current';
     const globalBufferSel = document.getElementById('bufferSelect');
     if (globalBufferSel) globalBufferSel.value = 'current';
@@ -1143,6 +1180,36 @@ function applyPollInterval() {
     }
 }
 
+/// Whether the terminal content area is currently visible to the user.
+/// Returns false when viewing logs/docs or when no command is selected.
+function _isTerminalVisible() {
+    if (state.currentView !== 'vtty') return false;
+    if (!state.selectedCmdId) return false;
+    return true;
+}
+
+/// Flush any buffered VTTY data that arrived while the terminal was not
+/// visible or while the user was scrolling.  Called when the terminal
+/// becomes visible again or when scrolling ends.
+function _flushPendingVttyUpdate() {
+    if (!state._pendingVttyDirty) return;
+    state._pendingVttyDirty = false;
+    if (state._pendingVttyData) {
+        const data = state._pendingVttyData;
+        state._pendingVttyData = null;
+        if (data.cells && data.cells.length > 0) {
+            applyVttyDiff(data);
+        } else {
+            updateVttyDisplay(data);
+        }
+    } else {
+        // We know data changed but don't have a snapshot — fetch fresh
+        if (state.selectedInstUrl && state.selectedCmdId) {
+            loadVttyHttp(state.selectedInstUrl, state.selectedCmdId);
+        }
+    }
+}
+
 /// Start the active update mode (push or poll).
 function startUpdateMode() {
     stopUpdateMode();
@@ -1193,9 +1260,14 @@ function connectVttyWs(instUrl, cmdId) {
             try {
                 const msg = JSON.parse(event.data);
                 if (msg.type === 'vtty_full' && msg.data) {
-                    // Initial full snapshot — apply it directly
+                    // Initial full snapshot — buffer or apply
                     if (state.bufferView === 'current') {
-                        updateVttyDisplay(msg.data);
+                        if (_isTerminalVisible()) {
+                            updateVttyDisplay(msg.data);
+                        } else {
+                            state._pendingVttyData = msg.data;
+                            state._pendingVttyDirty = true;
+                        }
                     }
                     const selPanel = getSelectedPanel();
                     if (selPanel) {
@@ -1203,15 +1275,24 @@ function connectVttyWs(instUrl, cmdId) {
                         if (badge) badge.classList.toggle('visible', !!msg.data.alternate_screen);
                     }
                 } else if (msg.type === 'vtty_diff' && msg.data) {
-                    // Level 3: Incremental diff — apply cell changes directly to DOM.
+                    // Level 3: Incremental diff — buffer or apply
                     if (state.bufferView === 'current') {
-                        applyVttyDiff(msg.data);
+                        if (_isTerminalVisible()) {
+                            applyVttyDiff(msg.data);
+                        } else {
+                            state._pendingVttyData = msg.data;
+                            state._pendingVttyDirty = true;
+                        }
                     }
                 } else if (msg.type === 'vtty_dirty' && msg.data) {
                     // Legacy dirty signal (shouldn't arrive in Level 3 mode,
                     // but handled as fallback for older servers).
                     if (state.bufferView === 'current') {
-                        scheduleVttyHttp(state.selectedInstUrl, state.selectedCmdId, 50);
+                        if (_isTerminalVisible()) {
+                            scheduleVttyHttp(state.selectedInstUrl, state.selectedCmdId, 50);
+                        } else {
+                            state._pendingVttyDirty = true;
+                        }
                     }
                 } else if (msg.type === 'command_ended') {
                     document.getElementById('connStatus').textContent = 'Command ended';
@@ -1341,6 +1422,8 @@ function stopPoll() {
 
 async function pollOnce() {
     if (!state.selectedInstUrl || !state.selectedCmdId) return;
+    // Skip fetching when terminal is not visible
+    if (!_isTerminalVisible()) return;
     const cmdId = state.selectedCmdId;
     const instUrl = state.selectedInstUrl;
     try {
@@ -1355,6 +1438,12 @@ async function pollOnce() {
 }
 
 function updateVttyDisplay(data) {
+    // Pause DOM updates while the user is actively scrolling
+    if (state._userScrolling) {
+        state._pendingVttyData = data;
+        state._pendingVttyDirty = true;
+        return;
+    }
     const panel = getSelectedPanel();
     if (!panel) return;
     const vttyEl = panel.querySelector('.vtty-container');
@@ -1535,6 +1624,12 @@ function _htmlEscapeChar(ch) {
 //   { generation, cursor, dimensions, changed_count, cells: [...] }
 // Each cell: { row, col, ch, fg: [r,g,b], bg: [r,g,b], bold, italic, ... }
 function applyVttyDiff(data) {
+    // Pause DOM updates while the user is actively scrolling
+    if (state._userScrolling) {
+        state._pendingVttyData = data;
+        state._pendingVttyDirty = true;
+        return;
+    }
     const panel = getSelectedPanel();
     if (!panel) return;
     const vttyEl = panel.querySelector('.vtty-container');
@@ -1606,6 +1701,8 @@ function applyVttyDiff(data) {
 // periodic refresh, sendKeys) all want to refresh the VTTY display.
 // Only the last call within the debounce window actually fires.
 function scheduleVttyHttp(instUrl, cmdId, delayMs) {
+    // Skip scheduling when terminal is not visible
+    if (!_isTerminalVisible()) return;
     if (state._vttyHttpTimer) clearTimeout(state._vttyHttpTimer);
     state._vttyHttpTimer = setTimeout(() => {
         state._vttyHttpTimer = null;
@@ -1653,6 +1750,12 @@ async function loadVttyHttp(instUrl, cmdId) {
             const vttyEl = panel.querySelector('.vtty-container');
             const pre = vttyEl ? vttyEl.querySelector('pre') : null;
             if (pre && json.data.html !== undefined) {
+                // Pause DOM updates while the user is actively scrolling
+                if (state._userScrolling) {
+                    state._pendingVttyData = json.data;
+                    state._pendingVttyDirty = true;
+                    return;
+                }
                 // Level 1: Save scroll position before innerHTML replacement
                 const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
                 const oldScrollHeight = vttyEl.scrollHeight;
