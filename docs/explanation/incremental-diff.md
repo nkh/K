@@ -305,7 +305,7 @@ vtty::renderer::tests::benchmark -- --nocapture`) on a debug build:
 
 ### Client-Side Optimization Levels
 
-The web admin interface implements two levels of optimization:
+The web admin interface implements three levels of optimization:
 
 **Level 1 — Native Scroll + Scroll Position Preservation:**
 - The browser's native scroll is no longer blocked for the live buffer view.
@@ -328,21 +328,55 @@ The web admin interface implements two levels of optimization:
 - Metadata-only updates (cursor position, dimensions, mouse state) are still
   applied even when the generation is unchanged.
 
+**Level 3 — Server-Side Cell Diff + Client-Side Incremental DOM Patching:**
+- The diff watcher (`spawn_diff_watcher` in `manager.rs`) maintains a local
+  snapshot of the previous buffer state. When the generation counter changes,
+  it computes a `Buffer::diff()` between the previous and current buffer.
+- If dimensions changed or more than 90% of cells differ, the watcher falls
+  back to sending `vtty_full` (complete HTML resync). Otherwise, it sends a
+  `vtty_diff` WebSocket message containing only the changed cells as a
+  `Vec<CellDiff>` JSON array.
+- The client maintains a 2D cell grid (`_cellGrids[cmdId]`) that maps
+  `(row, col)` positions to the corresponding `<span>` DOM elements inside
+  the `<pre>` container. This grid is rebuilt after each full HTML replacement.
+- On receiving a `vtty_diff` message, `applyVttyDiff()` patches only the
+  changed spans in-place using `setAttribute('style', ...)` and
+  `textContent` updates — no `innerHTML` replacement, no DOM destruction.
+- The client-side `_cellStyle()` function generates inline CSS that exactly
+  matches the server's `VttyRenderer::to_html()` output, ensuring visual
+  consistency between full HTML replacement and incremental diff patching.
+- If the cell grid is unavailable, dimensions have changed, or a grid
+  desync is detected, the client automatically falls back to a full HTML
+  fetch via `scheduleVttyHttp()`. The client can also send a `request_full`
+  WebSocket message to request an immediate resync from the server.
+- An HTTP endpoint `GET /api/commands/:id/vtty/diff` provides diff data for
+  poll-mode clients that do not use WebSocket streaming.
+
 ### Bandwidth
 
 | Metric | Value |
 |---|---|
-| Full snapshot (80×24) | ~40–60 KB (uncompressed), ~8–12 KB (gzip) |
-| Typical diff (interactive) | ~0.1–1 KB (uncompressed) |
-| Typical diff (fast scroll) | ~5–20 KB (uncompressed) |
+| Full snapshot (80×24) | ~208 KB (uncompressed), per `to_html` benchmark |
+| Full snapshot (120×40) | ~520 KB (uncompressed) |
+| Full snapshot (200×50) | ~1,083 KB (uncompressed) |
+| Diff 1% cells (80×24, typing) | ~3.5 KB/msg |
+| Diff 5% cells (80×24, interactive) | ~16.8 KB/msg |
+| Diff 25% cells (80×24, partial) | ~83.1 KB/msg |
+| Diff 5% cells (120×40, interactive) | ~41.7 KB/msg |
+| Diff 1% cells (200×50, typing) | ~17.5 KB/msg |
+| Diff 5% cells (200×50, interactive) | ~86.8 KB/msg |
 | Idle period traffic | 0 bytes (no messages sent) |
 
 ### CPU
 
 | Metric | Value |
 |---|---|
-| Diff computation per tick | ~0.05 ms (80×24 grid) |
-| Diff computation per tick | ~0.2 ms (200×60 grid) |
+| Diff computation per tick (80×24) | ~66 µs |
+| Diff computation per tick (120×40) | ~164 µs |
+| Diff computation per tick (200×50) | ~327 µs |
+| Diff JSON serialization 5% (80×24) | ~1.1 ms |
+| Diff JSON serialization 5% (120×40) | ~2.7 ms |
+| Diff JSON serialization 5% (200×50) | ~5.8 ms |
 | Memory overhead (snapshot) | ~120 KB per command (200×60) |
 
 ### Latency

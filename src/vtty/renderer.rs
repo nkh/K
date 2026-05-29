@@ -891,6 +891,71 @@ mod tests {
         }
     }
 
+    /// Benchmark: JSON serialization of BufferDiff for WebSocket transport.
+    /// Measures the time and output size of serializing diff data into the
+    /// JSON format used by the vtty_diff WS message (Level 3).
+    #[test]
+    fn benchmark_diff_json_serialization() {
+        let sizes: &[(usize, usize, &str)] = &[
+            (80, 24, "80x24 (small)"),
+            (120, 40, "120x40 (medium)"),
+            (200, 50, "200x50 (large)"),
+        ];
+        // Test different change rates
+        let change_rates: &[(f64, &str)] = &[
+            (0.01, "1% (typing)"),
+            (0.05, "5% (interactive)"),
+            (0.25, "25% (partial update)"),
+            (0.50, "50% (half-screen)"),
+        ];
+
+        for &(cols, rows, label) in sizes {
+            let mut buf_a = Buffer::new(cols, rows, 5000);
+            populate_buffer(&mut buf_a);
+
+            for &(rate, rate_label) in change_rates {
+                let mut buf_b = buf_a.clone();
+                let change_count = ((cols * rows) as f64 * rate) as usize;
+                for i in 0..change_count {
+                    let r = i / cols;
+                    let c = i % cols;
+                    buf_b.rows[r][c].ch = '█';
+                    buf_b.rows[r][c].fg = [255, 0, 0];
+                    buf_b.rows[r][c].bold = true;
+                }
+
+                let diff = buf_b.diff(&buf_a);
+
+                let iterations = 100;
+                let start = std::time::Instant::now();
+                let mut total_bytes = 0usize;
+                for _ in 0..iterations {
+                    let json = serde_json::json!({
+                        "type": "vtty_diff",
+                        "data": {
+                            "generation": 1u64,
+                            "cursor": {"row": 10, "col": 42},
+                            "dimensions": {"rows": rows, "cols": cols},
+                            "cursor_visible": true,
+                            "alternate_screen": false,
+                            "changed_count": diff.changed_count,
+                            "cells": diff.cells,
+                        }
+                    })
+                    .to_string();
+                    total_bytes += json.len();
+                }
+                let elapsed = start.elapsed();
+                let avg_us = elapsed.as_micros() as f64 / iterations as f64;
+                let avg_kb = total_bytes as f64 / iterations as f64 / 1024.0;
+                eprintln!(
+                    "  diff_json({}, {}) — {} iters, total {:.1?}, avg {:.0} µs/serialize, {:.1} KB/msg ({}/{} cells)",
+                    label, rate_label, iterations, elapsed, avg_us, avg_kb, diff.changed_count, cols * rows
+                );
+            }
+        }
+    }
+
     #[test]
     fn test_to_png_strikethrough() {
         let mut buf = Buffer::new(5, 2, 100);

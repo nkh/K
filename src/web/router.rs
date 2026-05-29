@@ -64,6 +64,10 @@ pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
             get(handlers::vtty::vtty_changed),
         )
         .route(
+            "/api/commands/:id/vtty/diff",
+            get(handlers::vtty::get_vtty_diff),
+        )
+        .route(
             "/api/commands/:id/vtty/partial",
             get(handlers::vtty::get_vtty_partial),
         )

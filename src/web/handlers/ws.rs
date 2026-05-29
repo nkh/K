@@ -280,6 +280,40 @@ async fn handle_vtty_client_message(
                 }
             }
         }
+        "request_full" => {
+            // Level 3: Client requests a full HTML resync (e.g., after cell grid desync).
+            // The diff watcher will naturally send a vtty_full on the next tick, but
+            // the client can also request an immediate resync via this message.
+            if let Some(handle) = manager.get(id) {
+                let emulator = handle.emulator.clone();
+                drop(handle);
+                let (html, cursor_row, cursor_col, rows, cols, alt_screen, cursor_visible, generation) = {
+                    let emu = emulator.read().await;
+                    let buf = emu.snapshot();
+                    let html = crate::vtty::renderer::VttyRenderer::to_html(&buf);
+                    let (cr, cc) = emu.cursor();
+                    let (r, c) = emu.dimensions();
+                    let alt = emu.is_alternate_screen();
+                    let cv = emu.is_cursor_visible();
+                    let gen = emu.buffer_generation();
+                    (html, cr, cc, r, c, alt, cv, gen)
+                };
+                let full_msg = json!({
+                    "type": "vtty_full",
+                    "data": {
+                        "id": id,
+                        "html": html,
+                        "cursor": {"row": cursor_row, "col": cursor_col},
+                        "dimensions": {"rows": rows, "cols": cols},
+                        "alternate_screen": alt_screen,
+                        "cursor_visible": cursor_visible,
+                        "generation": generation,
+                    }
+                })
+                .to_string();
+                let _ = ws_tx.send(Message::Text(full_msg)).await;
+            }
+        }
         _ => {
             tracing::warn!(?msg_type, "ws_vtty: unknown message type");
         }

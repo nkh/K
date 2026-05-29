@@ -319,3 +319,42 @@ pub async fn get_vtty_png(
             .into_response(),
     }
 }
+
+/// GET /api/commands/:id/vtty/diff
+///
+/// Returns a cell-level diff between the last transmitted snapshot and the
+/// current buffer state. Used by clients in poll mode (no WebSocket) for
+/// incremental DOM patching (Level 3 optimization).
+///
+/// Response includes `changed_count` and a `cells` array of CellDiff entries.
+/// If the terminal dimensions changed since the last diff, returns a flag
+/// `full_sync_required: true` and the client should fetch full HTML instead.
+pub async fn get_vtty_diff(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Json<Value> {
+    match state.manager.get(&id) {
+        Some(handle) => {
+            let (diff, cursor, dims, gen) = handle.vtty_diff_and_state().await;
+            let (rows, cols) = dims;
+            Json(serde_json::json!({
+                "status": "ok",
+                "data": {
+                    "id": id,
+                    "generation": gen,
+                    "cursor": { "row": cursor.0, "col": cursor.1 },
+                    "dimensions": { "rows": rows, "cols": cols },
+                    "changed_count": diff.changed_count,
+                    "full_sync_required": diff.changed_count > rows * cols * 9 / 10,
+                    "cells": diff.cells,
+                },
+                "error": null
+            }))
+        }
+        None => Json(serde_json::json!({
+            "status": "error",
+            "data": null,
+            "error": format!("Command {} not found", id)
+        })),
+    }
+}

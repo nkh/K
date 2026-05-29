@@ -266,6 +266,7 @@ impl ProcessSpawner {
             exit_code: std::sync::Mutex::new(None),
             exit_time: std::sync::Mutex::new(None),
             frozen: std::sync::atomic::AtomicBool::new(false),
+            prev_diff_snapshot: tokio::sync::Mutex::new(None),
         })
     }
 }

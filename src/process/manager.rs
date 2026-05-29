@@ -266,20 +266,20 @@ impl CommandManager {
     }
 
     /// Spawn a background watcher that detects buffer changes and broadcasts
-    /// lightweight "vtty_dirty" signals.  The watcher does NOT compute diffs
-    /// or include any cell data — it simply tells the client "something changed,
-    /// go fetch the latest HTML yourself".  The actual HTML is always obtained
-    /// via the existing `GET /api/commands/:id/vtty/html` endpoint.
+    /// incremental diff messages using the Level 3 protocol.  The watcher
+    /// maintains its own local buffer baseline, computes cell-level diffs, and
+    /// sends `vtty_diff` messages with changed cells.  If the terminal dimensions
+    /// change or too many cells changed (>90%), it falls back to `vtty_full`
+    /// with the complete HTML so the client can resync.
     fn spawn_diff_watcher(&self, watch_id: String) {
         let watch_commands = self.commands.clone();
         let watch_tx = self.vtty_change_tx.clone();
         let check_interval_ms = self.config.web.dirty_check_ms;
 
         tokio::spawn(async move {
-            // The watcher maintains its OWN local baseline for change detection.
-            // Uses the buffer generation counter for O(1) comparison instead
-            // of cloning the entire buffer on every tick.
             let mut prev_gen: Option<u64> = None;
+            let mut prev_buffer: Option<Buffer> = None;
+            let mut prev_dims: Option<(usize, usize)> = None;
 
             loop {
                 tokio::time::sleep(std::time::Duration::from_millis(check_interval_ms)).await;
@@ -298,13 +298,20 @@ impl CommandManager {
                 };
                 // DashMap shard lock is now released.
 
-                // Read the buffer generation for O(1) change detection (no clone needed)
-                let current_gen = {
+                let (current_gen, current_buf, cursor, dims, cursor_visible, alt_screen) = {
                     let emu = emulator.read().await;
-                    emu.buffer_generation()
+                    (
+                        emu.buffer_generation(),
+                        emu.snapshot(),
+                        emu.cursor(),
+                        emu.dimensions(),
+                        emu.is_cursor_visible(),
+                        emu.is_alternate_screen(),
+                    )
                 };
+                let (cursor_row, cursor_col) = cursor;
+                let (rows, cols) = dims;
 
-                // Check if anything changed using the generation counter
                 let has_changed = match prev_gen {
                     Some(prev) => current_gen != prev,
                     None => true,
@@ -313,21 +320,81 @@ impl CommandManager {
                 if !has_changed {
                     continue;
                 }
-
-                // Update the watcher's local baseline
                 prev_gen = Some(current_gen);
 
-                // Send a lightweight dirty signal — no diff data, no HTML.
-                // The client decides when and how to fetch the updated content.
+                // If dimensions changed, send full HTML (resync) — cannot diff across different sizes
+                let dims_changed = match prev_dims {
+                    Some(prev) => prev != (rows, cols),
+                    None => true,
+                };
+
+                if dims_changed || prev_buffer.is_none() {
+                    // Send vtty_full for resync
+                    let html = crate::vtty::renderer::VttyRenderer::to_html(&current_buf);
+                    let msg = serde_json::json!({
+                        "type": "vtty_full",
+                        "data": {
+                            "id": &watch_id,
+                            "html": html,
+                            "cursor": {"row": cursor_row, "col": cursor_col},
+                            "dimensions": {"rows": rows, "cols": cols},
+                            "alternate_screen": alt_screen,
+                            "cursor_visible": cursor_visible,
+                            "generation": current_gen,
+                        }
+                    })
+                    .to_string();
+                    let _ = watch_tx.send((watch_id.clone(), msg));
+                    prev_buffer = Some(current_buf);
+                    prev_dims = Some((rows, cols));
+                    continue;
+                }
+
+                // Compute diff between previous and current buffer
+                let prev = prev_buffer.as_ref().unwrap();
+                let diff = current_buf.diff(prev);
+
+                // If too many cells changed (>90% of total), fall back to full HTML
+                let total_cells = rows * cols;
+                if diff.changed_count > total_cells * 9 / 10 {
+                    let html = crate::vtty::renderer::VttyRenderer::to_html(&current_buf);
+                    let msg = serde_json::json!({
+                        "type": "vtty_full",
+                        "data": {
+                            "id": &watch_id,
+                            "html": html,
+                            "cursor": {"row": cursor_row, "col": cursor_col},
+                            "dimensions": {"rows": rows, "cols": cols},
+                            "alternate_screen": alt_screen,
+                            "cursor_visible": cursor_visible,
+                            "generation": current_gen,
+                        }
+                    })
+                    .to_string();
+                    let _ = watch_tx.send((watch_id.clone(), msg));
+                    prev_buffer = Some(current_buf);
+                    prev_dims = Some((rows, cols));
+                    continue;
+                }
+
+                // Send incremental diff
                 let msg = serde_json::json!({
-                    "type": "vtty_dirty",
+                    "type": "vtty_diff",
                     "data": {
                         "id": &watch_id,
+                        "generation": current_gen,
+                        "cursor": {"row": cursor_row, "col": cursor_col},
+                        "dimensions": {"rows": rows, "cols": cols},
+                        "alternate_screen": alt_screen,
+                        "cursor_visible": cursor_visible,
+                        "changed_count": diff.changed_count,
+                        "cells": diff.cells,
                     }
                 })
                 .to_string();
-
                 let _ = watch_tx.send((watch_id.clone(), msg));
+                prev_buffer = Some(current_buf);
+                prev_dims = Some((rows, cols));
             }
         });
     }

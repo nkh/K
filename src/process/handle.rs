@@ -1,6 +1,6 @@
 use crate::process::pty::PtyMaster;
 use std::sync::Arc;
-use tokio::sync::{mpsc, oneshot, RwLock};
+use tokio::sync::{mpsc, oneshot, Mutex, RwLock};
 
 use super::error::{ProcessError, Result};
 
@@ -52,6 +52,10 @@ pub struct CommandHandle {
     /// Whether the process has been frozen (SIGSTOP).  Uses AtomicBool
     /// so any thread can check or flip the flag without holding a lock.
     pub frozen: std::sync::atomic::AtomicBool,
+    /// Previous buffer snapshot used for computing incremental diffs (Level 3).
+    /// Stored per-handle so the HTTP diff endpoint can compute diffs without
+    /// relying on the WS diff watcher's local state.
+    pub prev_diff_snapshot: Mutex<Option<crate::vtty::buffer::Buffer>>,
 }
 
 impl CommandHandle {
@@ -288,5 +292,65 @@ impl CommandHandle {
     pub async fn recover_alternate_screen(&self) {
         let mut emu = self.emulator.write().await;
         emu.recover_from_alternate_screen();
+    }
+
+    /// Compute a cell-level diff of the current buffer against the last
+    /// transmitted snapshot, and return the diff along with cursor and dimensions.
+    /// Used by the HTTP diff endpoint and the Level 3 incremental update path.
+    pub async fn vtty_diff_and_state(&self) -> (
+        crate::vtty::buffer::BufferDiff,
+        (usize, usize),
+        (usize, usize),
+        u64,
+    ) {
+        let emu = self.emulator.read().await;
+        let buf = emu.snapshot();
+        let cursor = emu.cursor();
+        let dims = emu.dimensions();
+        let gen = emu.buffer_generation();
+        drop(emu);
+
+        let mut prev_guard = self.prev_diff_snapshot.lock().await;
+
+        match prev_guard.take() {
+            None => {
+                // First diff — return all cells as changed, store current as baseline
+                let diff = crate::vtty::buffer::BufferDiff {
+                    width: buf.width,
+                    height: buf.height,
+                    changed_count: buf.width * buf.height,
+                    cells: buf
+                        .rows
+                        .iter()
+                        .enumerate()
+                        .flat_map(|(row_idx, row)| {
+                            row.iter().enumerate().map(move |(col_idx, cell)| {
+                                crate::vtty::buffer::CellDiff {
+                                    row: row_idx,
+                                    col: col_idx,
+                                    ch: cell.ch,
+                                    fg: cell.fg,
+                                    bg: cell.bg,
+                                    bold: cell.bold,
+                                    italic: cell.italic,
+                                    underline: cell.underline,
+                                    blink: cell.blink,
+                                    reverse: cell.reverse,
+                                    invisible: cell.invisible,
+                                    strikethrough: cell.strikethrough,
+                                }
+                            })
+                        })
+                        .collect(),
+                };
+                *prev_guard = Some(buf);
+                (diff, cursor, dims, gen)
+            }
+            Some(prev_buf) => {
+                let diff = buf.diff(&prev_buf);
+                *prev_guard = Some(buf);
+                (diff, cursor, dims, gen)
+            }
+        }
     }
 }

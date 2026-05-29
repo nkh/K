@@ -31,6 +31,13 @@ const state = {
     // Whether the user is currently viewing the live buffer (not scrolled
     // into scrollback history). Used for auto-scroll decisions.
     _userAtBottom: true,
+    // Level 3: Cell grid for incremental DOM patching.
+    // Maps cmdId → { grid: [[span, ...], ...], rows: number, cols: number }
+    // Built after each full HTML replacement; used by applyVttyDiff.
+    _cellGrids: {},
+    // Level 3: Flag indicating the client supports incremental diff.
+    // Sent to server on WS connect so server knows to use vtty_diff.
+    _level3Enabled: true,
     // VTTY update mode: 'push' (server sends dirty signals via WS)
     // or 'poll' (client polls /api/commands/:id/vtty/changed)
     updateMode: localStorage.getItem('vrunner_update_mode') || 'push',
@@ -1195,9 +1202,14 @@ function connectVttyWs(instUrl, cmdId) {
                         const badge = document.getElementById('altScreenBadge-' + selPanel.id);
                         if (badge) badge.classList.toggle('visible', !!msg.data.alternate_screen);
                     }
+                } else if (msg.type === 'vtty_diff' && msg.data) {
+                    // Level 3: Incremental diff — apply cell changes directly to DOM.
+                    if (state.bufferView === 'current') {
+                        applyVttyDiff(msg.data);
+                    }
                 } else if (msg.type === 'vtty_dirty' && msg.data) {
-                    // Buffer has changed — schedule a debounced HTTP fetch.
-                    // The server doesn't send any cell data, just a notification.
+                    // Legacy dirty signal (shouldn't arrive in Level 3 mode,
+                    // but handled as fallback for older servers).
                     if (state.bufferView === 'current') {
                         scheduleVttyHttp(state.selectedInstUrl, state.selectedCmdId, 50);
                     }
@@ -1367,6 +1379,11 @@ function updateVttyDisplay(data) {
 
         pre.innerHTML = data.html;
 
+        // Level 3: Rebuild cell grid after full HTML replacement
+        if (state._level3Enabled && data.dimensions) {
+            buildCellGrid(cmdId, pre, data.dimensions.rows, data.dimensions.cols);
+        }
+
         // Level 1: Restore scroll position after DOM replacement.
         // If user was at bottom, snap to new bottom (auto-scroll).
         // Otherwise, adjust for content height change to maintain view position.
@@ -1429,6 +1446,161 @@ function updateVttyMetadata(data, panel, vttyEl) {
     state._termCols = dims.cols;
 }
 
+// ─── Level 3: Cell Grid for Incremental DOM Patching ───
+// Builds a 2D array of span element references from the <pre> DOM tree,
+// indexed as grid[row][col]. Each row is terminated by a \n text node in
+// the HTML produced by VttyRenderer::to_html().
+//
+// This grid enables O(1) lookup for any (row, col) cell, allowing
+// applyVttyDiff() to patch individual cells without destroying the entire
+// DOM tree (no innerHTML replacement).
+
+function buildCellGrid(cmdId, pre, rows, cols) {
+    const grid = [];
+    let currentRow = [];
+    for (const child of pre.childNodes) {
+        if (child.nodeType === Node.TEXT_NODE) {
+            // Text nodes with only whitespace/newline mark row boundaries.
+            // The server's to_html() emits a single '\n' between rows.
+            if (child.textContent.includes('\n')) {
+                // Split by newlines — each \n ends a row
+                const parts = child.textContent.split('\n');
+                for (let i = 0; i < parts.length - 1; i++) {
+                    if (currentRow.length > 0 || i > 0) {
+                        grid.push(currentRow);
+                        currentRow = [];
+                    }
+                }
+                // Trailing text (if any) is part of the next row — but there
+                // shouldn't be any in the server's output format.
+            }
+        } else if (child.nodeType === Node.ELEMENT_NODE && child.tagName === 'SPAN') {
+            currentRow.push(child);
+        }
+    }
+    // Push the last row
+    if (currentRow.length > 0) {
+        grid.push(currentRow);
+    }
+
+    state._cellGrids[cmdId] = { grid, rows, cols };
+}
+
+// Generate the inline style string for a cell, matching the server's
+// VttyRenderer::to_html() format exactly. This ensures visual consistency
+// between full HTML replacement and incremental diff patching.
+function _cellStyle(diff) {
+    let style = 'display:inline-block;width:1ch;';
+    let fg = diff.fg;
+    let bg = diff.bg;
+
+    // Handle reverse video: swap fg and bg
+    if (diff.reverse) {
+        [fg, bg] = [bg, fg];
+    }
+
+    style += `color:rgb(${fg[0]},${fg[1]},${fg[2]});`;
+    style += `background:rgb(${bg[0]},${bg[1]},${bg[2]});`;
+
+    if (diff.bold) style += 'font-weight:bold;';
+    if (diff.italic) style += 'font-style:italic;';
+    if (diff.underline && diff.strikethrough) {
+        style += 'text-decoration:underline line-through;';
+    } else if (diff.underline) {
+        style += 'text-decoration:underline;';
+    } else if (diff.strikethrough) {
+        style += 'text-decoration:line-through;';
+    }
+    if (diff.blink) style += 'animation:blink 1s step-end infinite;';
+
+    return style;
+}
+
+// HTML-escape a character, matching the server's html_escape() function.
+function _htmlEscapeChar(ch) {
+    switch (ch) {
+        case '&': return '&amp;';
+        case '<': return '&lt;';
+        case '>': return '&gt;';
+        case "'": return '&#39;';
+        case '"': return '&quot;';
+        default: return ch;
+    }
+}
+
+// Apply an incremental diff from the server directly to the DOM.
+// This updates only the changed cells, avoiding a full innerHTML replacement.
+//
+// The diff data has the format:
+//   { generation, cursor, dimensions, changed_count, cells: [...] }
+// Each cell: { row, col, ch, fg: [r,g,b], bg: [r,g,b], bold, italic, ... }
+function applyVttyDiff(data) {
+    const panel = getSelectedPanel();
+    if (!panel) return;
+    const vttyEl = panel.querySelector('.vtty-container');
+    const pre = vttyEl ? vttyEl.querySelector('pre') : null;
+    if (!pre) return;
+
+    const cmdId = state.selectedCmdId;
+    if (!cmdId) return;
+
+    // Level 2: Skip if generation unchanged
+    if (data.generation !== undefined && state._lastGeneration[cmdId] === data.generation) {
+        updateVttyMetadata(data, panel, vttyEl);
+        return;
+    }
+    if (data.generation !== undefined) {
+        state._lastGeneration[cmdId] = data.generation;
+    }
+
+    // Check if we have a cell grid for this command
+    const cg = state._cellGrids[cmdId];
+    if (!cg || !data.cells || !data.cells.length) {
+        // No grid or no cells — fall back to full HTML fetch
+        scheduleVttyHttp(state.selectedInstUrl, cmdId, 0);
+        return;
+    }
+
+    // Check for dimension mismatch — if dimensions changed, we need a full resync
+    const dims = data.dimensions || {};
+    if (dims.rows !== cg.rows || dims.cols !== cg.cols) {
+        // Dimensions changed — fall back to full HTML fetch
+        delete state._cellGrids[cmdId];
+        scheduleVttyHttp(state.selectedInstUrl, cmdId, 0);
+        return;
+    }
+
+    // Save scroll position (Level 1)
+    const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
+    const oldScrollHeight = vttyEl.scrollHeight;
+
+    // Apply each cell diff
+    for (let i = 0; i < data.cells.length; i++) {
+        const c = data.cells[i];
+        if (c.row < cg.grid.length && c.col < cg.grid[c.row].length) {
+            const span = cg.grid[c.row][c.col];
+            if (span) {
+                // Update the text content
+                const ch = (c.ch === ' ' || c.ch === '\u0000') ? '\u200b' : c.ch;
+                span.textContent = _htmlEscapeChar(ch);
+
+                // Update the style (use setAttribute to force browser to reparse)
+                span.setAttribute('style', _cellStyle(c));
+            }
+        }
+    }
+
+    // Level 1: Restore scroll position
+    if (wasAtBottom) {
+        vttyEl.scrollTop = vttyEl.scrollHeight;
+    } else {
+        vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
+    }
+
+    // Update metadata (cursor, dimensions, etc.)
+    updateVttyMetadata(data, panel, vttyEl);
+}
+
 // ─── Debounced VTTY HTTP Fetch ───
 // Prevents request flooding when multiple code paths (dirty signals, onclose,
 // periodic refresh, sendKeys) all want to refresh the VTTY display.
@@ -1486,6 +1658,14 @@ async function loadVttyHttp(instUrl, cmdId) {
                 const oldScrollHeight = vttyEl.scrollHeight;
 
                 pre.innerHTML = json.data.html;
+
+                // Level 3: Rebuild cell grid after full HTML replacement
+                if (state._level3Enabled && json.data.dimensions) {
+                    buildCellGrid(cmdId, pre, json.data.dimensions.rows, json.data.dimensions.cols);
+                } else {
+                    // Clear stale grid if dimensions not available
+                    delete state._cellGrids[cmdId];
+                }
 
                 // Level 1: Restore scroll position.
                 // Only auto-scroll when user was viewing the bottom.
