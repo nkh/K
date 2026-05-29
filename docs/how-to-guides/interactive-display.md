@@ -146,4 +146,4 @@ vrunner --display-all --web --port 8080 \
 
 The TUI renders in your terminal while the web UI is available at `http://localhost:8080/admin`. Both show the same commands with synchronized output.
 
-For web dashboard details, see [`web-dashboard.md`](web-dashboard.md). For the API, see [`../reference/api.md`](../reference/api.md).
+For web dashboard details, see [`web-dashboard.md`](web-dashboard.md). For the API, see [`../api.md`](../api.md).

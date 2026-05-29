@@ -153,4 +153,4 @@ VRUNNER_PEERS="http://host1:8080,http://host2:8080" vrunner --web
 
 Each command in the sidebar shows which instance it belongs to, with a colored indicator.
 
-For details on the underlying API endpoints, see [`../reference/api.md`](../reference/api.md).
+For details on the underlying API endpoints, see [`../api.md`](../api.md).

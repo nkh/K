@@ -167,4 +167,4 @@ Each team member runs:
 vrunner --config ./team-vrunner.yaml --profile alice-dev
 ```
 
-For the full configuration reference, see [`../reference/configuration.md`](../reference/configuration.md).
+For the full configuration reference, see [`../configuration.md`](../configuration.md).

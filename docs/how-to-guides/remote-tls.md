@@ -175,4 +175,4 @@ curl --cert team-b-cert.pem --key team-b-key.pem \
 
 Each team sees only the commands their certificate permits.
 
-For full certificate management details, see [`certificates.md`](certificates.md). For the complete API reference, see [`../reference/api.md`](../reference/api.md).
+For full certificate management details, see [`certificates.md`](certificates.md). For the complete API reference, see [`../api.md`](../api.md).

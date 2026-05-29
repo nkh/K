@@ -206,4 +206,4 @@ This helps you see exactly what changed on screen between interactions.
   curl -X POST http://localhost:8080/api/commands/cmd_abc/thaw
   ```
 
-For the full API reference, see [`../reference/api.md`](../reference/api.md). For sending keystrokes, see [`api-usage.md`](api-usage.md).
+For the full API reference, see [`../api.md`](../api.md). For sending keystrokes, see [`api-usage.md`](api-usage.md).

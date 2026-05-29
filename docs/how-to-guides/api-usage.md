@@ -2,7 +2,7 @@
 
 Learn how to programmatically control vrunner using `curl` and shell scripts — from listing and killing commands to sending keystrokes, capturing snapshots, and reading logs.
 
-All examples use `http://localhost:8080`. Replace with your server address as needed. For the full OpenAPI schema, see [`../reference/api.md`](../reference/api.md).
+All examples use `http://localhost:8080`. Replace with your server address as needed. For the full API reference, see [`../api.md`](../api.md).
 
 ## Listing Commands
 
@@ -214,4 +214,4 @@ curl -s "$SERVER/api/commands/$CMD_ID/logs?search=error" || true
 echo "Logs retrieved."
 ```
 
-For full endpoint documentation, see [`../reference/api.md`](../reference/api.md).
+For full endpoint documentation, see [`../api.md`](../api.md).

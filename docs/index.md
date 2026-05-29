@@ -13,8 +13,8 @@ A virtual terminal runner with web control plane.
 | Learn vrunner from scratch | [Getting Started](tutorials/getting-started.md) |
 | Run your first command in 5 minutes | [Getting Started, Lesson 1](tutorials/getting-started.md#lesson-1-your-first-command) |
 | Set up a dev server dashboard | [Development Server](how-to-guides/dev-server.md) |
-| Look up a config option | [Configuration](reference/configuration.md) |
-| Find an API endpoint | [API Reference](reference/api.md) |
+| Look up a config option | [Configuration](configuration.md) |
+| Find an API endpoint | [API Reference](api.md) |
 | Understand the architecture | [Architecture](explanation/architecture.md) |
 | Compare vrunner with tmux | [Comparison](explanation/comparison.md) |
 | Troubleshoot a problem | [FAQ](faq.md) |
@@ -48,10 +48,10 @@ A virtual terminal runner with web control plane.
 ### Reference
 | Document | Description |
 |----------|-------------|
-| [Configuration](reference/configuration.md) | All config fields, CLI flags, types, defaults, and precedence |
+| [Configuration](configuration.md) | All config fields, CLI flags, types, defaults, and precedence |
 | [CLI Reference](reference/cli.md) | All flags, subcommands, and key notation |
-| [API Reference](reference/api.md) | Complete REST API endpoint reference |
-| [WebSocket Protocol](reference/websocket.md) | VTTY and log streaming message formats |
+| [API Reference](api.md) | Complete REST API endpoint reference |
+| [WebSocket Protocol](websocket.md) | VTTY and log streaming message formats |
 | [Keybindings](reference/keybindings.md) | Default and customizable keyboard shortcuts |
 
 ### Explanation

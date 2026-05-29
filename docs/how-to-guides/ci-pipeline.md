@@ -188,4 +188,4 @@ jobs:
 - **Use `--no-env`** to isolate spawned commands from CI environment variables if they may interfere.
 - **Set resource limits** in your config to prevent commands from consuming excessive memory or CPU.
 
-For API details, see [`../reference/api.md`](../reference/api.md). For configuration options, see [`configuration-profiles.md`](configuration-profiles.md).
+For API details, see [`../api.md`](../api.md). For configuration options, see [`configuration-profiles.md`](configuration-profiles.md).

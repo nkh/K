@@ -211,4 +211,4 @@ CMD_PID=$(curl -s http://localhost:8080/api/commands/cmd_abc | jq -r '.pid')
 tr '\0' '\n' < /proc/$CMD_PID/environ | sort
 ```
 
-For the full API reference, see [`../reference/api.md`](../reference/api.md). For configuration file syntax, see [`configuration-profiles.md`](configuration-profiles.md).
+For the full API reference, see [`../api.md`](../api.md). For configuration file syntax, see [`configuration-profiles.md`](configuration-profiles.md).

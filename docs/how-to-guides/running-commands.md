@@ -62,7 +62,7 @@ The response returns the command ID and current status:
 }
 ```
 
-For the full request/response schema, see [`../reference/api.md`](../reference/api.md).
+For the full request/response schema, see [`../api.md`](../api.md).
 
 ## Spawning via the `vrunner spawn` Subcommand
 
@@ -118,4 +118,4 @@ WebSocket spawning is ideal for browser-based tools, dashboards, and real-time a
 | `vrunner spawn` | Dynamic workloads, multi-step scripts |
 | WebSocket | Real-time apps, browser extensions |
 
-For full API details and all available parameters, refer to [`../reference/api.md`](../reference/api.md).
+For full API details and all available parameters, refer to [`../api.md`](../api.md).
