@@ -2763,6 +2763,13 @@ document.addEventListener('click', (e) => {
 });
 
 // ─── Mouse wheel scrollback on terminal ───
+// Debounce wheel-triggered scrollback fetches using requestAnimationFrame.
+// Without debouncing, every wheel tick causes an HTTP round-trip + full DOM
+// replacement (pre.innerHTML), which makes scrolling painfully slow.
+let _wheelScrollRafId = null;
+let _wheelScrollPanel = null;   // panel object for the pending rAF callback
+let _wheelScrollAccum = 0;      // accumulated signed vertical delta
+
 document.addEventListener('wheel', (e) => {
     const vttyContainer = e.target.closest('.vtty-container');
     if (!vttyContainer || state.currentView !== 'vtty') return;
@@ -2785,28 +2792,44 @@ document.addEventListener('wheel', (e) => {
         return;
     }
 
-    // Otherwise, use wheel for scrollback navigation
-    if (e.deltaY > 0) {
-        // Wheel down: decrease scrollback offset (move toward live view)
-        panelObj.scrollbackOffset = Math.max(0, panelObj.scrollbackOffset - 3);
-    } else {
-        // Wheel up: increase scrollback offset (move into history)
-        panelObj.scrollbackOffset += 3;
-    }
+    // Accumulate scroll delta — will be processed in the next animation frame.
+    // This coalesces rapid wheel ticks into a single HTTP round-trip.
+    _wheelScrollPanel = panelObj;
+    _wheelScrollAccum += e.deltaY;
 
-    // Persist scrollback offset to sessionStorage
-    if (state.selectedCmdId) {
-        sessionStorage.setItem('vrunner_scrollback_' + state.selectedCmdId, panelObj.scrollbackOffset.toString());
-    }
+    if (_wheelScrollRafId) cancelAnimationFrame(_wheelScrollRafId);
+    _wheelScrollRafId = requestAnimationFrame(() => {
+        _wheelScrollRafId = null;
+        const p = _wheelScrollPanel;
+        if (!p) return;
 
-    // Fetch updated HTML with new scrollback offset
-    loadVttyHttp(panelObj.instUrl, state.selectedCmdId);
+        // Snapshot and reset the accumulator before processing.
+        const accum = _wheelScrollAccum;
+        _wheelScrollAccum = 0;
 
-    // Update scroll-to-bottom button visibility and scrollback indicator
-    const btn = panelEl.querySelector('.scroll-bottom-btn');
-    if (btn) btn.classList.toggle('visible', panelObj.scrollbackOffset > 0);
-    const sbIndicator = document.getElementById('scrollbackIndicator');
-    if (sbIndicator) sbIndicator.style.display = panelObj.scrollbackOffset > 0 ? '' : 'none';
+        // Convert accumulated pixel delta to scrollback lines.
+        // ~100px of scroll ≈ 3 lines (same ratio as the previous per-tick behavior).
+        const lines = Math.max(1, Math.round(Math.abs(accum) / 100) * 3);
+        if (accum > 0) {
+            p.scrollbackOffset = Math.max(0, p.scrollbackOffset - lines);
+        } else {
+            p.scrollbackOffset += lines;
+        }
+
+        // Persist scrollback offset to sessionStorage
+        if (state.selectedCmdId) {
+            sessionStorage.setItem('vrunner_scrollback_' + state.selectedCmdId, p.scrollbackOffset.toString());
+        }
+
+        // Fetch updated HTML with new scrollback offset
+        loadVttyHttp(p.instUrl, state.selectedCmdId);
+
+        // Update scroll-to-bottom button visibility and scrollback indicator
+        const btn = panelEl.querySelector('.scroll-bottom-btn');
+        if (btn) btn.classList.toggle('visible', p.scrollbackOffset > 0);
+        const sbIndicator = document.getElementById('scrollbackIndicator');
+        if (sbIndicator) sbIndicator.style.display = p.scrollbackOffset > 0 ? '' : 'none';
+    });
 }, { passive: false });
 
 // ─── Mouse event forwarding to PTY ───

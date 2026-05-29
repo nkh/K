@@ -274,9 +274,7 @@ impl VttyRenderer {
         let font_data =
             std::fs::read(&path).map_err(|e| format!("Failed to read font '{}': {}", path, e))?;
 
-        let font =
-            fontdue::Font::from_bytes(font_data.as_slice(), fontdue::FontSettings::default())
-                .map_err(|e| format!("Failed to parse font '{}': {}", path, e))?;
+        let font = load_font(&font_data, &path)?;
 
         // Measure a typical character to determine cell width.
         let (metrics, _) = font.rasterize('M', font_size);
@@ -409,6 +407,98 @@ fn find_default_font() -> Option<&'static str> {
         .iter()
         .find(|&path| std::path::Path::new(path).exists())
         .copied()
+}
+
+/// Known font style keywords used to match TTC collection faces by filename.
+const FONT_STYLE_KEYWORDS: &[&str] = &[
+    "thin",
+    "extralight",
+    "extra-light",
+    "light",
+    "regular",
+    "medium",
+    "semibold",
+    "semi-bold",
+    "demibold",
+    "bold",
+    "extrabold",
+    "extra-bold",
+    "black",
+    "heavy",
+];
+
+/// Extract a style hint (e.g. "medium") from a font filename.
+///
+/// For TTC collections, the first face (index 0) is often the thinnest weight,
+/// which is not what the user expects when they specify e.g.
+/// `SGr-IosevkaTerm-Medium.ttc`. This function scans the filename for known
+/// style keywords and returns the matched keyword in lowercase.
+fn extract_style_hint(path: &str) -> Option<String> {
+    let filename = std::path::Path::new(path).file_stem()?.to_str()?;
+    for part in filename.rsplit('-') {
+        let lower = part.to_lowercase();
+        if FONT_STYLE_KEYWORDS.contains(&lower.as_str()) {
+            return Some(lower);
+        }
+    }
+    for part in filename.rsplit('_') {
+        let lower = part.to_lowercase();
+        if FONT_STYLE_KEYWORDS.contains(&lower.as_str()) {
+            return Some(lower);
+        }
+    }
+    None
+}
+
+/// Load a font from raw bytes, handling TrueType Collections (.ttc) correctly.
+///
+/// TTC files contain multiple font faces. `fontdue::Font::from_bytes` with
+/// default settings always loads face index 0, which is often "Thin" or
+/// "ExtraLight" — not the weight the user expects based on the filename.
+/// This function detects TTC files by their magic bytes (`ttcf`) and iterates
+/// through collection indices, matching each face's name against a style hint
+/// extracted from the filename. Falls back to index 0 if no match is found.
+fn load_font(data: &[u8], path: &str) -> Result<fontdue::Font, String> {
+    let is_ttc = data.len() > 12 && &data[0..4] == b"ttcf";
+
+    if !is_ttc {
+        return fontdue::Font::from_bytes(data, fontdue::FontSettings::default())
+            .map_err(|e| format!("Failed to parse font '{}': {}", path, e));
+    }
+
+    // TTC collection — try to find the face matching the filename hint.
+    let hint = extract_style_hint(path);
+    let mut first_valid: Option<fontdue::Font> = None;
+
+    for idx in 0..20 {
+        let settings = fontdue::FontSettings {
+            collection_index: idx,
+            ..Default::default()
+        };
+        match fontdue::Font::from_bytes(data, settings) {
+            Ok(font) => {
+                if let Some(ref hint_str) = hint {
+                    let matches = font
+                        .name()
+                        .is_some_and(|n| n.to_lowercase().contains(hint_str.as_str()));
+                    if matches {
+                        return Ok(font);
+                    }
+                }
+                if first_valid.is_none() {
+                    first_valid = Some(font);
+                }
+            }
+            Err(_) => break, // no more faces in collection
+        }
+    }
+
+    first_valid.ok_or_else(|| {
+        format!(
+            "Failed to parse TTC font '{}': no valid faces found",
+            path
+        )
+    })
 }
 
 use super::cell::Cell;
