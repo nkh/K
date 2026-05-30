@@ -87,11 +87,11 @@ Print help information and exit.
 .SS Server Options
 
 .TP
-.B \-\-bind \fIADDR\fR
+.BR \-\-bind \fIADDR\fR
 Server bind address (default: \fB127.0.0.1\fR). Use \fB0.0.0.0\fR to accept remote connections.
 
 .TP
-.B \-\-port \fIPORT\fR
+.BR \-\-port \fIPORT\fR
 Server TCP port (default: \fB9090\fR).
 
 .TP
@@ -105,7 +105,7 @@ Convenience flag that binds to \fB0.0.0.0\fR and enables bearer token authentica
 Require bearer token authentication for all API requests.
 
 .TP
-.B \-\-token\-file \fIFILE\fR
+.BR \-\-token\-file \fIFILE\fR
 Path to the bearer token file (default: \fB~/.config/vrunner/token\fR). If the file does not exist when auth is required, a cryptographically random 256-bit token is generated and saved.
 
 .SS TLS Options
@@ -115,35 +115,35 @@ Path to the bearer token file (default: \fB~/.config/vrunner/token\fR). If the f
 Enable TLS (HTTPS) with self-signed certificates. Certificates are auto-generated on first use and saved to \fB~/.config/vrunner/\fR.
 
 .TP
-.B \-\-cert\-file \fIFILE\fR
+.BR \-\-cert\-file \fIFILE\fR
 Path to a custom PEM-encoded TLS certificate file.
 
 .TP
-.B \-\-key\-file \fIFILE\fR
+.BR \-\-key\-file \fIFILE\fR
 Path to a custom PEM-encoded TLS private key file.
 
 .SS Certificate Pool Options
 
 .TP
-.B \-\-certificate \fINAME:CERT:KEY\fR
+.BR \-\-certificate \fINAME:CERT:KEY\fR
 Define a named certificate for the certificate pool. Can be repeated. Example: \fB\-\-certificate "myapp:/path/to/cert.pem:/path/to/key.pem"\fR.
 
 .SS VTTY Options
 
 .TP
-.B \-\-vtty\-rows \fIN\fR
+.BR \-\-vtty\-rows \fIN\fR
 Virtual terminal height in rows (default: \fB24\fR).
 
 .TP
-.B \-\-vtty\-cols \fIN\fR
+.BR \-\-vtty\-cols \fIN\fR
 Virtual terminal width in columns (default: \fB80\fR).
 
 .TP
-.B \-\-term \fITERM\fR
+.BR \-\-term \fITERM\fR
 TERM value reported to child processes (default: \fBxterm-256color\fR).
 
 .TP
-.B \-\-scrollback \fIN\fR
+.BR \-\-scrollback \fIN\fR
 VTTY scrollback buffer size in number of lines (default: \fB5000\fR).
 
 .TP
@@ -177,7 +177,7 @@ Disable local terminal display (default).
 Keep displaying VTTY output after the initial CLI command exits, switching to the next available command (monitor mode). Without this flag, the display is dismissed when the CLI command finishes but the server continues running. Note: when all commands have exited (no retained commands remain), vrunner exits even in display-all mode.
 
 .TP
-.B \-\-refresh\-ms \fIMS\fR
+.BR \-\-refresh\-ms \fIMS\fR
 VTTY display refresh interval in milliseconds (default: \fB100\fR).
 
 .SS Logging Options
@@ -187,7 +187,7 @@ VTTY display refresh interval in milliseconds (default: \fB100\fR).
 Log API commands to the terminal.
 
 .TP
-.B \-\-log\-file \fIFILE\fR
+.BR \-\-log\-file \fIFILE\fR
 Log API commands to a file (also enables logging).
 
 .SS Daemon Options
@@ -197,25 +197,25 @@ Log API commands to a file (also enables logging).
 Run as a background daemon (Unix only). Performs a double-fork to detach from the controlling terminal. Implicitly disables local display.
 
 .TP
-.B \-\-stdout\-file \fIFILE\fR
+.BR \-\-stdout\-file \fIFILE\fR
 Redirect daemon stdout to this file (default: \fB/tmp/vrunner.out\fR).
 
 .TP
-.B \-\-stderr\-file \fIFILE\fR
+.BR \-\-stderr\-file \fIFILE\fR
 Redirect daemon stderr to this file (default: \fB/tmp/vrunner.err\fR).
 
 .SS Exit Handler Options
 
 .TP
-.B \-\-on\-exit \fICMD\fR
+.BR \-\-on\-exit \fICMD\fR
 Run \fICMD\fR when a child process exits cleanly (exit code 0). The command string is split on whitespace into a binary and arguments. The handler runs as a detached (fire-and-forget) process.
 
 .TP
-.B \-\-on\-error \fICMD\fR
+.BR \-\-on\-error \fICMD\fR
 Run \fICMD\fR when a child process exits with a non-zero exit code. Same parsing rules as \fB\-\-on\-exit\fR. Useful for sending failure notifications or triggering cleanup/rollback scripts.
 
 .TP
-.B \-\-exit\-timeout \fISECS\fR
+.BR \-\-exit\-timeout \fISECS\fR
 Maximum seconds to wait for a child process to exit after SIGINT before sending SIGKILL (default: \fB10\fR). Applies when \fBPOST /api/commands/:id/kill\fR is called or when the server shuts down. This two-phase approach prevents data corruption in processes that need to flush buffers or close connections.
 
 .TP
@@ -223,15 +223,15 @@ Maximum seconds to wait for a child process to exit after SIGINT before sending 
 Keep the VTTY buffer in memory after the child process exits. This is a \fBper\-command\fR option \[em] it only affects the command specified on the CLI, not future commands spawned via the API. The command remains visible in the tab bar and web UI with an "exited" status, allowing inspection of final output. The buffer can be manually purged via the API (DELETE /api/commands/:id) or the \fBpurge\fR subcommand. When all commands have exited and none are retained, vrunner exits even in \fB\-\-display\-all\fR mode.
 
 .TP
-.B \-\-snapshot\-on\-exit \fIFILE\fR
+.BR \-\-snapshot\-on\-exit \fIFILE\fR
 Save the VTTY buffer to \fIFILE\fR as plain text when the command exits. This is a per-command option. The output includes all scrollback lines followed by the visible screen rows, with each line trimmed of trailing whitespace. The snapshot is taken after the process exits but before the command is removed from the manager. Useful for capturing test output, build logs, or any command's final state.
 
 .TP
-.B \-\-send\-keys \fIKEYS\fR
+.BR \-\-send\-keys \fIKEYS\fR
 Send keystrokes to the command after it starts. Uses the same key notation as the API's \fBsend_keys\fR endpoint. Plain text is sent as-is; special keys use \fB<...>\fR notation: \fB<Enter>\fR, \fB<Tab>\fR, \fB<Esc>\fR, \fB<Up>\fR, \fB<Down>\fR, \fB<Left>\fR, \fB<Right>\fR, \fB<F1>\fR through \fB<F12>\fR, \fB<C\-c>\fR (Ctrl+C), \fB<C\-d>\fR (Ctrl+D), \fB<A\-x>\fR (Alt+x). Example: \fB\-\-send\-keys "ls<Enter>"\fR.
 
 .TP
-.B \-\-log\-pty\-raw \fIFILE\fR
+.BR \-\-log\-pty\-raw \fIFILE\fR
 Log raw PTY output from child processes to a file. Each line records one read() call with an elapsed-time stamp and escaped bytes (printable ASCII as-is, non-printable as \fB\\xHH\fR). The resulting log can be replayed step-by-step with \fBansi-replay\fR.
 
 .SS Interactive Options
@@ -243,7 +243,7 @@ Show a tab bar listing all running commands at the top of the interactive displa
 .SS Environment Variable Options
 
 .TP
-.B \-\-env \fIKEY=VALUE\fR
+.BR \-\-env \fIKEY=VALUE\fR
 Set environment variable for spawned commands (repeatable). Overrides config file environment variables.
 
 .TP
@@ -253,11 +253,11 @@ Ignore environment variables from the config file. Only variables set via \fB\-\
 .SS Profile Options
 
 .TP
-.B \-\-profile \fINAME\fR
+.BR \-\-profile \fINAME\fR
 Apply a named configuration profile from the config file. Profile fields override the base config; CLI flags override both.
 
 .TP
-.B \-\-target \fIPID\fR
+.BR \-\-target \fIPID\fR
 Target a specific vrunner instance by PID when using spawn, freeze, thaw, or resize subcommands.
 
 .SS Command Specification

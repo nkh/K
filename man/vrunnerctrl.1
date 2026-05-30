@@ -242,19 +242,19 @@ vrunner spawn [\fIOPTIONS\fR] \fICMD\fR [\fIARGS...\fR]
 Options:
 .RS
 .TP
-.B \-\-rows \fIN\fR
+.BR \-\-rows \fIN\fR
 Initial terminal height (default: 24, max: 200).
 .TP
-.B \-\-cols \fIN\fR
+.BR \-\-cols \fIN\fR
 Initial terminal width (default: 80, max: 500).
 .TP
-.B \-\-env \fIKEY=VALUE\fR
+.BR \-\-env \fIKEY=VALUE\fR
 Pass an environment variable to the spawned command. May be specified multiple times.
 .TP
 .B \-\-no\-env
 Do not inherit the parent process environment. Only variables set with \fB\-\-env\fR will be available.
 .TP
-.B \-\-target \fIPID\fR
+.BR \-\-target \fIPID\fR
 Spawn the command on a specific vrunner instance (by PID). If omitted, vrunner selects the first available instance.
 .RE
 
@@ -312,10 +312,10 @@ vrunner resize \fITARGET\fR [\fB\-\-rows\fR \fIN\fR] [\fB\-\-cols\fR \fIN\fR]
 Options:
 .RS
 .TP
-.B \-\-rows \fIN\fR
+.BR \-\-rows \fIN\fR
 New terminal height (1-200).
 .TP
-.B \-\-cols \fIN\fR
+.BR \-\-cols \fIN\fR
 New terminal width (1-500).
 .RE
 
