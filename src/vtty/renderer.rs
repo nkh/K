@@ -1,20 +1,6 @@
 use super::buffer::Buffer;
 use image::RgbaImage;
 
-/// HTML-escape the five XML/HTML metacharacters so that VTTY cell content
-/// never corrupts the DOM.  Programs that output `<`, `>`, `&`, `'`, or
-/// `"` (e.g. `cat` on an HTML file, ANSI art with `<`/`>`) are common.
-fn html_escape(s: char) -> String {
-    match s {
-        '&' => "&amp;".to_string(),
-        '<' => "&lt;".to_string(),
-        '>' => "&gt;".to_string(),
-        '\'' => "&#39;".to_string(),
-        '"' => "&quot;".to_string(),
-        c => c.to_string(),
-    }
-}
-
 /// Format an RGB triplet as a hex color string: "#RRGGBB".
 #[inline]
 fn hex_color(c: [u8; 3]) -> [u8; 7] {
@@ -146,7 +132,7 @@ impl VttyRenderer {
                 let ch = if cell.width == 0 { '\u{200b}' } else if cell.is_empty() { ' ' } else { cell.ch };
                 run_text.push(ch);
                 let mut j = i + 1;
-                while j < row.len() {
+                while j < row_len {
                     let next = &row[j];
                     let nfg = if next.reverse { next.bg } else { next.fg };
                     let nbg = if next.reverse { next.fg } else { next.bg };
@@ -158,12 +144,6 @@ impl VttyRenderer {
                     }
                     let nch = if next.width == 0 { '\u{200b}' } else if next.is_empty() { ' ' } else { next.ch };
                     run_text.push(nch);
-                    j += 1;
-                }
-                while j < row_len {
-                    // Row was shorter than width — pad with default-style spaces
-                    // to ensure every line occupies exactly `width` visual columns.
-                    run_text.push(' ');
                     j += 1;
                 }
 
@@ -259,7 +239,7 @@ impl VttyRenderer {
                 let ch = if cell.width == 0 { '\u{200b}' } else if cell.is_empty() { ' ' } else { cell.ch };
                 run_text.push(ch);
                 let mut j = i + 1;
-                while j < row.len() {
+                while j < row_len {
                     let next = &row[j];
                     let nfg = if next.reverse { next.bg } else { next.fg };
                     let nbg = if next.reverse { next.fg } else { next.bg };
@@ -271,10 +251,6 @@ impl VttyRenderer {
                     }
                     let nch = if next.width == 0 { '\u{200b}' } else if next.is_empty() { ' ' } else { next.ch };
                     run_text.push(nch);
-                    j += 1;
-                }
-                while j < row_len {
-                    run_text.push(' ');
                     j += 1;
                 }
 
