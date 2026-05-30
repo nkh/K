@@ -13,19 +13,19 @@ pub struct Cli {
     pub config: Option<String>,
 
     /// Server bind address (default: 127.0.0.1)
-    #[arg(long, value_name = "ADDR")]
+    #[arg(short, long, value_name = "ADDR")]
     pub bind: Option<String>,
 
     /// Server port (default: 9090)
-    #[arg(long, value_name = "PORT")]
+    #[arg(short, long, value_name = "PORT")]
     pub port: Option<u16>,
 
     /// Allow remote connections (binds to 0.0.0.0 and enables auth)
-    #[arg(long)]
+    #[arg(short, long)]
     pub remote: bool,
 
     /// Require authentication for API requests
-    #[arg(long)]
+    #[arg(short, long)]
     pub auth: bool,
 
     /// Register this instance with another vrunner server.
@@ -55,11 +55,11 @@ pub struct Cli {
 
     /// Define a named certificate (repeatable).
     /// Format: NAME:CERT_FILE:KEY_FILE
-    #[arg(long, value_name = "NAME:CERT:KEY")]
+    #[arg(short, long, value_name = "NAME:CERT:KEY")]
     pub certificate: Option<Vec<String>>,
 
     /// Run as a background daemon (Unix only)
-    #[arg(long)]
+    #[arg(short, long)]
     pub daemon: bool,
 
     /// Redirect daemon stdout to this file
@@ -71,11 +71,11 @@ pub struct Cli {
     pub stderr_file: Option<String>,
 
     /// Show VTTY on local terminal screen
-    #[arg(long)]
+    #[arg(short = 'D', long)]
     pub display: bool,
 
     /// Keep displaying after the initial command exits
-    #[arg(long)]
+    #[arg(short = 's', long)]
     pub display_all: bool,
 
     /// Disable local terminal display
@@ -91,11 +91,11 @@ pub struct Cli {
     pub tabs: bool,
 
     /// Log API commands to terminal
-    #[arg(long)]
+    #[arg(short, long)]
     pub log: bool,
 
     /// Log API commands to file
-    #[arg(long, value_name = "FILE")]
+    #[arg(short = 'L', long, value_name = "FILE")]
     pub log_file: Option<String>,
 
     /// Log raw PTY output (for debugging terminal escape sequences)
@@ -103,7 +103,7 @@ pub struct Cli {
     pub log_pty_raw: Option<String>,
 
     /// TERM value reported to child processes
-    #[arg(long, value_name = "TERM")]
+    #[arg(short = 'T', long, value_name = "TERM")]
     pub term: Option<String>,
 
     /// VTTY rows
@@ -127,7 +127,7 @@ pub struct Cli {
     pub no_truecolor: bool,
 
     /// Enable mouse event forwarding to child processes
-    #[arg(long)]
+    #[arg(short, long)]
     pub mouse: bool,
 
     /// Disable mouse event forwarding to child processes
@@ -147,7 +147,7 @@ pub struct Cli {
     pub exit_timeout: Option<u64>,
 
     /// Keep the VTTY buffer after the child exits
-    #[arg(long)]
+    #[arg(short = 'k', long)]
     pub retain_on_exit: bool,
 
     /// Save VTTY buffer to a file when the command exits
@@ -156,30 +156,30 @@ pub struct Cli {
 
     /// Send keystrokes to the command after it starts.
     /// Special keys use <...> notation, e.g. <Enter> <C-c> <Esc>
-    #[arg(long, value_name = "KEYS")]
+    #[arg(short = 'K', long, value_name = "KEYS")]
     pub send_keys: Option<String>,
 
     /// Set environment variables (repeatable). Format: KEY=VALUE
-    #[arg(long, value_name = "KEY=VALUE")]
+    #[arg(short = 'e', long, value_name = "KEY=VALUE")]
     pub env: Option<Vec<String>>,
 
     /// Ignore environment variables from the config file
-    #[arg(long)]
+    #[arg(short = 'E', long)]
     pub no_env: bool,
 
     /// Apply a named configuration profile from the config file
-    #[arg(long, value_name = "NAME")]
+    #[arg(short = 'P', long, value_name = "NAME")]
     pub profile: Option<String>,
 
     /// Target a specific vrunner instance by PID
-    #[arg(long, value_name = "PID")]
+    #[arg(short = 't', long, value_name = "PID")]
     pub target: Option<u32>,
 
     /// Set the working directory for spawned commands.
     /// The child process will have this as its CWD.
     /// When daemonized, defaults to the directory from which vrunner
     /// was invoked (instead of /tmp) if this option is not set.
-    #[arg(long, value_name = "DIR")]
+    #[arg(short = 'w', long, value_name = "DIR")]
     pub working_directory: Option<String>,
 
     /// Subcommand

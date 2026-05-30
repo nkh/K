@@ -1035,6 +1035,17 @@ async function loadCommands() {
     }
 }
 
+/// Lightweight DOM-only update: toggle the .selected class on sidebar items
+/// without re-fetching /api/commands. Used by selectCommand() to avoid
+/// a redundant HTTP roundtrip that would delay the initial VTTY load.
+function updateSidebarSelection() {
+    document.querySelectorAll('#commandList .cmd-item').forEach(el => {
+        const matchInst = el.dataset.instUrl === state.selectedInstUrl;
+        const matchCmd = el.dataset.cmdId === state.selectedCmdId;
+        el.classList.toggle('selected', matchInst && matchCmd);
+    });
+}
+
 function selectCommand(instUrl, cmdId, name) {
     // Clear stored scrollback for the previously selected command
     if (state.selectedCmdId) {
@@ -1062,7 +1073,7 @@ function selectCommand(instUrl, cmdId, name) {
 
     updatePanelCommandInfo();
     updateTerminalDisconnectedOverlay();
-    loadCommands(); // Re-render to update selection
+    updateSidebarSelection();
     // Immediately load VTTY content via HTTP
     loadVttyHttp(instUrl, cmdId);
     // Start the active update mode (push or poll)
