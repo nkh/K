@@ -44,6 +44,10 @@
 - [Security Model](./explanation/security-model.md)
 - [Lifecycle Policy](./explanation/lifecycle-policy.md)
 
+# Testing
+
+- [Testing Procedures](./testing.md)
+
 # Web UI Reference
 
 - [UI Introduction](./web-ui/introduction.md)

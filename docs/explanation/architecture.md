@@ -375,13 +375,28 @@ inside the buffer.
 #### `renderer.rs`
 
 The renderer converts the buffer state into a format suitable for transmission
-to the client. Two output modes exist:
+to the client. Three output formats exist:
 
-1. **Full snapshot** — Generates a complete HTML representation of every visible
-   cell (used for initial load and resynchronization).
-2. **Incremental diff** — Compares the current buffer against the previously
-   transmitted snapshot, emits only the changed cells. See
+1. **Full HTML snapshot** — Generates a complete HTML representation of every visible
+   cell using run-length encoding (RLE). Consecutive cells with identical foreground,
+   background, and decoration flags are merged into a single `<span>` element,
+   dramatically reducing DOM node count (e.g., 10,000 cells → ~2,000 spans). Empty
+   cells render as regular spaces (1ch width) to preserve column alignment in the
+   monospace `<pre>` container; wide-character continuations (width=0) use U+200B
+   (zero-width space). Used for initial load and resynchronization.
+
+2. **Scrollback HTML** — Same RLE format as full snapshot, but includes
+   scrollback lines above the visible screen. Used when the user scrolls into
+   terminal history.
+
+3. **Incremental diff** — Compares the current buffer against the previously
+   transmitted snapshot, emits only the changed cells as a flat array. The client
+   patches its DOM using cell grid coordinates. See
    [incremental-diff.md](incremental-diff.md) for the full protocol.
+
+The server also provides a `/api/snapshot` endpoint that bundles commands, VTTY
+HTML (for the first alive command), and resource usage data into a single HTTP
+response, eliminating the need for multiple serial round-trips on initial page load.
 
 #### `display.rs`
 
@@ -474,9 +489,14 @@ manager methods, and return JSON responses or WebSocket upgrades.
 The admin interface is a single-page application served at the root URL:
 
 - **`index.html`** — The main page shell; loads JS and CSS.
-- **JavaScript** — Opens a WebSocket to `/ws/:id`, renders terminal output using
-  `xterm.js`, and provides buttons for start/stop/resize/send-keys.
-- **CSS** — Minimal styling for layout and responsiveness.
+- **`app.js`** — Manages WebSocket connections for real-time VTTY streaming,
+  renders terminal output using server-generated HTML with RLE-encoded spans,
+  and provides controls for spawning, killing, resizing, and interacting with
+  commands. Supports multiple panels (one per vrunner instance), per-panel themes,
+  adjustable font sizes, a configurable refresh throttle, and keyboard input
+  forwarding.
+- **`style.css`** — Styling for layout, responsive design, theming (light/dark/auto),
+  and the VTTY container (monospace font with cell-level color spans).
 
 The admin interface is a **read-only static bundle**. It is not compiled or
 bundled at build time; it is simply included as static files. This keeps the build
@@ -800,7 +820,8 @@ with their role and version:
 | `toml` | 0.8+ | Configuration file parsing |
 | `rand` | 0.8+ | Cryptographically secure token generation |
 | `tracing` / `tracing-subscriber` | 0.1+ | Structured logging |
-| `xterm-js` (bundled) | 5.x | Browser-side terminal emulator (admin UI) |
+| `fontdue` | 0.7+ | Font rasterization for PNG screenshots |
+| `image` | 0.25+ | PNG encoding for screenshots |
 
 ---
 

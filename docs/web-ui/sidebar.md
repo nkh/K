@@ -15,19 +15,31 @@ A text filter that narrows the command list in real time. Matches against comman
 Terminates all running commands across all instances. This button uses the danger style (red background) to indicate its destructive nature. It sends a kill signal to every active command managed by the connected instance(s).
 
 ### Command List Items
-Each command in the list displays the following information:
+Each command in the list uses a two-row layout. The first row shows the primary identification; the second row shows live status information:
+
+**Row 1 (name row):**
 
 | Element | Description |
 |---------|-------------|
-| **Status dot** | Green (running), red (exited), or yellow (frozen/paused) |
+| **Kill button** (`✕`) | Kills the individual command. Always visible even when sidebar is narrow |
 | **Pin button** (`☆`) | Pins/unpins a command to keep it at the top of the list |
 | **Command name** | The name of the running command, truncated with ellipsis if too long |
-| **Runtime badge** | Shows elapsed time (e.g., `5m 30s`) for running commands |
-| **Resource badge** | CPU and memory usage when available |
 | **Certificate badge** | Shows the bound certificate name or `--` if none |
 | **Exit badge** | Shows the exit code (green for 0, red for non-zero) |
+
+**Row 2 (detail row):**
+
+| Element | Description |
+|---------|-------------|
+| **Runtime** | Shows elapsed time (e.g., `5m 30s`) for running commands |
+| **CPU** | Real-time CPU usage percentage (e.g., `CPU 12.5%`) |
+| **MEM** | Real-time memory usage (e.g., `MEM 45.2MB`) |
 | **PID** | Process ID of the child command |
-| **Kill button** (`✕`) | Kills the individual command. Always visible even when sidebar is narrow |
+| **Status** | `PAUSED` for frozen/paused commands |
+
+Detail items are separated by `|` and rendered in a smaller, muted font. The detail row is indented to align with the command name. Resource data (CPU, memory) is polled from the server every 2 seconds via `/api/commands/{id}/resources`.
+
+The filter and kill-all toolbar at the top of the commands tab is automatically hidden when no server is reachable or when there are no running commands.
 
 Clicking a command selects it and displays its terminal output in the main panel area. Right-clicking opens a context menu with additional actions.
 

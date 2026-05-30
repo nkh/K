@@ -27,6 +27,18 @@ Toggles between pausing (SIGSTOP) and resuming (SIGCONT) the selected command. W
 ### Restart Button (`↻`)
 Restarts the selected command by re-spawning it with the same command, arguments, working directory, and environment variables.
 
+### Refresh Throttle (`↻` / `-` / `off` / `+`)
+Controls how often terminal display updates are applied to the DOM. In push mode (the default), the server sends updates as fast as the terminal changes. The throttle allows the user to reduce this rate to save CPU/battery when real-time updates are not critical.
+
+- **`-`** button decreases the throttle interval by 100ms.
+- **`+`** button increases the throttle interval by 100ms.
+- **`off`** means no throttle — updates are applied immediately (default).
+- **Range**: 0 (off) to 2000ms in 100ms steps.
+- Changes take effect immediately without requiring any button press.
+- The setting is persisted to `localStorage` across sessions.
+
+When the throttle is active, the client buffers incoming VTTY updates and applies them in batch after the throttle window, fetching the latest state via HTTP.
+
 ### Send Keys Input
 A text field for typing keystrokes to send to the running command. The input accepts text as-is — typed characters are sent directly to the PTY. Press Enter to send the keystrokes, or click the **Send** button. See [Send Keys](./send-keys.md) for details on typing special keys.
 

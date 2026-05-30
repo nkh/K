@@ -11,7 +11,10 @@ use crate::instance::registry::InstanceRegistry;
 /// Fetches the VTTY buffer of the specified (or sole) running command,
 /// renders it as a PNG image using a TrueType font, and writes it to
 /// the output file.  If no output path is given, generates one from
-/// the command name and current timestamp.
+/// the pattern `vrunner_YYYYMMDD_HHMMSS_rowsxcols_command_args.png`.
+///
+/// The full output path is printed to stdout after the screenshot is
+/// saved, so the user can easily locate the file.
 pub async fn handle_screenshot_command(
     cli: &Cli,
     target: Option<&str>,
@@ -26,7 +29,7 @@ pub async fn handle_screenshot_command(
 
     let all_commands = collect_all_commands(&client, &instances).await;
 
-    let (instance_pid, cmd_id, _cmd_pid, name, _full) = match target {
+    let (instance_pid, cmd_id, _cmd_pid, name, full) = match target {
         Some(t) => {
             if let Ok(pid) = t.parse::<u32>() {
                 match all_commands.iter().find(|(_, _, p, _, _)| *p == pid) {
@@ -87,7 +90,10 @@ pub async fn handle_screenshot_command(
         url, cmd_id, font_size
     );
     if let Some(font) = font_name {
-        png_url.push_str(&format!("&font_name={}", urlencoding::encode(font)));
+        png_url.push_str(&format!(
+            "&font_name={}",
+            urlencoding::encode(font)
+        ));
     }
 
     let resp = client.get(&png_url).send().await?;
@@ -100,20 +106,62 @@ pub async fn handle_screenshot_command(
 
     let bytes = resp.bytes().await?;
 
-    // Auto-generate filename if not specified: <command_basename>_<timestamp>.png
+    // Auto-generate filename if not specified.
+    // Format: vrunner_YYYYMMDD_HHMMSS_rowsxcols_command_args.png
+    // Spaces in command/args are replaced with underscores.
     let output_path = match output {
         Some(p) => p.to_string(),
         None => {
-            let basename = name.rsplit('/').next().unwrap_or(&name);
-            let safe_name: String = basename
-                .chars()
-                .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
-                .collect();
             let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
-            format!("{}_{}.png", safe_name, ts)
+
+            // Try to fetch terminal dimensions for the filename.
+            // If the fetch fails, omit dimensions rather than erroring.
+            let dims_part = match fetch_dimensions(&client, &url, &cmd_id).await {
+                Some((rows, cols)) => format!("{}x{}", rows, cols),
+                None => String::new(),
+            };
+
+            // Build the command+args part: replace spaces with underscores,
+            // strip non-safe characters.
+            let cmd_part: String = full
+                .chars()
+                .map(|c| {
+                    if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' {
+                        c
+                    } else {
+                        '_'
+                    }
+                })
+                .collect();
+
+            // Truncate overly long command+args to keep filename reasonable
+            let cmd_truncated = if cmd_part.len() > 120 {
+                format!("{}...", &cmd_part[..117])
+            } else {
+                cmd_part
+            };
+
+            match dims_part.as_str() {
+                "" => format!("vrunner_{}_{}.png", ts, cmd_truncated),
+                dims => format!("vrunner_{}_{}_{}.png", ts, dims, cmd_truncated),
+            }
         }
     };
+
     tokio::fs::write(&output_path, &bytes).await?;
+
+    // Print the full path to stdout so the user can easily find the file.
+    // Use absolute path if the output_path is relative.
+    let display_path = std::path::Path::new(&output_path);
+    let abs_path = if display_path.is_absolute() {
+        output_path.clone()
+    } else {
+        match std::env::current_dir() {
+            Ok(cwd) => cwd.join(&output_path).to_string_lossy().to_string(),
+            Err(_) => output_path.clone(),
+        }
+    };
+    println!("{}", abs_path);
 
     tracing::info!(
         "Screenshot saved to '{}' ({} bytes, font_size={}) for command '{}'",
@@ -124,4 +172,23 @@ pub async fn handle_screenshot_command(
     );
 
     Ok(())
+}
+
+/// Fetch terminal dimensions (rows, cols) for a command via the VTTY metadata
+/// endpoint. Returns None if the fetch fails (non-fatal for filename generation).
+async fn fetch_dimensions(
+    client: &reqwest::Client,
+    base_url: &str,
+    cmd_id: &str,
+) -> Option<(usize, usize)> {
+    let url = format!("{}/api/commands/{}/vtty/html", base_url, cmd_id);
+    let resp = client.get(&url).send().await.ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let json: serde_json::Value = resp.json().await.ok()?;
+    let dims = json.get("data")?.get("dimensions")?;
+    let rows = dims.get("rows")?.as_u64()? as usize;
+    let cols = dims.get("cols")?.as_u64()? as usize;
+    Some((rows, cols))
 }

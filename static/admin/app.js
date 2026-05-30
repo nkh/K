@@ -690,6 +690,19 @@ function updateSidebarTabsVisibility() {
     }
 }
 
+/// Show/hide the command toolbar (filter + kill all) based on whether
+/// there is a reachable server with commands.  Hidden when no server is
+/// reachable or when there are zero commands across all instances.
+function updateCmdToolbarVisibility() {
+    const toolbar = document.getElementById('cmdToolbar');
+    if (!toolbar) return;
+    const anyReachable = state.instanceUrls.some(i => i.reachable === true);
+    const anyCommands = state.instanceUrls.some(
+        i => i._commands && i._commands.length > 0
+    );
+    toolbar.style.display = (anyReachable && anyCommands) ? '' : 'none';
+}
+
 // ─── Disconnected state ───
 
 /// Central function that updates all UI elements when instance reachability changes.
@@ -698,6 +711,7 @@ function updateDisconnectedUI() {
     updateSidebarBanner();
     updateSidebarTabsVisibility();
     updateTerminalDisconnectedOverlay();
+    updateCmdToolbarVisibility();
 }
 
 /// Show/hide a disconnected banner in the sidebar header area.
@@ -1092,12 +1106,13 @@ function _buildSidebar() {
             const instUnreachable = inst.reachable === false;
             const dimStyle = instUnreachable ? 'opacity:0.4;' : ((isAlive || isFrozen) ? '' : 'opacity:0.6;');
             const killDisabled = instUnreachable ? ' disabled title="Server disconnected"' : ' title="Kill"';
+            // Build detail parts as separate spans for the detail row
             const detailParts = [];
-            if (runtimeStr) detailParts.push(runtimeStr);
-            if (frozenBadge) detailParts.push(frozenBadge.trim());
-            if (resourceStr) detailParts.push(resourceStr);
-            if (cmd.pid) detailParts.push('pid:' + cmd.pid);
-            const detailStr = detailParts.join(' ');
+            if (runtimeStr) detailParts.push(escHtml(runtimeStr));
+            if (frozenBadge) detailParts.push(escHtml(frozenBadge.trim()));
+            if (res && res.cpu_percent != null) detailParts.push('CPU ' + res.cpu_percent.toFixed(1) + '%');
+            if (res && res.memory_mb != null) detailParts.push('MEM ' + res.memory_mb.toFixed(1) + 'MB');
+            if (cmd.pid) detailParts.push('pid ' + cmd.pid);
             const unreachableTitle = instUnreachable ? ` [disconnected]` : '';
             out += `
                 <div class="cmd-item${selected}${frozenClass}${exitedClass}${instUnreachable ? ' unreachable' : ''}" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" onclick="selectCommand(this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)}${unreachableTitle}" style="${dimStyle}">
@@ -1105,10 +1120,10 @@ function _buildSidebar() {
                         <button class="btn btn-xs btn-danger cmd-kill-btn" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}"${killDisabled}>&#x2715;</button>
                         <button class="pin-btn${isPinned ? ' active' : ''}" onclick="event.stopPropagation();togglePinCmd('${escHtml(cmdName)}')" title="${isPinned ? 'Unpin' : 'Pin'}">&#9734;</button>
                         <span class="name">${escHtml(cmdName)}</span>
-                        <span class="cmd-detail-inline">${escHtml(detailStr)}</span>
                         ${certBadge}
                         ${exitBadge}
                     </div>
+                    ${detailParts.length > 0 ? `<div class="cmd-detail-row">${detailParts.join('<span class="detail-sep">|</span>')}</div>` : ''}
                 </div>`;
         }
         return out;
@@ -1117,6 +1132,7 @@ function _buildSidebar() {
     rearrangePinnedCommands(container);
     container.innerHTML = html || '<div style="padding:1rem;color:var(--text-muted);text-align:center;">No running commands</div>';
     updateInstanceDropdown();
+    updateCmdToolbarVisibility();
 
     if (state._pendingSelectId) {
         const pendingId = state._pendingSelectId;
@@ -1877,6 +1893,12 @@ function updateVttyMetadata(data, panel, vttyEl) {
     if (vttyEl) {
         const mt = panelObj ? panelObj.mouseTracking : false;
         vttyEl.classList.toggle('selectable', !mt);
+        // Store dimensions on <pre> for screenshot filename generation
+        const pre = vttyEl.querySelector('pre');
+        if (pre && dims.rows && dims.cols) {
+            pre._vttyRows = dims.rows;
+            pre._vttyCols = dims.cols;
+        }
     }
 
     state._termRows = dims.rows;
@@ -2277,6 +2299,12 @@ function updateVttyMetadataFromHttp(data, panel, panelObj, sbOffset) {
     if (vttyEl) {
         const mt = panelObj ? panelObj.mouseTracking : false;
         vttyEl.classList.toggle('selectable', !mt);
+        // Store dimensions on <pre> for screenshot filename generation
+        const pre = vttyEl.querySelector('pre');
+        if (pre && dims.rows && dims.cols) {
+            pre._vttyRows = dims.rows;
+            pre._vttyCols = dims.cols;
+        }
     }
 
     // Hide cursor when in scrollback view or app hid it via ?25l
@@ -4150,17 +4178,38 @@ async function screenshotPanel(panelId) {
         const blob = await res.blob();
         const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        // Use command name + timestamp for the filename
-        let cmdName = 'screenshot';
+
+        // Build filename: vrunner_YYYYMMDD_HHMMSS_rowsxcols_command_args.png
+        let cmdInfo = 'vrunner';
         for (const inst of state.instanceUrls) {
             if (inst._commands) {
                 const cmd = inst._commands.find(c => c.id === cmdId);
-                if (cmd) { cmdName = (cmd.name || cmd.id).replace(/\//g, '_'); break; }
+                if (cmd) {
+                    const parts = [cmd.name || 'unknown'];
+                    if (cmd.args && cmd.args.length > 0) parts.push(...cmd.args);
+                    cmdInfo = parts.join(' ').replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+                    break;
+                }
             }
         }
-        const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        const ts = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+
+        // Include terminal dimensions if known from VTTY metadata
+        let dims = '';
+        const pre = document.querySelector(`#vtty-${panelId} pre`);
+        if (pre && pre._vttyRows && pre._vttyCols) {
+            dims = pre._vttyRows + 'x' + pre._vttyCols;
+        }
+
+        const truncated = cmdInfo.length > 120 ? cmdInfo.substring(0, 117) + '...' : cmdInfo;
+        const filename = dims
+            ? `vrunner_${ts}_${dims}_${truncated}.png`
+            : `vrunner_${ts}_${truncated}.png`;
+
         a.href = blobUrl;
-        a.download = cmdName + '_' + ts + '.png';
+        a.download = filename;
         a.click();
         URL.revokeObjectURL(blobUrl);
     } catch (e) {
@@ -4462,9 +4511,6 @@ function updateSidebarResourceText() {
         for (const cmd of inst._commands) {
             if (cmd.alive === false) continue;
             const res = state._resourceCache[cmd.id];
-            const resourceStr = (res && (res.cpu_percent != null || res.memory_mb != null))
-                ? `${res.cpu_percent != null ? res.cpu_percent.toFixed(1) + '%' : ''}${res.cpu_percent != null && res.memory_mb != null ? ' ' : ''}${res.memory_mb != null ? res.memory_mb.toFixed(1) + 'MB' : ''}`
-                : '';
             const item = document.querySelector(`.cmd-item[data-cmd-id="${cmd.id}"]`);
             if (!item) continue;
             const isFrozen = cmd.frozen === true;
@@ -4473,15 +4519,26 @@ function updateSidebarResourceText() {
                    : cmd.runtime_secs < 3600 ? Math.floor(cmd.runtime_secs / 60) + 'm ' + Math.floor(cmd.runtime_secs % 60) + 's'
                    : Math.floor(cmd.runtime_secs / 3600) + 'h ' + Math.floor((cmd.runtime_secs % 3600) / 60) + 'm')
                 : '';
-            const frozenBadge = isFrozen ? 'PAUSED ' : '';
+            const frozenBadge = isFrozen ? 'PAUSED' : '';
             const detailParts = [];
             if (runtimeStr) detailParts.push(runtimeStr);
-            if (frozenBadge) detailParts.push(frozenBadge.trim());
-            if (resourceStr) detailParts.push(resourceStr);
-            if (cmd.pid) detailParts.push('pid:' + cmd.pid);
-            const detailStr = detailParts.join(' ');
-            const detailEl = item.querySelector('.cmd-detail-inline');
-            if (detailEl) detailEl.textContent = detailStr;
+            if (frozenBadge) detailParts.push(frozenBadge);
+            if (res && res.cpu_percent != null) detailParts.push('CPU ' + res.cpu_percent.toFixed(1) + '%');
+            if (res && res.memory_mb != null) detailParts.push('MEM ' + res.memory_mb.toFixed(1) + 'MB');
+            if (cmd.pid) detailParts.push('pid ' + cmd.pid);
+
+            // Find or create the detail row
+            let detailRow = item.querySelector('.cmd-detail-row');
+            if (detailParts.length === 0) {
+                if (detailRow) detailRow.remove();
+            } else {
+                if (!detailRow) {
+                    detailRow = document.createElement('div');
+                    detailRow.className = 'cmd-detail-row';
+                    item.appendChild(detailRow);
+                }
+                detailRow.innerHTML = detailParts.join('<span class="detail-sep">|</span>');
+            }
         }
     }
 }
