@@ -628,7 +628,11 @@ function updateSidebarTabsVisibility() {
     const anyReachable = state.instanceUrls.some(i => i.reachable === true);
     if (anyReachable) {
         if (spawnTab) spawnTab.style.display = '';
-        if (spawnContent) spawnContent.style.display = '';
+        // Only show spawn content if the spawn tab is currently active;
+        // otherwise let switchSidebarTab() manage content visibility.
+        if (spawnContent && spawnTab && spawnTab.classList.contains('active')) {
+            spawnContent.style.display = '';
+        }
     } else {
         if (spawnTab) spawnTab.style.display = 'none';
         if (spawnContent) spawnContent.style.display = 'none';
@@ -4158,6 +4162,41 @@ async function pollResources() {
             } catch (e) {
                 // Silently ignore — resources are optional
             }
+        }
+    }
+    // Update sidebar resource text without full DOM rebuild
+    updateSidebarResourceText();
+}
+
+/// Update the .cmd-detail-inline text in sidebar command items to reflect
+/// the latest resource data from state._resourceCache. This avoids a full
+/// DOM rebuild (which the fingerprint optimization would skip anyway).
+function updateSidebarResourceText() {
+    for (const inst of state.instanceUrls) {
+        if (!inst._commands) continue;
+        for (const cmd of inst._commands) {
+            if (cmd.alive === false) continue;
+            const res = state._resourceCache[cmd.id];
+            const resourceStr = (res && (res.cpu_percent != null || res.memory_mb != null))
+                ? `${res.cpu_percent != null ? res.cpu_percent.toFixed(1) + '%' : ''}${res.cpu_percent != null && res.memory_mb != null ? ' ' : ''}${res.memory_mb != null ? res.memory_mb.toFixed(1) + 'MB' : ''}`
+                : '';
+            const item = document.querySelector(`.cmd-item[data-cmd-id="${cmd.id}"]`);
+            if (!item) continue;
+            const isFrozen = cmd.frozen === true;
+            const runtimeStr = cmd.runtime_secs > 0
+                ? (cmd.runtime_secs < 60 ? Math.floor(cmd.runtime_secs) + 's'
+                   : cmd.runtime_secs < 3600 ? Math.floor(cmd.runtime_secs / 60) + 'm ' + Math.floor(cmd.runtime_secs % 60) + 's'
+                   : Math.floor(cmd.runtime_secs / 3600) + 'h ' + Math.floor((cmd.runtime_secs % 3600) / 60) + 'm')
+                : '';
+            const frozenBadge = isFrozen ? 'PAUSED ' : '';
+            const detailParts = [];
+            if (runtimeStr) detailParts.push(runtimeStr);
+            if (frozenBadge) detailParts.push(frozenBadge.trim());
+            if (resourceStr) detailParts.push(resourceStr);
+            if (cmd.pid) detailParts.push('pid:' + cmd.pid);
+            const detailStr = detailParts.join(' ');
+            const detailEl = item.querySelector('.cmd-detail-inline');
+            if (detailEl) detailEl.textContent = detailStr;
         }
     }
 }
