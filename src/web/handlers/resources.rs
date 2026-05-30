@@ -54,14 +54,14 @@ pub async fn get_resources(State(state): State<AppState>, Path(id): Path<String>
     }))
 }
 
-struct ProcStats {
-    cpu_percent: Option<f64>,
-    memory_mb: Option<f64>,
-    threads: Option<u32>,
+pub(crate) struct ProcStats {
+    pub cpu_percent: Option<f64>,
+    pub memory_mb: Option<f64>,
+    pub threads: Option<u32>,
 }
 
 #[cfg(target_os = "linux")]
-fn read_proc_stats(pid: u32) -> ProcStats {
+pub(crate) fn read_proc_stats(pid: u32) -> ProcStats {
     // Read /proc/[pid]/stat
     let stat_path = format!("/proc/{}/stat", pid);
     let stat_content = match std::fs::read_to_string(&stat_path) {
@@ -175,7 +175,7 @@ fn get_clk_tck() -> Option<u64> {
 }
 
 #[cfg(not(target_os = "linux"))]
-fn read_proc_stats(_pid: u32) -> ProcStats {
+pub(crate) fn read_proc_stats(_pid: u32) -> ProcStats {
     ProcStats {
         cpu_percent: None,
         memory_mb: None,

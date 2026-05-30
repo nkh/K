@@ -14,6 +14,10 @@ pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
     // API routes — protected by auth middleware when auth is enabled
     let api_routes = Router::new()
         .route(
+            "/api/snapshot",
+            get(handlers::commands::get_snapshot),
+        )
+        .route(
             "/api/commands",
             get(handlers::commands::list_commands).post(handlers::commands::start_command),
         )

@@ -797,76 +797,137 @@ function switchViewTab(view, el) {
 }
 
 // ─── Commands ───
-async function loadCommands() {
-    // Load commands from all instances and track reachability.
-    let anyReachableChanged = false;
-    for (const inst of state.instanceUrls) {
-        try {
-            const res = await fetch(apiUrl('/api/commands', inst), { headers: authHeadersForInstance(inst) });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            const json = await res.json();
-            inst._commands = json.status === 'ok' ? json.data : [];
-            const wasReachable = inst.reachable;
-            inst.reachable = true;
-            inst._lastError = null;
-            if (wasReachable !== true) anyReachableChanged = true;
-        } catch (e) {
-            inst._commands = inst._commands || [];
-            const wasReachable = inst.reachable;
-            inst.reachable = false;
-            inst._lastError = 'connection lost (instance may have exited)';
-            if (wasReachable !== false) anyReachableChanged = true;
+
+/// Fast initial load: fetch commands, VTTY HTML, and resources in a SINGLE
+/// request from the primary instance.  This replaces the old flow of
+/// loadCommands → _prefetchVttyHtml → pollResources (3+ serial round trips)
+/// with just 1 round trip.
+///
+/// After the snapshot is processed, peer instances are fetched in parallel.
+/// Subsequent refreshes use the lighter loadCommands() which only fetches
+/// the commands list (no VTTY HTML, no resources).
+let _snapshotLoaded = false;
+
+async function loadSnapshot() {
+    if (_snapshotLoaded) { loadCommands(); return; }
+    _snapshotLoaded = true;
+
+    const primaryInst = state.instanceUrls[0];
+    if (!primaryInst) { loadCommands(); return; }
+
+    try {
+        const res = await fetch(apiUrl('/api/snapshot', primaryInst),
+            { headers: authHeadersForInstance(primaryInst) });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const json = await res.json();
+        if (json.status !== 'ok' || !json.data) throw new Error('bad snapshot');
+
+        const { commands, vtty, resources } = json.data;
+
+        // Store commands for the primary instance
+        primaryInst._commands = commands || [];
+        primaryInst.reachable = true;
+        primaryInst._lastError = null;
+
+        // Store resources in cache — sidebar will show them immediately
+        if (resources) {
+            for (const [cmdId, resData] of Object.entries(resources)) {
+                state._resourceCache[cmdId] = resData;
+            }
         }
-    }
-    if (anyReachableChanged) {
+
+        // Fetch peer instances in parallel (don't block the primary display)
+        const peerPromises = state.instanceUrls.slice(1).map(async (inst) => {
+            try {
+                const r = await fetch(apiUrl('/api/commands', inst),
+                    { headers: authHeadersForInstance(inst) });
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const j = await r.json();
+                inst._commands = j.status === 'ok' ? j.data : [];
+                inst.reachable = true;
+                inst._lastError = null;
+            } catch (e) {
+                inst._commands = inst._commands || [];
+                inst.reachable = false;
+                inst._lastError = 'connection lost (instance may have exited)';
+            }
+        });
+        // Kick off peer fetches but don't await — render primary immediately
+        const peersDone = Promise.all(peerPromises).then(() => {
+            updateDisconnectedUI();
+        });
+
+        // ── Render terminal from embedded VTTY HTML ──
+        const hasAnyCommands = commands && commands.length > 0;
+        const firstCmd = hasAnyCommands
+            ? (commands.find(c => c.alive) || commands[0])
+            : null;
+        const shouldShowWelcome = (state.panels.length === 1 && !hasAnyCommands && !state.selectedCmdId);
+
+        if (shouldShowWelcome !== _showingWelcome) {
+            renderPanels();
+        }
+
+        if (vtty && vtty.html !== undefined && firstCmd) {
+            state.selectedInstUrl = primaryInst.url;
+            state.selectedCmdId = firstCmd.id;
+            state._pendingVttyData = null;
+            state._pendingVttyDirty = false;
+            state.bufferView = 'current';
+
+            // Store generation for subsequent incremental updates
+            if (vtty.generation !== undefined) {
+                state._lastGeneration[firstCmd.id] = vtty.generation;
+            }
+
+            // Write VTTY HTML directly into <pre> — NO second HTTP request
+            const panel = getSelectedPanel();
+            if (panel) {
+                const vttyEl = panel.querySelector('.vtty-container');
+                const pre = vttyEl ? vttyEl.querySelector('pre') : null;
+                if (pre) {
+                    pre.innerHTML = vtty.html;
+                    // Build cell grid for Level 3 incremental diffing
+                    if (state._level3Enabled && vtty.dimensions) {
+                        buildCellGrid(firstCmd.id, pre, vtty.dimensions.rows, vtty.dimensions.cols);
+                    }
+                    // Update metadata (cursor, dimensions, alt screen, etc.)
+                    updateVttyMetadataFromHttp(vtty, panel,
+                        state.panels.find(p => p.id === panel.id), 0);
+                }
+            }
+
+            updatePanelCommandInfo();
+            updateTerminalDisconnectedOverlay();
+            // Start push/poll for incremental updates
+            startUpdateMode();
+        } else {
+            _showingWelcome = shouldShowWelcome;
+            updateDisconnectedUI();
+        }
+
+        // Wait for peers to finish, then build the sidebar with full data
+        await peersDone;
+        // Build sidebar (includes resource data from cache)
+        _buildSidebar();
+
+    } catch (e) {
+        primaryInst._commands = primaryInst._commands || [];
+        primaryInst.reachable = false;
+        primaryInst._lastError = 'connection lost';
         updateDisconnectedUI();
+        // Fall back to regular loadCommands
+        loadCommands();
     }
+}
 
-    // Check if welcome-panel state changed and re-render panels if so.
-    // Also detect the first command for instant initial load.
-    let hasAnyCommands = false;
-    let firstCommand = null;
-    for (const inst of state.instanceUrls) {
-        if (inst._commands && inst._commands.length > 0) {
-            hasAnyCommands = true;
-            if (!firstCommand) firstCommand = { instUrl: inst.url, cmd: inst._commands[0] };
-            break;
-        }
-    }
-    const shouldShowWelcome = (state.panels.length === 1 && !hasAnyCommands && !state.selectedCmdId);
-
-    // ── Instant initial load: pre-fetch VTTY HTML in parallel ──
-    // On first load (no command selected yet), ensure the panel DOM is
-    // rendered immediately and kick off the VTTY HTML fetch before
-    // building the sidebar.  This eliminates the sequential delay of
-    // "fetch commands → render sidebar → select command → fetch HTML".
-    const isFirstLoad = !state.selectedCmdId && shouldShowWelcome !== _showingWelcome && hasAnyCommands;
-    if (isFirstLoad && firstCommand) {
-        // Render panels first so the <pre> element exists in the DOM
-        renderPanels();
-        _showingWelcome = false;
-        // Pre-select immediately (sets state, builds cell grid later)
-        state.selectedInstUrl = firstCommand.instUrl;
-        state.selectedCmdId = firstCommand.cmd.id;
-        state._pendingVttyData = null;
-        state._pendingVttyDirty = false;
-        state.bufferView = 'current';
-        // Update panel header with command name
-        updatePanelCommandInfo();
-        updateTerminalDisconnectedOverlay();
-        // Fire the VTTY HTML fetch right away — don't wait for sidebar.
-        // The sidebar will be rendered below while the fetch is in-flight.
-        _prefetchVttyHtml(firstCommand.instUrl, firstCommand.cmd.id);
-    } else if (shouldShowWelcome !== _showingWelcome) {
-        renderPanels();
-    }
-
-    // Build a lightweight fingerprint from command data to skip redundant DOM updates
+/// Extract sidebar-building logic into a reusable function so both
+/// loadSnapshot() and loadCommands() can use it.
+function _buildSidebar() {
     const filter = (document.getElementById('cmdFilter') || {}).value || '';
     const filterLower = filter.toLowerCase();
     let fingerprint = '';
     for (const inst of state.instanceUrls) {
-        // Include reachability in fingerprint so UI updates when status changes
         fingerprint += inst.url + ':reachable=' + inst.reachable + '|';
         for (const cmd of (inst._commands || [])) {
             const cmdName = cmd.name || cmd.id;
@@ -877,10 +938,7 @@ async function loadCommands() {
             fingerprint += inst.url + ':' + cmd.id + ':' + isAlive + ':' + (cmd.exit_code != null ? cmd.exit_code : '') + ':' + (cmd.runtime_secs || 0) + '|';
         }
     }
-
-    // If nothing changed, skip DOM rebuild entirely
     if (fingerprint === _lastCommandState) {
-        // Still check for pending select and update panel info
         if (state._pendingSelectId) {
             const pendingId = state._pendingSelectId;
             state._pendingSelectId = null;
@@ -902,11 +960,9 @@ async function loadCommands() {
     }
     _lastCommandState = fingerprint;
 
-    // Render command list
     const container = document.getElementById('commandList');
     let html = '';
 
-    // Sort bar: "All (by name)" + one button per instance
     if (state.instanceUrls.length > 1) {
         html += '<div class="sidebar-sort-bar">';
         html += `<span class="sidebar-sort-item${_sidebarSort === 'name' ? ' active' : ''}" onclick="_sidebarSort='name';loadCommands()">All</span>`;
@@ -926,7 +982,6 @@ async function loadCommands() {
         return h + 'h ' + m + 'm';
     }
 
-    // Collect all filtered commands with their instance
     let allCmds = [];
     for (const inst of state.instanceUrls) {
         for (const cmd of (inst._commands || [])) {
@@ -938,16 +993,12 @@ async function loadCommands() {
         }
     }
 
-    // Sort and render
     if (_sidebarSort === 'name') {
-        // Sort alphabetically by command name
         allCmds.sort((a, b) => a.cmdName.localeCompare(b.cmdName));
         html += renderCmdList(allCmds);
     } else {
-        // Group by the selected instance (or show all grouped when _sidebarSort is an instance URL)
         const targetUrl = _sidebarSort;
         const grouped = targetUrl === 'all' ? null : targetUrl;
-        // Show only commands from the selected instance, grouped
         for (const inst of state.instanceUrls) {
             if (grouped && inst.url !== grouped) continue;
             const instCmds = allCmds.filter(c => c.inst.url === inst.url);
@@ -996,7 +1047,6 @@ async function loadCommands() {
             const instUnreachable = inst.reachable === false;
             const dimStyle = instUnreachable ? 'opacity:0.4;' : ((isAlive || isFrozen) ? '' : 'opacity:0.6;');
             const killDisabled = instUnreachable ? ' disabled title="Server disconnected"' : ' title="Kill"';
-            // Build inline detail: "12s 3.2% 128MB pid:1234"
             const detailParts = [];
             if (runtimeStr) detailParts.push(runtimeStr);
             if (frozenBadge) detailParts.push(frozenBadge.trim());
@@ -1019,15 +1069,10 @@ async function loadCommands() {
         return out;
     }
 
-    // Rearrange pinned commands to top
     rearrangePinnedCommands(container);
-
     container.innerHTML = html || '<div style="padding:1rem;color:var(--text-muted);text-align:center;">No running commands</div>';
-
-    // Update spawn instance dropdown
     updateInstanceDropdown();
 
-    // Auto-select a pending command (from URL routing /command-name)
     if (state._pendingSelectId) {
         const pendingId = state._pendingSelectId;
         state._pendingSelectId = null;
@@ -1040,25 +1085,64 @@ async function loadCommands() {
         }
     }
 
-    // Auto-select the first command if none is selected yet
     if (!state.selectedCmdId) {
         for (const inst of state.instanceUrls) {
             if (inst._commands && inst._commands.length > 0) {
                 const cmd = inst._commands[0];
                 selectCommand(inst.url, cmd.id, cmd.name || cmd.id);
-                return; // selectCommand triggers loadCommands, so stop here
+                return;
             }
         }
     }
 
-    // If a command is selected, refresh its VTTY
     if (state.selectedInstUrl && state.selectedCmdId) {
         updatePanelCommandInfo();
-        // Only poll via HTTP if using poll mode or viewing a non-current buffer
         if (state.updateMode === 'poll' || state.bufferView !== 'current') {
             scheduleVttyHttp(state.selectedInstUrl, state.selectedCmdId, 500);
         }
     }
+}
+
+async function loadCommands() {
+    // Load commands from all instances in PARALLEL and track reachability.
+    let anyReachableChanged = false;
+    await Promise.all(state.instanceUrls.map(async (inst) => {
+        try {
+            const res = await fetch(apiUrl('/api/commands', inst), { headers: authHeadersForInstance(inst) });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const json = await res.json();
+            inst._commands = json.status === 'ok' ? json.data : [];
+            const wasReachable = inst.reachable;
+            inst.reachable = true;
+            inst._lastError = null;
+            if (wasReachable !== true) anyReachableChanged = true;
+        } catch (e) {
+            inst._commands = inst._commands || [];
+            const wasReachable = inst.reachable;
+            inst.reachable = false;
+            inst._lastError = 'connection lost (instance may have exited)';
+            if (wasReachable !== false) anyReachableChanged = true;
+        }
+    }));
+    if (anyReachableChanged) {
+        updateDisconnectedUI();
+    }
+
+    // Check if welcome-panel state changed and re-render panels if so
+    let hasAnyCommands = false;
+    for (const inst of state.instanceUrls) {
+        if (inst._commands && inst._commands.length > 0) {
+            hasAnyCommands = true;
+            break;
+        }
+    }
+    const shouldShowWelcome = (state.panels.length === 1 && !hasAnyCommands && !state.selectedCmdId);
+    if (shouldShowWelcome !== _showingWelcome) {
+        renderPanels();
+    }
+
+    // Build sidebar (reuses extracted _buildSidebar for consistency)
+    _buildSidebar();
 }
 
 /// Lightweight DOM-only update: toggle the .selected class on sidebar items
@@ -3088,15 +3172,17 @@ function escHtml(str) {
 
 // ─── Refresh Loop ───
 function startRefresh() {
-    loadCommands();
+    // First call uses the snapshot endpoint (1 request = commands + VTTY + resources)
+    loadSnapshot();
     if (state.refreshInterval) clearInterval(state.refreshInterval);
     state.refreshInterval = setInterval(() => {
         loadCommands();
         checkForExitedCommands();
     }, 1000);
 
-    // Start resource polling (every 2 seconds)
+    // Start resource polling (every 2 seconds) — first poll fires immediately
     if (state._resourceInterval) clearInterval(state._resourceInterval);
+    pollResources(); // immediate first poll
     state._resourceInterval = setInterval(pollResources, 2000);
 }
 
@@ -4220,23 +4306,28 @@ function closeShortcuts() {
 
 // ─── Resource Polling ───
 async function pollResources() {
+    // Fetch all alive commands' resources in PARALLEL (not serial).
+    const promises = [];
     for (const inst of state.instanceUrls) {
         if (!inst._commands) continue;
         for (const cmd of inst._commands) {
             if (cmd.alive === false) continue;
-            try {
-                const res = await fetch(apiUrl(`/api/commands/${cmd.id}/resources`, { url: inst.url }), {
-                    headers: authHeadersForInstance(inst),
-                });
-                const json = await res.json();
-                if (json.status === 'ok' && json.data) {
-                    state._resourceCache[cmd.id] = json.data;
+            promises.push((async () => {
+                try {
+                    const res = await fetch(apiUrl(`/api/commands/${cmd.id}/resources`, { url: inst.url }), {
+                        headers: authHeadersForInstance(inst),
+                    });
+                    const json = await res.json();
+                    if (json.status === 'ok' && json.data) {
+                        state._resourceCache[cmd.id] = json.data;
+                    }
+                } catch (e) {
+                    // Silently ignore — resources are optional
                 }
-            } catch (e) {
-                // Silently ignore — resources are optional
-            }
+            })());
         }
     }
+    await Promise.all(promises);
     // Update sidebar resource text without full DOM rebuild
     updateSidebarResourceText();
 }

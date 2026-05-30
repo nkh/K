@@ -6,6 +6,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 use crate::config::merge::merge_command_env;
+use crate::web::handlers::resources::read_proc_stats;
 use crate::web::state::AppState;
 
 pub async fn list_commands(State(state): State<AppState>) -> Json<Value> {
@@ -491,4 +492,122 @@ pub async fn purge_command(State(state): State<AppState>, Path(id): Path<String>
             "error": e.to_string()
         })),
     }
+}
+
+/// GET /api/snapshot
+///
+/// Combined endpoint for fast initial page load. Returns the commands list,
+/// the first alive command's VTTY HTML, and resource usage for all alive
+/// commands — all in a single HTTP request. This eliminates the need for
+/// the client to make 2+ sequential requests on first load.
+pub async fn get_snapshot(State(state): State<AppState>) -> Json<Value> {
+    let commands = state.manager.list();
+
+    // Build the commands list (same as list_commands)
+    let mut data: Vec<Value> = Vec::new();
+    let mut first_alive_id: Option<String> = None;
+
+    for (id, name, args, pid, certificate) in &commands {
+        let exit_info = state
+            .manager
+            .get(id)
+            .map(|h| {
+                serde_json::json!({
+                    "on_exit": h.exit_config.on_exit.as_deref().unwrap_or(""),
+                    "on_error": h.exit_config.on_error.as_deref().unwrap_or(""),
+                    "exit_timeout": h.exit_config.timeout_secs,
+                    "retain_on_exit": h.exit_config.retain_on_exit,
+                    "snapshot_on_exit": h.exit_config.snapshot_on_exit,
+                })
+            })
+            .unwrap_or(serde_json::json!(null));
+        let (alive, runtime_secs, exit_code, exit_time, frozen) = state
+            .manager
+            .get(id)
+            .map(|h| {
+                let ec = h.exit_code.lock().ok().and_then(|c| *c);
+                let et = h
+                    .exit_time
+                    .lock()
+                    .ok()
+                    .and_then(|guard| *guard)
+                    .map(|t| t.elapsed().as_secs());
+                (h.is_alive(), h.runtime_secs(), ec, et, h.is_frozen())
+            })
+            .unwrap_or((false, 0.0, None, None, false));
+
+        if alive && first_alive_id.is_none() {
+            first_alive_id = Some(id.clone());
+        }
+
+        data.push(serde_json::json!({
+            "id": id,
+            "name": name,
+            "args": args,
+            "pid": pid,
+            "alive": alive,
+            "frozen": frozen,
+            "runtime_secs": runtime_secs,
+            "exit_code": exit_code,
+            "exit_time_secs": exit_time,
+            "status": if frozen { "frozen" } else if alive { "running" } else { "exited" },
+            "certificate": certificate,
+            "exit": exit_info,
+        }));
+    }
+
+    // Fetch VTTY HTML for the first alive command
+    let mut vtty = serde_json::json!(null);
+    if let Some(ref id) = first_alive_id {
+        if let Some(handle) = state.manager.get(id) {
+            let html = handle.vtty_html().await;
+            let cursor = handle.cursor_position().await;
+            let (rows, cols) = handle.dimensions().await;
+            let scrollback = handle.scrollback_count().await;
+            let alt_screen = handle.is_alternate_screen().await;
+            let mouse_tracking = handle.mouse_tracking_enabled().await;
+            let mouse_sgr = handle.mouse_sgr_enabled().await;
+            let cursor_visible = handle.is_cursor_visible().await;
+            let generation = handle.buffer_generation().await;
+            vtty = serde_json::json!({
+                "id": id,
+                "html": html,
+                "cursor": { "row": cursor.0, "col": cursor.1 },
+                "dimensions": { "rows": rows, "cols": cols },
+                "scrollback_lines": scrollback,
+                "alternate_screen": alt_screen,
+                "cursor_visible": cursor_visible,
+                "mouse_tracking": mouse_tracking,
+                "mouse_sgr": mouse_sgr,
+                "generation": generation,
+            });
+        }
+    }
+
+    // Fetch resources for all alive commands
+    let mut resources = serde_json::json!({});
+    for (id, _, _, pid, _) in &commands {
+        if let Some(handle) = state.manager.get(id) {
+            if handle.is_alive() {
+                let result = read_proc_stats(*pid);
+                resources[id] = serde_json::json!({
+                    "pid": pid,
+                    "cpu_percent": result.cpu_percent,
+                    "memory_mb": result.memory_mb,
+                    "threads": result.threads,
+                    "alive": true,
+                });
+            }
+        }
+    }
+
+    Json(serde_json::json!({
+        "status": "ok",
+        "data": {
+            "commands": data,
+            "vtty": vtty,
+            "resources": resources,
+        },
+        "error": null
+    }))
 }
