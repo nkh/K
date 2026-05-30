@@ -967,6 +967,12 @@ impl VttyEmulator {
         self.buffer.read().generation()
     }
 
+    /// Return the number of scrollback lines without cloning the buffer.
+    /// O(1) — just reads the vec length under a read lock.
+    pub fn scrollback_len(&self) -> usize {
+        self.buffer.read().scrollback.len()
+    }
+
     /// Snapshot the main buffer (returns the main buffer even if the
     /// alternate screen is currently active).
     pub fn snapshot_main(&self) -> Buffer {

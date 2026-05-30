@@ -58,6 +58,19 @@ pub struct CommandHandle {
     pub prev_diff_snapshot: Mutex<Option<crate::vtty::buffer::Buffer>>,
 }
 
+/// VTTY metadata bundle — all terminal state in one struct.
+/// Produced by `CommandHandle::vtty_metadata()` which acquires the read lock once.
+pub struct VttyMetadata {
+    pub cursor: (usize, usize),
+    pub dimensions: (usize, usize),
+    pub scrollback_lines: usize,
+    pub alternate_screen: bool,
+    pub cursor_visible: bool,
+    pub mouse_tracking: bool,
+    pub mouse_sgr: bool,
+    pub generation: u64,
+}
+
 impl CommandHandle {
     pub async fn send_bytes(&self, data: Vec<u8>) -> Result<()> {
         self.stdin_tx
@@ -112,8 +125,11 @@ impl CommandHandle {
         emu.partial(start_row, row_count)
     }
 
+    /// Render VTTY buffer as HTML with run-length encoding.
+    /// Acquires the read lock once, snapshots, and renders.
     pub async fn vtty_html(&self) -> String {
-        let buf = self.vtty_snapshot().await;
+        let emu = self.emulator.read().await;
+        let buf = emu.snapshot();
         crate::vtty::renderer::VttyRenderer::to_html(&buf)
     }
 
@@ -214,9 +230,11 @@ impl CommandHandle {
         emu.buffer_generation()
     }
 
+    /// Return scrollback line count without cloning the buffer.
+    /// Uses the cheap scrollback_len() method on the emulator.
     pub async fn scrollback_count(&self) -> usize {
         let emu = self.emulator.read().await;
-        emu.snapshot().scrollback.len()
+        emu.scrollback_len()
     }
 
     /// Whether any mouse tracking mode is enabled (1002/1003).
@@ -229,6 +247,22 @@ impl CommandHandle {
     pub async fn mouse_sgr_enabled(&self) -> bool {
         let emu = self.emulator.read().await;
         emu.mouse_sgr_enabled()
+    }
+
+    /// All VTTY metadata in a single read lock acquisition.
+    /// Replaces 8+ separate `emulator.read().await` calls with one.
+    pub async fn vtty_metadata(&self) -> VttyMetadata {
+        let emu = self.emulator.read().await;
+        VttyMetadata {
+            cursor: emu.cursor(),
+            dimensions: emu.dimensions(),
+            scrollback_lines: emu.scrollback_len(),
+            alternate_screen: emu.is_alternate_screen(),
+            cursor_visible: emu.is_cursor_visible(),
+            mouse_tracking: emu.mouse_tracking_enabled(),
+            mouse_sgr: emu.mouse_sgr_enabled(),
+            generation: emu.buffer_generation(),
+        }
     }
 
     pub async fn resize(&self, rows: u16, cols: u16) -> Result<()> {

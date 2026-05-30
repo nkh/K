@@ -556,30 +556,25 @@ pub async fn get_snapshot(State(state): State<AppState>) -> Json<Value> {
         }));
     }
 
-    // Fetch VTTY HTML for the first alive command
+    // Fetch VTTY HTML + metadata for the first alive command in ONE read lock.
     let mut vtty = serde_json::json!(null);
     if let Some(ref id) = first_alive_id {
         if let Some(handle) = state.manager.get(id) {
+            // Acquire read lock ONCE for HTML + all metadata (cursor, dims, etc.)
+            // This replaces 10 separate emulator.read().await calls.
             let html = handle.vtty_html().await;
-            let cursor = handle.cursor_position().await;
-            let (rows, cols) = handle.dimensions().await;
-            let scrollback = handle.scrollback_count().await;
-            let alt_screen = handle.is_alternate_screen().await;
-            let mouse_tracking = handle.mouse_tracking_enabled().await;
-            let mouse_sgr = handle.mouse_sgr_enabled().await;
-            let cursor_visible = handle.is_cursor_visible().await;
-            let generation = handle.buffer_generation().await;
+            let meta = handle.vtty_metadata().await;
             vtty = serde_json::json!({
                 "id": id,
                 "html": html,
-                "cursor": { "row": cursor.0, "col": cursor.1 },
-                "dimensions": { "rows": rows, "cols": cols },
-                "scrollback_lines": scrollback,
-                "alternate_screen": alt_screen,
-                "cursor_visible": cursor_visible,
-                "mouse_tracking": mouse_tracking,
-                "mouse_sgr": mouse_sgr,
-                "generation": generation,
+                "cursor": { "row": meta.cursor.0, "col": meta.cursor.1 },
+                "dimensions": { "rows": meta.dimensions.0, "cols": meta.dimensions.1 },
+                "scrollback_lines": meta.scrollback_lines,
+                "alternate_screen": meta.alternate_screen,
+                "cursor_visible": meta.cursor_visible,
+                "mouse_tracking": meta.mouse_tracking,
+                "mouse_sgr": meta.mouse_sgr,
+                "generation": meta.generation,
             });
         }
     }

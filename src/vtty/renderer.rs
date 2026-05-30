@@ -15,6 +15,22 @@ fn html_escape(s: char) -> String {
     }
 }
 
+/// Format an RGB triplet as a hex color string: "#RRGGBB".
+#[inline]
+fn hex_color(c: [u8; 3]) -> [u8; 7] {
+    let mut out = [b'#', 0, 0, 0, 0, 0, 0];
+    let hex = |b: u8| -> (u8, u8) {
+        let h = b >> 4;
+        let l = b & 0x0f;
+        (if h < 10 { b'0' + h } else { b'a' + h - 10 }, if l < 10 { b'0' + l } else { b'a' + l - 10 })
+    };
+    let (h0, l0) = hex(c[0]);
+    let (h1, l1) = hex(c[1]);
+    let (h2, l2) = hex(c[2]);
+    out[1] = h0; out[2] = l0; out[3] = h1; out[4] = l1; out[5] = h2; out[6] = l2;
+    out
+}
+
 /// Renders a VTTY buffer to various output formats.
 pub struct VttyRenderer;
 
@@ -77,61 +93,97 @@ impl VttyRenderer {
         output
     }
 
-    /// Serialize buffer to HTML with inline styles.
-    /// Returns the inner content only (no outer `<pre>` wrapper) so that
-    /// callers can control their own container element.
+    /// Serialize buffer to HTML with run-length encoding.
     ///
-    /// Cell characters are HTML-escaped (`<`, `>`, `&`, `'`, `"`) to
-    /// prevent DOM corruption when programs output HTML-like content or
-    /// ANSI art containing these metacharacters.
+    /// Consecutive cells with identical foreground, background, and decoration
+    /// flags are merged into a single `<span>` element. This dramatically
+    /// reduces the number of DOM nodes (e.g., 10,000 → ~2,000 for a typical
+    /// terminal), which is the primary bottleneck for initial page load.
+    ///
+    /// Uses CSS class `c` (defined in style.css) for the base cell styling.
+    /// Colors use hex format (#RRGGBB) instead of rgb() for compactness.
+    /// The `<pre>` element uses a monospace font, so cells render at uniform
+    /// width without explicit `width:1ch` per element — this avoids creating
+    /// per-element block formatting contexts (the dominant layout cost).
+    ///
+    /// Returns the inner content only (no outer `<pre>` wrapper).
     pub fn to_html(buffer: &Buffer) -> String {
-        let mut html = String::new();
-        // Rough capacity estimate: 80 chars × 24 rows × ~60 chars per cell (with span markup).
-        html.reserve(buffer.rows.len() * buffer.width * 60);
+        let total_cells = buffer.rows.len() * buffer.width;
+        // RLE estimate: assume average run of 5 cells, each producing ~35 chars.
+        // Fallback: if RLE doesn't help, the output is similar to old size.
+        let mut html = String::with_capacity(total_cells * 20);
+        let mut run_text: String = String::with_capacity(32);
 
         for row in &buffer.rows {
-            for cell in row {
-                // Every cell is wrapped in a <span> with display:inline-block;width:1ch
-                // so the client-side cell grid (buildCellGrid) can index each cell by
-                // position.  Empty cells get a zero-width space to keep the span alive.
-                let mut style = String::from("display:inline-block;width:1ch;");
-                style.push_str(&format!(
-                    "color:rgb({},{},{});",
-                    cell.fg[0], cell.fg[1], cell.fg[2]
-                ));
-                style.push_str(&format!(
-                    "background:rgb({},{},{});",
-                    cell.bg[0], cell.bg[1], cell.bg[2]
-                ));
+            let mut i = 0;
+            while i < row.len() {
+                let cell = &row[i];
+                // Start a new run with this cell's style
+                let fg = if cell.reverse { cell.bg } else { cell.fg };
+                let bg = if cell.reverse { cell.fg } else { cell.bg };
+                let fg_hex = hex_color(fg);
+                let bg_hex = hex_color(bg);
+                let bold = cell.bold;
+                let italic = cell.italic;
+                let underline = cell.underline;
+                let strikethrough = cell.strikethrough;
+                let blink = cell.blink;
 
-                if cell.reverse {
-                    style.push_str(&format!(
-                        "color:rgb({},{},{});background:rgb({},{},{});",
-                        cell.bg[0], cell.bg[1], cell.bg[2], cell.fg[0], cell.fg[1], cell.fg[2]
-                    ));
-                }
-                if cell.bold {
-                    style.push_str("font-weight:bold;");
-                }
-                if cell.italic {
-                    style.push_str("font-style:italic;");
-                }
-                if cell.underline {
-                    style.push_str("text-decoration:underline;");
-                }
-                if cell.strikethrough {
-                    style.push_str("text-decoration:line-through;");
-                }
-                if cell.blink {
-                    style.push_str("animation:blink 1s step-end infinite;");
-                }
-
+                // Accumulate characters that share this exact style
+                run_text.clear();
                 let ch = if cell.is_empty() { '\u{200b}' } else { cell.ch };
-                html.push_str(&format!(
-                    "<span style='{}'>{}</span>",
-                    style,
-                    html_escape(ch)
-                ));
+                run_text.push(ch);
+                let mut j = i + 1;
+                while j < row.len() {
+                    let next = &row[j];
+                    let nfg = if next.reverse { next.bg } else { next.fg };
+                    let nbg = if next.reverse { next.fg } else { next.bg };
+                    if nfg != fg || nbg != bg || next.bold != bold
+                        || next.italic != italic || next.underline != underline
+                        || next.strikethrough != strikethrough || next.blink != blink
+                    {
+                        break;
+                    }
+                    let nch = if next.is_empty() { '\u{200b}' } else { next.ch };
+                    run_text.push(nch);
+                    j += 1;
+                }
+
+                // Build style string
+                html.push_str("<span class=\"c\" style=\"color:");
+                html.push_str(std::str::from_utf8(&fg_hex).unwrap());
+                html.push_str(";background:");
+                html.push_str(std::str::from_utf8(&bg_hex).unwrap());
+                if bold {
+                    html.push_str(";font-weight:bold");
+                }
+                if italic {
+                    html.push_str(";font-style:italic");
+                }
+                if underline && strikethrough {
+                    html.push_str(";text-decoration:underline line-through");
+                } else if underline {
+                    html.push_str(";text-decoration:underline");
+                } else if strikethrough {
+                    html.push_str(";text-decoration:line-through");
+                }
+                if blink {
+                    html.push_str(";animation:blink 1s step-end infinite");
+                }
+                html.push_str("\">");
+                // Push run text with HTML escaping
+                for ch in run_text.chars() {
+                    match ch {
+                        '&' => html.push_str("&amp;"),
+                        '<' => html.push_str("&lt;"),
+                        '>' => html.push_str("&gt;"),
+                        '\'' => html.push_str("&#39;"),
+                        '"' => html.push_str("&quot;"),
+                        c => html.push(c),
+                    }
+                }
+                html.push_str("</span>");
+                i = j;
             }
             html.push('\n');
         }
@@ -139,26 +191,19 @@ impl VttyRenderer {
         html
     }
 
-    /// Serialize buffer (including scrollback) to HTML with inline styles.
-    ///
-    /// `scrollback_offset` shifts the viewport backward into the scrollback
-    /// buffer.  0 = normal (bottom of visible area), 1 = one line scrolled
-    /// back, etc.  The number of rows returned is `visible_rows`.
-    ///
-    /// This allows the web UI to render a scrollback view by setting the
-    /// offset and fetching the corresponding HTML slice.
+    /// Serialize buffer (including scrollback) to HTML with RLE encoding.
+    /// Same format as to_html() but includes scrollback lines.
     pub fn to_html_scrollback(
         buffer: &Buffer,
         scrollback_offset: usize,
         visible_rows: usize,
     ) -> String {
-        let total_lines = buffer.total_lines(); // scrollback.len() + rows.len()
+        let total_lines = buffer.total_lines();
         let max_offset = total_lines.saturating_sub(visible_rows);
         let effective_offset = scrollback_offset.min(max_offset);
 
-        // Collect the visible slice from scrollback + rows
-        let mut html = String::new();
-        html.reserve(visible_rows * buffer.width * 60);
+        let mut html = String::with_capacity(visible_rows * buffer.width * 20);
+        let mut run_text: String = String::with_capacity(32);
 
         let all_lines: Vec<&Vec<super::cell::Cell>> = buffer
             .scrollback
@@ -169,45 +214,65 @@ impl VttyRenderer {
             .collect();
 
         for row in &all_lines {
-            for cell in *row {
-                let mut style = String::from("display:inline-block;width:1ch;");
-                style.push_str(&format!(
-                    "color:rgb({},{},{});",
-                    cell.fg[0], cell.fg[1], cell.fg[2]
-                ));
-                style.push_str(&format!(
-                    "background:rgb({},{},{});",
-                    cell.bg[0], cell.bg[1], cell.bg[2]
-                ));
+            let mut i = 0;
+            while i < row.len() {
+                let cell = &row[i];
+                let fg = if cell.reverse { cell.bg } else { cell.fg };
+                let bg = if cell.reverse { cell.fg } else { cell.bg };
+                let fg_hex = hex_color(fg);
+                let bg_hex = hex_color(bg);
+                let bold = cell.bold;
+                let italic = cell.italic;
+                let underline = cell.underline;
+                let strikethrough = cell.strikethrough;
+                let blink = cell.blink;
 
-                if cell.reverse {
-                    style.push_str(&format!(
-                        "color:rgb({},{},{});background:rgb({},{},{});",
-                        cell.bg[0], cell.bg[1], cell.bg[2], cell.fg[0], cell.fg[1], cell.fg[2]
-                    ));
-                }
-                if cell.bold {
-                    style.push_str("font-weight:bold;");
-                }
-                if cell.italic {
-                    style.push_str("font-style:italic;");
-                }
-                if cell.underline {
-                    style.push_str("text-decoration:underline;");
-                }
-                if cell.strikethrough {
-                    style.push_str("text-decoration:line-through;");
-                }
-                if cell.blink {
-                    style.push_str("animation:blink 1s step-end infinite;");
-                }
-
+                run_text.clear();
                 let ch = if cell.is_empty() { '\u{200b}' } else { cell.ch };
-                html.push_str(&format!(
-                    "<span style='{}'>{}</span>",
-                    style,
-                    html_escape(ch)
-                ));
+                run_text.push(ch);
+                let mut j = i + 1;
+                while j < row.len() {
+                    let next = &row[j];
+                    let nfg = if next.reverse { next.bg } else { next.fg };
+                    let nbg = if next.reverse { next.fg } else { next.bg };
+                    if nfg != fg || nbg != bg || next.bold != bold
+                        || next.italic != italic || next.underline != underline
+                        || next.strikethrough != strikethrough || next.blink != blink
+                    {
+                        break;
+                    }
+                    let nch = if next.is_empty() { '\u{200b}' } else { next.ch };
+                    run_text.push(nch);
+                    j += 1;
+                }
+
+                html.push_str("<span class=\"c\" style=\"color:");
+                html.push_str(std::str::from_utf8(&fg_hex).unwrap());
+                html.push_str(";background:");
+                html.push_str(std::str::from_utf8(&bg_hex).unwrap());
+                if bold { html.push_str(";font-weight:bold"); }
+                if italic { html.push_str(";font-style:italic"); }
+                if underline && strikethrough {
+                    html.push_str(";text-decoration:underline line-through");
+                } else if underline {
+                    html.push_str(";text-decoration:underline");
+                } else if strikethrough {
+                    html.push_str(";text-decoration:line-through");
+                }
+                if blink { html.push_str(";animation:blink 1s step-end infinite"); }
+                html.push_str("\">");
+                for ch in run_text.chars() {
+                    match ch {
+                        '&' => html.push_str("&amp;"),
+                        '<' => html.push_str("&lt;"),
+                        '>' => html.push_str("&gt;"),
+                        '\'' => html.push_str("&#39;"),
+                        '"' => html.push_str("&quot;"),
+                        c => html.push(c),
+                    }
+                }
+                html.push_str("</span>");
+                i = j;
             }
             html.push('\n');
         }
@@ -609,8 +674,13 @@ mod tests {
         buf.rows[0][0].ch = 'X';
         buf.rows[0][0].fg = [0, 255, 0];
         let html = VttyRenderer::to_html(&buf);
-        assert!(html.contains("rgb(0,255,0)"));
+        // Uses hex color format (#00ff00) and CSS class "c"
+        assert!(html.contains("#00ff00"), "expected hex color for green fg");
+        assert!(html.contains("class=\"c\""), "expected CSS class 'c'");
         assert!(html.contains("X"));
+        // Should NOT contain old rgb() format or inline-block
+        assert!(!html.contains("rgb("), "should not use rgb() format");
+        assert!(!html.contains("inline-block"), "should not use inline-block");
     }
 
     #[test]

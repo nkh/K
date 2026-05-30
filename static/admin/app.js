@@ -1861,7 +1861,12 @@ function buildCellGrid(cmdId, pre, rows, cols) {
                 // shouldn't be any in the server's output format.
             }
         } else if (child.nodeType === Node.ELEMENT_NODE && child.tagName === 'SPAN') {
-            currentRow.push(child);
+            // Server uses RLE: a single span may contain multiple characters.
+            // Expand into per-cell entries for the cell grid.
+            const text = child.textContent;
+            for (let i = 0; i < text.length; i++) {
+                currentRow.push({ span: child, idx: i, len: text.length });
+            }
         }
     }
     // Push the last row
@@ -1876,7 +1881,6 @@ function buildCellGrid(cmdId, pre, rows, cols) {
 // VttyRenderer::to_html() format exactly. This ensures visual consistency
 // between full HTML replacement and incremental diff patching.
 function _cellStyle(diff) {
-    let style = 'display:inline-block;width:1ch;';
     let fg = diff.fg;
     let bg = diff.bg;
 
@@ -1885,21 +1889,26 @@ function _cellStyle(diff) {
         [fg, bg] = [bg, fg];
     }
 
-    style += `color:rgb(${fg[0]},${fg[1]},${fg[2]});`;
-    style += `background:rgb(${bg[0]},${bg[1]},${bg[2]});`;
+    // Hex color format: #RRGGBB (matches server-side hex_color())
+    let style = 'color:#' + _hex(fg[0]) + _hex(fg[1]) + _hex(fg[2]) + ';background:#' + _hex(bg[0]) + _hex(bg[1]) + _hex(bg[2]);
 
-    if (diff.bold) style += 'font-weight:bold;';
-    if (diff.italic) style += 'font-style:italic;';
+    if (diff.bold) style += ';font-weight:bold';
+    if (diff.italic) style += ';font-style:italic';
     if (diff.underline && diff.strikethrough) {
-        style += 'text-decoration:underline line-through;';
+        style += ';text-decoration:underline line-through';
     } else if (diff.underline) {
-        style += 'text-decoration:underline;';
+        style += ';text-decoration:underline';
     } else if (diff.strikethrough) {
-        style += 'text-decoration:line-through;';
+        style += ';text-decoration:line-through';
     }
-    if (diff.blink) style += 'animation:blink 1s step-end infinite;';
+    if (diff.blink) style += ';animation:blink 1s step-end infinite';
 
     return style;
+}
+
+/// Convert a byte (0-255) to a 2-digit lowercase hex string.
+function _hex(b) {
+    return (b < 16 ? '0' : '') + b.toString(16);
 }
 
 // HTML-escape a character, matching the server's html_escape() function.
@@ -1920,6 +1929,72 @@ function _htmlEscapeChar(ch) {
 // The diff data has the format:
 //   { generation, cursor, dimensions, changed_count, cells: [...] }
 // Each cell: { row, col, ch, fg: [r,g,b], bg: [r,g,b], bold, italic, ... }
+
+/// Split a merged (RLE) span at the target cell position so that cell
+/// gets its own individual <span> element.  Updates the cell grid entries
+/// for all affected positions (before, target, and after the split).
+///
+/// Before: <span class="c" style="...">ABCDE</span>
+///                         ^--- target at idx=2 (cell 'C')
+/// After:  <span class="c" style="orig">AB</span><span class="c" style="new">C'</span><span class="c" style="orig">DE</span>
+function _splitAndUpdateCell(cg, row, col, diff) {
+    const entry = cg.grid[row][col];
+    if (!entry || entry.len <= 1) return;
+
+    const span = entry.span;
+    const idx = entry.idx;
+    const text = span.textContent;
+    const origStyle = span.getAttribute('style') || '';
+
+    // Characters before the target
+    const before = text.substring(0, idx);
+    // Characters after the target
+    const after = text.substring(idx + 1);
+
+    // Create "after" span if there are trailing characters
+    if (after.length > 0) {
+        const afterSpan = document.createElement('span');
+        afterSpan.className = 'c';
+        afterSpan.setAttribute('style', origStyle);
+        afterSpan.textContent = after;
+        span.parentNode.insertBefore(afterSpan, span.nextSibling);
+        // Update grid entries for characters after the target
+        for (let k = col + 1; k < cg.grid[row].length; k++) {
+            const e = cg.grid[row][k];
+            if (e && e.span === span && e.idx > idx) {
+                e.span = afterSpan;
+                e.idx = e.idx - idx - 1;
+                e.len = afterSpan.textContent.length;
+            }
+        }
+    }
+
+    // Create "before" span if there are leading characters
+    if (before.length > 0) {
+        const beforeSpan = document.createElement('span');
+        beforeSpan.className = 'c';
+        beforeSpan.setAttribute('style', origStyle);
+        beforeSpan.textContent = before;
+        span.parentNode.insertBefore(beforeSpan, span);
+        // Update grid entries for characters before the target
+        for (let k = col - 1; k >= 0; k--) {
+            const e = cg.grid[row][k];
+            if (e && e.span === span && e.idx < idx) {
+                e.span = beforeSpan;
+                e.len = beforeSpan.textContent.length;
+            }
+        }
+    }
+
+    // Update the target cell in place
+    const ch = (diff.ch === ' ' || diff.ch === '\u0000') ? '\u200b' : diff.ch;
+    span.textContent = _htmlEscapeChar(ch);
+    span.setAttribute('style', _cellStyle(diff));
+
+    // Update grid entry for the target cell
+    entry.len = 1;
+    entry.idx = 0;
+}
 function applyVttyDiff(data) {
     // Pause DOM updates while the user is actively scrolling
     if (state._userScrolling) {
@@ -1970,14 +2045,20 @@ function applyVttyDiff(data) {
     for (let i = 0; i < data.cells.length; i++) {
         const c = data.cells[i];
         if (c.row < cg.grid.length && c.col < cg.grid[c.row].length) {
-            const span = cg.grid[c.row][c.col];
-            if (span) {
-                // Update the text content
-                const ch = (c.ch === ' ' || c.ch === '\u0000') ? '\u200b' : c.ch;
-                span.textContent = _htmlEscapeChar(ch);
-
-                // Update the style (use setAttribute to force browser to reparse)
-                span.setAttribute('style', _cellStyle(c));
+            const entry = cg.grid[c.row][c.col];
+            if (entry) {
+                // Cell grid entries are { span, idx, len } objects from RLE expansion.
+                // If the span contains only this cell (len===1), update directly.
+                // Otherwise, split the merged span so this cell gets its own element.
+                if (entry.len === 1) {
+                    // Fast path: single-char span — update directly
+                    const ch = (c.ch === ' ' || c.ch === '\u0000') ? '\u200b' : c.ch;
+                    entry.span.textContent = _htmlEscapeChar(ch);
+                    entry.span.setAttribute('style', _cellStyle(c));
+                } else {
+                    // Slow path: split the merged span at the target position.
+                    _splitAndUpdateCell(cg, c.row, c.col, c);
+                }
             }
         }
     }
