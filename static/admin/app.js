@@ -231,6 +231,7 @@ function releaseCurrentFocusTrap() {
     applyFontSize();
     initBottombar();
     initSoundToggle();
+    _syncRefreshMsUI();
 
     // Event delegation for command list — handles kill buttons without inline onclick
     document.getElementById('commandList').addEventListener('click', (e) => {
@@ -516,6 +517,26 @@ function changeRefreshMs(delta) {
     }
     localStorage.setItem('vrunner_refresh_ms', state.refreshMs.toString());
     // Update all panel widgets
+    _syncRefreshMsUI();
+}
+
+/// Apply the refresh throttle from the input field (called on change).
+function applyRefreshMs() {
+    const val = parseInt(document.getElementById('refreshMs').value) || 0;
+    state.refreshMs = Math.max(0, Math.min(2000, val));
+    // Snap to 100ms steps (0 stays 0)
+    if (state.refreshMs > 0 && state.refreshMs % 100 !== 0) {
+        state.refreshMs = Math.round(state.refreshMs / 100) * 100;
+    }
+    localStorage.setItem('vrunner_refresh_ms', state.refreshMs.toString());
+    document.getElementById('refreshMs').value = state.refreshMs;
+    _syncRefreshMsUI();
+}
+
+/// Sync all refresh throttle UI elements with state.refreshMs.
+function _syncRefreshMsUI() {
+    const input = document.getElementById('refreshMs');
+    if (input) input.value = state.refreshMs;
     document.querySelectorAll('.refresh-val').forEach(el => {
         el.textContent = state.refreshMs || 'off';
     });
@@ -2112,7 +2133,9 @@ function _splitAndUpdateCell(cg, row, col, diff) {
     }
 
     // Update the target cell in place
-    const ch = (diff.ch === ' ' || diff.ch === '\u0000') ? '\u200b' : diff.ch;
+    // width=0 → wide-char continuation (zero-width space).
+    // width=1 with space → normal empty cell (actual space).
+    const ch = diff.width === 0 ? '\u200b' : (diff.ch === '\u0000' ? ' ' : diff.ch);
     span.textContent = _htmlEscapeChar(ch);
     span.setAttribute('style', _cellStyle(diff));
 
@@ -2177,7 +2200,9 @@ function applyVttyDiff(data) {
                 // Otherwise, split the merged span so this cell gets its own element.
                 if (entry.len === 1) {
                     // Fast path: single-char span — update directly
-                    const ch = (c.ch === ' ' || c.ch === '\u0000') ? '\u200b' : c.ch;
+                    // width=0 → wide-char continuation (zero-width space).
+                    // width=1 with space → normal empty cell (actual space).
+                    const ch = c.width === 0 ? '\u200b' : (c.ch === '\u0000' ? ' ' : c.ch);
                     entry.span.textContent = _htmlEscapeChar(ch);
                     entry.span.setAttribute('style', _cellStyle(c));
                 } else {

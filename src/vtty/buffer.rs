@@ -437,6 +437,10 @@ pub struct CellDiff {
     pub reverse: bool,
     pub invisible: bool,
     pub strikethrough: bool,
+    /// Display width of the character: 0 (continuation of wide char), 1, or 2.
+    /// Required by the client to distinguish normal empty cells (width=1, ch=' ')
+    /// from wide-char continuations (width=0) when rendering incremental diffs.
+    pub width: u8,
 }
 
 /// Result of diffing two buffers.
@@ -473,6 +477,7 @@ impl Buffer {
                         reverse: c.reverse,
                         invisible: c.invisible,
                         strikethrough: c.strikethrough,
+                        width: c.width,
                     });
                 }
             }
@@ -503,6 +508,7 @@ impl Buffer {
                                 reverse: a.reverse,
                                 invisible: a.invisible,
                                 strikethrough: a.strikethrough,
+                                width: a.width,
                             });
                         }
                     }
@@ -720,5 +726,69 @@ mod tests {
         assert_eq!(b.generation(), u64::MAX);
         b.set(0, 1, Cell::new('Y'));
         assert_eq!(b.generation(), 0); // wrapped
+    }
+
+    // ─── CellDiff width field tests ───
+
+    #[test]
+    fn test_diff_includes_width_for_wide_char() {
+        let a = Buffer::new(5, 1, 100);
+        let mut b_buf = Buffer::new(5, 1, 100);
+        // Change cell at col 1 to a wide char
+        b_buf.rows[0][1].ch = '你';
+        b_buf.rows[0][1].width = 2;
+        b_buf.rows[0][2].ch = ' '; // continuation
+        b_buf.rows[0][2].width = 0;
+        let diff = b_buf.diff(&a);
+        // Find the cell at (0, 1) in the diff
+        let wide_cell = diff.cells.iter().find(|c| c.row == 0 && c.col == 1);
+        assert!(wide_cell.is_some(), "wide char cell should be in diff");
+        let wc = wide_cell.unwrap();
+        assert_eq!(wc.ch, '你');
+        assert_eq!(wc.width, 2, "wide char CellDiff should have width=2");
+        // Find the continuation cell at (0, 2)
+        let cont_cell = diff.cells.iter().find(|c| c.row == 0 && c.col == 2);
+        assert!(cont_cell.is_some(), "continuation cell should be in diff");
+        let cc = cont_cell.unwrap();
+        assert_eq!(cc.width, 0, "continuation CellDiff should have width=0");
+    }
+
+    #[test]
+    fn test_diff_includes_width_for_normal_cells() {
+        let a = Buffer::new(5, 1, 100);
+        let mut b_buf = Buffer::new(5, 1, 100);
+        // Change cell at col 0 to 'X' (width=1, default)
+        b_buf.rows[0][0].ch = 'X';
+        let diff = b_buf.diff(&a);
+        let cell = diff.cells.iter().find(|c| c.row == 0 && c.col == 0);
+        assert!(cell.is_some());
+        assert_eq!(cell.unwrap().width, 1, "normal cell CellDiff should have width=1");
+    }
+
+    #[test]
+    fn test_diff_dimension_change_includes_width() {
+        let a = Buffer::new(3, 2, 100);
+        let b_buf = Buffer::new(5, 2, 100);
+        let diff = b_buf.diff(&a);
+        // All cells should be in the diff (dimension change)
+        assert_eq!(diff.cells.len(), 5 * 2);
+        // Every cell should have width=1 (default)
+        for c in &diff.cells {
+            assert_eq!(c.width, 1, "all default cells in dimension-change diff should have width=1");
+        }
+    }
+
+    #[test]
+    fn test_diff_serialization_includes_width() {
+        // Verify that the width field survives JSON serialization (as sent to client)
+        let mut buf = Buffer::new(5, 1, 100);
+        buf.rows[0][2].ch = '你';
+        buf.rows[0][2].width = 2;
+        buf.rows[0][3].width = 0;
+        let diff = buf.diff(&Buffer::new(5, 1, 100));
+        let json = serde_json::to_string(&diff).unwrap();
+        // The JSON should contain "width":2 and "width":0
+        assert!(json.contains("\"width\":2"), "JSON should contain width:2 for wide char");
+        assert!(json.contains("\"width\":0"), "JSON should contain width:0 for continuation");
     }
 }

@@ -728,6 +728,115 @@ mod tests {
         assert!(lines[1].starts_with('V'));
     }
 
+    // ─── RLE wide-char rendering tests ───
+
+    #[test]
+    fn test_rle_wide_char_uses_zero_width_space() {
+        // A wide character (width=2) followed by its continuation (width=0)
+        // should render the continuation as U+200B (zero-width space) to
+        // preserve column alignment in the monospace <pre>.
+        let mut buf = Buffer::new(6, 1, 100);
+        buf.rows[0][2].ch = '你';
+        buf.rows[0][2].width = 2;
+        buf.rows[0][3].ch = ' '; // continuation placeholder
+        buf.rows[0][3].width = 0;
+        buf.rows[0][4].ch = 'Z';
+        let html = VttyRenderer::to_html(&buf);
+        // The continuation cell should produce a zero-width space, not a normal space
+        assert!(html.contains('\u{200b}'), "wide-char continuation should render as U+200B");
+        // The wide char itself should appear in the output
+        assert!(html.contains('你'), "wide char should be in output");
+        // The Z after the wide char should also appear
+        assert!(html.contains('Z'), "trailing char should be in output");
+    }
+
+    #[test]
+    fn test_rle_wide_char_continuation_different_style() {
+        // When a wide char and its continuation have different styles,
+        // they should be rendered as separate spans (not merged).
+        let mut buf = Buffer::new(6, 1, 100);
+        buf.rows[0][0].ch = 'A';
+        buf.rows[0][0].fg = [100, 100, 100]; // grey
+        buf.rows[0][1].ch = '你';
+        buf.rows[0][1].width = 2;
+        buf.rows[0][1].fg = [255, 0, 0]; // red
+        buf.rows[0][2].ch = ' '; // continuation
+        buf.rows[0][2].width = 0;
+        buf.rows[0][2].fg = [0, 0, 255]; // blue — different from lead!
+        buf.rows[0][3].ch = 'B';
+        buf.rows[0][3].fg = [100, 100, 100]; // grey — same as A
+        let html = VttyRenderer::to_html(&buf);
+        // Should have at least 4 spans: A(span1), 你(span2), cont(span3), B(merged with A or new)
+        let span_count = html.matches("<span class=\"c\"").count();
+        assert!(span_count >= 3, "wide char with different continuation style should produce separate spans, got {}", span_count);
+        // Both 你 and the zero-width space should be present
+        assert!(html.contains('你'));
+        assert!(html.contains('\u{200b}'));
+    }
+
+    #[test]
+    fn test_rle_empty_cells_use_space_not_zwsp() {
+        // Normal empty cells (width=1, default attributes) should render as
+        // regular spaces, NOT as zero-width spaces.  This is the core of the
+        // column-alignment bug — if empty cells become U+200B, columns collapse.
+        let mut buf = Buffer::new(5, 1, 100);
+        buf.rows[0][0].ch = 'X';
+        buf.rows[0][0].fg = [255, 0, 0];
+        // Cells 1-3 are default (empty: ch=' ', width=1)
+        buf.rows[0][4].ch = 'Y';
+        buf.rows[0][4].fg = [255, 0, 0];
+        let html = VttyRenderer::to_html(&buf);
+        // Count zero-width spaces — should be exactly 0 (no wide chars in this buffer)
+        let zwsp_count = html.matches('\u{200b}').count();
+        assert_eq!(zwsp_count, 0, "normal empty cells should NOT produce U+200B, got {}", zwsp_count);
+        // The X and Y should be present
+        assert!(html.contains('X'));
+        assert!(html.contains('Y'));
+    }
+
+    #[test]
+    fn test_rle_mixed_wide_and_narrow() {
+        // A realistic scenario: mixed wide and narrow characters on one row.
+        // Row: "A你 B" where 你 is width=2
+        // Columns: 0=A(w1), 1=你(w2), 2=cont(w0), 3=space(w1), 4=B(w1)
+        let mut buf = Buffer::new(5, 1, 100);
+        buf.rows[0][0].ch = 'A';
+        buf.rows[0][0].fg = [200, 200, 200];
+        buf.rows[0][1].ch = '你';
+        buf.rows[0][1].width = 2;
+        buf.rows[0][1].fg = [200, 200, 200];
+        buf.rows[0][2].ch = ' ';
+        buf.rows[0][2].width = 0;
+        buf.rows[0][2].fg = [200, 200, 200];
+        // Cell 3 is default empty
+        buf.rows[0][4].ch = 'B';
+        buf.rows[0][4].fg = [200, 200, 200];
+        let html = VttyRenderer::to_html(&buf);
+        // All same style, so should merge into a single span
+        assert!(html.contains('A'));
+        assert!(html.contains('你'));
+        assert!(html.contains('\u{200b}')); // continuation
+        assert!(html.contains('B'));
+        // Verify exactly one zero-width space (one wide char continuation)
+        let zwsp_count = html.matches('\u{200b}').count();
+        assert_eq!(zwsp_count, 1, "should have exactly 1 ZWSP for 1 wide char");
+    }
+
+    #[test]
+    fn test_rle_row_produces_correct_newline() {
+        // Each row should end with exactly one newline
+        let mut buf = Buffer::new(3, 2, 100);
+        buf.rows[0][0].ch = 'A';
+        buf.rows[1][0].ch = 'B';
+        let html = VttyRenderer::to_html(&buf);
+        let lines: Vec<&str> = html.split('\n').collect();
+        // 2 rows + trailing empty from final newline = 3 entries, last empty
+        assert_eq!(lines.len(), 3, "2-row buffer should produce 3 split entries (2 + trailing)");
+        assert!(lines[0].contains('A'));
+        assert!(lines[1].contains('B'));
+        assert_eq!(lines[2], "", "trailing newline should produce empty final entry");
+    }
+
     // ─── PNG rendering tests ───
 
     fn require_font() -> &'static str {

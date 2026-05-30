@@ -372,6 +372,7 @@ impl CommandHandle {
                                     reverse: cell.reverse,
                                     invisible: cell.invisible,
                                     strikethrough: cell.strikethrough,
+                                    width: cell.width,
                                 }
                             })
                         })
