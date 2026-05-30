@@ -283,9 +283,9 @@ pub enum Commands {
         /// PID or name of the command to screenshot
         target: Option<String>,
 
-        /// Output file path (default: screenshot.png)
-        #[arg(long, default_value = "screenshot.png")]
-        output: String,
+        /// Output file path (default: <command_name>_<timestamp>.png)
+        #[arg(long)]
+        output: Option<String>,
 
         /// Font size in pixels per character cell (default: 14, range: 6–48)
         #[arg(long, default_value_t = 14.0)]

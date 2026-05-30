@@ -10,11 +10,12 @@ use crate::instance::registry::InstanceRegistry;
 ///
 /// Fetches the VTTY buffer of the specified (or sole) running command,
 /// renders it as a PNG image using a TrueType font, and writes it to
-/// the output file.
+/// the output file.  If no output path is given, generates one from
+/// the command name and current timestamp.
 pub async fn handle_screenshot_command(
     cli: &Cli,
     target: Option<&str>,
-    output: &str,
+    output: Option<&str>,
     font_size: f32,
     font_name: Option<&str>,
 ) -> Result<()> {
@@ -98,11 +99,25 @@ pub async fn handle_screenshot_command(
     }
 
     let bytes = resp.bytes().await?;
-    tokio::fs::write(output, &bytes).await?;
+
+    // Auto-generate filename if not specified: <command_basename>_<timestamp>.png
+    let output_path = match output {
+        Some(p) => p.to_string(),
+        None => {
+            let basename = name.rsplit('/').next().unwrap_or(&name);
+            let safe_name: String = basename
+                .chars()
+                .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+                .collect();
+            let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
+            format!("{}_{}.png", safe_name, ts)
+        }
+    };
+    tokio::fs::write(&output_path, &bytes).await?;
 
     tracing::info!(
         "Screenshot saved to '{}' ({} bytes, font_size={}) for command '{}'",
-        output,
+        output_path,
         bytes.len(),
         font_size,
         name

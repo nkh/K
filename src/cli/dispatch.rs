@@ -240,7 +240,7 @@ pub async fn handle_subcommands(cli: &Cli) -> Result<bool> {
             subcommands::handle_screenshot_command(
                 cli,
                 target.as_deref(),
-                output,
+                output.as_deref(),
                 *font_size,
                 font_name.as_deref(),
             )

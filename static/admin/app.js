@@ -862,7 +862,7 @@ async function loadSnapshot() {
         const firstCmd = hasAnyCommands
             ? (commands.find(c => c.alive) || commands[0])
             : null;
-        const shouldShowWelcome = (state.panels.length === 1 && !hasAnyCommands && !state.selectedCmdId);
+        const shouldShowWelcome = (state.panels.length === 1 && !hasAnyCommands && !state.selectedCmdId && !state.serverReachable);
 
         if (shouldShowWelcome !== _showingWelcome) {
             renderPanels();
@@ -1136,7 +1136,7 @@ async function loadCommands() {
             break;
         }
     }
-    const shouldShowWelcome = (state.panels.length === 1 && !hasAnyCommands && !state.selectedCmdId);
+    const shouldShowWelcome = (state.panels.length === 1 && !hasAnyCommands && !state.selectedCmdId && !state.serverReachable);
     if (shouldShowWelcome !== _showingWelcome) {
         renderPanels();
     }
@@ -2363,6 +2363,9 @@ async function killAllCommands() {
     if (container) {
         container.innerHTML = '<div style="padding:1rem;color:var(--text-muted);text-align:center;">No running commands</div>';
     }
+    // Show empty terminal (not the welcome/spawn panel)
+    _showingWelcome = false;
+    renderPanels();
     // Wait for all kill requests to complete
     await Promise.all(promises);
     // Re-fetch from server after a delay to let the backend process kills
@@ -2562,30 +2565,10 @@ function renderPanels() {
         }
     }
 
-    if (state.panels.length === 1 && !hasAnyCommands && !state.selectedCmdId) {
+    if (state.panels.length === 1 && !hasAnyCommands && !state.selectedCmdId && !state.serverReachable) {
         _showingWelcome = true;
-        if (state.serverReachable) {
-            // Server is reachable but no commands running — show spawn form
-            html += `
-            <div class="welcome-panel">
-                <div class="welcome-card">
-                    <img src="/favicon.png" alt="vrunner" style="height:2rem;width:auto;margin-bottom:0.75rem;">
-                    <p>Spawn a command to get started. Your terminal output will appear here.</p>
-                    <div class="welcome-form">
-                        <input type="text" id="welcomeCmd" placeholder="/usr/bin/htop" onkeydown="if(event.key==='Enter'){event.preventDefault();spawnFromWelcome()}">
-                        <button class="btn btn-primary" onclick="spawnFromWelcome()">Spawn Command</button>
-                    </div>
-                    <ul class="welcome-tips">
-                        <li>Use the <strong>Spawn</strong> tab in the sidebar to configure advanced options</li>
-                        <li>Use <strong>Templates</strong> to save and reuse common commands</li>
-                        <li>Click on a command in the sidebar to view its terminal output</li>
-                        <li>Press <strong>?</strong> to see keyboard shortcuts</li>
-                    </ul>
-                </div>
-            </div>`;
-        } else {
-            // Server is unreachable — vrunner is not running
-            html += `
+        // Server is unreachable — vrunner is not running
+        html += `
             <div class="welcome-panel">
                 <div class="welcome-card">
                     <img src="/favicon.png" alt="vrunner" style="height:2rem;width:auto;margin-bottom:0.75rem;">
@@ -2594,7 +2577,6 @@ function renderPanels() {
                     <p>Start vrunner and refresh this page to connect.</p>
                 </div>
             </div>`;
-        }
     } else {
         _showingWelcome = false;
         for (const panel of state.panels) {
@@ -4030,7 +4012,7 @@ async function screenshotPanel(panelId) {
         const blob = await res.blob();
         const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        // Use command name for the filename
+        // Use command name + timestamp for the filename
         let cmdName = 'screenshot';
         for (const inst of state.instanceUrls) {
             if (inst._commands) {
@@ -4038,8 +4020,9 @@ async function screenshotPanel(panelId) {
                 if (cmd) { cmdName = (cmd.name || cmd.id).replace(/\//g, '_'); break; }
             }
         }
+        const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
         a.href = blobUrl;
-        a.download = cmdName + '.png';
+        a.download = cmdName + '_' + ts + '.png';
         a.click();
         URL.revokeObjectURL(blobUrl);
     } catch (e) {
