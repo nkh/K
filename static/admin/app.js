@@ -52,6 +52,12 @@ const state = {
     updateMode: localStorage.getItem('vrunner_update_mode') || 'push',
     pollInterval: parseInt(localStorage.getItem('vrunner_poll_interval') || '500'),
     _pollTimer: null,
+    // Client-side refresh throttle (ms).  In push mode, this throttles how
+    // often VTTY updates are applied to the DOM even if the server sends them
+    // faster.  0 = no throttle (apply immediately).  Range: 0–2000 in 100ms
+    // steps.
+    refreshMs: parseInt(localStorage.getItem('vrunner_refresh_ms') || '0'),
+    _refreshThrottleTimer: null,
     // Server-configured defaults (fetched from /api/info)
     serverUpdateMode: null,
     serverPollMs: null,
@@ -492,6 +498,45 @@ function changePanelFontSize(panelId, delta) {
     // Update the label in the panel header
     const label = document.querySelector(`#${panelId} .panel-font-size`);
     if (label) label.textContent = panelObj.fontSize + 'px';
+}
+
+// ─── Refresh throttle ───
+// Controls how often VTTY updates are applied to the DOM.
+// 0 = no throttle (updates applied immediately on every server push).
+// 100–2000 = throttle interval in milliseconds (updates batched and applied
+// at most once per interval).
+function changeRefreshMs(delta) {
+    state.refreshMs = Math.max(0, Math.min(2000, state.refreshMs + delta));
+    // Snap to 100ms steps (0 stays 0)
+    if (state.refreshMs > 0 && state.refreshMs % 100 !== 0) {
+        state.refreshMs = Math.round(state.refreshMs / 100) * 100;
+    }
+    localStorage.setItem('vrunner_refresh_ms', state.refreshMs.toString());
+    // Update all panel widgets
+    document.querySelectorAll('.refresh-val').forEach(el => {
+        el.textContent = state.refreshMs || 'off';
+    });
+}
+
+/// Throttled wrapper: if a refresh throttle is active, buffer the update and
+/// apply it after the throttle window.  Returns true if the update was
+/// throttled (caller should not apply it now), false if it should be applied
+/// immediately.
+function _throttleRefresh() {
+    if (state.refreshMs <= 0) return false; // no throttle
+    if (state._refreshThrottleTimer) return true; // already pending
+    state._refreshThrottleTimer = setTimeout(() => {
+        state._refreshThrottleTimer = null;
+        _flushThrottledRefresh();
+    }, state.refreshMs);
+    return true;
+}
+
+/// Called when the throttle timer fires: fetch the latest VTTY state.
+function _flushThrottledRefresh() {
+    if (state.selectedInstUrl && state.selectedCmdId) {
+        scheduleVttyHttp(state.selectedInstUrl, state.selectedCmdId, 0);
+    }
 }
 
 // Per-panel theme toggle: cycles through '' (inherit global) → 'light' → 'dark' → ''.
@@ -1539,7 +1584,11 @@ function connectVttyWs(instUrl, cmdId) {
                     // Initial full snapshot — buffer or apply
                     if (state.bufferView === 'current') {
                         if (_isTerminalVisible()) {
-                            updateVttyDisplay(msg.data);
+                            // Skip DOM update if refresh throttle is active —
+                            // the throttle timer will fetch the latest state.
+                            if (!_throttleRefresh()) {
+                                updateVttyDisplay(msg.data);
+                            }
                         } else {
                             state._pendingVttyData = msg.data;
                             state._pendingVttyDirty = true;
@@ -1554,7 +1603,9 @@ function connectVttyWs(instUrl, cmdId) {
                     // Level 3: Incremental diff — buffer or apply
                     if (state.bufferView === 'current') {
                         if (_isTerminalVisible()) {
-                            applyVttyDiff(msg.data);
+                            if (!_throttleRefresh()) {
+                                applyVttyDiff(msg.data);
+                            }
                         } else {
                             state._pendingVttyData = msg.data;
                             state._pendingVttyDirty = true;
@@ -2692,6 +2743,12 @@ function renderPanels() {
                             <option value="main">Main</option>
                             <option value="alt">Alt</option>
                         </select>
+                        <span class="refresh-ctrl" title="Refresh throttle (ms). 0 = no throttle.">
+                            <span class="refresh-label">&#x21bb;</span>
+                            <button class="btn btn-xs" onclick="changeRefreshMs(-100)" title="Decrease throttle">-</button>
+                            <span class="refresh-val" id="refreshVal-${panel.id}">${state.refreshMs || 'off'}</span>
+                            <button class="btn btn-xs" onclick="changeRefreshMs(100)" title="Increase throttle">+</button>
+                        </span>
                         <span id="altScreenBadge-${panel.id}" class="alt-screen-badge">ALT SCREEN</span>
                         <button id="pauseRunBtn-${panel.id}" class="btn btn-xs" onclick="togglePauseRunPanel('${panel.id}')" title="Pause/Resume" style="display:none;">&#9208; Pause</button>
                         <button class="btn btn-xs" onclick="restartCommand('${panel.id}')" title="Restart command">&#x21BB;</button>

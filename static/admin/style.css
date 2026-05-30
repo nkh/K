@@ -106,7 +106,7 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 
 /* VTTY */
 .vtty-container { flex: 1; overflow: auto; background: var(--vtty-bg, #000); position: relative; cursor: text; }
-.vtty-container pre { margin: 0; padding: 0; font-family: var(--font-mono); font-size: inherit; line-height: 1.2; min-width: 100%; min-height: 100%; user-select: none; }
+.vtty-container pre { margin: 0; padding: 0; font-family: var(--font-mono); font-size: inherit; line-height: 1.2; min-width: 100%; min-height: 100%; user-select: none; background: var(--vtty-bg, #000); }
 /* VTTY cell class — uses default inline display (no inline-block).
    The monospace font on <pre> ensures uniform character width without
    per-element BFC (block formatting context) creation, which is the
@@ -369,6 +369,11 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 /* Per-panel font size controls */
 .panel-font-size-ctrl { display: flex; align-items: center; gap: 0.1rem; flex-shrink: 0; }
 .panel-font-size-ctrl .panel-font-size { font-size: 0.6rem; color: var(--text-muted); min-width: 24px; text-align: center; font-family: var(--font-mono); }
+
+/* Refresh rate control in panel header */
+.refresh-ctrl { display: flex; align-items: center; gap: 0.1rem; flex-shrink: 0; }
+.refresh-ctrl .refresh-label { font-size: 0.6rem; color: var(--text-muted); }
+.refresh-ctrl .refresh-val { font-size: 0.6rem; color: var(--text-primary); min-width: 28px; text-align: center; font-family: var(--font-mono); background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 2px; padding: 0.05rem 0.15rem; }
 
 /* Selection mode: when active, mouse events are not forwarded to PTY */
 .vtty-container.selection-mode { cursor: text; outline: 2px solid var(--accent); outline-offset: -2px; }

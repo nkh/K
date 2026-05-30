@@ -129,9 +129,13 @@ impl VttyRenderer {
                 let strikethrough = cell.strikethrough;
                 let blink = cell.blink;
 
-                // Accumulate characters that share this exact style
+                // Accumulate characters that share this exact style.
+                // Width-0 cells (wide-char continuations) use U+200B so they
+                // contribute zero visual columns; regular empty cells use a
+                // plain space so they occupy exactly 1ch in the monospace font
+                // and preserve column alignment.
                 run_text.clear();
-                let ch = if cell.is_empty() { '\u{200b}' } else { cell.ch };
+                let ch = if cell.width == 0 { '\u{200b}' } else if cell.is_empty() { ' ' } else { cell.ch };
                 run_text.push(ch);
                 let mut j = i + 1;
                 while j < row.len() {
@@ -144,7 +148,7 @@ impl VttyRenderer {
                     {
                         break;
                     }
-                    let nch = if next.is_empty() { '\u{200b}' } else { next.ch };
+                    let nch = if next.width == 0 { '\u{200b}' } else if next.is_empty() { ' ' } else { next.ch };
                     run_text.push(nch);
                     j += 1;
                 }
@@ -228,7 +232,11 @@ impl VttyRenderer {
                 let blink = cell.blink;
 
                 run_text.clear();
-                let ch = if cell.is_empty() { '\u{200b}' } else { cell.ch };
+                // Width-0 cells (wide-char continuations) use U+200B so they
+                // contribute zero visual columns; regular empty cells use a
+                // plain space so they occupy exactly 1ch in the monospace font
+                // and preserve column alignment.
+                let ch = if cell.width == 0 { '\u{200b}' } else if cell.is_empty() { ' ' } else { cell.ch };
                 run_text.push(ch);
                 let mut j = i + 1;
                 while j < row.len() {
@@ -241,7 +249,7 @@ impl VttyRenderer {
                     {
                         break;
                     }
-                    let nch = if next.is_empty() { '\u{200b}' } else { next.ch };
+                    let nch = if next.width == 0 { '\u{200b}' } else if next.is_empty() { ' ' } else { next.ch };
                     run_text.push(nch);
                     j += 1;
                 }
