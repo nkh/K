@@ -55,7 +55,7 @@ pub struct Cli {
 
     /// Define a named certificate (repeatable).
     /// Format: NAME:CERT_FILE:KEY_FILE
-    #[arg(short, long, value_name = "NAME:CERT:KEY")]
+    #[arg(short = 'C', long, value_name = "NAME:CERT:KEY")]
     pub certificate: Option<Vec<String>>,
 
     /// Run as a background daemon (Unix only)
@@ -332,8 +332,18 @@ impl Cli {
         let version = include_str!(concat!(env!("OUT_DIR"), "/version.txt"));
         let mut cmd = <Self as CommandFactory>::command();
         cmd = cmd.version(version.trim());
-        let matches = cmd.get_matches();
-        <Self as FromArgMatches>::from_arg_matches(&matches).expect("failed to parse CLI arguments")
+        match cmd.clone().try_get_matches() {
+            Ok(matches) => {
+                <Self as FromArgMatches>::from_arg_matches(&matches)
+                    .expect("failed to parse CLI arguments")
+            }
+            Err(err) => {
+                let rendered = err.render().to_string();
+                eprint!("{}", rendered);
+                print_subcommand_options(&rendered, &cmd);
+                std::process::exit(err.exit_code());
+            }
+        }
     }
 
     /// Parse --env KEY=VALUE flags into a HashMap.
@@ -515,6 +525,61 @@ impl Cli {
         cfg.environment.variables.extend(cli_env);
         Ok(())
     }
+}
+
+/// When a parse error references a subcommand (e.g. "Usage: vrunner screenshot [OPTIONS]"),
+/// print a compact list of the available options so the user doesn't have to
+/// run `--help` separately.
+fn print_subcommand_options(rendered: &str, cmd: &clap::Command) {
+    // Extract the subcommand name from the "Usage:" line.
+    // e.g. "Usage: vrunner screenshot [OPTIONS] [TARGET]"
+    let usage_line = rendered.lines().find(|l| l.starts_with("Usage:"));
+    let Some(usage_line) = usage_line else { return };
+    let parts: Vec<&str> = usage_line.split_whitespace().collect();
+    // parts: ["Usage:", "vrunner", "screenshot", "[OPTIONS]", "[TARGET]"]
+    if parts.len() < 3 {
+        return;
+    }
+    // The subcommand is the 3rd token (index 2). Skip if it starts with '[' or '-'.
+    let sub_name = parts[2];
+    if sub_name.starts_with('[') || sub_name.starts_with('-') {
+        return;
+    }
+
+    let Some(subcmd) = cmd.find_subcommand(sub_name) else { return };
+    let opts: Vec<_> = subcmd
+        .get_arguments()
+        .filter(|a| !a.is_hide_set() && !a.is_positional())
+        .collect();
+    if opts.is_empty() {
+        return;
+    }
+
+    let _ = eprintln!("\n  Available options:");
+    for opt in &opts {
+        let mut names = String::new();
+        if let Some(short) = opt.get_short() {
+            names.push('-');
+            names.push(short);
+            names.push_str(", ");
+        }
+        if let Some(long) = opt.get_long() {
+            names.push_str("--");
+            names.push_str(long);
+        }
+        if let Some(val_names) = opt.get_value_names() {
+            if let Some(value) = val_names.first() {
+                names.push(' ');
+                names.push_str(value);
+            }
+        }
+        if let Some(help) = opt.get_help() {
+            let _ = eprintln!("    {:<36} {}", names, help);
+        } else {
+            let _ = eprintln!("    {}", names);
+        }
+    }
+    let _ = eprintln!();
 }
 
 #[cfg(test)]

@@ -822,16 +822,42 @@ async function loadCommands() {
         updateDisconnectedUI();
     }
 
-    // Check if welcome-panel state changed and re-render panels if so
+    // Check if welcome-panel state changed and re-render panels if so.
+    // Also detect the first command for instant initial load.
     let hasAnyCommands = false;
+    let firstCommand = null;
     for (const inst of state.instanceUrls) {
         if (inst._commands && inst._commands.length > 0) {
             hasAnyCommands = true;
+            if (!firstCommand) firstCommand = { instUrl: inst.url, cmd: inst._commands[0] };
             break;
         }
     }
     const shouldShowWelcome = (state.panels.length === 1 && !hasAnyCommands && !state.selectedCmdId);
-    if (shouldShowWelcome !== _showingWelcome) {
+
+    // ── Instant initial load: pre-fetch VTTY HTML in parallel ──
+    // On first load (no command selected yet), ensure the panel DOM is
+    // rendered immediately and kick off the VTTY HTML fetch before
+    // building the sidebar.  This eliminates the sequential delay of
+    // "fetch commands → render sidebar → select command → fetch HTML".
+    const isFirstLoad = !state.selectedCmdId && shouldShowWelcome !== _showingWelcome && hasAnyCommands;
+    if (isFirstLoad && firstCommand) {
+        // Render panels first so the <pre> element exists in the DOM
+        renderPanels();
+        _showingWelcome = false;
+        // Pre-select immediately (sets state, builds cell grid later)
+        state.selectedInstUrl = firstCommand.instUrl;
+        state.selectedCmdId = firstCommand.cmd.id;
+        state._pendingVttyData = null;
+        state._pendingVttyDirty = false;
+        state.bufferView = 'current';
+        // Update panel header with command name
+        updatePanelCommandInfo();
+        updateTerminalDisconnectedOverlay();
+        // Fire the VTTY HTML fetch right away — don't wait for sidebar.
+        // The sidebar will be rendered below while the fetch is in-flight.
+        _prefetchVttyHtml(firstCommand.instUrl, firstCommand.cmd.id);
+    } else if (shouldShowWelcome !== _showingWelcome) {
         renderPanels();
     }
 
@@ -1895,6 +1921,42 @@ function scheduleVttyHttp(instUrl, cmdId, delayMs) {
         state._vttyHttpTimer = null;
         loadVttyHttp(instUrl, cmdId);
     }, delayMs);
+}
+
+/// Pre-fetch VTTY HTML for instant initial display.
+/// Unlike loadVttyHttp, this does NOT check generation (first load, no cache)
+/// and does NOT defer to pending state.  It writes directly into the <pre>.
+async function _prefetchVttyHtml(instUrl, cmdId) {
+    const panel = getSelectedPanel();
+    if (!panel) return;
+    const vttyEl = panel.querySelector('.vtty-container');
+    const pre = vttyEl ? vttyEl.querySelector('pre') : null;
+    if (!pre) return;
+
+    try {
+        const res = await fetch(apiUrl(`/api/commands/${cmdId}/vtty/html`, { url: instUrl }),
+            { headers: authHeadersForInstance({ url: instUrl }) });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json.status === 'ok' && json.data && json.data.html !== undefined) {
+            pre.innerHTML = json.data.html;
+            // Store generation for subsequent incremental updates
+            if (json.data.generation !== undefined) {
+                state._lastGeneration[cmdId] = json.data.generation;
+            }
+            // Build cell grid for Level 3 incremental diffing
+            if (state._level3Enabled && json.data.dimensions) {
+                buildCellGrid(cmdId, pre, json.data.dimensions.rows, json.data.dimensions.cols);
+            }
+            // Update metadata (cursor, dimensions, etc.)
+            updateVttyMetadataFromHttp(json.data, panel,
+                state.panels.find(p => p.id === panel.id), 0);
+            // Start the push/poll update mode now that initial content is displayed
+            startUpdateMode();
+        }
+    } catch (e) {
+        console.error('Failed to pre-fetch VTTY HTML:', e);
+    }
 }
 
 async function loadVttyHttp(instUrl, cmdId) {
