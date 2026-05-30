@@ -1,6 +1,9 @@
 // ─── State ───
 // Fingerprint of last command list state to avoid redundant DOM updates
 let _lastCommandState = '';
+// Flat list of visible commands for prev/next navigation.
+// Each entry: { instUrl, cmdId, name }
+let _navCommands = [];
 // Whether the welcome panel is currently displayed
 let _showingWelcome = true;
 // Sidebar sort: 'name' sorts all commands alphabetically, 'instance' groups by instance.
@@ -868,6 +871,35 @@ function switchViewTab(view, el) {
 /// the commands list (no VTTY HTML, no resources).
 let _snapshotLoaded = false;
 
+// ── Command Navigation (prev/next) ──
+// Navigate through the flat command list. These functions are called by
+// the prev/next buttons in the topbar, useful when the sidebar is hidden.
+function navigateCommand(direction) {
+    if (_navCommands.length === 0) return;
+    const currentIdx = _navCommands.findIndex(
+        c => c.instUrl === state.selectedInstUrl && c.cmdId === state.selectedCmdId
+    );
+    let nextIdx;
+    if (currentIdx === -1) {
+        // No command selected — go to first
+        nextIdx = direction > 0 ? 0 : _navCommands.length - 1;
+    } else {
+        nextIdx = (currentIdx + direction + _navCommands.length) % _navCommands.length;
+    }
+    const target = _navCommands[nextIdx];
+    if (target) {
+        selectCommand(target.instUrl, target.cmdId, target.name);
+    }
+}
+
+function navigatePrevCommand() {
+    navigateCommand(-1);
+}
+
+function navigateNextCommand() {
+    navigateCommand(1);
+}
+
 async function loadSnapshot() {
     if (_snapshotLoaded) { loadCommands(); return; }
     _snapshotLoaded = true;
@@ -1052,6 +1084,16 @@ function _buildSidebar() {
             allCmds.push({ inst, cmd, cmdName });
         }
     }
+
+    // Sort allCmds globally for navigation (alphabetical by name)
+    allCmds.sort((a, b) => a.cmdName.localeCompare(b.cmdName));
+
+    // Build the flat navigation list from the sorted commands
+    _navCommands = allCmds.map(({ inst, cmd, cmdName }) => ({
+        instUrl: inst.url,
+        cmdId: cmd.id,
+        name: cmdName,
+    }));
 
     if (_sidebarSort === 'name') {
         allCmds.sort((a, b) => a.cmdName.localeCompare(b.cmdName));
@@ -1293,6 +1335,12 @@ function updatePanelCommandInfo() {
             }
         }
 
+        // Show/hide restart button next to command name
+        const restartBtn = panel.querySelector(`[id^="restartBtn-"]`);
+        if (restartBtn) {
+            restartBtn.style.display = '';
+        }
+
         // Update resource badge in panel header
         const resourceBadgeEl = panel.querySelector(`[id^="resourceBadge-"]`);
         if (resourceBadgeEl) {
@@ -1329,6 +1377,9 @@ function updatePanelCommandInfo() {
         // Hide pause button
         const pauseBtn = panel.querySelector(`[id^="pauseRunBtn-"]`);
         if (pauseBtn) pauseBtn.style.display = 'none';
+        // Hide restart button
+        const restartBtn = panel.querySelector(`[id^="restartBtn-"]`);
+        if (restartBtn) restartBtn.style.display = 'none';
         // Hide exited banner
         const exitedBanner = panel.querySelector(`[id^="exitedBanner-"]`);
         if (exitedBanner) exitedBanner.style.display = 'none';
@@ -2752,6 +2803,7 @@ function renderPanels() {
                             <span class="cmd-fullname" id="cmdName-${panel.id}"></span>
                             <span class="cmd-args" id="cmdArgs-${panel.id}"></span>
                         </div>
+                        <button class="btn btn-xs restart-btn" id="restartBtn-${panel.id}" onclick="restartCommand('${panel.id}')" title="Restart this command" style="display:none;">&#x21BB;</button>
                         <button class="btn btn-xs" onclick="toggleResources()" title="Toggle resource info">&#x2699;</button>
                         <span class="resource-badge" id="resourceBadge-${panel.id}" style="${state.showResources ? '' : 'display:none;'}"></span>
                         <span class="instance-url" style="${state.showResources ? '' : 'display:none;'}">${escHtml(panel.instUrl.replace(/^https?:\/\//, ''))}</span>
@@ -3480,6 +3532,21 @@ document.addEventListener('keydown', (e) => {
     // ? — show keyboard shortcuts
     if (e.key === '?' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
         showShortcuts();
+    }
+    // Alt+Left / Alt+Right — navigate prev/next command (only when not focused on terminal)
+    if (e.altKey && !e.ctrlKey && !e.metaKey && !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
+        const panel = getSelectedPanel();
+        const panelObj = panel && state.panels.find(p => p.id === panel.id);
+        if (e.key === 'ArrowLeft' && !(panelObj && panelObj.focused)) {
+            e.preventDefault();
+            navigatePrevCommand();
+            return;
+        }
+        if (e.key === 'ArrowRight' && !(panelObj && panelObj.focused)) {
+            e.preventDefault();
+            navigateNextCommand();
+            return;
+        }
     }
 });
 
@@ -4449,6 +4516,7 @@ function showShortcuts() {
             <tr><td>Ctrl+Shift+C</td><td>Copy terminal selection</td></tr>
             <tr><td>Ctrl+Shift+S / Alt+S</td><td>Toggle selection mode</td></tr>
             <tr><td>Escape</td><td>Close search / menu</td></tr>
+            <tr><td>Alt+Left / Alt+Right</td><td>Navigate prev/next command</td></tr>
             <tr><td>Any key</td><td>Focus key input (when not in a field)</td></tr>
             <tr><td>Enter</td><td>Send keystrokes to terminal</td></tr>
         </table>

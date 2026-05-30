@@ -10,6 +10,119 @@ use vrunner::process::manager::CommandManager;
 use vrunner::web::auth::AuthManager;
 use vrunner::web::server::start_server;
 
+/// Default port for client-mode discovery.
+const DEFAULT_PORT: u16 = 9090;
+
+/// Check if a TCP port is available for binding.
+/// Returns Ok(()) if the port is free, Err with a descriptive message if not.
+fn check_port_available(bind: &str, port: u16) -> Result<()> {
+    let addr = format!("{}:{}", bind, port);
+    match std::net::TcpListener::bind(&addr) {
+        Ok(listener) => {
+            // Successfully bound — port is free. Drop the listener immediately.
+            drop(listener);
+            Ok(())
+        }
+        Err(e) => {
+            anyhow::bail!(
+                "Port {} is already in use (bind address: {}). \n\
+                 Use `vrunner list` to see running instances, or specify \n\
+                 a different port with `--port <PORT>`. \n\
+                 Error: {}",
+                port, bind, e
+            );
+        }
+    }
+}
+
+/// Client mode: try to send the command to a running vrunner instance
+/// on the default port. Returns Ok(true) if the command was sent
+/// successfully (caller should exit), Ok(false) if no server was
+/// found (caller should start a new server), or Err on other failures.
+async fn try_client_mode(cli: &Cli) -> Result<bool> {
+    let cmd_args = match &cli.cmd_args {
+        Some(args) if !args.is_empty() => args,
+        _ => return Ok(false),
+    };
+
+    let cmd = &cmd_args[0];
+    let args = &cmd_args[1..];
+
+    // Determine the bind address to probe (use config if available, else default)
+    let bind = cli.bind.clone().unwrap_or_else(|| "127.0.0.1".to_string());
+    let probe_url = format!("http://{}:{}/api/commands", bind, DEFAULT_PORT);
+
+    tracing::info!(
+        url = %probe_url,
+        cmd = %cmd,
+        "No --port specified; trying to send command to running instance"
+    );
+
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(2))
+        .timeout(std::time::Duration::from_secs(5))
+        .build();
+
+    let client = match client {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::info!(error = %e, "Failed to build HTTP client for client mode");
+            return Ok(false);
+        }
+    };
+
+    let mut body = serde_json::json!({
+        "cmd": cmd,
+        "args": args,
+    });
+
+    // Add working directory if specified
+    if let Some(ref dir) = cli.working_directory {
+        body["working_directory"] = serde_json::json!(dir);
+    }
+
+    let resp = match client.post(&probe_url).json(&body).send().await {
+        Ok(resp) => resp,
+        Err(e) => {
+            tracing::info!(
+                error = %e,
+                url = %probe_url,
+                "No running vrunner instance found at default port — starting new server"
+            );
+            return Ok(false);
+        }
+    };
+
+    let status = resp.status();
+    let result: serde_json::Value = match resp.json().await {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::info!(error = %e, "Non-JSON response from instance");
+            return Ok(false);
+        }
+    };
+
+    if status.is_success() {
+        let cmd_pid = result["data"]["pid"].as_u64().unwrap_or(0);
+        let _cmd_id = result["data"]["id"].as_str().unwrap_or("?");
+        println!(
+            "Command sent to running vrunner instance on port {}",
+            DEFAULT_PORT
+        );
+        println!("  PID:       {}", cmd_pid);
+        println!("  VTTY:      http://{}:{}/admin/{}", bind, DEFAULT_PORT, cmd);
+        Ok(true)
+    } else {
+        let error = result["error"].as_str().unwrap_or("Unknown error");
+        tracing::warn!(
+            status = %status,
+            error = %error,
+            "Server responded with error in client mode"
+        );
+        Ok(false)
+    }
+}
+
 /// Detect the terminal size and apply it to the VTTY config when
 /// --display is enabled.  CLI flags --vtty-rows / --vtty-cols take
 /// precedence over detection.
@@ -118,7 +231,21 @@ async fn async_main(cli: Cli) -> Result<()> {
         return Ok(());
     }
 
-    // Load and merge configuration (lazy — only reached if no subcommand handled)
+    // ── Client mode: send command to running instance if no --port given ──
+    // When the user runs `vrunner htop` (no --port), try to forward the
+    // command to the existing vrunner instance on the default port.
+    // Only fall through to start a new server if no instance is reachable.
+    if cli.port.is_none() {
+        if try_client_mode(&cli).await? {
+            // Command was sent to a running instance — exit successfully.
+            // No need to use std::process::exit here since we haven't set up
+            // signal handlers or the tokio signal driver yet.
+            return Ok(());
+        }
+    }
+
+    // Load and merge configuration (lazy — only reached if no subcommand handled
+    // and client mode did not apply)
     let mut cfg = dispatch::resolve_config(&cli)?;
 
     // Detect terminal size for display mode (no-op unless --display)
@@ -138,18 +265,28 @@ async fn async_main(cli: Cli) -> Result<()> {
     // Initialize command manager
     let manager = Arc::new(CommandManager::new(cfg.clone()));
 
+    // ── Port availability check ──
+    // Whether --port was explicit or default, verify the port is free BEFORE
+    // spawning any child commands.  Without this check, the spawned tokio
+    // server task silently absorbs the bind error, leaving the vrunner process
+    // running but unusable and very hard to kill.
+    if let Err(e) = check_port_available(&cfg.server.bind, cfg.server.port) {
+        tracing::error!(bind = %cfg.server.bind, port = cfg.server.port, "{}", e);
+        anyhow::bail!("{}", e);
+    }
+
     // Spawn child command from CLI positional args, if provided.
     let spawned_id = spawn_initial_command(&cli, &manager, &cfg).await?;
 
     // Create shutdown channel — passed explicitly, no globals
     let (shutdown_tx, _shutdown_rx) = broadcast::channel::<()>(1);
 
-    // Start the web server
+    // Start the web server (port is guaranteed available after check above)
     let server_handle = tokio::spawn({
         let manager = manager.clone();
         let shutdown_tx = shutdown_tx.clone();
         let cfg = cfg.clone();
-        let auth_token = auth_token.clone(); // keep original for registration below
+        let auth_token = auth_token.clone();
         async move {
             start_server(
                 cfg.server.bind.clone(),
