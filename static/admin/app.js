@@ -4646,35 +4646,20 @@ async function restartCommand(panelId) {
 }
 
 async function restartCommandById(instUrl, cmdId) {
-    const inst = state.instanceUrls.find(i => i.url === instUrl);
-    if (!inst || !inst._commands) return;
-    const cmd = inst._commands.find(c => c.id === cmdId);
-    if (!cmd) return;
-    const cmdName = cmd.name || cmd.id;
-    const cmdArgs = cmd.args || [];
-    const cert = cmd.certificate || null;
-    // Kill the existing command
-    _lastCommandState = '';
+    // Use the atomic restart endpoint: the server spawns the new command
+    // FIRST, then kills the old one.  This prevents the server from
+    // shutting down when the old command was the last one running.
     try {
-        await fetch(apiUrl(`/api/commands/${cmdId}/kill`, { url: instUrl }), {
+        const res = await fetch(apiUrl(`/api/commands/${cmdId}/restart`, { url: instUrl }), {
             method: 'POST',
             headers: authHeadersForInstance({ url: instUrl }),
             body: JSON.stringify({}),
-        });
-    } catch (e) { /* ignore */ }
-    // Spawn a new command with the same parameters
-    try {
-        const body = { cmd: cmdName, args: cmdArgs };
-        if (cert) body.certificate = cert;
-        const res = await fetch(apiUrl('/api/commands', { url: instUrl }), {
-            method: 'POST',
-            headers: authHeadersForInstance({ url: instUrl }),
-            body: JSON.stringify(body),
         });
         const json = await res.json();
         if (json.status === 'ok' && json.data && json.data.id) {
             state.selectedInstUrl = instUrl;
             state.selectedCmdId = json.data.id;
+            _lastCommandState = '';
             loadCommands();
         }
     } catch (e) { /* ignore */ }

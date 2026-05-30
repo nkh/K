@@ -292,6 +292,83 @@ pub async fn thaw_command(State(state): State<AppState>, Path(id): Path<String>)
     }
 }
 
+/// POST /api/commands/:id/restart
+/// Atomically restart a command: spawn a new instance FIRST, then kill the
+/// old one.  This ensures the command list is never empty during the
+/// restart, preventing the display loop or headless mode from triggering
+/// an unwanted server shutdown.
+pub async fn restart_command(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<Value>,
+) -> Json<Value> {
+    // Look up the existing command to get its name and args
+    let (cmd_name, cmd_args) = match state.manager.get(&id) {
+        Some(h) => (h.name.clone(), h.args.clone()),
+        None => {
+            return Json(serde_json::json!({
+                "status": "error",
+                "data": null,
+                "error": format!("Command '{}' not found", id)
+            }));
+        }
+    };
+
+    // Allow the request body to override cmd/args (for flexibility).
+    // If not provided, reuse the old command's values.
+    let override_cmd = body.get("cmd").and_then(|v| v.as_str()).map(String::from);
+    let override_args: Option<Vec<String>> = body
+        .get("args")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        });
+
+    let final_cmd = override_cmd.unwrap_or(cmd_name);
+    let final_args = override_args.unwrap_or(cmd_args);
+
+    // Step 1: Spawn the new command BEFORE killing the old one.
+    // This keeps the command list non-empty so the server doesn't
+    // interpret the kill as "all commands exited → shutdown".
+    match state
+        .manager
+        .spawn(
+            final_cmd,
+            final_args,
+            None,
+            None,
+            std::collections::HashMap::new(),
+            None,
+            None,
+            None,
+        )
+        .await
+    {
+        Ok(new_id) => {
+            let new_pid = state.manager.get(&new_id).map(|h| h.pid).unwrap_or(0);
+            // Step 2: Kill the old command now that the replacement is running.
+            let _ = state.manager.kill(&id, None).await;
+            tracing::info!(
+                old_id = %id,
+                new_id = %new_id,
+                "Restarted command"
+            );
+            Json(serde_json::json!({
+                "status": "ok",
+                "data": { "id": new_id, "pid": new_pid },
+                "error": null
+            }))
+        }
+        Err(e) => Json(serde_json::json!({
+            "status": "error",
+            "data": null,
+            "error": format!("Failed to spawn replacement command: {}", e)
+        })),
+    }
+}
+
 pub async fn shutdown(State(state): State<AppState>) -> Json<Value> {
     let _ = state.shutdown_tx.send(());
     Json(serde_json::json!({

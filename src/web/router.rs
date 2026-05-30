@@ -52,6 +52,10 @@ pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
             post(handlers::commands::kill_command),
         )
         .route(
+            "/api/commands/:id/restart",
+            post(handlers::commands::restart_command),
+        )
+        .route(
             "/api/commands/:id",
             delete(handlers::commands::purge_command),
         )
