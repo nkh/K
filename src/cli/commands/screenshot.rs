@@ -11,7 +11,7 @@ use crate::instance::registry::InstanceRegistry;
 /// Fetches the VTTY buffer of the specified (or sole) running command,
 /// renders it as a PNG image using a TrueType font, and writes it to
 /// the output file.  If no output path is given, generates one from
-/// the pattern `vrunner_YYYYMMDD_HHMMSS_rowsxcols_command_args.png`.
+/// the pattern `vrunner_YYYYMMDD_HHMMSS_rows_cols_command_args.png`.
 ///
 /// The full output path is printed to stdout after the screenshot is
 /// saved, so the user can easily locate the file.
@@ -107,7 +107,7 @@ pub async fn handle_screenshot_command(
     let bytes = resp.bytes().await?;
 
     // Auto-generate filename if not specified.
-    // Format: vrunner_YYYYMMDD_HHMMSS_rowsxcols_command_args.png
+    // Format: vrunner_YYYYMMDD_HHMMSS_rows_cols_command_args.png
     // Spaces in command/args are replaced with underscores.
     let output_path = match output {
         Some(p) => p.to_string(),
@@ -117,7 +117,7 @@ pub async fn handle_screenshot_command(
             // Try to fetch terminal dimensions for the filename.
             // If the fetch fails, omit dimensions rather than erroring.
             let dims_part = match fetch_dimensions(&client, &url, &cmd_id).await {
-                Some((rows, cols)) => format!("{}x{}", rows, cols),
+                Some((rows, cols)) => format!("{}_{}", rows, cols),
                 None => String::new(),
             };
 

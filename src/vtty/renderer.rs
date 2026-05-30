@@ -114,9 +114,17 @@ impl VttyRenderer {
         let mut html = String::with_capacity(total_cells * 20);
         let mut run_text: String = String::with_capacity(32);
 
+        let width = buffer.width;
         for row in &buffer.rows {
+            // Cap at buffer.width to prevent rendering extra cells if a row
+            // somehow has more cells than expected (e.g., race during resize).
+            let row_len = row.len().min(width);
+            if row_len == 0 {
+                html.push('\n');
+                continue;
+            }
             let mut i = 0;
-            while i < row.len() {
+            while i < row_len {
                 let cell = &row[i];
                 // Start a new run with this cell's style
                 let fg = if cell.reverse { cell.bg } else { cell.fg };
@@ -150,6 +158,12 @@ impl VttyRenderer {
                     }
                     let nch = if next.width == 0 { '\u{200b}' } else if next.is_empty() { ' ' } else { next.ch };
                     run_text.push(nch);
+                    j += 1;
+                }
+                while j < row_len {
+                    // Row was shorter than width — pad with default-style spaces
+                    // to ensure every line occupies exactly `width` visual columns.
+                    run_text.push(' ');
                     j += 1;
                 }
 
@@ -217,9 +231,15 @@ impl VttyRenderer {
             .take(visible_rows)
             .collect();
 
+        let width = buffer.width;
         for row in &all_lines {
+            let row_len = row.len().min(width);
+            if row_len == 0 {
+                html.push('\n');
+                continue;
+            }
             let mut i = 0;
-            while i < row.len() {
+            while i < row_len {
                 let cell = &row[i];
                 let fg = if cell.reverse { cell.bg } else { cell.fg };
                 let bg = if cell.reverse { cell.fg } else { cell.bg };
@@ -251,6 +271,10 @@ impl VttyRenderer {
                     }
                     let nch = if next.width == 0 { '\u{200b}' } else if next.is_empty() { ' ' } else { next.ch };
                     run_text.push(nch);
+                    j += 1;
+                }
+                while j < row_len {
+                    run_text.push(' ');
                     j += 1;
                 }
 

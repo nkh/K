@@ -43,6 +43,12 @@ impl Buffer {
         for row in &mut self.rows {
             row.resize(new_width, Cell::default());
         }
+        // Scrollback rows must also be resized to match the new width,
+        // otherwise to_html_scrollback renders them with the wrong number
+        // of columns, causing alignment errors and blank lines.
+        for row in &mut self.scrollback {
+            row.resize(new_width, Cell::default());
+        }
         self.rows
             .resize(new_height, vec![Cell::default(); new_width]);
         self.width = new_width;

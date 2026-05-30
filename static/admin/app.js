@@ -597,8 +597,9 @@ function toggleSidebar() {
 function toggleResources() {
     state.showResources = !state.showResources;
     localStorage.setItem('vrunner_show_resources', state.showResources.toString());
-    document.querySelectorAll('.resource-badge').forEach(el => {
-        el.style.display = state.showResources ? '' : 'none';
+    const display = state.showResources ? '' : 'none';
+    document.querySelectorAll('.resource-badge, .instance-url').forEach(el => {
+        el.style.display = display;
     });
 }
 
@@ -700,7 +701,7 @@ function updateCmdToolbarVisibility() {
     const anyCommands = state.instanceUrls.some(
         i => i._commands && i._commands.length > 0
     );
-    toolbar.style.display = (anyReachable && anyCommands) ? '' : 'none';
+    toolbar.style.display = (anyReachable && anyCommands) ? 'flex' : 'none';
 }
 
 // ─── Disconnected state ───
@@ -2753,7 +2754,7 @@ function renderPanels() {
                         </div>
                         <button class="btn btn-xs" onclick="toggleResources()" title="Toggle resource info">&#x2699;</button>
                         <span class="resource-badge" id="resourceBadge-${panel.id}" style="${state.showResources ? '' : 'display:none;'}"></span>
-                        <span class="instance-url">${escHtml(panel.instUrl.replace(/^https?:\/\//, ''))}</span>
+                        <span class="instance-url" style="${state.showResources ? '' : 'display:none;'}">${escHtml(panel.instUrl.replace(/^https?:\/\//, ''))}</span>
                         <span class="panel-font-size-ctrl">
                             <button class="btn btn-xs" onclick="changePanelFontSize('${panel.id}', -1)" title="Decrease font size">A-</button>
                             <span class="panel-font-size">${panel.fontSize}px</span>
@@ -2772,14 +2773,10 @@ function renderPanels() {
                             <option value="alt">Alt</option>
                         </select>
                         <span class="refresh-ctrl" title="Refresh throttle (ms). 0 = no throttle.">
-                            <span class="refresh-label">&#x21bb;</span>
                             <button class="btn btn-xs" onclick="changeRefreshMs(-100)" title="Decrease throttle">-</button>
                             <span class="refresh-val" id="refreshVal-${panel.id}">${state.refreshMs || 'off'}</span>
                             <button class="btn btn-xs" onclick="changeRefreshMs(100)" title="Increase throttle">+</button>
                         </span>
-                        <span id="altScreenBadge-${panel.id}" class="alt-screen-badge">ALT SCREEN</span>
-                        <button id="pauseRunBtn-${panel.id}" class="btn btn-xs" onclick="togglePauseRunPanel('${panel.id}')" title="Pause/Resume" style="display:none;">&#9208; Pause</button>
-                        <button class="btn btn-xs" onclick="restartCommand('${panel.id}')" title="Restart command">&#x21BB;</button>
                         <div class="panel-send-row">
                             <input type="text" id="keyInput-${panel.id}" placeholder="Send keys..." onkeydown="if(event.key==='Enter'){event.preventDefault();sendKeysToPanel('${panel.id}')}">
                             <button class="btn btn-xs" onclick="sendKeysToPanel('${panel.id}')" title="Send keys to terminal">Send</button>

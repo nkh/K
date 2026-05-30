@@ -7,14 +7,29 @@ use crate::instance::registry::InstanceRegistry;
 
 use super::common::{c, http_client, instance_url, resolve_targeted_instances};
 
+/// Format a duration in seconds as a human-readable string.
+fn format_duration(secs: f64) -> String {
+    if secs < 60.0 {
+        format!("{:.0}s", secs)
+    } else if secs < 3600.0 {
+        format!("{}m {:.0}s", (secs / 60.0) as u64, secs % 60.0)
+    } else {
+        format!(
+            "{}h {}m",
+            (secs / 3600.0) as u64,
+            ((secs % 3600.0) / 60.0) as u64
+        )
+    }
+}
+
 /// Handle the `vrunner list` subcommand.
 ///
 /// Queries running vrunner instances and shows their commands in a
 /// two-level indented hierarchy:
 ///
-///   INSTANCE  PID: 12345  PORT: 9090  BIND: 127.0.0.1  DAEMON: no  DISPLAY: yes
-///     COMMAND  htop                              PID: 5678  CERT: -
-///     COMMAND  vim file.txt                      PID: 5679  CERT: my-app
+///   INSTANCE  PID: 12345  PORT: 9090  BIND: 127.0.0.1  DAEMON: no  DISPLAY: yes  UP: 2h 15m
+///     COMMAND  htop                              PID: 5678  UP: 45m 12s  SIZE: 80x24  CERT: -
+///     COMMAND  vim file.txt                      PID: 5679  UP: 2m 5s   SIZE: 120x40  CERT: my-app
 ///
 /// When `--target <PID>` is provided, only that instance is listed.
 /// Unreachable instances show an `[ERROR]` line under their header.
@@ -58,7 +73,17 @@ pub async fn handle_list_command(cli: &Cli) -> Result<()> {
 
     let client = http_client();
 
+    // Deduplicate instances by bind:port to prevent showing the same
+    // commands twice when two vrunners happen to share the same endpoint.
+    let mut seen_endpoints = std::collections::HashSet::new();
+
     for info in &instances {
+        let endpoint = format!("{}:{}", info.bind, info.port);
+        if !seen_endpoints.insert(endpoint.clone()) {
+            // Duplicate endpoint — skip this instance
+            continue;
+        }
+
         println!("{}", format_instance_header(info));
 
         let url = instance_url(info, &None);
@@ -72,7 +97,14 @@ pub async fn handle_list_command(cli: &Cli) -> Result<()> {
                                 println!("  {}", c("(no commands)", Color::Yellow, false));
                             } else {
                                 for cmd in cmds {
-                                    if let Some(line) = format_command(cmd) {
+                                    // Fetch terminal dimensions for this command
+                                    let cmd_id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                                    let dims = if !cmd_id.is_empty() {
+                                        fetch_cmd_dimensions(&client, &url, cmd_id).await
+                                    } else {
+                                        None
+                                    };
+                                    if let Some(line) = format_command(cmd, dims) {
                                         println!("{}", line);
                                     }
                                 }
@@ -122,8 +154,14 @@ pub async fn handle_list_command(cli: &Cli) -> Result<()> {
 pub fn format_instance_header(info: &InstanceInfo) -> String {
     let daemon = if info.daemon { "yes" } else { "no" };
     let display = if info.display { "yes" } else { "no" };
+    let uptime = info.start_time;
+    let uptime_secs = uptime
+        .signed_duration_since(chrono::Utc::now())
+        .num_seconds()
+        .abs() as f64;
+    let uptime_str = format_duration(uptime_secs);
     format!(
-        "{}  {} {}  {} {}  {} {}  {} {}  {} {}",
+        "{}  {} {}  {} {}  {} {}  {} {}  {} {}  {} {}",
         c("INSTANCE", Color::Blue, true),
         c("PID:", Color::DarkGrey, false),
         info.pid,
@@ -135,12 +173,33 @@ pub fn format_instance_header(info: &InstanceInfo) -> String {
         daemon,
         c("DISPLAY:", Color::DarkGrey, false),
         display,
+        c("UP:", Color::DarkGrey, false),
+        c(&uptime_str, Color::Green, false),
     )
+}
+
+/// Fetch terminal dimensions for a command by querying the VTTY HTML endpoint.
+/// Returns (rows, cols) or None if the fetch fails.
+async fn fetch_cmd_dimensions(
+    client: &reqwest::Client,
+    base_url: &str,
+    cmd_id: &str,
+) -> Option<(usize, usize)> {
+    let url = format!("{}/api/commands/{}/vtty/html", base_url, cmd_id);
+    let resp = client.get(&url).send().await.ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let json: serde_json::Value = resp.json().await.ok()?;
+    let dims = json.get("data")?.get("dimensions")?;
+    let rows = dims.get("rows")?.as_u64()? as usize;
+    let cols = dims.get("cols")?.as_u64()? as usize;
+    Some((rows, cols))
 }
 
 /// Format a single command line for `vrunner list` output.
 /// Returns None if the JSON value lacks required fields.
-pub fn format_command(cmd: &serde_json::Value) -> Option<String> {
+pub fn format_command(cmd: &serde_json::Value, dims: Option<(usize, usize)>) -> Option<String> {
     let name = cmd.get("name")?.as_str()?;
     let args = cmd.get("args")?.as_array()?;
     let args_vec: Vec<&str> = args.iter().filter_map(|v| v.as_str()).collect();
@@ -150,8 +209,8 @@ pub fn format_command(cmd: &serde_json::Value) -> Option<String> {
         format!("{} {}", name, args_vec.join(" "))
     };
     // Truncate long command names for readability
-    let truncated = if display_name.len() > 40 {
-        format!("{}...", &display_name[..37])
+    let truncated = if display_name.len() > 30 {
+        format!("{}...", &display_name[..27])
     } else {
         display_name
     };
@@ -160,11 +219,24 @@ pub fn format_command(cmd: &serde_json::Value) -> Option<String> {
         .get("certificate")
         .and_then(|v| v.as_str())
         .unwrap_or("-");
+    let runtime = cmd
+        .get("runtime_secs")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let runtime_str = format_duration(runtime);
+    let dims_str = match dims {
+        Some((r, c)) => format!("{}x{}", r, c),
+        None => "-".to_string(),
+    };
 
     Some(format!(
-        "  {} {}  {}",
+        "  {} {}  {} {}  {} {}  {}",
         c(&format!("{:<10}", pid), Color::Cyan, false),
         c(&format!("{:<20}", truncated), Color::Reset, false),
+        c("UP:", Color::DarkGrey, false),
+        c(&format!("{:<10}", runtime_str), Color::Green, false),
+        c("SIZE:", Color::DarkGrey, false),
+        c(&format!("{:<8}", dims_str), Color::Yellow, false),
         c(&format!("CERT: {}", cert), Color::DarkGrey, false),
     ))
 }

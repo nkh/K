@@ -24,7 +24,7 @@ When no target is specified and exactly one command is running, that command is 
 
 .TP
 .BR "\-\-output " \fIFILE\fR
-Output file path for the PNG image. When omitted, the filename is auto-generated from the pattern \fBvrunner_YYYYMMDD_HHMMSS_rowsxcols_command_args.png\fR, where \fIrows\fR and \fIcols\fR are the terminal dimensions of the captured command, and \fIcommand_args\fR is the full command line with spaces replaced by underscores. The full absolute path of the saved file is printed to stdout after the screenshot is taken.
+Output file path for the PNG image. When omitted, the filename is auto-generated from the pattern \fBvrunner_YYYYMMDD_HHMMSS_rows_cols_command_args.png\fR, where \fIrows\fR and \fIcols\fR are the terminal dimensions of the captured command, and \fIcommand_args\fR is the full command line with spaces replaced by underscores. The full absolute path of the saved file is printed to stdout after the screenshot is taken.
 
 .TP
 .BR "\-\-font-size " \fIN\fR
@@ -73,7 +73,7 @@ Capture a screenshot with auto-generated filename:
 .PP
 \fB$ vrunner screenshot\fR
 .PP
-Output: \fI/home/user/vrunner_20260530_092208_80x24_htop.png\fR
+Output: \fI/home/user/vrunner_20260530_092208_80_24_htop.png\fR
 .RE
 
 Specify output path and custom font:
