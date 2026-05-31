@@ -27,7 +27,7 @@
 
 ## Executive Summary
 
-The `speedup` branch strips vrunner of its entire HTTP/WebSocket server stack (axum, TLS, auth, certificate management, web UI handlers) and replaces it with a lightweight **Unix Domain Socket (UDS)** IPC mechanism. This eliminates ~9,600 lines of code and 20 crate dependencies, dramatically reducing startup time from ~150ms to under 5ms.
+The `speedup` branch strips vrl of its entire HTTP/WebSocket server stack (axum, TLS, auth, certificate management, web UI handlers) and replaces it with a lightweight **Unix Domain Socket (UDS)** IPC mechanism. This eliminates ~9,600 lines of code and 20 crate dependencies, dramatically reducing startup time from ~150ms to under 5ms.
 
 All process management and inter-instance communication that previously used HTTP endpoints is now handled via UDS with a length-prefixed JSON wire protocol. The web browser admin UI, TLS certificates, authentication tokens, CORS policies, WebSocket terminal streaming, SSE event feeds, and PNG screenshot generation are all removed.
 
@@ -39,7 +39,7 @@ All process management and inter-instance communication that previously used HTT
 
 ```
 ┌──────────────────────────────────────────────┐
-│  vrunner instance                             │
+│  vrl instance                             │
 │                                               │
 │  ┌─────────┐  ┌──────────────────────────┐   │
 │  │ PTY     │  │ HTTP Server (axum)        │   │
@@ -72,11 +72,11 @@ All process management and inter-instance communication that previously used HTT
 
 ```
 ┌──────────────────────────────────────────────┐
-│  vrunner instance                             │
+│  vrl instance                             │
 │                                               │
 │  ┌─────────┐  ┌──────────────────────────┐   │
 │  │ PTY     │  │ UDS Control Socket       │   │
-│  │ Manager │  │  ~/.local/share/vrunner/ │   │
+│  │ Manager │  │  ~/.local/share/vrl/ │   │
 │  │         │  │    control-{pid}.sock     │   │
 │  │         │  │  ├── List                 │   │
 │  │         │  │  ├── SendKeys             │   │
@@ -93,7 +93,7 @@ All process management and inter-instance communication that previously used HTT
     UDS socket (permissions 0600)
          │
   ┌──────┴──────┐
-  │ vrunner CLI │
+  │ vrl CLI │
   │  (keys,     │
   │   cat, etc) │
   └─────────────┘
@@ -191,12 +191,12 @@ All process management and inter-instance communication that previously used HTT
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `src/cli/commands/cat.rs` | 107 | HTTP-based `vrunner cat` (reqwest to server) |
+| `src/cli/commands/cat.rs` | 107 | HTTP-based `vrl cat` (reqwest to server) |
 | `src/cli/commands/cert.rs` | 119 | Certificate management commands |
-| `src/cli/commands/purge.rs` | 201 | HTTP-based `vrunner purge` |
+| `src/cli/commands/purge.rs` | 201 | HTTP-based `vrl purge` |
 | `src/cli/commands/screenshot.rs` | 194 | PNG screenshot generation |
-| `src/cli/commands/resize.rs` | 163 | HTTP-based `vrunner resize` |
-| `src/cli/commands/spawn.rs` | 162 | HTTP-based `vrunner spawn` |
+| `src/cli/commands/resize.rs` | 163 | HTTP-based `vrl resize` |
+| `src/cli/commands/spawn.rs` | 162 | HTTP-based `vrl spawn` |
 
 ### Deleted config modules (2 files, ~248 lines)
 
@@ -252,23 +252,23 @@ Replaces the deleted HTTP-based CLI command files. Contains handlers for:
 **Removed:**
 - `try_client_mode()` — HTTP-based client-mode discovery that probed port 9090 with reqwest
 - `check_port_available()` — TCP port binding check
-- `use vrunner::web::auth::AuthManager` — Auth manager initialization
-- `use vrunner::web::server::start_server` — Server startup call
+- `use vrl::web::auth::AuthManager` — Auth manager initialization
+- `use vrl::web::server::start_server` — Server startup call
 - Multi-threaded tokio runtime (`tokio::runtime::Builder::new_multi_thread()`)
 - Server startup with port binding, TLS config, and certificate generation
 - `bound_rx` channel for receiving the bound port number
 - HTTP-based fallback logic for command forwarding to existing instances
 
 **Added:**
-- `use vrunner::ipc::server::spawn_control_server` — UDS control socket startup
-- `use vrunner::ipc::socket_path_for_pid` — Socket path computation
+- `use vrl::ipc::server::spawn_control_server` — UDS control socket startup
+- `use vrl::ipc::socket_path_for_pid` — Socket path computation
 - `spawn_control_server()` call in `async_main()` — starts the UDS listener as a background task
 - Single-threaded tokio runtime (`tokio::runtime::Builder::new_current_thread()`) — sufficient since there's no HTTP server to handle
 - Socket cleanup on shutdown (`std::fs::remove_file`)
 - IPC command routing: `dispatch::is_ipc_command()` + `dispatch::run_ipc_command()` for subcommands that need UDS (keys, cat, spawn-in, freeze, thaw, resize)
 - Directory creation for socket path parent
 
-**Key design change:** In main branch, `main()` built a multi-threaded tokio runtime and started both the server and display loop. In speedup, it uses a lighter `current_thread` runtime. IPC subcommands get their own minimal runtime without starting a full vrunner instance.
+**Key design change:** In main branch, `main()` built a multi-threaded tokio runtime and started both the server and display loop. In speedup, it uses a lighter `current_thread` runtime. IPC subcommands get their own minimal runtime without starting a full vrl instance.
 
 ### `src/cli/args.rs` (656 → 433 lines, -223 lines)
 
@@ -306,13 +306,13 @@ Replaces the deleted HTTP-based CLI command files. Contains handlers for:
 **After:** Three-phase dispatch:
 1. `pre_runtime()` — Parse CLI, handle synchronous subcommands (list, stop, config-check, completions). IPC subcommands (keys, cat, spawn-in, freeze, thaw, resize) are detected but returned as `Ok(Some(cli))`.
 2. `is_ipc_command()` — Returns true for IPC subcommands.
-3. `run_ipc_command()` — Runs the IPC subcommand using the UDS client with a minimal tokio runtime. Does NOT start a full vrunner instance.
+3. `run_ipc_command()` — Runs the IPC subcommand using the UDS client with a minimal tokio runtime. Does NOT start a full vrl instance.
 
 ### `src/cli/commands/list.rs` (major rewrite)
 
 **Before:** Used `sysinfo::System::new_all()` to scan all processes, match by name, build instance list with HTTP URLs.
 
-**After:** Reads PID files from `~/.local/share/vrunner/instances/`, checks `/proc/<pid>/comm` for liveness, much faster and no full process table scan.
+**After:** Reads PID files from `~/.local/share/vrl/instances/`, checks `/proc/<pid>/comm` for liveness, much faster and no full process table scan.
 
 ### `src/cli/commands/stop.rs` (major rewrite)
 
@@ -416,7 +416,7 @@ Removed per-command certificate binding from spawn logic.
 
 ### Why current_thread runtime is safe
 
-Without an HTTP server, vrunner no longer needs concurrent I/O across multiple tasks. The only background tasks are:
+Without an HTTP server, vrl no longer needs concurrent I/O across multiple tasks. The only background tasks are:
 - UDS control socket listener (one connection at a time is sufficient)
 - PTY output reader (driven by the display loop)
 - Signal handler (tokio signal stream)
@@ -429,15 +429,15 @@ All of these are event-driven and work fine on a single-threaded runtime.
 
 | Feature | main branch (HTTP) | speedup branch (UDS) |
 |---------|-------------------|---------------------|
-| **List instances** | `GET /api/commands` or `vrunner list` (sysinfo scan) | `vrunner list` (PID file + `/proc` check) |
-| **Send keystrokes** | `POST /api/commands/:id/keys` (HTTP) or WebSocket binary frame | `vrunner keys <pid> <keys>` → `ControlCommand::SendKeys` via UDS |
-| **Cat VTTY output** | `GET /api/commands/:id/vtty/text` | `vrunner cat <pid>` → `ControlCommand::Cat` via UDS |
-| **Spawn command** | `POST /api/commands` (HTTP JSON) | `vrunner spawn-in <pid> -- <cmd> <args>` → `ControlCommand::Spawn` via UDS |
+| **List instances** | `GET /api/commands` or `vrl list` (sysinfo scan) | `vrl list` (PID file + `/proc` check) |
+| **Send keystrokes** | `POST /api/commands/:id/keys` (HTTP) or WebSocket binary frame | `vrl keys <pid> <keys>` → `ControlCommand::SendKeys` via UDS |
+| **Cat VTTY output** | `GET /api/commands/:id/vtty/text` | `vrl cat <pid>` → `ControlCommand::Cat` via UDS |
+| **Spawn command** | `POST /api/commands` (HTTP JSON) | `vrl spawn-in <pid> -- <cmd> <args>` → `ControlCommand::Spawn` via UDS |
 | **Kill command** | `DELETE /api/commands/:id` | Handled via UDS `ControlCommand::Kill` |
-| **Freeze command** | `POST /api/commands/:id/freeze` | `vrunner freeze <pid>` → `ControlCommand::Freeze` via UDS |
-| **Thaw command** | `POST /api/commands/:id/thaw` | `vrunner thaw <pid>` → `ControlCommand::Thaw` via UDS |
-| **Resize VTTY** | `POST /api/commands/:id/resize` | `vrunner resize <pid> --rows N --cols M` → `ControlCommand::Resize` via UDS |
-| **Stop instance** | `POST /api/stop` (HTTP) | `vrunner stop` → SIGTERM directly |
+| **Freeze command** | `POST /api/commands/:id/freeze` | `vrl freeze <pid>` → `ControlCommand::Freeze` via UDS |
+| **Thaw command** | `POST /api/commands/:id/thaw` | `vrl thaw <pid>` → `ControlCommand::Thaw` via UDS |
+| **Resize VTTY** | `POST /api/commands/:id/resize` | `vrl resize <pid> --rows N --cols M` → `ControlCommand::Resize` via UDS |
+| **Stop instance** | `POST /api/stop` (HTTP) | `vrl stop` → SIGTERM directly |
 | **Screenshot** | `GET /api/commands/:id/vtty/png` | **Removed** (no PNG rendering) |
 | **VTTY HTML** | `GET /api/commands/:id/vtty/html` | **Removed** (no web UI) |
 | **WebSocket stream** | `WS /api/commands/:id/ws` | **Removed** (no web UI) |
@@ -473,7 +473,7 @@ Messages use length-prefixed JSON framing:
 
 ### Socket Security
 
-- Socket path: `~/.local/share/vrunner/control-{pid}.sock`
+- Socket path: `~/.local/share/vrl/control-{pid}.sock`
 - File permissions: `0600` (owner read/write only)
 - Only processes running as the same user can connect
 - No network exposure (UDS is local-only by definition)
@@ -492,17 +492,17 @@ server:
 
 security:
   require_auth: false
-  token_file: "~/.config/vrunner/token"
+  token_file: "~/.config/vrl/token"
   cors:
     policy: "any"
 
 tls:
   enabled: false
-  cert_file: "~/.config/vrunner/cert.pem"
-  key_file: "~/.config/vrunner/key.pem"
+  cert_file: "~/.config/vrl/cert.pem"
+  key_file: "~/.config/vrl/key.pem"
 
 certificates:
-  directory: "~/.config/vrunner/certs/"
+  directory: "~/.config/vrl/certs/"
   entries: []
 
 web:
@@ -596,7 +596,7 @@ All **296 unit tests** pass. These cover:
 - UDS protocol encode/decode round-trip tests
 - UDS server accept + command dispatch tests
 - UDS client connect + response parsing tests
-- IPC command handler integration tests (spawn a vrunner, send keys, verify output)
+- IPC command handler integration tests (spawn a vrl, send keys, verify output)
 
 ---
 
@@ -605,7 +605,7 @@ All **296 unit tests** pass. These cover:
 | Feature | Status | Notes |
 |---------|--------|-------|
 | **PTY process management** | Fully working | Core functionality unchanged |
-| **Command spawn with args** | Fully working | `vrunner -- cmd args` |
+| **Command spawn with args** | Fully working | `vrl -- cmd args` |
 | **Command exit tracking** | Fully working | Exit code, timeout, on_exit/on_error hooks |
 | **SIGSTOP/SIGCONT (freeze/thaw)** | Fully working | Via UDS IPC |
 | **Keystroke injection** | Fully working | Via UDS IPC (was WebSocket binary) |
@@ -619,7 +619,7 @@ All **296 unit tests** pass. These cover:
 | **Instance stopping** | Fully working | Direct SIGTERM |
 | **Config loading (YAML/TOML)** | Fully working | Simplified (no server/tls/web sections) |
 | **Config profiles** | Fully working | `--profile NAME` |
-| **Shell completions** | Fully working | `vrunner completions bash/zsh/fish/...` |
+| **Shell completions** | Fully working | `vrl completions bash/zsh/fish/...` |
 | **Config validation** | Working (reduced) | Only validates remaining config fields |
 | **Command templates** | Working | Still defined in config, though no web UI uses them |
 | **Snapshots** | Working | Store/restore VTTY buffer snapshots |
@@ -631,24 +631,24 @@ All **296 unit tests** pass. These cover:
 
 | Feature | Reason | Alternative |
 |---------|--------|-------------|
-| **Web admin UI** | Entire HTTP server removed | CLI commands (`vrunner list`, `vrunner cat`, etc.) |
+| **Web admin UI** | Entire HTTP server removed | CLI commands (`vrl list`, `vrl cat`, etc.) |
 | **WebSocket terminal streaming** | No server to stream to | Display mode (`--display`) for local viewing |
 | **TLS/HTTPS** | No HTTP server | UDS is local-only, no network exposure |
 | **Authentication tokens** | No HTTP API to protect | UDS file permissions (0600) |
 | **CORS configuration** | No cross-origin requests | N/A |
 | **Self-signed certificates** | No TLS needed | N/A |
-| **PNG screenshot generation** | `image` + `fontdue` crates removed | `vrunner cat <pid>` for text output |
+| **PNG screenshot generation** | `image` + `fontdue` crates removed | `vrl cat <pid>` for text output |
 | **HTML VTTY rendering** | No web browser target | Display mode for terminal rendering |
 | **SSE event feed** | No server push needed | N/A |
 | **URL sharing** | No web links to share | N/A |
 | **Peer management** | No web connections | N/A |
 | **Certificate pool** | No mTLS | N/A |
-| **Client-mode discovery** | No HTTP probe on port 9090 | `vrunner list` to find running instances |
+| **Client-mode discovery** | No HTTP probe on port 9090 | `vrl list` to find running instances |
 | **`--bind` / `--port` flags** | No TCP server | N/A |
 | **`--tls` flag** | No TLS | N/A |
 | **`--auth` flag** | No authentication | N/A |
-| **`vrunner screenshot` command** | PNG code removed | `vrunner cat <pid>` |
-| **`vrunner cert` command** | Certificate management removed | N/A |
+| **`vrl screenshot` command** | PNG code removed | `vrl cat <pid>` |
+| **`vrl cert` command** | Certificate management removed | N/A |
 
 ---
 

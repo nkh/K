@@ -11,15 +11,15 @@ pub use super::profiles::ProfilesConfig;
 pub use super::templates::{TemplateConfig, TemplatesConfig};
 pub use super::vtty::VttyConfig;
 
-/// Top-level configuration for vrunner.
+/// Top-level configuration for vrl.
 ///
 /// All fields have sensible defaults, so a config file is entirely optional.
-/// When no config file is present, vrunner runs with the default VTTY
+/// When no config file is present, vrl runs with the default VTTY
 /// dimensions and no display.
 ///
 /// Config files are searched in this order (later files override earlier):
-/// 1. ~/.config/vrunner/config.yaml (or .toml)
-/// 2. ./vrunner.yaml (or .toml) in the current directory
+/// 1. ~/.config/vrl/config.yaml (or .toml)
+/// 2. ./vrl.yaml (or .toml) in the current directory
 /// 3. Path specified with --config CLI flag
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct Config {

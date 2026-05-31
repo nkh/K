@@ -1,0 +1,57 @@
+.\" Title: vrl-list
+.\" Author: vrl contributors
+.\" Manual section: 1
+.\"
+.TH VRL\-LIST 1 "2025" "vrl" "User Commands"
+
+.SH NAME
+vrl list \- list running vrl instances and their commands
+
+.SH SYNOPSIS
+.B vrl
+\fBlist\fR [\fB\-\-target\fR \fIPID\fR]
+
+.SH DESCRIPTION
+Lists all running vrl instances. For each instance, connects to its UDS control socket to retrieve the live command list from memory, including commands added dynamically via \fBvrl spawn\-in\fR.
+
+The output shows each instance with its PID, daemon/display status, and uptime, followed by a list of commands with their PIDs, names, and running status.
+
+When \fB\-\-target\fR is specified, only the specified instance is shown.
+
+.SH OPTIONS
+
+.TP
+.BR \-\-target " " \fIPID\fR
+Only show the instance with the given PID.
+
+.SH OUTPUT
+
+Instance header line: INSTANCE PID: N DAEMON: yes/no DISPLAY: yes/no UP: duration
+
+Per command: PID (indented) command_name STATUS: running|frozen|exited duration
+
+.SH EXAMPLES
+
+List all instances:
+.RS
+.PP
+.nf
+\fB$ vrl list\fR
+INSTANCE  PID: 12345  DAEMON: no  DISPLAY: yes  UP: 3m 15s
+  5678     htop                          STATUS: running  3m 15s
+.fi
+.RE
+
+List a specific instance:
+.RS
+.PP
+.nf
+\fB$ vrl list \-\-target 12345\fR
+.fi
+.RE
+
+.SH SEE ALSO
+.BR vrl (1),
+.BR vrl\-stop (1),
+.BR vrl\-spawn\-in (1),
+.BR vrl\-keys (1)

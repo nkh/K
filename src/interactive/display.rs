@@ -3,7 +3,7 @@
 //! This module contains the core display loop that renders VTTY buffers to
 //! the local terminal, forwards keystrokes to child commands, and handles
 //! terminal resize events (SIGWINCH). It is the primary interactive interface
-//! for vrunner's `--display` mode.
+//! for vrl's `--display` mode.
 //!
 //! The display loop runs entirely within the async runtime and uses crossterm
 //! for terminal control, AsyncFd for non-blocking keystroke reading from
@@ -104,7 +104,7 @@ pub(crate) async fn render_vtty(
         let mut stdout = std::io::stdout();
         let _ = TerminalDisplay::clear();
         if display_all {
-            let _ = write!(stdout, "\r\n  vrunner: no commands running.\r\n");
+            let _ = write!(stdout, "\r\n  vrl: no commands running.\r\n");
             let _ = write!(
                 stdout,
                 "  Waiting for commands (web UI, API, or F12 to spawn).\r\n"
@@ -2375,7 +2375,7 @@ pub async fn wait_for_child(
             }
             _ = shutdown_rx.recv() => {
                 tracing::info!(id, "Shutdown signal received in headless mode");
-                // Kill the child so vrunner can exit cleanly
+                // Kill the child so vrl can exit cleanly
                 let id_string = id.to_string();
                 let _ = manager.kill(&id_string, None).await;
                 return;

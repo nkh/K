@@ -4,7 +4,7 @@ Learn how to configure event hooks that trigger custom scripts when commands are
 
 ## What Are Hooks?
 
-Hooks are shell commands that vrunner executes automatically when specific events occur. They let you integrate vrunner with external tools — sending notifications, logging to external systems, triggering alerts, or running cleanup scripts.
+Hooks are shell commands that vrl executes automatically when specific events occur. They let you integrate vrl with external tools — sending notifications, logging to external systems, triggering alerts, or running cleanup scripts.
 
 ## Supported Events
 
@@ -13,11 +13,11 @@ Hooks are shell commands that vrunner executes automatically when specific event
 | `on_spawn` | A command is successfully spawned |
 | `on_exit` | A command exits (any exit code) |
 | `on_error` | A command exits with a non-zero exit code |
-| `on_kill` | A command is killed by vrunner or via the API |
+| `on_kill` | A command is killed by vrl or via the API |
 
 ## Placeholders
 
-Hook commands support placeholders that vrunner replaces with actual values at runtime:
+Hook commands support placeholders that vrl replaces with actual values at runtime:
 
 | Placeholder | Value |
 |-------------|-------|
@@ -35,23 +35,23 @@ Hook commands support placeholders that vrunner replaces with actual values at r
 Define hooks at the top level of your config to apply to every command:
 
 ```yaml
-# ~/.config/vrunner/config.yaml
+# ~/.config/vrl/config.yaml
 hooks:
   on_spawn: |
-    echo "[vrunner] $VRUNNER_CMD_NAME ($VRUNNER_CMD_ID) started at $VRUNNER_TIMESTAMP" \
-      >> /var/log/vrunner/events.log
+    echo "[vrl] $VRUNNER_CMD_NAME ($VRUNNER_CMD_ID) started at $VRUNNER_TIMESTAMP" \
+      >> /var/log/vrl/events.log
 
   on_exit: |
-    echo "[vrunner] $VRUNNER_CMD_NAME exited with code $VRUNNER_EXIT_CODE" \
-      >> /var/log/vrunner/events.log
+    echo "[vrl] $VRUNNER_CMD_NAME exited with code $VRUNNER_EXIT_CODE" \
+      >> /var/log/vrl/events.log
 
   on_error: |
     /opt/scripts/notify-slack.sh '#alerts' \
       "Command $VRUNNER_CMD_NAME failed with exit code $VRUNNER_EXIT_CODE"
 
   on_kill: |
-    echo "[vrunner] $VRUNNER_CMD_NAME was killed (was PID $VRUNNER_PID)" \
-      >> /var/log/vrunner/events.log
+    echo "[vrl] $VRUNNER_CMD_NAME was killed (was PID $VRUNNER_PID)" \
+      >> /var/log/vrl/events.log
 ```
 
 ### Per-Command Hooks
@@ -147,9 +147,9 @@ commands:
 ```yaml
 hooks:
   on_exit: |
-    if [ -f "/var/log/vrunner/$VRUNNER_CMD_NAME.log" ]; then
-      mv "/var/log/vrunner/$VRUNNER_CMD_NAME.log" \
-         "/var/log/vrunner/$VRUNNER_CMD_NAME-$VRUNNER_TIMESTAMP.log"
+    if [ -f "/var/log/vrl/$VRUNNER_CMD_NAME.log" ]; then
+      mv "/var/log/vrl/$VRUNNER_CMD_NAME.log" \
+         "/var/log/vrl/$VRUNNER_CMD_NAME-$VRUNNER_TIMESTAMP.log"
     fi
 ```
 
@@ -162,7 +162,7 @@ commands:
     hooks:
       on_error: |
         sleep 5
-        vrunner spawn --command "./worker" --name "worker"
+        vrl spawn --command "./worker" --name "worker"
 ```
 
 ### Datadog Metric on Spawn
@@ -172,7 +172,7 @@ hooks:
   on_spawn: |
     curl -s -X POST "https://api.datadoghq.com/api/v1/series?api_key=$DD_API_KEY" \
       -H "Content-Type: application/json" \
-      -d "{\"series\": [{\"metric\": \"vrunner.commands.spawned\", \"points\": [[$(date +%s), 1]], \"tags\": [\"command:$VRUNNER_CMD_NAME\"]}]}"
+      -d "{\"series\": [{\"metric\": \"vrl.commands.spawned\", \"points\": [[$(date +%s), 1]], \"tags\": [\"command:$VRUNNER_CMD_NAME\"]}]}"
 ```
 
 ### Webhook on Any Exit
@@ -180,7 +180,7 @@ hooks:
 ```yaml
 hooks:
   on_exit: |
-    curl -s -X POST https://webhook.example.com/vrunner \
+    curl -s -X POST https://webhook.example.com/vrl \
       -H "Content-Type: application/json" \
       -d "{\"event\": \"exit\", \"command\": \"$VRUNNER_CMD_NAME\", \"exit_code\": $VRUNNER_EXIT_CODE, \"timestamp\": \"$VRUNNER_TIMESTAMP\"}"
 ```
@@ -189,8 +189,8 @@ hooks:
 
 - **Synchronous** — Hooks block the event loop briefly. Keep hook scripts fast.
 - **Timeout** — Hooks that run longer than 30 seconds are killed and logged as warnings.
-- **Environment** — Hook commands inherit vrunner's environment plus the placeholder variables.
-- **Error handling** — If a hook command fails (non-zero exit), vrunner logs a warning but does not affect the spawned command.
+- **Environment** — Hook commands inherit vrl's environment plus the placeholder variables.
+- **Error handling** — If a hook command fails (non-zero exit), vrl logs a warning but does not affect the spawned command.
 - **Shell** — Hook commands are executed with `/bin/sh -c`.
 
 ## Debugging Hooks
@@ -206,7 +206,7 @@ hooks:
       echo "CMD_NAME: $VRUNNER_CMD_NAME"
       echo "PID: $VRUNNER_PID"
       echo "TIMESTAMP: $VRUNNER_TIMESTAMP"
-    } >> /tmp/vrunner-hooks-debug.log
+    } >> /tmp/vrl-hooks-debug.log
 ```
 
 For the full configuration reference, see [`configuration-profiles.md`](configuration-profiles.md). For the complete placeholder list, see [`../certificates.md`](../certificates.md).

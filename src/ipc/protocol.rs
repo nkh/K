@@ -8,7 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Commands that a client can send to a running vrunner instance.
+/// Commands that a client can send to a running vrl instance.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ControlCommand {
@@ -85,7 +85,7 @@ pub enum ControlCommand {
         name: String,
     },
 
-    /// Gracefully shut down the entire vrunner instance.
+    /// Gracefully shut down the entire vrl instance.
     Shutdown,
 
     /// Ping — returns instance info for liveness check.

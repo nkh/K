@@ -1,10 +1,10 @@
 # Environment Variables
 
-Learn how to control the environment variables passed to spawned commands using vrunner's three-layer model: configuration file, CLI flags, and API parameters.
+Learn how to control the environment variables passed to spawned commands using vrl's three-layer model: configuration file, CLI flags, and API parameters.
 
 ## Three-Layer Model
 
-vrunner resolves environment variables for each command from three sources, merged in order of increasing precedence:
+vrl resolves environment variables for each command from three sources, merged in order of increasing precedence:
 
 1. **Config file** — `env` key in the command definition.
 2. **CLI flags** — `--env` flags passed at spawn time.
@@ -17,7 +17,7 @@ Higher-priority layers override lower-priority ones. If a key appears in multipl
 Define environment variables in your YAML config:
 
 ```yaml
-# ~/.config/vrunner/config.yaml
+# ~/.config/vrl/config.yaml
 commands:
   - name: frontend
     command: "npm run dev"
@@ -36,13 +36,13 @@ Override or add environment variables with `--env` flags:
 
 ```bash
 # Override NODE_ENV from the config
-vrunner --cmd "npm run dev" --name "frontend" --env NODE_ENV=production
+vrl --cmd "npm run dev" --name "frontend" --env NODE_ENV=production
 
 # Add a new variable not in the config
-vrunner --cmd "npm run dev" --name "frontend" --env DEBUG=true
+vrl --cmd "npm run dev" --name "frontend" --env DEBUG=true
 
 # Set multiple variables
-vrunner --cmd "npm run dev" --name "frontend" \
+vrl --cmd "npm run dev" --name "frontend" \
   --env NODE_ENV=staging --env PORT=4000 --env DEBUG=true
 ```
 
@@ -85,7 +85,7 @@ commands:
 
 ```bash
 # CLI
-vrunner --cmd "./server" --name "app" --env LOG_LEVEL=info --env CACHE=true
+vrl --cmd "./server" --name "app" --env LOG_LEVEL=info --env CACHE=true
 ```
 
 ```json
@@ -105,15 +105,15 @@ The final environment for the `app` command:
 
 ## Isolation with `--no-env`
 
-By default, spawned commands inherit vrunner's own environment. Use `--no-env` to start commands with a clean environment containing only what you explicitly set:
+By default, spawned commands inherit vrl's own environment. Use `--no-env` to start commands with a clean environment containing only what you explicitly set:
 
 ```bash
-vrunner --no-env \
+vrl --no-env \
   --cmd "./server" --name "app" \
   --env PORT=3000 --env DATABASE_URL=postgres://localhost/mydb
 ```
 
-The command receives only `PORT` and `DATABASE_URL` — none of the variables from vrunner's process or the config file (except what you explicitly pass via `--env`).
+The command receives only `PORT` and `DATABASE_URL` — none of the variables from vrl's process or the config file (except what you explicitly pass via `--env`).
 
 This is useful for:
 
@@ -123,23 +123,23 @@ This is useful for:
 
 ## TERM Variable
 
-vrunner **always** sets the `TERM` environment variable for spawned commands, regardless of other settings:
+vrl **always** sets the `TERM` environment variable for spawned commands, regardless of other settings:
 
 - Default value: `xterm-256color`
 - Override with `--env TERM=xterm` if needed.
 
-The `TERM` variable is set because vrunner provides a virtual terminal (PTY) for each command, and the command needs to know the terminal type to render correctly.
+The `TERM` variable is set because vrl provides a virtual terminal (PTY) for each command, and the command needs to know the terminal type to render correctly.
 
 ```bash
 # TERM is always set, even with --no-env
-vrunner --no-env --cmd "htop" --name "monitor"
+vrl --no-env --cmd "htop" --name "monitor"
 # htop receives: TERM=xterm-256color (and nothing else)
 ```
 
 To use a different terminal type:
 
 ```bash
-vrunner --cmd "vim" --name "editor" --env TERM=screen-256color
+vrl --cmd "vim" --name "editor" --env TERM=screen-256color
 ```
 
 ## Practical Examples
@@ -147,7 +147,7 @@ vrunner --cmd "vim" --name "editor" --env TERM=screen-256color
 ### Development Environment
 
 ```bash
-vrunner \
+vrl \
   --cmd "npm run dev" --name "frontend" \
   --env NODE_ENV=development \
   --env PORT=3000 \
@@ -157,7 +157,7 @@ vrunner \
 ### Production Environment (Isolated)
 
 ```bash
-vrunner --no-env --daemon \
+vrl --no-env --daemon \
   --cmd "./server" --name "api" \
   --env NODE_ENV=production \
   --env PORT=8080 \
@@ -188,7 +188,7 @@ Avoid putting secrets in the config file. Pass them via `--env` or the API inste
 
 ```bash
 # Pass API key from an environment variable on the host
-vrunner --cmd "./server" --name "api" \
+vrl --cmd "./server" --name "api" \
   --env API_KEY="$MY_API_KEY"
 ```
 

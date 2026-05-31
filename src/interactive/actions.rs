@@ -88,7 +88,7 @@ pub fn render_help_overlay(bindings: &[Binding], stdout: &mut std::io::Stdout) {
     // Header
     let _ = write!(
         stdout,
-        "\x1b[1;34m  vrunner \u{2014} Keybindings\x1b[0m\r\n"
+        "\x1b[1;34m  vrl \u{2014} Keybindings\x1b[0m\r\n"
     );
     let _ = write!(
         stdout,
@@ -185,7 +185,7 @@ pub fn render_help_overlay(bindings: &[Binding], stdout: &mut std::io::Stdout) {
 #[allow(dead_code)]
 pub fn render_spawn_prompt(stdout: &mut std::io::Stdout) {
     let _ = terminal::Clear(terminal::ClearType::All);
-    let _ = write!(stdout, "\x1b[1;34m  vrunner — Spawn Command\x1b[0m\r\n\r\n");
+    let _ = write!(stdout, "\x1b[1;34m  vrl — Spawn Command\x1b[0m\r\n\r\n");
     let _ = write!(stdout, "  \x1b[1mCommand:\x1b[0m ");
     let _ = stdout.flush();
 }

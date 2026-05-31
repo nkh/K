@@ -1,121 +1,57 @@
 # Running Commands
 
-Learn how to spawn and manage terminal commands through every interface vrunner provides — CLI arguments, the web UI, the REST API, the `vrunner spawn` subcommand, and WebSocket messages.
+Learn how to spawn and manage terminal commands through every interface vrl provides — CLI arguments, the `vrl spawn-in` subcommand, and UDS IPC commands.
 
 ## Spawning at Startup with `--`
 
-The simplest way to run commands is to pass them directly on the command line after `--`. Each `--cmd value` pair defines one command, and you can include as many as you need.
+The simplest way to run commands is to pass them directly on the command line after `--`:
 
 ```bash
-vrunner --cmd "htop" --cmd "tail -f /var/log/syslog"
+vrl -- htop
+vrl --display -- vim notes.txt
+vrl --daemon -- my-long-running-script.sh
 ```
 
-Give commands human-readable names for easier identification in the dashboard and API:
+Arguments go after `--`:
 
 ```bash
-vrunner --cmd "htop" --name "system-monitor" \
-        --cmd "tail -f /var/log/syslog" --name "syslog"
+vrl -- python -m http.server 8000
 ```
 
-You can also provide individual flags per command when spawning multiple at once:
+Give commands custom environment variables:
 
 ```bash
-vrunner --cmd "htop" --name "monitor" --env TERM=xterm-256color \
-        --cmd "npm run dev" --name "frontend" --cwd /home/user/project
+vrl --env RUST_LOG=debug -- cargo run
 ```
 
-## Spawning via the Web UI
+## Spawning via `vrl spawn-in`
 
-Once vrunner is running with its web interface enabled, open `http://localhost:8080` (or your configured port) and use the **Spawn** form:
-
-1. **Command** — Enter the full command string (e.g., `htop`).
-2. **Name** — Assign an optional name (e.g., `system-monitor`).
-3. **Working Directory** — Set the CWD for the command.
-4. **Environment Variables** — Add key-value pairs to inject into the process.
-
-Click **Spawn** to start the command. The new terminal appears immediately in the sidebar and the main pane.
-
-## Spawning via `POST /api/commands`
-
-Use the REST API to spawn commands programmatically. Send a JSON body to the `/api/commands` endpoint:
+The `spawn-in` subcommand lets you add commands to an already-running vrl instance:
 
 ```bash
-curl -X POST http://localhost:8080/api/commands \
-  -H "Content-Type: application/json" \
-  -d '{
-    "command": "htop",
-    "name": "system-monitor",
-    "cwd": "/home/user",
-    "env": {"TERM": "xterm-256color"}
-  }'
-```
+# If exactly one instance is running, it is used automatically
+vrl spawn-in 12345 -- htop
 
-The response returns the command ID and current status:
+# With arguments
+vrl spawn-in 12345 -- python -m http.server 8000
 
-```json
-{
-  "id": "cmd_a1b2c3",
-  "name": "system-monitor",
-  "command": "htop",
-  "status": "running",
-  "pid": 12345
-}
-```
-
-For the full request/response schema, see [`../api.md`](../api.md).
-
-## Spawning via the `vrunner spawn` Subcommand
-
-The `spawn` subcommand lets you add commands to an already-running vrunner instance without restarting it:
-
-```bash
-# Spawn into a running instance
-vrunner spawn --command "htop" --name "monitor"
-
-# Specify the instance address
-vrunner spawn --command "npm run build" --name "build" \
-  --server http://localhost:8080
+# With custom terminal size
+vrl spawn-in 12345 --rows 50 --cols 160 -- vim notes.txt
 ```
 
 This is especially useful in scripts where you need to dynamically add workloads:
 
 ```bash
 for service in frontend backend worker; do
-  vrunner spawn --command "npm run dev --workspace=$service" --name "$service"
+  vrl spawn-in 12345 -- "npm run dev --workspace=$service"
 done
 ```
-
-## Spawning via WebSocket
-
-Connect to the vrunner WebSocket endpoint and send a spawn message:
-
-```javascript
-const ws = new WebSocket('ws://localhost:8080/ws');
-
-ws.onopen = () => {
-  ws.send(JSON.stringify({
-    action: 'spawn',
-    command: 'htop',
-    name: 'system-monitor'
-  }));
-};
-
-ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  console.log('Spawned:', data.id);
-};
-```
-
-WebSocket spawning is ideal for browser-based tools, dashboards, and real-time automation where you want a persistent connection.
 
 ## Choosing a Method
 
 | Method | Best For |
 |--------|----------|
 | `--` at startup | Static configurations, startup scripts |
-| Web UI | One-off commands, quick exploration |
-| `POST /api/commands` | CI/CD pipelines, automation scripts |
-| `vrunner spawn` | Dynamic workloads, multi-step scripts |
-| WebSocket | Real-time apps, browser extensions |
+| `vrl spawn-in` | Dynamic workloads, multi-step scripts |
 
-For full API details and all available parameters, refer to [`../api.md`](../api.md).
+For full configuration details, refer to [`../configuration.md`](../configuration.md).

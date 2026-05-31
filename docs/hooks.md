@@ -1,7 +1,7 @@
 # Event Hooks
 
-vrunner supports event hooks — shell commands that run automatically when
-specific lifecycle events occur. Hooks are configured in `vrunner.yaml`.
+vrl supports event hooks — shell commands that run automatically when
+specific lifecycle events occur. Hooks are configured in `vrl.yaml`.
 
 ## Available Events
 
@@ -16,9 +16,9 @@ specific lifecycle events occur. Hooks are configured in `vrunner.yaml`.
 
 ```yaml
 hooks:
-  on_spawn: "notify-send 'vrunner' 'Started {name}'"
+  on_spawn: "notify-send 'vrl' 'Started {name}'"
   on_exit: "echo '{name} exited successfully'"
-  on_error: "notify-send 'vrunner' '{name} failed (exit {exit_code})'"
+  on_error: "notify-send 'vrl' '{name} failed (exit {exit_code})'"
   on_kill: "echo 'Killed {name}'"
 ```
 

@@ -11,7 +11,7 @@ Profiles let you maintain separate configurations for development, staging, and 
 Define profiles under the `profiles` key in your YAML configuration file:
 
 ```yaml
-# ~/.config/vrunner/config.yaml
+# ~/.config/vrl/config.yaml
 profiles:
   dev:
     port: 8080
@@ -65,13 +65,13 @@ Pass the `--profile` flag to activate a named profile:
 
 ```bash
 # Start with the dev profile
-vrunner --profile dev
+vrl --profile dev
 
 # Start with the staging profile
-vrunner --profile staging
+vrl --profile staging
 
 # Start with the production profile
-vrunner --profile production
+vrl --profile production
 ```
 
 The profile's settings are applied as defaults. Any commands defined in the profile are spawned automatically at startup.
@@ -82,13 +82,13 @@ You can override individual profile settings on the command line. CLI flags alwa
 
 ```bash
 # Use staging profile but change the port
-vrunner --profile staging --port 7070
+vrl --profile staging --port 7070
 
 # Use dev profile but enable TLS
-vrunner --profile dev --tls --cert ./local-cert.pem --key ./local-key.pem
+vrl --profile dev --tls --cert ./local-cert.pem --key ./local-key.pem
 
 # Use production profile but run in the foreground (override daemon mode)
-vrunner --profile production --no-daemon
+vrl --profile production --no-daemon
 ```
 
 Precedence order (highest to lowest):
@@ -123,7 +123,7 @@ See [`hooks.md`](hooks.md) for full hook documentation.
 Use `--config` to point to a specific config file while still selecting a profile:
 
 ```bash
-vrunner --config /path/to/team-config.yaml --profile staging
+vrl --config /path/to/team-config.yaml --profile staging
 ```
 
 This is useful in team environments where a shared config file defines multiple profiles for different team members or environments.
@@ -133,7 +133,7 @@ This is useful in team environments where a shared config file defines multiple 
 A team config file checked into version control:
 
 ```yaml
-# team-vrunner.yaml
+# team-vrl.yaml
 profiles:
   alice-dev:
     port: 8081
@@ -164,7 +164,7 @@ profiles:
 Each team member runs:
 
 ```bash
-vrunner --config ./team-vrunner.yaml --profile alice-dev
+vrl --config ./team-vrl.yaml --profile alice-dev
 ```
 
 For the full configuration reference, see [`../configuration.md`](../configuration.md).

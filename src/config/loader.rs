@@ -25,8 +25,8 @@ pub fn load_config(cli_path: Option<&str>) -> Result<Config> {
 
     // Global config — try YAML first, then TOML
     if let Some(global_dir) = dirs::config_dir() {
-        let global_yaml = global_dir.join("vrunner").join("config.yaml");
-        let global_toml = global_dir.join("vrunner").join("config.toml");
+        let global_yaml = global_dir.join("vrl").join("config.yaml");
+        let global_toml = global_dir.join("vrl").join("config.toml");
 
         if global_yaml.exists() {
             let fmt = detect_format(&global_yaml).unwrap_or(FileFormat::Yaml);
@@ -39,8 +39,8 @@ pub fn load_config(cli_path: Option<&str>) -> Result<Config> {
 
     // Local config — try YAML first, then TOML
     let cwd = std::env::current_dir()?;
-    let local_yaml = cwd.join("vrunner.yaml");
-    let local_toml = cwd.join("vrunner.toml");
+    let local_yaml = cwd.join("vrl.yaml");
+    let local_toml = cwd.join("vrl.toml");
     let mut local_path: Option<std::path::PathBuf> = None;
 
     if local_yaml.exists() {

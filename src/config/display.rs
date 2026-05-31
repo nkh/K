@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Local terminal display settings.
-/// When enabled, vrunner renders VTTY output directly in the
+/// When enabled, vrl renders VTTY output directly in the
 /// terminal it was launched from (similar to mprocs).
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]

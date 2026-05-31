@@ -1,17 +1,17 @@
-# vrunner Architecture Overview
+# vrl Architecture Overview
 
-This document describes the high-level architecture of **vrunner**, a Rust-based virtual terminal runner with a web control plane, TLS encryption, optional authentication, daemon mode, and instance registry.
+This document describes the high-level architecture of **vrl**, a Rust-based virtual terminal runner with UDS (Unix Domain Socket) IPC, daemon mode, and instance registry.
 
 ---
 
 ## 1. Design Principles
 
 1. **Silent by Default** — The local terminal is not a log sink unless explicitly requested.
-2. **Secure by Default** — Binds to localhost with no auth; remote access requires explicit opt-in.
-3. **Separation of Concerns** — CLI parsing, config loading, process management, terminal emulation, web serving, security, and instance tracking are distinct modules.
-4. **Extensibility** — New web API commands, handle sinks, and VTTY backends can be added without modifying core logic.
-5. **Async-First** — Built on `tokio` to handle concurrent connections, processes, and I/O loops.
-6. **Multi-Instance Awareness** — The tool manages not only commands but also peer `vrunner` processes on the same machine.
+2. **Local IPC Only** — All inter-process communication uses Unix Domain Sockets; no network exposure.
+3. **Separation of Concerns** — CLI parsing, config loading, process management, terminal emulation, and instance tracking are distinct modules.
+4. **Speed** — No HTTP server, no TLS, no heavy dependencies. Startup in under 5ms.
+5. **Async-First** — Built on `tokio` (single-threaded) to handle concurrent connections, processes, and I/O loops.
+6. **Multi-Instance Awareness** — The tool manages not only commands but also peer `vrl` processes on the same machine.
 
 ---
 
@@ -19,7 +19,7 @@ This document describes the high-level architecture of **vrunner**, a Rust-based
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                         vrunner binary                               │
+│                         vrl binary                                  │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌───────────┐  │
 │  │   CLI       │  │   Config    │  │   Instance  │  │  Daemon   │  │
 │  │   Parser    │  │   Loader    │  │   Registry  │  │  Mode     │  │
@@ -41,26 +41,14 @@ This document describes the high-level architecture of **vrunner**, a Rust-based
 │  └─────────────┘  └───────────┘  └─────────────┘                │
 │                          │                                         │
 │              ┌───────────▼────────────┐                            │
-│              │    AppState            │                            │
-│              │  (Axum shared state)   │                            │
-│              └───────────┬────────────┘                            │
-│                          │                                         │
-│         ┌────────────────┼────────────────┐                       │
-│         │                │                │                       │
-│  ┌──────▼──────┐  ┌─────▼─────┐  ┌──────▼──────┐                │
-│  │   Auth      │  │   TLS     │  │  Middleware  │                │
-│  │  Middleware │  │  (HTTPS)  │  │ (CORS, Log) │                │
-│  └─────────────┘  └───────────┘  └─────────────┘                │
-│                          │                                         │
-│              ┌───────────▼────────────┐                            │
-│              │      Web Server        │                            │
-│              │   (axum / tokio)       │                            │
+│              │    IPC Server            │                            │
+│              │  (UDS control socket)     │                            │
 │              └───────────┬────────────┘                            │
 │                          │                                         │
 │              ┌───────────▼────────────┐                            │
-│              │   HTTP(S) Clients      │                            │
-│              │  (Browser / curl /     │                            │
-│              │   other vrunner CLIs)  │                            │
+│              │   UDS Clients          │                            │
+│              │  (vrl list, vrl keys,  │                            │
+│              │   vrl cat, vrl spawn-in)│                            │
 │              └────────────────────────┘                            │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -74,99 +62,91 @@ This document describes the high-level architecture of **vrunner**, a Rust-based
 `main.rs` is a thin binary wrapper that parses CLI arguments, loads configuration, optionally daemonizes, and delegates to the library crate. `src/lib.rs` is the single source of truth for all `mod` declarations.
 
 Uses `clap` with derive macros. Supports:
-- Options before `--` (vrunner flags)
+- Options before `--` (vrl flags)
 - Command + args after `--` (child process)
-- Subcommands: `list`, `stop <PID>`, `spawn <cmd> [args...]`, `freeze <PID>`, `thaw <PID>`, `resize <target>`, `cert <generate|list|show|remove>`, `list-vrunner`, `list-commands`, `stop-command <PID>`
-
-**`src/cli/args.rs`** defines:
-- `Cli` struct with `#[command(trailing_var_arg = true)]`
-- `Commands` enum for `List`, `Stop`, `Spawn`, `Freeze`, `Thaw`, `Resize`, `Cert`, `ListVrunner`, `ListCommands`, `StopCommand`
-- `Cli::apply_overrides()` method that applies CLI flags over loaded configuration
-- Complete CLI coverage for all config entries (see [docs/configuration.md](configuration.md))
+- Subcommands: `list`, `stop`, `spawn-in`, `keys`, `cat`, `freeze`, `thaw`, `resize`, `config-check`, `completions`
 
 ### 3.2 Configuration Layer (`src/config/`)
 
 | Component | Responsibility |
 |-----------|-------------|
-| `loader.rs` | Discovers global (`~/.config/vrunner/config.yaml`) and local (`./vrunner.yaml`) YAML configs, plus any CLI-specified path. |
-| `schema.rs` | Typed structs with serde: `Config`, `ServerConfig`, `SecurityConfig`, `TlsConfig`, `VttyConfig`, `DisplayConfig`, `CommandLogConfig`, `DaemonConfig`, `HandleConfig`. |
+| `loader.rs` | Discovers global (`~/.config/vrl/config.yaml`) and local (`./vrl.yaml`) YAML configs, plus any CLI-specified path. |
+| `schema.rs` | Typed structs with serde: `Config`, `VttyConfig`, `DisplayConfig`, `CommandLogConfig`, `DaemonConfig`, `HandleConfig`. |
 | `merge.rs` | Override logic: local config overrides global config. CLI flags applied on top. |
 
-### 3.3 Application State (`src/web/state.rs`)
+### 3.3 IPC Server (`src/ipc/`)
 
-The `AppState` struct holds all shared state for the web server, passed through Axum's `State<AppState>` extractor:
-
-```rust
-pub struct AppState {
-    pub manager: Arc<CommandManager>,
-    pub shutdown_tx: broadcast::Sender<()>,
-    pub auth_token: Option<String>,  // None = no auth required
-    pub cert_store: Arc<CertificateStore>,
-    pub vtty_events: broadcast::Sender<(String, String)>,
-    pub log_events: broadcast::Sender<String>,
-}
-```
-
-This replaces the previous global mutable static pattern, providing clean dependency injection and thread-safe access.
-
-- `cert_store` — Thread-safe pool of named certificates for per-command access control.
-- `vtty_events` — Broadcast channel for VTTY change notifications (command_id, JSON message).
-- `log_events` — Broadcast channel for real-time log entry streaming.
-
-### 3.4 Security (`src/web/auth.rs`, `src/web/middleware.rs`)
+The UDS IPC server is the heart of the speedup branch, replacing the entire HTTP server stack.
 
 | Component | Responsibility |
 |-----------|-------------|
-| `auth.rs` | `AuthManager`: loads or generates a 256-bit random bearer token. Token file is created with `0600` permissions. |
-| `middleware.rs` | `auth_middleware`: validates `Authorization: Bearer <token>` header when auth is enabled. When `auth_token` is `None`, all requests pass through. |
+| `server.rs` | Binds UDS socket at `~/.local/share/vrl/control-{pid}.sock` (permissions `0600`). Accept loop dispatches incoming commands to the `CommandManager`. |
+| `protocol.rs` | Wire protocol: `ControlCommand` enum, `ControlResponse` enum, length-prefixed JSON framing (`[4-byte big-endian u32][JSON payload]`). |
+| `client.rs` | UDS client for CLI subcommands: connect, send `ControlCommand`, receive `ControlResponse`. |
+| `mod.rs` | Module declarations + `socket_path_for_pid()` helper. |
 
-### 3.5 TLS (`src/web/tls.rs`)
+#### Supported IPC Commands
+
+| Command | Description |
+|---------|-------------|
+| `Ping` | Health check |
+| `List` | List running commands |
+| `SendKeys` | Inject keystrokes into a command's PTY |
+| `Cat` | Retrieve VTTY buffer as plain text |
+| `Spawn` | Create a new command in a running instance |
+| `Kill` | Terminate a running command |
+| `Freeze` | Pause a command (SIGSTOP) |
+| `Thaw` | Resume a paused command (SIGCONT) |
+| `Resize` | Change VTTY dimensions (SIGWINCH) |
+| `Shutdown` | Gracefully shut down the instance |
+
+#### Socket Security
+
+- Socket path: `~/.local/share/vrl/control-{pid}.sock`
+- File permissions: `0600` (owner read/write only)
+- Only processes running as the same user can connect
+- No network exposure (UDS is local-only by definition)
+
+### 3.4 Instance Registry (`src/instance/`)
+
+Manages a directory of JSON pidfiles (`~/.local/share/vrl/instances/<PID>.json`).
 
 | Component | Responsibility |
 |-----------|-------------|
-| `tls.rs` | `TlsManager`: loads existing PEM certificates or generates self-signed certificates via `rcgen`. Certificates include SAN entries for `localhost`, `127.0.0.1`, and `::1`. Private key files are created with `0600` permissions. |
+| `registry.rs` | `InstanceRegistry`: register, unregister, list, stop. Validates liveness via `/proc/<pid>/comm` on Linux. Auto-cleans stale pidfiles. |
+| `info.rs` | `InstanceInfo`: serializable metadata (PID, start time, daemon/display flags, command). |
 
-### 3.6 Instance Registry (`src/instance/`)
-
-Manages a directory of JSON pidfiles (`~/.local/share/vrunner/instances/<PID>.json`).
-
-| Component | Responsibility |
-|-----------|-------------|
-| `registry.rs` | `InstanceRegistry`: register, unregister, list, stop. Validates liveness via `sysinfo`. Auto-cleans stale pidfiles. |
-| `info.rs` | `InstanceInfo`: serializable metadata (PID, port, bind, start time, daemon/display flags, command). |
-
-### 3.7 Daemon Mode (`src/daemon/`)
+### 3.5 Daemon Mode (`src/daemon/`)
 
 | Component | Responsibility |
 |-----------|-------------|
 | `mod.rs` | Platform dispatch. |
 | `unix.rs` | Custom double-fork daemonization using raw `libc` calls (`fork`, `setsid`, fd redirection). Called before tokio runtime to avoid conflicts with async signal handling. |
 
-### 3.8 Command Logger (`src/logging/`)
+### 3.6 Command Logger (`src/logging/`)
 
 | Component | Responsibility |
 |-----------|-------------|
-| `command_log.rs` | `CommandLogger`: thread-safe logger that writes to screen, file, or both. Used by the web layer to audit API calls. |
+| `command_log.rs` | `CommandLogger`: thread-safe logger that writes to screen, file, or both. |
 
-### 3.9 Process Management (`src/process/`)
-
-| Component | Responsibility |
-|-----------|-------------|
-| `manager.rs` | `CommandManager`: owns `DashMap<CommandId, CommandHandle>`. Spawns, lists, kills, freezes, thaws. Injects `CommandLogger`. Manages named VTTY buffer snapshots with metadata. Implements the incremental diff protocol for WebSocket streaming via `spawn_diff_watcher()`. |
-| `spawner.rs` | Platform-specific PTY creation via `portable-pty`. Uses `mpsc::channel` bridge between synchronous PTY reads and async VTTY writes — a blocking thread reads from the PTY and sends chunks through the channel, while a single async receiver task feeds them to the VTTY emulator. The process waiter (blocking thread) monitors child exit, runs optional `on_exit`/`on_error` handlers, signals exit via a `watch::channel<bool>` (never loses notifications, unlike `Notify`), and removes the command from the manager's DashMap. |
-| `handle.rs` | `CommandHandle`: per-command state (ID, PID, name, args, VTTY reference, spawn time). Provides synchronous and asynchronous buffer snapshot methods, process liveness checks, wall-clock runtime tracking, and a `watch::Receiver<bool>` (`exit_rx`) for reliable exit notification. |
-
-### 3.10 VTTY Emulator (`src/vtty/`)
+### 3.7 Process Management (`src/process/`)
 
 | Component | Responsibility |
 |-----------|-------------|
-| `emulator.rs` | Terminal state machine supporting cursor movement, erase operations, scroll, SGR attributes (16/256/truecolor), DEC private modes, alternate screen, save/restore cursor, scroll regions. |
+| `manager.rs` | `CommandManager`: owns `DashMap<CommandId, CommandHandle>`. Spawns, lists, kills, freezes, thaws. Manages named VTTY buffer snapshots. |
+| `spawner.rs` | Platform-specific PTY creation via `portable-pty`. Uses `mpsc::channel` bridge between synchronous PTY reads and async VTTY writes. |
+| `handle.rs` | `CommandHandle`: per-command state (ID, PID, name, args, VTTY reference, spawn time). |
+
+### 3.8 VTTY Emulator (`src/vtty/`)
+
+| Component | Responsibility |
+|-----------|-------------|
+| `emulator.rs` | Terminal state machine supporting cursor movement, erase operations, scroll, SGR attributes, DEC private modes, alternate screen. |
 | `parser.rs` | Streaming ANSI parser with state machine (CSI, OSC, DCS, simple escapes). |
-| `buffer.rs` | 2D cell grid with scrollback, insert/delete lines/cells, clear operations, and cell-level diff computation. `Buffer::diff()` compares two buffers and returns a `BufferDiff` containing only changed cells (character, colors, and text attributes). |
-| `renderer.rs` | Serialize buffer to ANSI, HTML, or plain text. |
+| `buffer.rs` | 2D cell grid with scrollback, insert/delete lines/cells, clear operations. |
 | `display.rs` | `TerminalDisplay`: renders the buffer to the local terminal using `crossterm` (only when `--display` is active). |
 
-### 3.11 Handle System (`src/handles/`)
+### 3.9 Handle System (`src/handles/`)
 
 Extensible file descriptor routing.
 
@@ -176,103 +156,6 @@ Extensible file descriptor routing.
 | `sink.rs` | `Sink` trait (async). |
 | `file_sink.rs`, `vtty_sink.rs`, `null_sink.rs` | Implementations. |
 
-### 3.12 Web Server (`src/web/`)
-
-| Component | Responsibility |
-|-----------|-------------|
-| `server.rs` | Binds TCP socket, starts `axum_server`. Supports both HTTP and TLS (HTTPS) modes. Manages graceful shutdown via signal handlers. |
-| `router.rs` | Route table with `AppState` injection. All handlers receive `State<AppState>`. |
-| `handlers/` | One module per endpoint group: `commands.rs`, `keys.rs`, `vtty.rs`, `admin.rs`, `handles.rs`. |
-| `middleware.rs` | CORS, authentication, request logging, JSON error envelopes. |
-| `certs.rs` | `CertificateStore`: manages a pool of named certificates for per-command access control. Generates self-signed certs via `rcgen`, derives bearer tokens from certificate content via SHA-256. |
-| `static_assets.rs` | Embedded admin SPA via `rust-embed`. |
-
-#### Route Table
-
-```rust
-pub fn create_router(state: AppState) -> Router {
-    Router::new()
-        .route("/api/commands", get(list_commands).post(start_command))
-        .route("/api/commands/kill-pid/{pid}", post(kill_command_by_pid))
-        .route("/api/commands/{id}/keys", post(send_keys))
-        .route("/api/commands/{id}/kill", post(kill_command))
-        .route("/api/commands/{id}/freeze", post(freeze_command))
-        .route("/api/commands/{id}/thaw", post(thaw_command))
-        .route("/api/commands/{id}/vtty", get(get_vtty_full))
-        .route("/api/commands/{id}/vtty/html", get(get_vtty_html))
-        .route("/api/commands/{id}/vtty/partial", get(get_vtty_partial))
-        .route("/api/commands/{id}/resize", post(resize_vtty))
-        .route("/api/commands/{id}/snapshot", post(snapshot_command))
-        .route("/api/commands/{id}/snapshots", get(list_snapshots))
-        .route("/api/commands/{id}/diff", post(diff_command))
-        .route("/api/commands/{id}/snapshots/{name}", delete(delete_snapshot))
-        .route("/api/commands/{id}/handles", get(list_handles).post(add_handle))
-        .route("/api/shutdown", post(shutdown))
-        .route("/admin", get(admin_page))
-        .route("/admin/*path", get(admin_assets))
-        .with_state(state)
-}
-```
-
-### 3.13 Admin Interface (`static/admin/`)
-
-Lightweight SPA served from embedded assets. Communicates with the REST API and WebSocket endpoints. Features include real-time VTTY viewing via the incremental diff WebSocket protocol, Pause/Run controls for freeze/thaw, 1-second HTTP polling fallback, auto-selection of the first available command, and a responsive topbar layout.
-
-### 3.14 Incremental VTTY Diff Protocol
-
-The WebSocket VTTY streaming uses an incremental diff protocol to minimize bandwidth. The protocol operates in three layers:
-
-**Server-side diff computation (`CommandManager::spawn_diff_watcher`):**
-1. A background task polls the VTTY buffer every 200ms for each running command.
-2. It clones the current buffer and compares it against the last-sent buffer using `Buffer::diff()`.
-3. The diff comparison checks dimensions first (if dimensions changed, all cells are considered changed). For same-dimension buffers, it compares each cell's character, foreground/background RGB, and text attributes.
-4. Only if cells have actually changed does it serialize a `vtty_diff` JSON message with the cell list and broadcast it.
-5. When no previous buffer exists (first poll after connect), it sends a `vtty_full` message with the complete HTML.
-6. If the broadcast receiver falls behind (lag), a full `vtty_full` resynchronization message is sent automatically.
-
-**Client-side handling (admin SPA):**
-1. On receiving `vtty_full`, the complete HTML is rendered directly.
-2. On receiving `vtty_diff`, the client triggers an HTTP full-refresh to ensure correct rendering while still benefiting from the server-side optimization of only sending diffs when the buffer actually changes.
-
-**Data structures:**
-- `CellDiff`: A single changed cell with row, column, character, RGB colors, and text attribute flags.
-- `BufferDiff`: Contains width, height, total changed count, and a vector of `CellDiff` entries.
-- `StoredSnapshot`: A named VTTY buffer snapshot with `SnapshotMeta` (name, command info, PID, timestamp, runtime).
-
-### 3.15 Snapshot and Diff System
-
-The command manager maintains an in-memory store of named VTTY buffer snapshots using `DashMap<(CommandId, String), StoredSnapshot>`. Snapshots are created via `POST /api/commands/{id}/snapshot`, listed via `GET /api/commands/{id}/snapshots`, compared against the current buffer via `POST /api/commands/{id}/diff`, and deleted via `DELETE /api/commands/{id}/snapshots/:name`. All snapshots for a command are automatically cleaned up when the command is killed.
-
-### 3.16 Certificate System (`src/web/certs.rs`)
-
-The certificate system provides a pool of named certificates that can be bound to individual commands for per-command access control.
-
-| Component | Description |
-|-----------|-------------|
-| `CertificateStore` | Thread-safe pool (`DashMap<String, CertificateEntry>`) holding named certificate/key pairs. Shared via `AppState`. Initialized from config entries and CLI `--certificate` flags. |
-| `CertificateEntry` | A named cert/key pair with a derived bearer token. The token is computed as `SHA-256(PEM certificate)`, hex-encoded. This allows clients to authenticate using the token derived from the certificate content. |
-| `CommandHandle.certificate` | Optional field on each running command. When set, only API requests bearing the matching derived token can interact with that command's endpoints. Unbound commands follow the normal auth rules. |
-| CLI subcommands | `cert generate <name>` creates a self-signed cert via `rcgen` and adds it to the pool. `cert list`, `cert show <name>`, and `cert remove <name>` manage the pool. |
-
-**Per-command access control flow:**
-
-```
-API Request → Auth Middleware
-                  │
-         ┌────────┴────────┐
-         │                 │
-   Command is cert-bound   Command is unbound
-         │                 │
-   Check cert-derived     Follow normal auth rules
-   token in header        (bearer token or no auth)
-         │                 │
-   ┌─────┴─────┐          │
-   │           │          │
-  Match     No match      │
-   │           │          │
-  Allow    403 Forbidden  │
-```
-
 ---
 
 ## 4. Data Flow
@@ -280,11 +163,11 @@ API Request → Auth Middleware
 ### 4.1 Starting an Instance
 
 ```
-CLI: vrunner --port 9090 --tls -- htop
+CLI: vrl -- htop
        │
        ▼
 ┌──────────────┐
-│ CLI Parser   │──► Extract vrunner flags + child command
+│ CLI Parser   │──► Extract vrl flags + child command
 └──────────────┘
        │
        ▼
@@ -312,31 +195,14 @@ CLI: vrunner --port 9090 --tls -- htop
        │
        ▼
 ┌──────────────┐
-│ TLS Manager  │──► Load or generate self-signed certs (if --tls)
-└──────────────┘
-       │
-       ▼
-┌──────────────┐
-│ Certificate  │──► Initialize cert pool from config + CLI --certificate flags
-│ Store        │──► Derive bearer tokens (SHA-256 of cert PEM) for each entry
-└──────────────┘
-       │
-       ▼
-┌──────────────┐
-│ Auth Manager │──► Load or generate bearer token (if --auth)
-└──────────────┘
-       │
-       ▼
-┌──────────────┐
-│ Web Server   │──► Start axum_server on 127.0.0.1:9090 (HTTP or HTTPS)
-│              │──► Apply auth + CORS + logging middleware
+│ IPC Server   │──► Start UDS listener on ~/.local/share/vrl/control-{pid}.sock
 └──────────────┘
        │
        ▼
 ┌──────────────────────────────────────────────────────┐
-│ Lifecycle (selected mode):                           │
+│ Lifecycle:                                            │
 │                                                      │
-│ Display mode: render VTTY → monitor child → on exit  │
+│ Display mode: render VTTY → monitor child → on exit   │
 │   check manager.list().is_empty()                    │
 │   → empty: restore terminal + shutdown                │
 │   → not empty: switch to monitor mode                 │
@@ -352,12 +218,12 @@ CLI: vrunner --port 9090 --tls -- htop
 ### 4.2 Listing Instances
 
 ```
-CLI: vrunner list
+CLI: vrl list
        │
        ▼
 ┌──────────────┐
-│ Instance     │──► Read all pidfiles from ~/.local/share/vrunner/instances/
-│ Registry     │──► Filter out stale entries (dead PIDs via sysinfo)
+│ Instance     │──► Read all pidfiles from ~/.local/share/vrl/instances/
+│ Registry     │──► Filter out stale entries (check /proc/<pid>/comm)
 └──────────────┘
        │
        ▼
@@ -367,17 +233,12 @@ CLI: vrunner list
 ### 4.3 Stopping an Instance
 
 ```
-CLI: vrunner stop 12345
+CLI: vrl stop 12345
        │
        ▼
 ┌──────────────┐
-│ Instance     │──► Read 12345.json from registry
-│ Registry     │──► Get bind address and port
-└──────────────┘
-       │
-       ▼
-┌──────────────┐
-│ HTTP Client  │──► POST http(s)://<bind>:<port>/api/shutdown
+│ Process      │──► Send SIGTERM to PID 12345
+│ Signal       │
 └──────────────┘
 ```
 
@@ -385,108 +246,48 @@ CLI: vrunner stop 12345
 
 ## 5. Concurrency Model
 
-- **Tokio Runtime**: Multi-threaded scheduler, started after daemonization (if applicable).
-- **AppState**: Shared via `Arc` and Axum's `State` extractor — no global mutable state.
+- **Tokio Runtime**: Single-threaded scheduler (`current_thread`), started after daemonization (if applicable). Sufficient since there is no HTTP server.
 - **Command Manager**: `Arc<DashMap<CommandId, CommandHandle>>` for lock-free reads.
 - **Per-Command Tasks**: `pty_reader` (blocking thread → mpsc channel), `stdin_writer`, `handle_writers`, `process_waiter`.
-- **Sync/Async Bridge**: PTY reads happen on a blocking thread (`portable-pty` provides synchronous `Read`/`Write`). Data is sent through a bounded `tokio::sync::mpsc::channel(64)` to a single async receiver task that feeds the VTTY emulator.
-- **Web Handlers**: Stateless, borrow `State<AppState>` from Axum.
-- **Command Logger**: `Arc<CommandLogger>` shared between web handlers and process manager.
-- **Shutdown**: `broadcast::Sender<()>` distributed via `AppState`. Signal handler sends on the channel; server listens and triggers graceful shutdown.
-- **Lifecycle Policy**: "Last-command-standing" — vrunner remains alive as long as at least one command exists in the `CommandManager`, whether running or retained (`retain_on_exit`). Shutdown occurs only when the command count reaches zero. When the initial CLI command exits, retained commands keep the display and server alive; non-retained commands are removed, and if the resulting list is empty, vrunner exits even in `display_all` mode.
-
-  - **Headless mode**: After `wait_for_child` returns, `manager.list().is_empty()` is checked. If empty, shutdown is broadcast. If commands remain (retained or API-spawned), the process drops into the idle-wait path (listening on the shutdown channel).
-  - **Display mode**: When the direct child exits (via `exit_rx` or tick fallback), `manager.list().is_empty()` is checked. If empty, the display loop breaks and restores the terminal. If commands remain (including retained exited commands), `active_id` and `exit_rx` are cleared and the loop continues in "monitor mode," rendering the first available command from the manager. The display exits when no commands remain at all.
-  - **Monitor mode**: In display mode with no direct child, keystrokes are not forwarded (read-only observation). The idle tick check (`exit_rx.is_none() && manager.list().is_empty()`) detects when the last remaining command exits.
-  - **Per-command options**: `--retain-on-exit`, `--snapshot-on-exit`, and `--send-keys` are per-command options applied only to the CLI-spawned command via an explicit `ExitConfig` passed to `manager.spawn()`. They do not modify the global `default_exit` config. API-spawned commands set these options individually in the POST request body.
+- **Sync/Async Bridge**: PTY reads happen on a blocking thread (`portable-pty`). Data is sent through a bounded `tokio::sync::mpsc::channel(64)` to a single async receiver task that feeds the VTTY emulator.
+- **Command Logger**: `Arc<CommandLogger>` shared between process manager.
+- **Shutdown**: `broadcast::Sender<()>` distributed. Signal handler sends on the channel; listener triggers graceful shutdown.
+- **Lifecycle Policy**: "Last-command-standing" — vrl remains alive as long as at least one command exists. Shutdown occurs only when the command count reaches zero.
 
 ---
 
-## 6. Security Architecture
-
-### Authentication Flow
-
-```
-Request → CORS middleware → Auth middleware → Handler
-                                 │
-                    ┌────────────┴────────────┐
-                    │                         │
-              auth_token is None        auth_token is Some
-              (localhost mode)         (remote mode)
-                    │                         │
-              Pass through          Check Authorization header
-                                       │
-                              ┌────────┴────────┐
-                              │                 │
-                           Valid token     Missing/invalid
-                              │                 │
-                          Pass through    401 Unauthorized
-```
-
-### TLS Setup
-
-```
---tls flag → TlsManager::load_or_generate_config()
-                    │
-            ┌───────┴────────┐
-            │                │
-      Certs exist      Certs missing
-            │                │
-      Load PEM files   Generate via rcgen
-            │          (CN=vrunner, SAN=localhost)
-            │                │
-            │          Save to ~/.config/vrunner/
-            │          (cert.pem + key.pem @ 0600)
-            │                │
-            └───────┬────────┘
-                    │
-            Build rustls::ServerConfig
-            (no client auth — bearer token handles auth)
-                    │
-            axum_server::bind_rustls()
-```
-
----
-
-## 7. Crate Dependencies
+## 6. Crate Dependencies
 
 | Crate | Purpose |
 |-------|---------|
-| `tokio` | Async runtime |
-| `axum` | HTTP server framework |
-| `axum-server` | HTTP/TLS server with graceful shutdown |
-| `reqwest` | HTTP client (for `vrunner stop`) |
-| `rustls` / `rustls-pemfile` | TLS (no OpenSSL dependency) |
-| `rcgen` | Self-signed certificate generation |
-| `rand` | Cryptographically random token generation |
-| `serde` / `serde_json` | Serialization |
-| `clap` | CLI parsing |
+| `tokio` | Async runtime (current_thread flavor) |
+| `serde` / `serde_json` | Serialization for UDS protocol |
+| `clap` / `clap_complete` | CLI parsing and shell completions |
 | `config` | Hierarchical config loading |
 | `anyhow` | Error handling |
-| `tracing` | Structured logging |
+| `tracing` / `tracing-subscriber` | Structured logging |
 | `uuid` | Command ID generation |
 | `chrono` | Timestamps |
 | `portable-pty` | Cross-platform PTY creation |
 | `parking_lot` | `RwLock` for VTTY buffer |
 | `crossterm` | Local terminal display |
-| `libc` | Raw Unix syscalls for daemonization |
+| `libc` | Raw Unix syscalls for daemonization and signals |
 | `dirs` | Standard directories |
-| `sysinfo` | Process liveness checks |
-| `rust-embed` | Embed admin assets |
 | `dashmap` | Concurrent hash map |
-| `tower-http` | CORS middleware |
-| `sha2` | SHA-256 hashing for certificate token derivation |
-| `hex` | Hex encoding for certificate tokens |
+| `async-trait` | Async trait support |
+| `unicode-width` | Terminal column width calculation |
+| `regex` | Pattern matching in display/keybindings |
 
 ---
 
-## 8. Extension Points
+## 7. Extension Points
 
-### Adding a New Web Command
+### Adding a New IPC Command
 
-1. Write handler in `src/web/handlers/<domain>.rs`.
-2. Add route in `src/web/router.rs` (the handler receives `State<AppState>`).
-3. Document in README and configuration reference.
+1. Add variant to `ControlCommand` enum in `src/ipc/protocol.rs`.
+2. Add handling in `src/ipc/server.rs`.
+3. Add CLI handler in `src/cli/commands/ipc.rs`.
+4. Document in README and configuration reference.
 
 ### Adding a New Handle Sink
 
@@ -496,10 +297,9 @@ Request → CORS middleware → Auth middleware → Handler
 
 ---
 
-## 9. Testing Strategy
+## 8. Testing Strategy
 
 - **Unit tests**: VTTY parser, buffer operations, config merging, key encoding.
-- **Integration tests**: Spawn command, send keys via API, assert VTTY contents.
-- **Instance tests**: Start two instances on different ports, verify `vrunner list` shows both, verify `vrunner stop` shuts one down.
+- **Integration tests**: Spawn command, send keys via UDS, assert VTTY contents.
+- **Instance tests**: Start two instances, verify `vrl list` shows both, verify `vrl stop` shuts one down.
 - **Platform tests**: CI matrix for Linux, macOS, Windows.
-- **Security tests**: Verify auth middleware blocks unauthenticated requests when enabled.

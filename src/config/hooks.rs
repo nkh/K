@@ -156,7 +156,7 @@ mod tests {
         let hooks = HooksConfig {
             on_spawn: Some("notify-send 'Started' {name}".to_string()),
             on_exit: Some("echo '{name} exited successfully'".to_string()),
-            on_error: Some("notify-send 'vrunner' '{name} failed (exit {exit_code})'".to_string()),
+            on_error: Some("notify-send 'vrl' '{name} failed (exit {exit_code})'".to_string()),
             on_kill: Some("echo 'Killed {name}'".to_string()),
         };
         assert!(hooks.on_spawn.is_some());

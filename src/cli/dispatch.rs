@@ -7,7 +7,7 @@
 //! tokio runtime for the async UDS client.  These are handled in `main()` after
 //! `pre_runtime()` returns `Ok(Some(cli))` — but we detect them here and return
 //! a special sentinel so the caller knows to run the IPC handler instead of
-//! starting a full vrunner instance.
+//! starting a full vrl instance.
 
 use anyhow::Result;
 use std::io::stdout;
@@ -85,7 +85,7 @@ Fields with errors: {}",
 /// here directly.  IPC subcommands (keys, cat, spawn-in, freeze, thaw, resize)
 /// are detected but deferred — they return Ok(Some(cli)) and the caller checks
 /// `is_ipc_command()` to decide whether to run the IPC handler or start a
-/// full vrunner instance.
+/// full vrl instance.
 pub fn pre_runtime() -> Result<Option<Cli>> {
     let cli = Cli::parse_with_version();
 
@@ -112,7 +112,7 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
         }
         Some(Commands::Completions { shell }) => {
             let mut cmd = <Cli as CommandFactory>::command();
-            clap_complete::generate(*shell, &mut cmd, "vrunner", &mut stdout());
+            clap_complete::generate(*shell, &mut cmd, "vrl", &mut stdout());
             return Ok(None);
         }
         // IPC commands — handled by the caller after tokio runtime is available
@@ -131,7 +131,7 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
 }
 
 /// Check if the parsed CLI represents an IPC subcommand (one that needs
-/// a UDS connection to a running instance, not a new vrunner instance).
+/// a UDS connection to a running instance, not a new vrl instance).
 pub fn is_ipc_command(cli: &Cli) -> bool {
     matches!(
         cli.command,

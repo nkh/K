@@ -45,3 +45,30 @@ Stage Summary:
 - 54 files changed, 220 insertions(+), 11058 deletions(-)
 - All 296 tests pass
 - vrunner is now a pure PTY + terminal display tool
+---
+Task ID: 3
+Agent: main
+Task: Rename binary to vrl, fix list UDS diagnostics, update docs and manpages
+
+Work Log:
+- Changed Cargo.toml package name from "vrunner" to "vrl"
+- Updated CLI name in args.rs: `#[command(name = "vrl")]` and `parse_with_version()`
+- Updated completion generation in dispatch.rs: "vrl" instead of "vrunner"
+- Renamed all source references: use vrl::, data paths, config paths, process name checks
+- is_pid_vrunner() → is_pid_vrl(), /proc check now looks for "vrl" in comm
+- Data dir: ~/.local/share/vrl/, config dir: ~/.config/vrl/, socket: ~/.local/share/vrl/control-{pid}.sock
+- Config filenames: vrl.yaml, vrl.toml (local config files)
+- Simplified InstanceInfo: removed port, bind, command fields (commands now queried via UDS)
+- Removed initial_command from register_current() and PID file
+- Removed fallback PID-file command display in list command - now shows warnings on UDS errors
+- Removed dead format_instance_list() from common.rs
+- Cleaned up all user-facing messages to use "vrl"
+- Replaced old manpages (vrunner-*.1) with new vrl manpages: vrl.1, vrl-list.1, vrl-stop.1
+- Batch-updated 18 documentation files: vrunner → vrl in architecture, cli reference, usage, getting-started, README, etc.
+- All 296 tests pass, clippy clean
+
+Stage Summary:
+- Binary renamed to vrl across all source, config, and documentation
+- List command now surfaces UDS errors instead of silently falling back to PID file
+- PID files simplified: no longer store initial command (always query via UDS)
+- 23 source files updated, 18 docs updated, 3 manpages created

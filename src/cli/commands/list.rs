@@ -23,9 +23,9 @@ fn format_duration(secs: f64) -> String {
     }
 }
 
-/// Handle the `vrunner list` subcommand.
+/// Handle the `vrl list` subcommand.
 ///
-/// Discovers running vrunner instances from PID files, then queries each
+/// Discovers running vrl instances from PID files, then queries each
 /// instance via UDS to get its live command list (including commands added
 /// via spawn-in).
 pub async fn handle_list_command(cli: &Cli) -> Result<()> {
@@ -33,7 +33,7 @@ pub async fn handle_list_command(cli: &Cli) -> Result<()> {
     let all_instances = registry.list_instances();
 
     if all_instances.is_empty() {
-        println!("No running vrunner instances.");
+        println!("No running vrl instances.");
         return Ok(());
     }
 
@@ -43,7 +43,7 @@ pub async fn handle_list_command(cli: &Cli) -> Result<()> {
             Some(info) => vec![info.clone()],
             None => {
                 anyhow::bail!(
-                    "No vrunner instance found with PID {}. Running instances:\n{}",
+                    "No vrl instance found with PID {}. Running instances:\n{}",
                     target_pid,
                     all_instances
                         .iter()
@@ -81,33 +81,17 @@ pub async fn handle_list_command(cli: &Cli) -> Result<()> {
                 }
             }
             Ok(ControlResponse::Error { error }) => {
-                // Instance is alive (PID file says so) but UDS query failed.
-                // Show the initial command from PID file as fallback.
-                let fallback = info
-                    .command
-                    .as_deref()
-                    .unwrap_or("(unknown)");
-                println!(
-                    "  {} {}",
-                    c("COMMAND:", Color::DarkGrey, false),
-                    c(fallback, Color::Yellow, false),
-                );
                 eprintln!(
                     "  {} (could not query commands via UDS: {})",
                     c("WARNING:", Color::Yellow, true),
                     error
                 );
             }
-            Err(_) => {
-                // Socket not reachable — show fallback from PID file.
-                let fallback = info
-                    .command
-                    .as_deref()
-                    .unwrap_or("(unknown)");
-                println!(
-                    "  {} {}",
-                    c("COMMAND:", Color::DarkGrey, false),
-                    c(fallback, Color::Yellow, false),
+            Err(e) => {
+                eprintln!(
+                    "  {} (UDS error: {})",
+                    c("WARNING:", Color::Yellow, true),
+                    e
                 );
             }
         }
@@ -121,7 +105,7 @@ pub async fn handle_list_command(cli: &Cli) -> Result<()> {
     Ok(())
 }
 
-/// Format an instance header line for `vrunner list` output.
+/// Format an instance header line for `vrl list` output.
 pub fn format_instance_header(info: &crate::instance::info::InstanceInfo) -> String {
     let daemon = if info.daemon { "yes" } else { "no" };
     let display = if info.display { "yes" } else { "no" };
@@ -145,7 +129,7 @@ pub fn format_instance_header(info: &crate::instance::info::InstanceInfo) -> Str
     )
 }
 
-/// Format a single command line for `vrunner list` output.
+/// Format a single command line for `vrl list` output.
 /// Returns None if the JSON value lacks required fields.
 pub fn format_command(cmd: &serde_json::Value) -> Option<String> {
     let name = cmd.get("name")?.as_str()?;

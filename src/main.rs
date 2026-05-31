@@ -1,20 +1,20 @@
 use anyhow::Result;
 use std::sync::Arc;
 
-use vrunner::cli::args::Cli;
-use vrunner::cli::dispatch;
-use vrunner::instance::registry::InstanceRegistry;
-use vrunner::interactive::display::{detect_terminal_size, run_display_loop, wait_for_child};
-use vrunner::ipc::server::spawn_control_server;
-use vrunner::ipc::socket_path_for_pid;
-use vrunner::process::manager::CommandManager;
+use vrl::cli::args::Cli;
+use vrl::cli::dispatch;
+use vrl::instance::registry::InstanceRegistry;
+use vrl::interactive::display::{detect_terminal_size, run_display_loop, wait_for_child};
+use vrl::ipc::server::spawn_control_server;
+use vrl::ipc::socket_path_for_pid;
+use vrl::process::manager::CommandManager;
 
 /// Spawn a child command from the CLI positional args, if provided.
 /// Returns the spawned command ID, or None if no command was given.
 async fn spawn_initial_command(
     cli: &Cli,
     manager: &Arc<CommandManager>,
-    cfg: &vrunner::config::schema::Config,
+    cfg: &vrl::config::schema::Config,
 ) -> Result<Option<String>> {
     let cmd_args = match &cli.cmd_args {
         Some(args) if !args.is_empty() => args,
@@ -71,7 +71,7 @@ async fn spawn_initial_command(
 /// Detect the terminal size and apply it to the VTTY config when
 /// --display is enabled.  CLI flags --vtty-rows / --vtty-cols take
 /// precedence over detection.
-fn apply_detected_terminal_size(cli: &Cli, cfg: &mut vrunner::config::schema::Config) {
+fn apply_detected_terminal_size(cli: &Cli, cfg: &mut vrl::config::schema::Config) {
     if !cfg.display.enabled {
         return;
     }
@@ -158,8 +158,7 @@ async fn async_main(cli: Cli) -> Result<()> {
 
     // Initialize instance registry
     let registry = InstanceRegistry::new()?;
-    let initial_command = cli.cmd_args.as_ref().and_then(|args| args.first().map(|s| s.as_str()));
-    registry.register_current(&cfg, initial_command)?;
+    registry.register_current(&cfg)?;
 
     // Initialize command manager
     let manager = Arc::new(CommandManager::new(cfg.clone()));
@@ -221,7 +220,7 @@ fn main() -> Result<()> {
     };
 
     // IPC commands need a minimal tokio runtime for the UDS client.
-    // Route them directly without starting a full vrunner instance.
+    // Route them directly without starting a full vrl instance.
     if dispatch::is_ipc_command(&cli) {
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -240,7 +239,7 @@ fn main() -> Result<()> {
                 cfg.daemon.enabled = true;
             }
 
-            vrunner::daemon::unix::daemonize(&cfg)?;
+            vrl::daemon::unix::daemonize(&cfg)?;
         }
         #[cfg(not(unix))]
         {

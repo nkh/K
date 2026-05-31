@@ -3,7 +3,7 @@ use anyhow::Result;
 use crate::config::loader::load_config;
 use crate::config::validation::{validate_config, ValidationLevel};
 
-/// Handle the `vrunner config-check` subcommand.
+/// Handle the `vrl config-check` subcommand.
 ///
 /// Validates configuration files without starting the server.
 /// Reports validation errors and warnings with field paths.

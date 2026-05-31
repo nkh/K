@@ -13,7 +13,7 @@ pub mod list;
 pub mod stop;
 
 // Re-export all public handlers
-pub use common::{c, format_instance_list};
+pub use common::c;
 pub use config::handle_config_check_command;
 pub use ipc::{
     handle_cat_command, handle_freeze_command, handle_keys_command, handle_resize_command,

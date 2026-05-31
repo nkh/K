@@ -2,7 +2,7 @@
 //!
 //! Delegates to per-command handlers in the `commands` module.
 
-pub use crate::cli::commands::common::{c, format_instance_list};
+pub use crate::cli::commands::common::c;
 pub use crate::cli::commands::config::handle_config_check_command;
 pub use crate::cli::commands::ipc::{
     handle_cat_command, handle_freeze_command, handle_keys_command, handle_resize_command,

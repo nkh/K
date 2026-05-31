@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::instance::info::InstanceInfo;
 
-/// Stop a vrunner instance by sending SIGTERM to its PID.
+/// Stop a vrl instance by sending SIGTERM to its PID.
 ///
 /// If no PID is given, stops the only instance if exactly one is running.
 pub fn handle_stop_command(pid: Option<u32>, instances: &[InstanceInfo]) -> Result<()> {
@@ -18,7 +18,7 @@ pub fn handle_stop_command(pid: Option<u32>, instances: &[InstanceInfo]) -> Resu
                 target_pid, target_pid, errno
             );
         }
-        println!("Sent SIGTERM to vrunner instance (PID {})", target_pid);
+        println!("Sent SIGTERM to vrl instance (PID {})", target_pid);
     }
     #[cfg(not(unix))]
     {
@@ -27,20 +27,20 @@ pub fn handle_stop_command(pid: Option<u32>, instances: &[InstanceInfo]) -> Resu
             .arg(target_pid.to_string())
             .spawn()?
             .wait()?;
-        println!("Sent kill signal to vrunner instance (PID {})", target_pid);
+        println!("Sent kill signal to vrl instance (PID {})", target_pid);
     }
 
     Ok(())
 }
 
-/// Resolve the target PID for the `vrunner stop` subcommand.
+/// Resolve the target PID for the `vrl stop` subcommand.
 /// If no PID is given, resolves to the only instance if exactly one is running.
 pub fn resolve_stop_target(pid: Option<u32>, instances: &[InstanceInfo]) -> u32 {
     match pid {
         Some(p) => p,
         None => match instances.len() {
             0 => {
-                eprintln!("No vrunner instances running.");
+                eprintln!("No vrl instances running.");
                 std::process::exit(1);
             }
             1 => {
@@ -49,11 +49,11 @@ pub fn resolve_stop_target(pid: Option<u32>, instances: &[InstanceInfo]) -> u32 
                 p
             }
             _ => {
-                eprintln!("Multiple vrunner instances running. Specify which one to stop:");
+                eprintln!("Multiple vrl instances running. Specify which one to stop:");
                 for inst in instances {
-                    eprintln!("  PID {} -- {}", inst.pid, inst.command.as_deref().unwrap_or("(idle)"));
+                    eprintln!("  PID {}", inst.pid);
                 }
-                eprintln!("Usage: vrunner stop <PID>");
+                eprintln!("Usage: vrl stop <PID>");
                 std::process::exit(1);
             }
         },

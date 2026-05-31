@@ -3,7 +3,7 @@ use clap::CommandFactory;
 use clap::{FromArgMatches, Parser, Subcommand};
 
 #[derive(Parser, Debug)]
-#[command(name = "vrunner")]
+#[command(name = "vrl")]
 #[command(about = "A virtual terminal runner")]
 #[command(trailing_var_arg = true)]
 #[command(version)]
@@ -125,7 +125,7 @@ pub struct Cli {
     #[arg(short = 'P', long, value_name = "NAME")]
     pub profile: Option<String>,
 
-    /// Target a specific vrunner instance by PID
+    /// Target a specific vrl instance by PID
     #[arg(short = 't', long, value_name = "PID")]
     pub target: Option<u32>,
 
@@ -144,10 +144,10 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// List all running vrunner instances
+    /// List all running vrl instances
     List,
 
-    /// Stop a vrunner instance by PID (auto-selects if only one)
+    /// Stop a vrl instance by PID (auto-selects if only one)
     Stop {
         /// PID of the instance to stop
         pid: Option<u32>,
@@ -155,7 +155,7 @@ pub enum Commands {
 
     /// Send keystrokes to a command in a running instance
     Keys {
-        /// PID of the target vrunner instance
+        /// PID of the target vrl instance
         pid: u32,
         /// ID of the target command (omit for first command)
         #[arg(short = 'c', long)]
@@ -166,16 +166,16 @@ pub enum Commands {
 
     /// Show VTTY text output of a command in a running instance
     Cat {
-        /// PID of the target vrunner instance
+        /// PID of the target vrl instance
         pid: u32,
         /// ID of the target command (omit for first command)
         #[arg(short = 'c', long)]
         command: Option<String>,
     },
 
-    /// Spawn a command inside a running vrunner instance
+    /// Spawn a command inside a running vrl instance
     SpawnIn {
-        /// PID of the target vrunner instance
+        /// PID of the target vrl instance
         pid: u32,
         /// Command to run
         cmd: String,
@@ -186,7 +186,7 @@ pub enum Commands {
 
     /// Freeze (suspend) a command in a running instance
     Freeze {
-        /// PID of the target vrunner instance
+        /// PID of the target vrl instance
         pid: u32,
         /// ID of the target command (omit for first command)
         #[arg(short = 'c', long)]
@@ -195,7 +195,7 @@ pub enum Commands {
 
     /// Thaw (resume) a frozen command in a running instance
     Thaw {
-        /// PID of the target vrunner instance
+        /// PID of the target vrl instance
         pid: u32,
         /// ID of the target command (omit for first command)
         #[arg(short = 'c', long)]
@@ -204,7 +204,7 @@ pub enum Commands {
 
     /// Resize the VTTY of a command in a running instance
     Resize {
-        /// PID of the target vrunner instance
+        /// PID of the target vrl instance
         pid: u32,
         /// ID of the target command (omit for first command)
         #[arg(short = 'c', long)]
@@ -220,7 +220,7 @@ pub enum Commands {
     /// Validate config files without starting
     ConfigCheck,
 
-    /// Generate shell completion scripts for vrunner
+    /// Generate shell completion scripts for vrl
     Completions {
         /// The shell to generate completions for
         #[arg(value_enum)]
@@ -234,6 +234,7 @@ impl Cli {
         let version = include_str!(concat!(env!("OUT_DIR"), "/version.txt"));
         let mut cmd = <Self as CommandFactory>::command();
         cmd = cmd.version(version.trim());
+        cmd = cmd.name("vrl");
         match cmd.clone().try_get_matches() {
             Ok(matches) => {
                 <Self as FromArgMatches>::from_arg_matches(&matches)

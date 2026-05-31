@@ -66,7 +66,7 @@ pub fn daemonize(cfg: &Config) -> Result<()> {
     }
 
     // Daemon process (grandchild): restore the invocation directory.
-    // We prefer the saved CWD (where the user invoked vrunner) over /tmp
+    // We prefer the saved CWD (where the user invoked vrl) over /tmp
     // because relative paths in commands should work relative to that
     // directory.  Fall back to /tmp only if the saved CWD is no longer
     // accessible (e.g. it was a tmpfs that got unmounted).
