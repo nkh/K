@@ -170,16 +170,6 @@ impl CommandHandle {
         crate::vtty::renderer::VttyRenderer::to_html(&buf)
     }
 
-    /// Render the VTTY buffer as a PNG image using a TTF font.
-    #[cfg(feature = "png")]
-    pub async fn vtty_png(
-        &self,
-        font_size: f32,
-        font_path: Option<&str>,
-    ) -> std::result::Result<Vec<u8>, String> {
-        let buf = self.vtty_snapshot().await;
-        crate::vtty::renderer::VttyRenderer::to_png(&buf, font_size, font_path)
-    }
 
     pub async fn cursor_position(&self) -> (usize, usize) {
         let emu = self.emulator.read().await;

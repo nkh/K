@@ -2,7 +2,6 @@ use anyhow::Result;
 use serde_json;
 use std::fs;
 use std::path::PathBuf;
-use std::time::Duration;
 
 use super::info::InstanceInfo;
 use crate::config::schema::Config;
@@ -25,9 +24,6 @@ impl InstanceRegistry {
     }
 
     /// Create a registry backed by a specific directory.
-    ///
-    /// Useful for tests to avoid polluting the shared system directory.
-    /// The directory is created if it doesn't exist.
     pub fn with_dir(dir: PathBuf) -> Result<Self> {
         fs::create_dir_all(&dir)?;
         Ok(Self { dir })
@@ -37,12 +33,12 @@ impl InstanceRegistry {
         let pid = std::process::id();
         let info = InstanceInfo {
             pid,
-            port: cfg.server.port,
-            bind: cfg.server.bind.clone(),
+            port: 0, // No server
+            bind: String::new(), // No server
             start_time: chrono::Utc::now(),
             daemon: cfg.daemon.enabled,
             display: cfg.display.enabled,
-            command: None, // populated by caller if available
+            command: None,
         };
         let path = self.dir.join(format!("{}.json", pid));
         fs::write(&path, serde_json::to_string_pretty(&info)?)?;
@@ -59,13 +55,6 @@ impl InstanceRegistry {
     }
 
     /// Fast liveness check: read PID files, check /proc/<pid>/comm, return live instances.
-    ///
-    /// This is the optimized path used on every startup for client-mode discovery.
-    /// Instead of scanning all system processes via `sysinfo::System::new_all()`,
-    /// it reads each PID file and checks `/proc/<pid>/comm` (a single small file
-    /// read) to verify the process is alive and is actually vrunner.
-    ///
-    /// Saves ~5-15ms compared to `list_instances()` on a typical system.
     pub fn list_instances_fast(&self) -> Vec<InstanceInfo> {
         let mut instances = Vec::new();
         if let Ok(entries) = fs::read_dir(&self.dir) {
@@ -81,7 +70,6 @@ impl InstanceRegistry {
                                 }
                             }
                         } else {
-                            // PID no longer alive or recycled — clean up stale entry
                             let _ = fs::remove_file(&path);
                         }
                     }
@@ -92,11 +80,6 @@ impl InstanceRegistry {
     }
 
     /// Check if a PID is alive and belongs to a vrunner process.
-    ///
-    /// On Linux: reads `/proc/<pid>/comm` — a single small file read (~50 bytes).
-    /// On other Unix: falls back to `kill(pid, 0)`.
-    /// This is dramatically cheaper than `sysinfo::System::new_all()` which
-    /// reads `/proc` for every process on the system.
     fn is_pid_vrunner(pid: u32) -> bool {
         #[cfg(target_os = "linux")]
         {
@@ -110,24 +93,15 @@ impl InstanceRegistry {
         }
         #[cfg(all(unix, not(target_os = "linux")))]
         {
-            // Non-Linux Unix: use kill(pid, 0) to check liveness
-            // No name verification without sysinfo, but the PID file is our best hint
             unsafe { libc::kill(pid as i32, 0) == 0 }
         }
         #[cfg(not(unix))]
         {
-            // Non-Unix: no /proc, no kill(0). Assume alive if PID file exists.
-            // This is a conservative fallback — the slow path (TCP probe) will
-            // handle false positives.
             true
         }
     }
 
-    /// Full instance listing with sysinfo verification.
-    ///
-    /// Used by `vrunner list` and subcommands that need to enumerate all instances
-    /// with full process metadata.  This scans ALL system processes to verify
-    /// each PID hasn't been recycled to a non-vrunner process.
+    /// Full instance listing with /proc verification.
     pub fn list_instances(&self) -> Vec<InstanceInfo> {
         let mut instances = Vec::new();
         if let Ok(entries) = fs::read_dir(&self.dir) {
@@ -144,7 +118,6 @@ impl InstanceRegistry {
                                 }
                             }
                         } else {
-                            // PID recycled — remove stale entry
                             tracing::warn!(
                                 pid,
                                 "cleaning up stale instance registry entry (PID recycled)"
@@ -165,54 +138,18 @@ impl InstanceRegistry {
             return;
         }
         println!(
-            "{:<10} {:<8} {:<20} {:<10} {:<10} COMMAND",
-            "PID", "PORT", "BIND", "DAEMON", "DISPLAY"
+            "{:<10} {:<20} {:<10} {:<10} COMMAND",
+            "PID", "BIND", "DAEMON", "DISPLAY"
         );
         for info in instances {
             println!(
-                "{:<10} {:<8} {:<20} {:<10} {:<10} {}",
+                "{:<10} {:<20} {:<10} {:<10} {}",
                 info.pid,
-                info.port,
                 info.bind,
                 if info.daemon { "yes" } else { "no" },
                 if info.display { "yes" } else { "no" },
                 info.command.as_deref().unwrap_or("(idle)")
             );
         }
-    }
-
-    pub async fn stop_instance(&self, pid: u32) -> Result<()> {
-        let instances = self.list_instances();
-        let target = instances.iter().find(|i| i.pid == pid);
-        match target {
-            Some(info) => {
-                let url = format!("http://{}:{}/api/shutdown", info.bind, info.port);
-                let client = reqwest::Client::builder()
-                    .connect_timeout(Duration::from_secs(3))
-                    .timeout(Duration::from_secs(5))
-                    .build()?;
-                match client.post(&url).send().await {
-                    Ok(resp) if resp.status().is_success() => {
-                        println!("Instance {} stopped gracefully.", pid);
-                    }
-                    Ok(resp) => {
-                        let status = resp.status();
-                        tracing::error!("Shutdown request returned HTTP {}", status);
-                        println!(
-                            "Failed to stop instance {} (HTTP {}). You may need to run: kill {}",
-                            pid, status, pid
-                        );
-                    }
-                    Err(e) => {
-                        tracing::error!(pid = pid, url = %url, error = %e, "Failed to contact instance");
-                        println!("Failed to contact instance {} ({}). Is the web server running? Try: kill {}", pid, e, pid);
-                    }
-                }
-            }
-            None => {
-                println!("No running vrunner instance found with PID {}.", pid);
-            }
-        }
-        Ok(())
     }
 }

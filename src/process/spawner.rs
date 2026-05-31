@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use super::handle::CommandHandle;
 use crate::config::hooks::HooksConfig;
-use crate::config::schema::{ExitConfig, HandleConfig, RateLimitConfig, VttyConfig};
+use crate::config::schema::{ExitConfig, HandleConfig, VttyConfig};
 use crate::handles::{
     file_sink::FileSink, null_sink::NullSink, registry::HandleRegistry, sink::Sink,
     vtty_sink::VttySink,
@@ -22,12 +22,13 @@ use crate::vtty::emulator::VttyEmulator;
 use crate::vtty::rate_limiter::RateLimiter;
 use crate::vtty::sink::{BroadcastVttySink, VttyOutput};
 
+/// Default rate limit for VTTY output notifications (updates per second).
+const DEFAULT_RATE_LIMIT: u32 = 30;
+
 pub struct ProcessSpawner {
     vtty_cfg: VttyConfig,
-    rate_limit_cfg: RateLimitConfig,
+    max_updates_per_sec: u32,
     /// The PTY backend used to open pseudo-terminals.
-    /// Defaults to [`PortablePtyBackend`] but can be swapped for testing
-    /// or to use a custom implementation (Unix native PTY, ConPTY, etc.).
     pty_backend: Box<dyn PtyBackend>,
 }
 
@@ -60,26 +61,22 @@ impl ExitStatus {
 }
 
 impl ProcessSpawner {
-    pub fn new(vtty_cfg: &VttyConfig, rate_limit_cfg: &RateLimitConfig) -> Self {
+    pub fn new(vtty_cfg: &VttyConfig) -> Self {
         Self {
             vtty_cfg: vtty_cfg.clone(),
-            rate_limit_cfg: rate_limit_cfg.clone(),
+            max_updates_per_sec: DEFAULT_RATE_LIMIT,
             pty_backend: Box::new(PortablePtyBackend::new()),
         }
     }
 
     /// Create a spawner with a custom PTY backend.
-    ///
-    /// This allows injecting alternative PTY implementations for testing
-    /// or platform-specific backends (Unix native PTY, ConPTY, etc.).
     pub fn with_backend(
         vtty_cfg: &VttyConfig,
-        rate_limit_cfg: &RateLimitConfig,
         backend: Box<dyn PtyBackend>,
     ) -> Self {
         Self {
             vtty_cfg: vtty_cfg.clone(),
-            rate_limit_cfg: rate_limit_cfg.clone(),
+            max_updates_per_sec: DEFAULT_RATE_LIMIT,
             pty_backend: backend,
         }
     }
@@ -215,7 +212,7 @@ impl ProcessSpawner {
             pty_out_rx,
             vtty_output.clone(),
             writer.clone(),
-            &self.rate_limit_cfg,
+            self.max_updates_per_sec,
         );
 
         // Spawn stdin writer task (blocking thread)
@@ -346,9 +343,9 @@ fn spawn_emulator_writer(
     mut pty_out_rx: mpsc::Receiver<PtyOutput>,
     vtty_output: Arc<VttyOutput>,
     writer: Arc<parking_lot::Mutex<Box<dyn Write + Send>>>,
-    rate_limit_cfg: &RateLimitConfig,
+    max_updates_per_sec: u32,
 ) {
-    let mut rate_limiter = RateLimiter::from_config(rate_limit_cfg.max_updates_per_sec);
+    let mut rate_limiter = RateLimiter::from_config(max_updates_per_sec);
     let flush_interval = rate_limiter.interval();
     tokio::spawn(async move {
         // State for rate-limited buffering.

@@ -108,7 +108,7 @@ impl CommandManager {
         // Use per-command exit config if provided, otherwise fall back to defaults
         let exit_config = exit_config.unwrap_or_else(|| self.config.default_exit.exit.clone());
 
-        let spawner = ProcessSpawner::new(&self.config.vtty, &self.config.web.rate_limit);
+        let spawner = ProcessSpawner::new(&self.config.vtty);
         let pty_raw_log = self.config.command_log.pty_raw_log.as_deref();
         let hooks = self.config.hooks.clone();
         let mut handle = spawner
@@ -274,7 +274,6 @@ impl CommandManager {
     fn spawn_diff_watcher(&self, watch_id: String) {
         let watch_commands = self.commands.clone();
         let watch_tx = self.vtty_change_tx.clone();
-        let check_interval_ms = self.config.web.dirty_check_ms;
 
         tokio::spawn(async move {
             let mut prev_gen: Option<u64> = None;
@@ -282,7 +281,7 @@ impl CommandManager {
             let mut prev_dims: Option<(usize, usize)> = None;
 
             loop {
-                tokio::time::sleep(std::time::Duration::from_millis(check_interval_ms)).await;
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
                 // Clone the emulator Arc and drop the DashMap entry BEFORE
                 // awaiting the snapshot.  Holding the DashMap shard read lock

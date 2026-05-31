@@ -8,4 +8,3 @@ pub mod interactive;
 pub mod logging;
 pub mod process;
 pub mod vtty;
-pub mod web;

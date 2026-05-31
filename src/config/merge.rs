@@ -6,14 +6,6 @@ use super::schema::{Config, PartialConfig};
 /// Local fields fully override global (except collections which merge when empty).
 pub fn merge_configs(global: Config, local: Config) -> Config {
     Config {
-        server: local.server,
-        security: local.security,
-        tls: local.tls,
-        certificates: if local.certificates.entries.is_empty() {
-            global.certificates
-        } else {
-            local.certificates
-        },
         vtty: local.vtty,
         display: local.display,
         command_log: local.command_log,
@@ -26,7 +18,6 @@ pub fn merge_configs(global: Config, local: Config) -> Config {
         interactive: local.interactive,
         default_exit: local.default_exit,
         environment: merge_env(global.environment, local.environment),
-        web: local.web,
         hooks: local.hooks,
         templates: if local.templates.is_empty() {
             global.templates
@@ -61,10 +52,6 @@ fn merge_profiles(
 /// Only fields present (Some) in the partial config override the base.
 pub fn apply_profile(base: Config, profile: &PartialConfig) -> Config {
     Config {
-        server: profile.server.clone().unwrap_or(base.server),
-        security: profile.security.clone().unwrap_or(base.security),
-        tls: profile.tls.clone().unwrap_or(base.tls),
-        certificates: base.certificates,
         vtty: profile.vtty.clone().unwrap_or(base.vtty),
         display: profile.display.clone().unwrap_or(base.display),
         command_log: profile.command_log.clone().unwrap_or(base.command_log),
@@ -73,7 +60,6 @@ pub fn apply_profile(base: Config, profile: &PartialConfig) -> Config {
         interactive: profile.interactive.clone().unwrap_or(base.interactive),
         default_exit: profile.default_exit.clone().unwrap_or(base.default_exit),
         environment: profile.environment.clone().unwrap_or(base.environment),
-        web: profile.web.clone().unwrap_or(base.web),
         hooks: profile.hooks.clone().unwrap_or(base.hooks),
         templates: profile.templates.clone().unwrap_or(base.templates),
         profiles: base.profiles,

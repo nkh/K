@@ -4,65 +4,13 @@ use clap::{FromArgMatches, Parser, Subcommand};
 
 #[derive(Parser, Debug)]
 #[command(name = "vrunner")]
-#[command(about = "A virtual terminal runner with web control plane")]
+#[command(about = "A virtual terminal runner")]
 #[command(trailing_var_arg = true)]
 #[command(version)]
 pub struct Cli {
     /// Path to configuration file
     #[arg(short, long, value_name = "FILE")]
     pub config: Option<String>,
-
-    /// Server bind address (default: 127.0.0.1)
-    #[arg(short, long, value_name = "ADDR")]
-    pub bind: Option<String>,
-
-    /// Server port (default: 9090)
-    #[arg(short, long, value_name = "PORT")]
-    pub port: Option<u16>,
-
-    /// Allow remote connections (binds to 0.0.0.0 and enables auth)
-    #[arg(short, long)]
-    pub remote: bool,
-
-    /// Require authentication for API requests
-    #[arg(short, long)]
-    pub auth: bool,
-
-    /// Register this instance with another vrunner server.
-    /// Takes a port number — the new instance registers with the
-    /// server running on that port (on the same bind address).
-    /// The primary's web UI will be notified and can show commands
-    /// from both instances. When the primary exits, the browser can
-    /// fail over to this instance directly.
-    #[arg(long, value_name = "PORT")]
-    pub register_with: Option<u16>,
-
-    /// Path to the bearer token file (default: ~/.config/vrunner/token)
-    #[arg(long, value_name = "FILE")]
-    pub token_file: Option<String>,
-
-    /// Enable TLS (HTTPS) with self-signed certificates
-    #[arg(long)]
-    pub tls: bool,
-
-    /// Path to the TLS certificate file
-    #[arg(long, value_name = "FILE")]
-    pub cert_file: Option<String>,
-
-    /// Path to the TLS private key file
-    #[arg(long, value_name = "FILE")]
-    pub key_file: Option<String>,
-
-    /// Define a named certificate (repeatable).
-    /// Format: NAME:CERT_FILE:KEY_FILE
-    #[arg(short = 'C', long, value_name = "NAME:CERT:KEY")]
-    pub certificate: Option<Vec<String>>,
-
-    /// Run without starting the web server.
-    /// Only command execution and local terminal display are available.
-    /// All web UI, API, and HTTP-based subcommands are unavailable.
-    #[arg(long)]
-    pub no_server: bool,
 
     /// Run as a background daemon (Unix only)
     #[arg(short, long)]
@@ -96,11 +44,11 @@ pub struct Cli {
     #[arg(long)]
     pub tabs: bool,
 
-    /// Log API commands to terminal
+    /// Log commands to terminal
     #[arg(short, long)]
     pub log: bool,
 
-    /// Log API commands to file
+    /// Log commands to file
     #[arg(short = 'L', long, value_name = "FILE")]
     pub log_file: Option<String>,
 
@@ -182,9 +130,6 @@ pub struct Cli {
     pub target: Option<u32>,
 
     /// Set the working directory for spawned commands.
-    /// The child process will have this as its CWD.
-    /// When daemonized, defaults to the directory from which vrunner
-    /// was invoked (instead of /tmp) if this option is not set.
     #[arg(short = 'w', long, value_name = "DIR")]
     pub working_directory: Option<String>,
 
@@ -208,127 +153,14 @@ pub enum Commands {
         pid: Option<u32>,
     },
 
-    /// Spawn a new command on a running vrunner instance
-    Spawn {
-        /// Command to run
-        cmd: String,
-        /// Arguments for the command
-        #[arg(trailing_var_arg = true)]
-        args: Vec<String>,
-        /// VTTY rows for the spawned command
-        #[arg(long)]
-        rows: Option<u16>,
-        /// VTTY columns for the spawned command
-        #[arg(long)]
-        cols: Option<u16>,
-    },
-
-    /// Freeze (suspend) a running command via SIGSTOP
-    Freeze {
-        /// PID of the command to freeze
-        pid: u32,
-    },
-
-    /// Thaw (resume) a frozen command via SIGCONT
-    Thaw {
-        /// PID of the command to thaw
-        pid: u32,
-    },
-
-    /// Manage named certificates for per-command access control
-    Cert {
-        #[command(subcommand)]
-        action: CertAction,
-    },
-
-    /// List vrunner instances (machine-readable, tab-separated)
-    ListVrunner,
-
-    /// List running commands (machine-readable, tab-separated)
-    ListCommands,
-
-    /// Stop a specific command by PID or name (not the whole instance)
-    StopCommand {
-        /// PID or name of the command to stop
-        target: Option<String>,
-    },
-
-    /// Purge an exited command, discarding its VTTY buffer
-    Purge {
-        /// Command ID or name of the exited command to purge
-        target: Option<String>,
-    },
-
-    /// Resize the VTTY of a running command (buffer + PTY)
-    Resize {
-        /// PID or name of the command to resize
-        target: String,
-        /// Number of rows (default: terminal height)
-        #[arg(long, default_value_t = 0)]
-        rows: u16,
-        /// Number of columns (default: terminal width)
-        #[arg(long, default_value_t = 0)]
-        cols: u16,
-    },
-
-    /// Validate config files without starting the server
+    /// Validate config files without starting
     ConfigCheck,
-
-    /// Print the VTTY buffer of a running command as text
-    Cat {
-        /// PID or name of the command whose buffer to print
-        target: Option<String>,
-
-        /// Preserve ANSI color escape sequences in the output
-        #[arg(long)]
-        color_always: bool,
-    },
-
-    /// Capture the VTTY buffer as a PNG screenshot
-    Screenshot {
-        /// PID or name of the command to screenshot
-        target: Option<String>,
-
-        /// Output file path (default: <command_name>_<timestamp>.png)
-        #[arg(long)]
-        output: Option<String>,
-
-        /// Font size in pixels per character cell (default: 14, range: 6–48)
-        #[arg(long, default_value_t = 14.0)]
-        font_size: f32,
-
-        /// Path to a TTF/OTF font file.  When omitted, the server searches
-        /// common system paths for a monospace font.
-        #[arg(long)]
-        font_name: Option<String>,
-    },
 
     /// Generate shell completion scripts for vrunner
     Completions {
         /// The shell to generate completions for
         #[arg(value_enum)]
         shell: clap_complete::Shell,
-    },
-}
-
-#[derive(Subcommand, Debug)]
-pub enum CertAction {
-    /// Generate a new named certificate
-    Generate {
-        /// Name for the certificate (e.g., "webapp-frontend")
-        name: String,
-    },
-    /// List all certificates in the pool
-    List,
-    /// Show details of a specific certificate
-    Show {
-        /// Name of the certificate to display
-        name: String,
-    },
-    /// Remove a certificate from the pool
-    Remove {
-        /// Name of the certificate to remove
-        name: String,
     },
 }
 
@@ -346,7 +178,6 @@ impl Cli {
             Err(err) => {
                 let rendered = err.render().to_string();
                 eprint!("{}", rendered);
-                print_subcommand_options(&rendered, &cmd);
                 std::process::exit(err.exit_code());
             }
         }
@@ -368,70 +199,8 @@ impl Cli {
     /// Apply CLI overrides to the loaded configuration.
     /// CLI flags take the highest precedence (override global and local config).
     pub fn apply_overrides(&self, cfg: &mut Config) -> anyhow::Result<()> {
-        // Server
-        if let Some(bind) = &self.bind {
-            cfg.server.bind = bind.clone();
-        }
-        if let Some(port) = self.port {
-            cfg.server.port = port;
-        }
-
-        // Security
-        if self.remote {
-            cfg.server.bind = "0.0.0.0".to_string();
-            cfg.security.require_auth = true;
-        }
-        if self.auth {
-            cfg.security.require_auth = true;
-        }
-        if let Some(token_file) = &self.token_file {
-            cfg.security.token_file = token_file.clone();
-        }
-
-        // TLS
-        if self.tls {
-            cfg.tls.enabled = true;
-        }
-        if let Some(cert_file) = &self.cert_file {
-            cfg.tls.cert_file = Some(cert_file.clone());
-        }
-        if let Some(key_file) = &self.key_file {
-            cfg.tls.key_file = Some(key_file.clone());
-        }
-
-        // Certificates pool (from --certificate NAME:CERT:KEY flags)
-        if let Some(cert_defs) = &self.certificate {
-            for cert_def in cert_defs {
-                let parts: Vec<&str> = cert_def.splitn(3, ':').collect();
-                if parts.len() == 3 {
-                    use crate::config::schema::CertificateEntryConfig;
-                    cfg.certificates.entries.push(CertificateEntryConfig {
-                        name: parts[0].to_string(),
-                        cert_file: parts[1].to_string(),
-                        key_file: parts[2].to_string(),
-                    });
-                }
-            }
-        }
-
-        // --no-server conflicts with flags that require a server
-        if self.no_server {
-            if self.remote {
-                anyhow::bail!("--no-server conflicts with --remote. Remote access requires the web server.");
-            }
-            if self.register_with.is_some() {
-                anyhow::bail!("--no-server conflicts with --register-with. Peer registration requires the web server.");
-            }
-            if self.auth {
-                anyhow::bail!("--no-server conflicts with --auth. Authentication is a server feature.");
-            }
-        }
-
         // Daemon
         if self.daemon {
-            // --daemon detaches from the controlling terminal, making display
-            // mode impossible. Reject conflicting flags early with a clear
-            // message rather than silently ignoring them.
             if self.display || self.display_all || self.tabs {
                 let mut flags = Vec::new();
                 if self.display {
@@ -460,9 +229,6 @@ impl Cli {
         }
 
         // Display
-        // --display-all implies --display: keep displaying after the CLI
-        // command exits, which requires the display to be active in the
-        // first place.
         if self.display || self.display_all {
             cfg.display.enabled = true;
         }
@@ -524,9 +290,6 @@ impl Cli {
         if let Some(timeout) = self.exit_timeout {
             cfg.default_exit.exit.timeout_secs = timeout;
         }
-        // Note: --retain-on-exit is NOT applied to the global default here.
-        // It is a per-command option applied only to the CLI-spawned command
-        // in main.rs.  Similarly, --snapshot-on-exit is per-command.
 
         // Interactive display
         if self.tabs {
@@ -539,66 +302,10 @@ impl Cli {
         }
 
         // --env KEY=VALUE: merge CLI env vars into config env vars
-        // (CLI always adds/overrides config)
         let cli_env = self.parse_env_vars();
         cfg.environment.variables.extend(cli_env);
         Ok(())
     }
-}
-
-/// When a parse error references a subcommand (e.g. "Usage: vrunner screenshot [OPTIONS]"),
-/// print a compact list of the available options so the user doesn't have to
-/// run `--help` separately.
-fn print_subcommand_options(rendered: &str, cmd: &clap::Command) {
-    // Extract the subcommand name from the "Usage:" line.
-    // e.g. "Usage: vrunner screenshot [OPTIONS] [TARGET]"
-    let usage_line = rendered.lines().find(|l| l.starts_with("Usage:"));
-    let Some(usage_line) = usage_line else { return };
-    let parts: Vec<&str> = usage_line.split_whitespace().collect();
-    // parts: ["Usage:", "vrunner", "screenshot", "[OPTIONS]", "[TARGET]"]
-    if parts.len() < 3 {
-        return;
-    }
-    // The subcommand is the 3rd token (index 2). Skip if it starts with '[' or '-'.
-    let sub_name = parts[2];
-    if sub_name.starts_with('[') || sub_name.starts_with('-') {
-        return;
-    }
-
-    let Some(subcmd) = cmd.find_subcommand(sub_name) else { return };
-    let opts: Vec<_> = subcmd
-        .get_arguments()
-        .filter(|a| !a.is_hide_set() && !a.is_positional())
-        .collect();
-    if opts.is_empty() {
-        return;
-    }
-
-    let _ = eprintln!("\n  Available options:");
-    for opt in &opts {
-        let mut names = String::new();
-        if let Some(short) = opt.get_short() {
-            names.push('-');
-            names.push(short);
-            names.push_str(", ");
-        }
-        if let Some(long) = opt.get_long() {
-            names.push_str("--");
-            names.push_str(long);
-        }
-        if let Some(val_names) = opt.get_value_names() {
-            if let Some(value) = val_names.first() {
-                names.push(' ');
-                names.push_str(value);
-            }
-        }
-        if let Some(help) = opt.get_help() {
-            let _ = eprintln!("    {:<36} {}", names, help);
-        } else {
-            let _ = eprintln!("    {}", names);
-        }
-    }
-    let _ = eprintln!();
 }
 
 #[cfg(test)]
@@ -607,32 +314,6 @@ mod tests {
 
     fn default_config() -> Config {
         Config::default()
-    }
-
-    #[test]
-    fn no_server_conflicts_with_remote() {
-        let cli = Cli::try_parse_from(["vrunner", "--no-server", "--remote", "htop"]).unwrap();
-        let result = cli.apply_overrides(&mut default_config());
-        assert!(result.is_err());
-        let msg = result.unwrap_err().to_string();
-        assert!(
-            msg.contains("--no-server conflicts with --remote"),
-            "unexpected: {msg}"
-        );
-    }
-
-    #[test]
-    fn no_server_conflicts_with_register_with() {
-        let cli =
-            Cli::try_parse_from(["vrunner", "--no-server", "--register-with", "9091", "htop"])
-                .unwrap();
-        let result = cli.apply_overrides(&mut default_config());
-        assert!(result.is_err());
-        let msg = result.unwrap_err().to_string();
-        assert!(
-            msg.contains("--no-server conflicts with --register-with"),
-            "unexpected: {msg}"
-        );
     }
 
     #[test]
@@ -669,20 +350,6 @@ mod tests {
             msg.contains("--daemon conflicts with --tabs"),
             "unexpected: {msg}"
         );
-    }
-
-    #[test]
-    fn daemon_conflicts_with_all_display_flags() {
-        let cli = Cli::try_parse_from(["vrunner", "--daemon", "--display-all", "--tabs", "htop"])
-            .unwrap();
-        let result = cli.apply_overrides(&mut default_config());
-        assert!(result.is_err());
-        let msg = result.unwrap_err().to_string();
-        assert!(
-            msg.contains("--display-all"),
-            "missing --display-all in: {msg}"
-        );
-        assert!(msg.contains("--tabs"), "missing --tabs in: {msg}");
     }
 
     #[test]
