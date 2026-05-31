@@ -20,3 +20,28 @@ Work Log:
 Stage Summary:
 - Two root causes found and fixed: CSS inheritance issue and undefined `panelObj.cmdId`
 - Commit d26c733 pushed to main
+---
+Task ID: 2
+Agent: main
+Task: Remove all server-related and PNG generation code from speedup branch
+
+Work Log:
+- Deleted entire src/web/ directory (20+ files: server, router, handlers, auth, TLS, middleware, state, certs, static assets)
+- Deleted server config modules: config/server.rs, config/security.rs, config/web.rs
+- Deleted HTTP-dependent CLI subcommands: cat, cert, screenshot, spawn, freeze, thaw, purge, resize
+- Deleted 3 test files that tested removed server features
+- Removed all server CLI args from args.rs (--bind, --port, --remote, --auth, --tls, etc.)
+- Rewrote main.rs to remove all server init code (try_client_mode, check_port_available, start_server, bound_tx, register-with)
+- Converted vrunner to pure PTY + terminal display tool with current_thread runtime
+- Rewrote dispatch.rs to handle subcommands synchronously (no tokio runtime needed)
+- Converted list/stop subcommands to work via PID files and SIGTERM (no HTTP)
+- Removed RateLimitConfig from spawner, replaced with u32 constant
+- Removed screenshot font fields from VttyConfig
+- Stripped all #[cfg(feature = "png")] code from renderer.rs and handle.rs
+- Rewrote config/schema.rs, config/merge.rs, config/validation.rs to remove server fields
+- Updated Cargo.toml: removed axum, reqwest, rustls, rcgen, image, fontdue, rust-embed, sha2, hex, etc.
+
+Stage Summary:
+- 54 files changed, 220 insertions(+), 11058 deletions(-)
+- All 296 tests pass
+- vrunner is now a pure PTY + terminal display tool

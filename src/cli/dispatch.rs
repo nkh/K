@@ -2,6 +2,12 @@
 //!
 //! `pre_runtime()` handles all subcommands synchronously before the tokio runtime.
 //! `resolve_config()` loads, merges, and validates configuration.
+//!
+//! IPC subcommands (keys, cat, spawn-in, freeze, thaw, resize) require a minimal
+//! tokio runtime for the async UDS client.  These are handled in `main()` after
+//! `pre_runtime()` returns `Ok(Some(cli))` — but we detect them here and return
+//! a special sentinel so the caller knows to run the IPC handler instead of
+//! starting a full vrunner instance.
 
 use anyhow::Result;
 use std::io::stdout;
@@ -75,9 +81,11 @@ Fields with errors: {}",
 /// Synchronous pre-runtime phase: parse CLI, handle subcommands, load config,
 /// and daemonize.
 ///
-/// All subcommands are handled synchronously here — no tokio runtime needed.
-/// Returns Ok(Some(cli)) if the caller should start a vrunner instance,
-/// or Ok(None) if a subcommand was handled and the process should exit.
+/// Synchronous subcommands (list, stop, config-check, completions) are handled
+/// here directly.  IPC subcommands (keys, cat, spawn-in, freeze, thaw, resize)
+/// are detected but deferred — they return Ok(Some(cli)) and the caller checks
+/// `is_ipc_command()` to decide whether to run the IPC handler or start a
+/// full vrunner instance.
 pub fn pre_runtime() -> Result<Option<Cli>> {
     let cli = Cli::parse_with_version();
 
@@ -110,8 +118,75 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
             clap_complete::generate(*shell, &mut cmd, "vrunner", &mut stdout());
             return Ok(None);
         }
+        // IPC commands — handled by the caller after tokio runtime is available
+        Some(Commands::Keys { .. })
+        | Some(Commands::Cat { .. })
+        | Some(Commands::SpawnIn { .. })
+        | Some(Commands::Freeze { .. })
+        | Some(Commands::Thaw { .. })
+        | Some(Commands::Resize { .. }) => {
+            return Ok(Some(cli));
+        }
         None => {}
     }
 
     Ok(Some(cli))
+}
+
+/// Check if the parsed CLI represents an IPC subcommand (one that needs
+/// a UDS connection to a running instance, not a new vrunner instance).
+pub fn is_ipc_command(cli: &Cli) -> bool {
+    matches!(
+        cli.command,
+        Some(Commands::Keys { .. })
+            | Some(Commands::Cat { .. })
+            | Some(Commands::SpawnIn { .. })
+            | Some(Commands::Freeze { .. })
+            | Some(Commands::Thaw { .. })
+            | Some(Commands::Resize { .. })
+    )
+}
+
+/// Dispatch an IPC subcommand.  Requires a tokio runtime.
+pub async fn run_ipc_command(cli: Cli) -> Result<()> {
+    use crate::cli::commands::verify_instance;
+
+    match cli.command {
+        Some(Commands::Keys { pid, command, keys }) => {
+            tracing_subscriber::fmt::init();
+            verify_instance(pid)?;
+            subcommands::handle_keys_command(pid, command.as_deref(), &keys).await
+        }
+        Some(Commands::Cat { pid, command }) => {
+            tracing_subscriber::fmt::init();
+            verify_instance(pid)?;
+            subcommands::handle_cat_command(pid, command.as_deref()).await
+        }
+        Some(Commands::SpawnIn { pid, cmd, args }) => {
+            tracing_subscriber::fmt::init();
+            verify_instance(pid)?;
+            subcommands::handle_spawn_in_command(pid, &cmd, &args).await
+        }
+        Some(Commands::Freeze { pid, command }) => {
+            tracing_subscriber::fmt::init();
+            verify_instance(pid)?;
+            subcommands::handle_freeze_command(pid, command.as_deref()).await
+        }
+        Some(Commands::Thaw { pid, command }) => {
+            tracing_subscriber::fmt::init();
+            verify_instance(pid)?;
+            subcommands::handle_thaw_command(pid, command.as_deref()).await
+        }
+        Some(Commands::Resize {
+            pid,
+            command,
+            rows,
+            cols,
+        }) => {
+            tracing_subscriber::fmt::init();
+            verify_instance(pid)?;
+            subcommands::handle_resize_command(pid, command.as_deref(), rows, cols).await
+        }
+        _ => anyhow::bail!("Not an IPC command"),
+    }
 }

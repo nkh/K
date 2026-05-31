@@ -153,6 +153,70 @@ pub enum Commands {
         pid: Option<u32>,
     },
 
+    /// Send keystrokes to a command in a running instance
+    Keys {
+        /// PID of the target vrunner instance
+        pid: u32,
+        /// ID of the target command (omit for first command)
+        #[arg(short = 'c', long)]
+        command: Option<String>,
+        /// Keystrokes to send. Use <Enter>, <C-c>, <Esc> etc. for special keys.
+        keys: String,
+    },
+
+    /// Show VTTY text output of a command in a running instance
+    Cat {
+        /// PID of the target vrunner instance
+        pid: u32,
+        /// ID of the target command (omit for first command)
+        #[arg(short = 'c', long)]
+        command: Option<String>,
+    },
+
+    /// Spawn a command inside a running vrunner instance
+    SpawnIn {
+        /// PID of the target vrunner instance
+        pid: u32,
+        /// Command to run
+        cmd: String,
+        /// Arguments for the command
+        #[arg(trailing_var_arg = true)]
+        args: Vec<String>,
+    },
+
+    /// Freeze (suspend) a command in a running instance
+    Freeze {
+        /// PID of the target vrunner instance
+        pid: u32,
+        /// ID of the target command (omit for first command)
+        #[arg(short = 'c', long)]
+        command: Option<String>,
+    },
+
+    /// Thaw (resume) a frozen command in a running instance
+    Thaw {
+        /// PID of the target vrunner instance
+        pid: u32,
+        /// ID of the target command (omit for first command)
+        #[arg(short = 'c', long)]
+        command: Option<String>,
+    },
+
+    /// Resize the VTTY of a command in a running instance
+    Resize {
+        /// PID of the target vrunner instance
+        pid: u32,
+        /// ID of the target command (omit for first command)
+        #[arg(short = 'c', long)]
+        command: Option<String>,
+        /// Number of rows
+        #[arg(long, default_value_t = 24)]
+        rows: u16,
+        /// Number of columns
+        #[arg(long, default_value_t = 80)]
+        cols: u16,
+    },
+
     /// Validate config files without starting
     ConfigCheck,
 

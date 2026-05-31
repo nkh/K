@@ -5,6 +5,8 @@ use vrunner::cli::args::Cli;
 use vrunner::cli::dispatch;
 use vrunner::instance::registry::InstanceRegistry;
 use vrunner::interactive::display::{detect_terminal_size, run_display_loop, wait_for_child};
+use vrunner::ipc::server::spawn_control_server;
+use vrunner::ipc::socket_path_for_pid;
 use vrunner::process::manager::CommandManager;
 
 /// Spawn a child command from the CLI positional args, if provided.
@@ -170,6 +172,16 @@ async fn async_main(cli: Cli) -> Result<()> {
     // Install signal handler for clean shutdown
     spawn_signal_handler(shutdown_tx.clone());
 
+    // Start UDS control socket for inter-instance IPC
+    let pid = std::process::id();
+    let control_socket = socket_path_for_pid(pid);
+    spawn_control_server(manager.clone(), control_socket, shutdown_tx.subscribe());
+
+    // Ensure control socket directory exists
+    if let Some(parent) = socket_path_for_pid(pid).parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+
     if cfg.display.enabled {
         // ── Display mode ──
         let log_entries = manager.logger().memory_buffer_arc();
@@ -193,8 +205,9 @@ async fn async_main(cli: Cli) -> Result<()> {
         tracing::info!("No command specified and no display. Exiting.");
     }
 
-    // Clean up instance registry entry
+    // Clean up instance registry entry and control socket
     let _ = registry.unregister_current();
+    let _ = std::fs::remove_file(socket_path_for_pid(std::process::id()));
 
     Ok(())
 }
@@ -205,6 +218,16 @@ fn main() -> Result<()> {
         Some(cli) => cli,
         None => return Ok(()), // Subcommand handled, exit
     };
+
+    // IPC commands need a minimal tokio runtime for the UDS client.
+    // Route them directly without starting a full vrunner instance.
+    if dispatch::is_ipc_command(&cli) {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?
+            .block_on(dispatch::run_ipc_command(cli))?;
+        return Ok(());
+    }
 
     // Daemonize if requested — MUST happen before tokio::runtime is created.
     if cli.daemon {
