@@ -1,24 +1,25 @@
-# vrl User Manual
+# vrl / vrunner User Manual
 
-> **vrl** — A virtual terminal runner and process orchestrator with a web-first control plane.
+> **vrl** — A local-first virtual terminal runner (UDS IPC). **vrunner** — The same core, exposed as an HTTP server with web dashboard and REST API.
 
-This manual is the comprehensive reference for vrl. It covers every feature, configuration option, API endpoint, and workflow. Whether you are running your first command or integrating vrl into a CI pipeline, this document has the answer.
+This manual is the comprehensive reference for both **vrl** and **vrunner** — two binaries built from the same `vrl_core` library. It covers every feature, configuration option, API endpoint, and workflow. Whether you are running your first command or integrating vrunner into a CI pipeline, this document has the answer.
 
 ---
 
 ## Table of Contents
 
 ### [Part I — Getting Started](#part-i--getting-started)
-- [1.1 What is vrl?](#11-what-is-vrl)
-- [1.2 Installation](#12-installation)
-- [1.3 First Run](#13-first-run)
-- [1.4 Key Concepts](#14-key-concepts)
-- [1.5 CLI Quick Reference](#15-cli-quick-reference)
+- [1.1 What is vrl / vrunner?](#11-what-is-vrl--vrunner)
+- [1.2 vrl vs vrunner — Choosing the Right Binary](#12-vrl-vs-vrunner--choosing-the-right-binary)
+- [1.3 Installation](#13-installation)
+- [1.4 First Run](#14-first-run)
+- [1.5 Key Concepts](#15-key-concepts)
+- [1.6 CLI Quick Reference](#16-cli-quick-reference)
 
 ### [Part II — Everyday Use](#part-ii--everyday-use)
 - [2.1 Running Commands](#21-running-commands)
 - [2.2 Viewing Terminal Output](#22-viewing-terminal-output)
-- [2.3 Web Admin Interface](#23-web-admin-interface)
+- [2.3 Web Admin Interface — vrunner only](#23-web-admin-interface--vrunner-only)
 - [2.4 Sending Keystrokes](#24-sending-keystrokes)
 - [2.5 Managing Commands](#25-managing-commands)
 - [2.6 Configuration](#26-configuration)
@@ -34,17 +35,17 @@ This manual is the comprehensive reference for vrl. It covers every feature, con
 - [3.5 Split-Pane Display](#35-split-pane-display)
 - [3.6 Retain on Exit and Purge](#36-retain-on-exit-and-purge)
 - [3.7 Tabs Feature](#37-tabs-feature)
-- [3.8 Remote Access and TLS](#38-remote-access-and-tls)
+- [3.8 Remote Access and TLS — vrunner only](#38-remote-access-and-tls--vrunner-only)
 - [3.9 Daemon Mode](#39-daemon-mode)
 - [3.10 Multi-Instance Management](#310-multi-instance-management)
-- [3.11 Certificate Management](#311-certificate-management)
+- [3.11 Certificate Management — vrunner only](#311-certificate-management--vrunner-only)
 - [3.12 Exit Handlers and Timeouts](#312-exit-handlers-and-timeouts)
-- [3.13 Snapshots and Diffs](#313-snapshots-and-diffs)
-- [3.14 WebSocket Protocol](#314-websocket-protocol)
-- [3.15 Incremental Diff Protocol](#315-incremental-diff-protocol)
+- [3.13 Snapshots and Diffs — vrunner only](#313-snapshots-and-diffs--vrunner-only)
+- [3.14 WebSocket Protocol — vrunner only](#314-websocket-protocol--vrunner-only)
+- [3.15 Incremental Diff Protocol — vrunner only](#315-incremental-diff-protocol--vrunner-only)
 - [3.16 Hooks](#316-hooks)
 
-### [Part IV — API Reference](#part-iv--api-reference)
+### [Part IV — API Reference (vrunner only)](#part-iv--api-reference-vrunner-only)
 - [4.1 REST API Overview](#41-rest-api-overview)
 - [4.2 Command Endpoints](#42-command-endpoints)
 - [4.3 VTTY Endpoints](#43-vtty-endpoints)
@@ -55,7 +56,7 @@ This manual is the comprehensive reference for vrl. It covers every feature, con
 - [4.8 Log Endpoints](#48-log-endpoints)
 - [4.9 Handle Endpoints](#49-handle-endpoints)
 
-### [Part V — Security](#part-v--security)
+### [Part V — Security (vrunner only)](#part-v--security-vrunner-only)
 - [5.1 Authentication](#51-authentication)
 - [5.2 TLS Encryption](#52-tls-encryption)
 - [5.3 CORS Policy](#53-cors-policy)
@@ -81,7 +82,7 @@ This manual is the comprehensive reference for vrl. It covers every feature, con
 
 # Part I — Getting Started
 
-## 1.1 What is vrl?
+## 1.1 What is vrl / vrunner?
 
 vrl executes commands inside virtual TTYs (pseudo-terminals) and exposes them through a web API and built-in admin dashboard. Unlike tools that wrap processes directly, vrl gives child processes full terminal capabilities — ANSI colors, cursor movement, interactive keyboard input, mouse events — while keeping the local terminal completely silent unless you opt in.
 
@@ -89,7 +90,7 @@ The key architectural idea is the **separation between starting a command and in
 
 vrl is a single statically-linked binary with no runtime dependencies beyond the OS. The admin UI is embedded directly into the binary using `rust_embed`, so there are no separate assets to deploy or serve.
 
-### Who is vrl for?
+### Who is vrl / vrunner for?
 
 | Role | How vrl helps |
 |------|-------------------|
@@ -99,24 +100,92 @@ vrl is a single statically-linked binary with no runtime dependencies beyond the
 | System administrator | Manage services on headless machines through a browser with TLS and auth |
 | Pair programmers | Share a terminal session between developers via the web interface |
 
-### What makes vrl different?
+### What makes vrl / vrunner different?
 
 vrl is **web-first by design**. While it supports local terminal display, its primary interface is the HTTP API and the admin dashboard. This means you can run vrl on a headless server and interact with it entirely from a browser. The embedded admin UI requires no separate build step or asset pipeline — it ships inside the binary.
 
-## 1.2 Installation
+## 1.2 vrl vs vrunner — Choosing the Right Binary
+
+The project provides **two binaries** built from the same `vrl_core` library. They share all core functionality (VTTY engine, process management, configuration, interactive display, daemon mode, hooks, handles) but differ in how they expose that functionality:
+
+### Overview
+
+| Aspect | **vrl** (local) | **vrunner** (HTTP) |
+|--------|------------------|---------------------|
+| Transport | Unix Domain Socket (UDS) | HTTP on port 9090 |
+| Startup | Fast, minimal overhead | Starts HTTP server, TLS if configured |
+| Web dashboard | No | Yes — embedded SPA at `/admin` |
+| REST API | No | Yes — 30+ endpoints at `/api/` |
+| WebSocket | No | Yes — VTTY streaming + log streaming |
+| TLS encryption | No | Yes — built-in, auto-generated certs |
+| Authentication | Not needed (local only) | Yes — bearer token, certificate pool |
+| CORS policy | N/A | Yes — configurable via config |
+| Remote access | No (local socket only) | Yes — bind to any interface |
+| Certificates | No | Yes — per-command access control |
+| Interactive display | Yes (`--display`) | Yes (`--display`) |
+| Daemon mode | Yes (`--daemon`) | Yes (`--daemon`) |
+| Config profiles | Yes | Yes |
+| Hooks | Yes | Yes |
+| Handles | Yes | Yes |
+| VTTY engine | Same | Same |
+| CLI subcommands | Same (`list`, `stop`, `spawn`, etc.) | Same |
+| Binary name | `vrl` | `vrunner` |
+
+### When to use **vrl**
+
+- Local development workflows where you want fast startup
+- Scripting and automation where you don't need HTTP
+- CI pipelines that use `--display` to mirror output to the terminal
+- Any scenario where only local access is needed and you want minimal overhead
+
+### When to use **vrunner**
+
+- You need a **web dashboard** to monitor processes from a browser
+- You need a **REST API** for programmatic control from scripts or other services
+- You need **remote access** to manage processes on a headless server
+- You need **WebSocket streaming** for real-time terminal output
+- You need **TLS** and **authentication** for secure remote management
+- You need **per-command certificates** for access control
+- Pair programming — multiple developers viewing the same terminal sessions
+
+### How they share configuration
+
+Both binaries read the same configuration files (`vrl.yaml`, `~/.config/vrl/config.yaml`, etc.) and support the same config schema. However, **vrl ignores web-specific settings** (`server`, `security`, `tls`, `web` sections) since it does not run an HTTP server. Similarly, **vrunner supports all config sections** including web-specific ones.
+
+## 1.3 Installation
 
 ### From Source (Cargo)
 
 ```bash
 git clone https://github.com/nkh/K.git
 cd K
-cargo build --release
+
+# Build vrl (local UDS binary)
+cargo build --release --bin vrl
 # Binary is at target/release/vrl
+
+# Build vrunner (HTTP server + web dashboard binary)
+cargo build --release --bin vrunner
+# Binary is at target/release/vrunner
+```
+
+### Build Both at Once
+
+```bash
+cargo build --release
+# Both binaries are at target/release/vrl and target/release/vrunner
 ```
 
 ### System-Wide Install
 
 ```bash
+# Install vrl only
+cargo install --bin vrl --path .
+
+# Install vrunner only
+cargo install --bin vrunner --path .
+
+# Install both
 cargo install --path .
 ```
 
@@ -124,24 +193,60 @@ cargo install --path .
 
 ```bash
 cp man/vrl.1 /usr/local/share/man/man1/
+cp man/vrunner.1 /usr/local/share/man/man1/
 man vrl
+man vrunner
 ```
 
 ### Prebuilt Binaries
 
 Download from the [Releases](https://github.com/nkh/K/releases) page (if available).
 
-## 1.3 First Run
+## 1.4 First Run
 
-### Step 1: Start vrl
+### First Run with vrl (local UDS)
+
+**Step 1: Start vrl with a command**
+
+```bash
+vrl -- htop
+```
+
+This runs `htop` inside a virtual TTY. The VTTY is connected via a Unix Domain Socket — no HTTP server is started. The command runs until it exits (or use `Ctrl+\` to detach).
+
+**Step 2: View it in the terminal**
+
+```bash
+vrl --display -- htop
+```
+
+This mirrors the VTTY output to your local terminal. Use the interactive display to send keystrokes, switch commands, and more.
+
+**Step 3: Start in idle mode**
 
 ```bash
 vrl
 ```
 
+vrl starts with no command running. Use `vrl spawn` from another terminal to add commands:
+
+```bash
+# From another terminal
+vrl spawn htop
+vrl spawn -- cargo run
+```
+
+### First Run with vrunner (HTTP server)
+
+**Step 1: Start vrunner**
+
+```bash
+vrunner
+```
+
 This starts an HTTP server on `http://127.0.0.1:9090`. No command is running yet — the instance is idle and ready to receive API requests or web UI connections.
 
-### Step 2: Verify it works
+**Step 2: Verify it works**
 
 ```bash
 curl http://127.0.0.1:9090/api/commands
@@ -152,11 +257,11 @@ Expected response:
 {"status":"ok","data":[],"error":null}
 ```
 
-### Step 3: Open the dashboard
+**Step 3: Open the dashboard**
 
 Open `http://127.0.0.1:9090/admin` in your browser. You will see the admin dashboard with an empty command list.
 
-### Step 4: Spawn a command
+**Step 4: Spawn a command**
 
 ```bash
 curl -X POST http://127.0.0.1:9090/api/commands \
@@ -171,48 +276,56 @@ Expected response:
 
 The command now appears in the web dashboard. Click on it to view the live terminal output.
 
-### Step 5: Run a command at startup
+**Step 5: Run a command at startup**
 
-Stop vrl (`Ctrl+C`) and try:
+Stop vrunner (`Ctrl+C`) and try:
 
 ```bash
-vrl --display -- htop
+vrunner --display -- htop
 ```
 
 This runs `htop` inside a virtual TTY and mirrors the output to your local terminal. Press `Ctrl+\` to quit the display while keeping the server running.
 
-## 1.4 Key Concepts
+## 1.5 Key Concepts
+
+> **Shared feature** — These concepts apply equally to both **vrl** and **vrunner**.
 
 ### VTTY (Virtual TTY)
 
-A VTTY is an in-memory terminal emulator that receives raw PTY output from a child process. It maintains a 2D grid of cells (character + attributes), a scrollback buffer, cursor position, and terminal state (alternate screen, scroll regions, mouse tracking). Each command spawned by vrl gets its own VTTY.
+A VTTY is an in-memory terminal emulator that receives raw PTY output from a child process. It maintains a 2D grid of cells (character + attributes), a scrollback buffer, cursor position, and terminal state (alternate screen, scroll regions, mouse tracking). Each command spawned by vrl/vrunner gets its own VTTY.
 
 ### Command Manager
 
-The `CommandManager` is the central registry of all running commands. It stores `CommandHandle` objects in a concurrent `DashMap`, keyed by UUID. When a command exits, its handle is either removed (default) or retained (with `--retain-on-exit` or the API `retain_on_exit` field). When the last command is removed from the manager, vrl exits (in display and headless mode). Retained commands keep the display and server alive.
+The `CommandManager` is the central registry of all running commands. It stores `CommandHandle` objects in a concurrent `DashMap`, keyed by UUID. When a command exits, its handle is either removed (default) or retained (with `--retain-on-exit` or the API `retain_on_exit` field). When the last command is removed from the manager, the binary exits (in display and headless mode). Retained commands keep the display and server alive.
 
 ### Display Modes
 
-vrl operates in several modes depending on the flags used:
+Both vrl and vrunner operate in several modes depending on the flags used:
 
 | Mode | Flags | Behavior |
 |------|-------|----------|
-| Headless | *(default)* | Silent execution, server runs, waits for shutdown signal |
+| Headless | *(default)* | Silent execution, server/socket runs, waits for shutdown signal |
 | Display | `--display` | Mirrors VTTY to local terminal, exits when command exits |
 | Monitor | `--display-all` | Stays in display mode after command exits, switches to next |
 | Daemon | `--daemon` | Background process, double-forks, detached from terminal |
 
 ### The `--` Separator
 
-The `--` separator is required when passing a command to vrl. Everything before `--` is a vrl flag; everything after is the child command:
+The `--` separator is required when passing a command to vrl or vrunner. Everything before `--` is a vrl/vrunner flag; everything after is the child command:
 
 ```bash
 vrl --port 3000 --display -- python -m http.server 8000
-#      ^^^^^^^^^^^ ^^^^^^^^^^^ ^^ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-#      vrl opts  vrl opt  child command + args
+#     ^^^^^^^^^^^ ^^^^^^^^^^^ ^^ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#     vrl opts  vrl opt  child command + args
+
+vrunner --port 3000 --display -- python -m http.server 8000
+#        ^^^^^^^^^^^ ^^^^^^^^^^^ ^^ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#        vrunner opts  vrunner opt  child command + args
 ```
 
-## 1.5 CLI Quick Reference
+## 1.6 CLI Quick Reference
+
+### vrl (local UDS binary)
 
 ```
 vrl [OPTIONS] [-- COMMAND [ARGS...]]
@@ -223,14 +336,33 @@ vrl freeze <PID>
 vrl thaw <PID>
 vrl resize <TARGET> [--rows N] [--cols M]
 vrl purge [TARGET]
-vrl cert generate|list|show|remove
 vrl list-vrl
 vrl list-commands
 vrl stop-command <TARGET>
 vrl config-check
 ```
 
-For the complete CLI reference, see the man page (`man vrl`) or run `vrl --help`.
+### vrunner (HTTP server binary)
+
+```
+vrunner [OPTIONS] [-- COMMAND [ARGS...]]
+vrunner list
+vrunner stop <PID>
+vrunner spawn [OPTIONS] CMD [ARGS...]
+vrunner freeze <PID>
+vrunner thaw <PID>
+vrunner resize <TARGET> [--rows N] [--cols M]
+vrunner purge [TARGET]
+vrunner cert generate|list|show|remove
+vrunner list-vrl
+vrunner list-commands
+vrunner stop-command <TARGET>
+vrunner config-check
+```
+
+> **Note:** Both binaries share the same CLI subcommand interface. The `cert` subcommand is only available in vrunner since it manages HTTP API certificates.
+
+For the complete CLI reference, see the man page (`man vrl` or `man vrunner`) or run `vrl --help` / `vrunner --help`.
 
 ---
 
@@ -238,19 +370,23 @@ For the complete CLI reference, see the man page (`man vrl`) or run `vrl --help`
 
 ## 2.1 Running Commands
 
+> **Shared feature** — Both vrl and vrunner can run commands at startup and via `spawn`. Web UI and API methods are **vrunner only**.
+
 ### At Startup
 
-Use the `--` separator to pass a command to vrl at launch:
+Use the `--` separator to pass a command at launch:
 
 ```bash
-# Run a development server
-vrl --port 3000 -- npm run dev
+# Run a development server (vrl or vrunner)
+vrl --display -- vim notes.txt
+vrunner --port 3000 -- npm run dev
 
 # Run with local terminal display
 vrl --display -- vim notes.txt
 
 # Run in the background as a daemon
 vrl --daemon -- my-long-running-script.sh
+vrunner --daemon -- my-long-running-script.sh
 
 # Run with a custom terminal size
 vrl --vtty-cols 120 -- python -m http.server 8000
@@ -265,14 +401,14 @@ vrl --retain-on-exit --snapshot-on-exit /tmp/build.log -- cargo build --release
 vrl --snapshot-on-exit /tmp/htop-output.txt --display -- htop
 ```
 
-### Via the Web UI
+### Via the Web UI — vrunner only
 
 1. Open `http://127.0.0.1:9090/admin` in your browser.
 2. Use the command spawn interface to enter a command and optional arguments.
 3. The command starts inside a new VTTY; its entry appears in the command list.
 4. Click on the command to view its terminal output.
 
-### Via curl (API)
+### Via curl (API) — vrunner only
 
 ```bash
 # Start a simple command
@@ -291,9 +427,9 @@ curl -X POST http://127.0.0.1:9090/api/commands \
   -d '{"cmd": "cargo", "args": ["test"], "on_exit": "notify-send OK", "on_error": "notify-send FAIL"}'
 ```
 
-### Via `vrl spawn` (CLI)
+### Via `vrl spawn` / `vrunner spawn` (CLI)
 
-The `spawn` subcommand discovers running vrl instances and sends a spawn request:
+The `spawn` subcommand discovers running instances and sends a spawn request:
 
 ```bash
 # Auto-selects the only running instance
@@ -312,7 +448,9 @@ vrl spawn --env RUST_LOG=debug -- cargo run
 vrl spawn --rows 50 --cols 160 -- vim file.txt
 ```
 
-### Via WebSocket
+> With **vrl**, the `spawn` subcommand communicates via UDS. With **vrunner**, it communicates via HTTP to the running server.
+
+### Via WebSocket — vrunner only
 
 ```javascript
 const ws = new WebSocket('ws://127.0.0.1:9090/api/commands/550e8400.../ws');
@@ -324,6 +462,8 @@ ws.send(JSON.stringify({ type: 'resize', rows: 40, cols: 120 }));
 
 ## 2.2 Viewing Terminal Output
 
+> **Shared feature** — Both vrl and vrunner support local VTTY display. Web-based viewing is **vrunner only**.
+
 ### Local VTTY Display
 
 ```bash
@@ -332,7 +472,7 @@ vrl --display -- htop
 
 The VTTY contents are mirrored to stdout at the refresh interval (`--refresh-ms`, default 100ms). The display renders the raw ANSI output including colors and cursor positioning.
 
-### Web Admin VTTY Viewer
+### Web Admin VTTY Viewer — vrunner only
 
 The admin dashboard provides a full-featured terminal viewer with:
 
@@ -343,7 +483,7 @@ The admin dashboard provides a full-featured terminal viewer with:
 - **Search** — `Ctrl+F` to search within the output buffer
 - **Auto-resize** — terminal fits the available panel space
 
-### VTTY API Endpoints
+### VTTY API Endpoints — vrunner only
 
 Three endpoints provide VTTY content at different levels:
 
@@ -363,13 +503,15 @@ curl "http://127.0.0.1:9090/api/commands/$ID/vtty/html?scrollback_offset=10"
 curl "http://127.0.0.1:9090/api/commands/$ID/vtty/partial?offset=0&limit=50"
 ```
 
-### Direct Command URLs
+### Direct Command URLs — vrunner only
 
 Navigate to `http://localhost:9090/<command_name>` to jump straight to a command's terminal. For example, `/htop` opens the VTTY viewer for a command named `htop`. If multiple commands share the same name, a picker list is shown.
 
-## 2.3 Web Admin Interface
+## 2.3 Web Admin Interface — vrunner only
 
-The admin dashboard is a single-page application embedded in the vrl binary and served at `/admin`. It is split into three files — `index.html`, `style.css`, and `app.js` — and communicates with the REST API and WebSocket endpoints. All static assets are embedded at compile time via `rust-embed`; no external CDN or build step is required.
+> **vrunner only** — The web admin interface is not available in vrl.
+
+The admin dashboard is a single-page application embedded in the vrunner binary and served at `/admin`. It is split into three files — `index.html`, `style.css`, and `app.js` — and communicates with the REST API and WebSocket endpoints. All static assets are embedded at compile time via `rust-embed`; no external CDN or build step is required.
 
 ### Layout
 
@@ -458,7 +600,9 @@ The layout uses a consistent button sizing system with four variants: `btn-xs` (
 
 ## 2.4 Sending Keystrokes
 
-### Via API
+> **Shared feature** — Both vrl and vrunner support sending keystrokes. API and WebSocket methods are **vrunner only**.
+
+### Via API — vrunner only
 
 ```bash
 ID="550e8400-e29b-41d4-a716-446655440000"
@@ -489,18 +633,24 @@ curl -X POST http://127.0.0.1:9090/api/commands/$ID/keys \
 | `\x1b[C` | Right arrow |
 | `\x1b[D` | Left arrow |
 
-### Via WebSocket
+### Via WebSocket — vrunner only
 
 ```javascript
 ws.send(JSON.stringify({ type: 'keys', keys: 'q' }));
 ws.send(JSON.stringify({ type: 'keys', keys: ':q!\r' }));  // quit vim
 ```
 
-### Via Web UI
+### Via Web UI — vrunner only
 
 Click the terminal pane to capture keyboard focus, then type normally. The keystrokes are forwarded to the child process in real time.
 
+### Via Interactive Display — vrl / vrunner
+
+When using `--display`, type directly in the terminal. Keystrokes are forwarded to the child process in real time.
+
 ## 2.5 Managing Commands
+
+> **Shared feature** — Both vrl and vrunner support CLI-based command management. API methods are **vrunner only**.
 
 ### Listing Commands
 
@@ -508,18 +658,18 @@ Click the terminal pane to capture keyboard focus, then type normally. The keyst
 # Via CLI (all instances)
 vrl list
 
-# Via API
+# Via API (vrunner only)
 curl http://127.0.0.1:9090/api/commands
 ```
 
 ### Killing Commands
 
 ```bash
-# Via API (by command UUID)
+# Via API (by command UUID) — vrunner only
 curl -X POST http://127.0.0.1:9090/api/commands/$ID/kill \
   -H "Content-Type: application/json" -d '{}'
 
-# Via API (by OS PID)
+# Via API (by OS PID) — vrunner only
 curl -X POST http://127.0.0.1:9090/api/commands/kill-pid/12345
 
 # Via CLI (queries all instances)
@@ -538,7 +688,7 @@ vrl freeze $ID
 # Thaw (SIGCONT — resumes the process)
 vrl thaw $ID
 
-# Via API
+# Via API (vrunner only)
 curl -X POST http://127.0.0.1:9090/api/commands/$ID/freeze
 curl -X POST http://127.0.0.1:9090/api/commands/$ID/thaw
 ```
@@ -549,7 +699,7 @@ curl -X POST http://127.0.0.1:9090/api/commands/$ID/thaw
 # Via CLI (auto-detects terminal size if omitted)
 vrl resize htop --rows 50 --cols 160
 
-# Via API
+# Via API (vrunner only)
 curl -X POST http://127.0.0.1:9090/api/commands/$ID/resize \
   -H "Content-Type: application/json" \
   -d '{"rows": 50, "cols": 160}'
@@ -568,15 +718,17 @@ vrl purge
 # Via CLI (by ID or name)
 vrl purge 550e8400
 
-# Via API
+# Via API (vrunner only)
 curl -X DELETE http://127.0.0.1:9090/api/commands/$ID
 
-# Via Web UI — click the purge button on an exited command in the sidebar
+# Via Web UI (vrunner only) — click the purge button on an exited command in the sidebar
 ```
 
 ## 2.6 Configuration
 
-vrl reads configuration from multiple sources in order of increasing precedence:
+> **Shared feature** — Both vrl and vrunner read the same configuration files. Web-specific sections (`server`, `security`, `tls`, `web`) are only used by vrunner.
+
+Both binaries read configuration from multiple sources in order of increasing precedence:
 
 ```
 Built-in defaults → Global config → Local config → Explicit config file → CLI flags
@@ -650,9 +802,15 @@ profiles: {}
 handles: []
 ```
 
+> **Binary-specific config sections:**
+> - **Both**: `vtty`, `display`, `daemon`, `interactive`, `default_exit`, `environment`, `profiles`, `handles`
+> - **vrunner only**: `server`, `security`, `tls`, `web`
+
 For the complete configuration reference with all fields, types, and CLI flag mappings, see [docs/configuration.md](docs/configuration.md).
 
 ## 2.7 Configuration Profiles
+
+> **Shared feature** — Both vrl and vrunner support configuration profiles.
 
 Profiles let you define named sets of configuration values. When selected, only the fields present in the profile override the base configuration:
 
@@ -690,7 +848,9 @@ CLI flags always take final precedence over both the base config and the profile
 
 ## 2.8 Environment Variables
 
-vrl provides three layers of environment variable control:
+> **Shared feature** — Both vrl and vrunner support environment variable control via config and CLI.
+
+Both binaries provide three layers of environment variable control:
 
 ```
 CLI --env flags / API "env" field  (highest — always wins)
@@ -716,7 +876,7 @@ environment:
 # CLI — override for this command only
 vrl spawn --env RUST_LOG=debug -- cargo run
 
-# API — per-command override
+# API — per-command override (vrunner only)
 curl -X POST http://127.0.0.1:9090/api/commands \
   -H "Content-Type: application/json" \
   -d '{"cmd": "./my-app", "env": {"RUST_LOG": "debug"}}'
@@ -726,6 +886,8 @@ vrl spawn --no-env --env PATH=/usr/bin -- ./my-script.sh
 ```
 
 ## 2.9 Logging
+
+> **Shared feature** — Both vrl and vrunner support command logging via CLI flags. API log access and WebSocket log streaming are **vrunner only**.
 
 ### Command Log
 
@@ -737,7 +899,7 @@ vrl --log -- my-command
 vrl --log-file /var/log/vrl.log -- my-command
 ```
 
-### Reading Logs via API
+### Reading Logs via API — vrunner only
 
 ```bash
 # All log entries
@@ -757,7 +919,7 @@ vrl --log-pty-raw /tmp/pty-raw.log -- my-command
 
 Each line records one `read()` call with an elapsed-time stamp and escaped bytes. Printable ASCII is shown as-is; non-printable bytes are escaped as `\xHH`. The resulting log can be replayed step-by-step with tools like `ansi-replay`.
 
-### Real-Time Log Streaming
+### Real-Time Log Streaming — vrunner only
 
 ```javascript
 const ws = new WebSocket('ws://127.0.0.1:9090/api/ws/logs');
@@ -772,6 +934,8 @@ ws.onmessage = (e) => {
 # Part III — Advanced Topics
 
 ## 3.1 Interactive Display
+
+> **Shared feature** — Both vrl and vrunner support the interactive terminal-based display mode.
 
 The interactive display mode provides a terminal-based UI for monitoring and controlling commands. It is enabled with `--display` and optionally `--display-all` and `--tabs`:
 
@@ -843,9 +1007,11 @@ The display loop operates in these states:
 3. **Overlay** — A temporary overlay (log, help, spawn prompt) is shown on top of the VTTY
 4. **Context Menu** — Right-click context menu for command management actions
 
-When a command exits in active mode, the display automatically transitions to monitor mode (if other commands exist) or exits (if no commands remain). If `--retain-on-exit` was used on a command, that command stays in the manager after exiting, which keeps the display alive even in `display_all` mode. When all commands have been removed (none retained), vrl exits regardless of `display_all`.
+When a command exits in active mode, the display automatically transitions to monitor mode (if other commands exist) or exits (if no commands remain). If `--retain-on-exit` was used on a command, that command stays in the manager after exiting, which keeps the display alive even in `display_all` mode. When all commands have been removed (none retained), the binary exits regardless of `display_all`.
 
 ## 3.2 Keyboard Shortcuts Reference
+
+> **Shared feature** — Both vrl and vrunner support the same interactive keyboard shortcuts.
 
 ### Default Keybindings
 
@@ -887,7 +1053,9 @@ interactive:
 
 ## 3.3 Mouse Support
 
-### CLI Interactive Display
+### CLI Interactive Display — vrl / vrunner
+
+> **Shared feature** — Both binaries support mouse forwarding in the interactive display.
 
 Enable mouse forwarding to child processes with `--mouse`:
 
@@ -895,11 +1063,11 @@ Enable mouse forwarding to child processes with `--mouse`:
 vrl --display --mouse -- htop
 ```
 
-When enabled, mouse events (clicks, drags, wheel) from the terminal are captured by vrl and forwarded to the child process using SGR (?1006) encoding. This allows mouse-aware applications (htop, vim, mc, tmux) to receive mouse input as if running directly in the terminal.
+When enabled, mouse events (clicks, drags, wheel) from the terminal are captured and forwarded to the child process using SGR (?1006) encoding. This allows mouse-aware applications (htop, vim, mc, tmux) to receive mouse input as if running directly in the terminal.
 
-Mouse events in the **tab bar** area always control vrl (tab switching), regardless of the `--mouse` flag. Only mouse events within the VTTY display area are forwarded to the child.
+Mouse events in the **tab bar** area always control the display (tab switching), regardless of the `--mouse` flag. Only mouse events within the VTTY display area are forwarded to the child.
 
-### Web UI Mouse Interaction
+### Web UI Mouse Interaction — vrunner only
 
 The web admin interface provides full mouse interaction:
 
@@ -911,15 +1079,19 @@ The web admin interface provides full mouse interaction:
 
 ## 3.4 Search and Copy/Paste
 
-### Search in Interactive Display
+### Search in Interactive Display — vrl / vrunner
+
+> **Shared feature** — Both binaries support search in the interactive display.
 
 Press `Ctrl+F` to open the search bar. Type a search term and press Enter to find the next match. Matches are highlighted in the terminal output.
 
-### Search in Web UI
+### Search in Web UI — vrunner only
 
 Press `Ctrl+F` inside the web terminal viewer. A search bar appears at the top of the terminal pane.
 
-### Copy/Paste in Interactive Display
+### Copy/Paste in Interactive Display — vrl / vrunner
+
+> **Shared feature** — Both binaries support copy/paste in the interactive display.
 
 When mouse support is enabled (`--mouse`), you can select text in the terminal display:
 
@@ -928,6 +1100,8 @@ When mouse support is enabled (`--mouse`), you can select text in the terminal d
 3. Use the terminal's paste mechanism to insert the copied text
 
 ## 3.5 Split-Pane Display
+
+> **Shared feature** — Both vrl and vrunner support split-pane mode.
 
 Press `Ctrl+S` in the interactive display to toggle split-pane mode. This divides the terminal area horizontally, showing two VTTYs side by side. Use `Ctrl+Left`/`Ctrl+Right` to switch which pane is active. Each pane shows a different command's output.
 
@@ -938,7 +1112,9 @@ vrl --display-all -- cargo test
 
 ## 3.6 Retain on Exit and Purge
 
-By default, when a command exits its VTTY buffer is discarded and vrl exits (in display mode). The `--retain-on-exit` flag is a **per-command option** that keeps the buffer in memory, allowing you to inspect the final output:
+> **Shared feature** — Both vrl and vrunner support retain-on-exit. API/web purge is **vrunner only**.
+
+By default, when a command exits its VTTY buffer is discarded and the binary exits (in display mode). The `--retain-on-exit` flag is a **per-command option** that keeps the buffer in memory, allowing you to inspect the final output:
 
 ```bash
 # Keep the VTTY buffer after cargo test finishes
@@ -951,12 +1127,14 @@ vrl --retain-on-exit --snapshot-on-exit /tmp/test-output.txt -- cargo test
 When a command with `--retain-on-exit` finishes:
 - It remains visible in the tab bar with an `[EXITED]` status
 - The VTTY buffer stays in memory for inspection
-- In the web UI, exited commands show a purge button in the sidebar
+- In the web UI (vrunner), exited commands show a purge button in the sidebar
 - The display loop stays active (does not exit) because the retained command is still in the manager
 
 **Important:** `--retain-on-exit` is per-command. It only affects the command specified on the CLI. Future commands spawned via the API or F12 use their own `retain_on_exit` setting (passed in the spawn request body).
 
 ### Snapshot on Exit
+
+> **Shared feature** — Both vrl and vrunner support snapshot-on-exit.
 
 The `--snapshot-on-exit <FILE>` flag saves the VTTY buffer (including scrollback) to a file as plain text when the command exits. This is useful for capturing test output, build logs, or any command's final state:
 
@@ -976,13 +1154,15 @@ Remove retained commands to free memory:
 vrl purge
 vrl purge 550e8400
 
-# API: delete by command ID
+# API: delete by command ID (vrunner only)
 curl -X DELETE http://127.0.0.1:9090/api/commands/$ID
 
-# Web UI: click the purge button on an exited command
+# Web UI: click the purge button on an exited command (vrunner only)
 ```
 
 ## 3.7 Tabs Feature
+
+> **Shared feature** — Both vrl and vrunner support the tab bar in interactive display.
 
 The `--tabs` flag enables a tab bar at the top of the interactive display listing all running commands:
 
@@ -997,12 +1177,14 @@ Features:
 - Tabs automatically update when commands spawn or exit
 - Retained (exited) commands appear with `[EXITED]` status
 
-## 3.8 Remote Access and TLS
+## 3.8 Remote Access and TLS — vrunner only
+
+> **vrunner only** — vrl uses local UDS and has no HTTP server, TLS, or remote access capabilities.
 
 ### Quick Remote Setup
 
 ```bash
-vrl --remote --tls -- my-command
+vrunner --remote --tls -- my-command
 ```
 
 This single command:
@@ -1012,7 +1194,7 @@ This single command:
 
 ### Step-by-Step Setup
 
-1. **Start the server**: `vrl --bind 0.0.0.0 --port 8080 --auth --tls -- my-command`
+1. **Start the server**: `vrunner --bind 0.0.0.0 --port 8080 --auth --tls -- my-command`
 2. **Get the token**: `cat ~/.config/vrl/token`
 3. **Get the certificate**: `cat ~/.config/vrl/cert.pem`
 4. **Connect from remote**:
@@ -1025,7 +1207,7 @@ This single command:
 ### Custom TLS Certificates
 
 ```bash
-vrl --tls \
+vrunner --tls \
   --cert-file /etc/ssl/certs/vrl.crt \
   --key-file /etc/ssl/private/vrl.key \
   --remote -- my-command
@@ -1041,17 +1223,20 @@ tls:
 
 ## 3.9 Daemon Mode
 
-Run vrl as a background process:
+> **Shared feature** — Both vrl and vrunner support daemon mode.
+
+Run as a background process:
 
 ```bash
 vrl --daemon -- my-command
+vrunner --daemon -- my-command
 ```
 
 In daemon mode:
 - A double-fork detaches the process from the controlling terminal
 - stdin is closed; stdout/stderr redirect to files (default: `/tmp/vrl.out`, `/tmp/vrl.err`)
 - The `--display` option is automatically disabled
-- The HTTP server continues running for API/web access
+- With vrunner, the HTTP server continues running for API/web access
 
 ```bash
 # Custom output files
@@ -1061,22 +1246,24 @@ vrl --daemon --stdout-file /var/log/vrl/stdout \
 # Manage a daemon
 vrl list                          # find the PID
 vrl stop <pid>                    # stop the instance
-curl http://127.0.0.1:9090/api/commands  # API still works
+curl http://127.0.0.1:9090/api/commands  # API still works (vrunner only)
 ```
 
 ## 3.10 Multi-Instance Management
 
-Multiple vrl instances can run on different ports:
+> **Shared feature** — Both vrl and vrunner support multiple instances. HTTP-specific features apply to vrunner only.
+
+Multiple instances can run simultaneously:
 
 ```bash
-# Dev instance on port 8080
-vrl --port 8080 -- daemon
+# Dev instance — vrl (local UDS, no port needed)
+vrl -- daemon
 
-# Staging on port 9090 with TLS
-vrl --port 9090 --tls -- daemon
+# Staging — vrunner on port 9090 with TLS
+vrunner --port 9090 --tls -- daemon
 
-# Production on port 443
-vrl --port 443 --tls --remote -- daemon
+# Production — vrunner on port 443
+vrunner --port 443 --tls --remote -- daemon
 ```
 
 ```bash
@@ -1087,29 +1274,31 @@ vrl list
 vrl stop 12345
 
 # Each instance can use a different config
-vrl -c ./configs/dev.yaml --port 8080 -- daemon
-vrl -c ./configs/prod.yaml --port 443 -- daemon
+vrl -c ./configs/dev.yaml -- daemon
+vrunner -c ./configs/prod.yaml --port 443 -- daemon
 ```
 
-## 3.11 Certificate Management
+## 3.11 Certificate Management — vrunner only
+
+> **vrunner only** — Certificates provide per-command access control for the HTTP API. Not applicable to vrl.
 
 Certificates provide per-command access isolation. Each certificate in the pool can be bound to running commands, ensuring only clients with the correct bearer token can interact with them.
 
 ```bash
 # Generate a certificate
-vrl cert generate my-application
+vrunner cert generate my-application
 
 # List all certificates
-vrl cert list
+vrunner cert list
 
 # Show certificate details including bearer token
-vrl cert show my-application
+vrunner cert show my-application
 
 # Remove a certificate
-vrl cert remove my-application
+vrunner cert remove my-application
 
 # Use the token in API requests
-TOKEN=$(vrl cert show my-application | grep -oP 'Token:\s*\K\S+')
+TOKEN=$(vrunner cert show my-application | grep -oP 'Token:\s*\K\S+')
 curl -H "Authorization: Bearer $TOKEN" http://localhost:9090/api/commands/$ID/vtty
 
 # Bind a command to a certificate at spawn time
@@ -1122,13 +1311,15 @@ For the complete certificate management guide, see [docs/certificates.md](docs/c
 
 ## 3.12 Exit Handlers and Timeouts
 
+> **Shared feature** — Both vrl and vrunner support exit handlers via CLI. API-based exit handlers are **vrunner only**.
+
 Exit handlers run external commands when a child process exits:
 
 ```bash
 # Via CLI
 vrl --on-exit "notify-send Done" --on-error "notify-send Error" --exit-timeout 20 -- cargo test
 
-# Via API
+# Via API (vrunner only)
 curl -X POST http://127.0.0.1:9090/api/commands \
   -H "Content-Type: application/json" \
   -d '{"cmd": "cargo", "args": ["test"], "on_exit": "notify-send OK", "on_error": "notify-send FAIL", "exit_timeout": 30}'
@@ -1136,14 +1327,16 @@ curl -X POST http://127.0.0.1:9090/api/commands \
 
 ### Graceful Shutdown Sequence
 
-When a command is killed via the API:
+When a command is killed via the API or CLI:
 1. **SIGINT** is sent (giving the process a chance to exit cleanly)
 2. Wait up to `exit_timeout` seconds (default: 10)
 3. If still running, **SIGKILL** is sent
 
 This two-phase approach prevents data corruption in processes that need to flush buffers or close connections.
 
-## 3.13 Snapshots and Diffs
+## 3.13 Snapshots and Diffs — vrunner only
+
+> **vrunner only** — API-based snapshot and diff operations require the HTTP server.
 
 Store named VTTY buffer snapshots and compute cell-level diffs for testing and debugging:
 
@@ -1167,9 +1360,11 @@ curl -X POST http://127.0.0.1:9090/api/commands/$ID/diff \
 curl -X DELETE http://127.0.0.1:9090/api/commands/$ID/snapshots/after-build
 ```
 
-## 3.14 WebSocket Protocol
+## 3.14 WebSocket Protocol — vrunner only
 
-vrl provides two WebSocket endpoints for real-time streaming:
+> **vrunner only** — WebSocket endpoints are part of the HTTP server and not available in vrl.
+
+vrunner provides two WebSocket endpoints for real-time streaming:
 
 ### VTTY WebSocket — `ws://host:port/api/commands/:id/ws`
 
@@ -1218,7 +1413,9 @@ const ws = new WebSocket('wss://host:9090/api/commands/.../ws?token=YOUR_TOKEN')
 
 For the complete WebSocket message specification, see [docs/websocket.md](docs/websocket.md).
 
-## 3.15 Incremental Diff Protocol
+## 3.15 Incremental Diff Protocol — vrunner only
+
+> **vrunner only** — The incremental diff protocol is used by the VTTY WebSocket, which is part of the HTTP server.
 
 The VTTY WebSocket uses an incremental diff protocol to minimize bandwidth. Instead of sending the full terminal HTML on every update, only changed cells are transmitted.
 
@@ -1263,11 +1460,15 @@ If the client falls behind (broadcast lag), the server automatically sends a new
 
 ## 3.16 Hooks
 
+> **Shared feature** — Both vrl and vrunner support hooks.
+
 Hooks are commands that run at specific points in the command lifecycle. They are configured in the config file under the `hooks` section. For details, see [docs/hooks.md](docs/hooks.md).
 
 ---
 
-# Part IV — API Reference
+# Part IV — API Reference (vrunner only)
+
+> **vrunner only** — All REST API endpoints require the HTTP server. vrl uses UDS IPC and does not expose these endpoints.
 
 ## 4.1 REST API Overview
 
@@ -1700,7 +1901,7 @@ Response:
 
 ### `POST /api/shutdown`
 
-Gracefully shut down the vrl instance. Drains connections for 2 seconds, then terminates.
+Gracefully shut down the vrunner instance. Drains connections for 2 seconds, then terminates.
 
 ```bash
 curl -X POST http://127.0.0.1:9090/api/shutdown
@@ -1713,7 +1914,7 @@ Response:
 
 ### `GET /api/commands/:id/ws` (WebSocket)
 
-Upgrade to a WebSocket for real-time VTTY streaming. See [Section 3.14](#314-websocket-protocol) for the full protocol specification.
+Upgrade to a WebSocket for real-time VTTY streaming. See [Section 3.14](#314-websocket-protocol--vrunner-only) for the full protocol specification.
 
 ## 4.7 Certificate Endpoints
 
@@ -1783,20 +1984,22 @@ curl -X POST http://127.0.0.1:9090/api/commands/$ID/handles \
 
 ---
 
-# Part V — Security
+# Part V — Security (vrunner only)
+
+> **vrunner only** — Security features (authentication, TLS, CORS, certificates) are part of the HTTP server. vrl uses local UDS and does not need these protections.
 
 ## 5.1 Authentication
 
-By default, vrl binds to `127.0.0.1` with no authentication. This is safe for local use because any process that can reach localhost already has shell access.
+By default, vrunner binds to `127.0.0.1` with no authentication. This is safe for local use because any process that can reach localhost already has shell access.
 
 ### Enabling Auth
 
 ```bash
 # Explicit
-vrl --auth -- my-command
+vrunner --auth -- my-command
 
 # Implicit (via --remote)
-vrl --remote -- my-command
+vrunner --remote -- my-command
 ```
 
 When auth is enabled, a 256-bit random token is generated and saved to `~/.config/vrl/token` (with 0600 permissions). Include it in all API requests:
@@ -1818,7 +2021,7 @@ const ws = new WebSocket('wss://host:9090/api/commands/.../ws?token=YOUR_TOKEN')
 ### Self-Signed Certificates
 
 ```bash
-vrl --tls -- my-command
+vrunner --tls -- my-command
 ```
 
 Certificates are auto-generated on first use and saved to `~/.config/vrl/` (cert.pem + key.pem @ 0600 permissions). The certificate includes SAN entries for `localhost`, `127.0.0.1`, and `::1`.
@@ -1826,7 +2029,7 @@ Certificates are auto-generated on first use and saved to `~/.config/vrl/` (cert
 ### Custom Certificates
 
 ```bash
-vrl --tls --cert-file /etc/ssl/certs/vrl.crt --key-file /etc/ssl/private/vrl.key -- my-command
+vrunner --tls --cert-file /etc/ssl/certs/vrl.crt --key-file /etc/ssl/private/vrl.key -- my-command
 ```
 
 ### Connecting with TLS
@@ -1841,7 +2044,7 @@ curl -k https://localhost:9090/api/commands
 
 ## 5.3 CORS Policy
 
-vrl uses `tower-http` CORS middleware to control cross-origin access to the API and admin interface. The CORS policy is configurable through the `security.cors` field in the configuration file.
+vrunner uses `tower-http` CORS middleware to control cross-origin access to the API and admin interface. The CORS policy is configurable through the `security.cors` field in the configuration file.
 
 ### Configuration
 
@@ -1903,7 +2106,7 @@ Certificates in the pool can be bound to individual commands. When a command is 
 
 ```bash
 # Generate a certificate
-vrl cert generate my-app
+vrunner cert generate my-app
 
 # Spawn a command bound to that certificate
 curl -X POST http://localhost:9090/api/commands \
@@ -1911,7 +2114,7 @@ curl -X POST http://localhost:9090/api/commands \
   -d '{"cmd": "node", "args": ["server.js"], "certificate": "my-app"}'
 
 # Only requests with the certificate's token can access this command
-TOKEN=$(vrl cert show my-app | grep -oP 'Token:\s*\K\S+')
+TOKEN=$(vrunner cert show my-app | grep -oP 'Token:\s*\K\S+')
 curl -H "Authorization: Bearer $TOKEN" http://localhost:9090/api/commands/$ID/vtty
 ```
 
@@ -1924,7 +2127,7 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:9090/api/commands/$ID/vt
 - **TLS certificates** — Use CA-signed certificates (e.g., Let's Encrypt) for production; self-signed only for development
 - **Daemon mode** — Ensure log files are in secure directories; do not expose stdout/stderr files
 - **Network exposure** — Only bind to `0.0.0.0` when remote access is needed; use a firewall to restrict access
-- **No sandboxing** — vrl does not sandbox child processes; only run trusted commands
+- **No sandboxing** — Child processes are not sandboxed; only run trusted commands
 
 ---
 
@@ -1937,8 +2140,14 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:9090/api/commands/$ID/vt
 git clone https://github.com/nkh/K.git
 cd K
 
-# Build
+# Build both binaries
 cargo build --release
+
+# Build vrl only
+cargo build --release --bin vrl
+
+# Build vrunner only
+cargo build --release --bin vrunner
 
 # Run tests
 cargo test
@@ -1955,7 +2164,7 @@ cargo fmt --check
 ```
 src/
 ├── main.rs              # Binary entry point, CLI parsing, async runtime
-├── lib.rs               # Library crate root
+├── lib.rs               # Library crate root (vrl_core)
 ├── cli/                 # CLI argument parsing and subcommands
 │   ├── args.rs          # clap derive structs (Cli, Commands)
 │   └── subcommands.rs   # Subcommand handlers (list, stop, spawn, etc.)
@@ -1974,7 +2183,7 @@ src/
 │   ├── buffer.rs        # 2D cell grid with scrollback and diff
 │   ├── renderer.rs      # ANSI, HTML, and plain-text serialization
 │   └── display.rs       # Local terminal rendering via crossterm
-├── web/                 # HTTP server and admin UI
+├── web/                 # HTTP server and admin UI (vrunner only)
 │   ├── server.rs        # TCP/TLS binding, graceful shutdown
 │   ├── router.rs        # Axum route table
 │   ├── state.rs         # AppState (shared state)
@@ -1993,7 +2202,7 @@ src/
 ├── handles/             # Extensible file descriptor routing
 └── logging/             # Command logger
 
-static/admin/            # Embedded admin SPA (HTML/CSS/JS)
+static/admin/            # Embedded admin SPA (HTML/CSS/JS, vrunner only)
 docs/                    # Documentation
 man/                     # Unix man pages
 examples/                # Example configuration files
@@ -2054,23 +2263,29 @@ cd tests/vtty && bash run_tests.sh
 
 ## A. Comparison with Alternatives
 
-| Feature | vrl | tmux | screen | mprocs | gotty | wetty |
+| Feature | vrl / vrunner | tmux | screen | mprocs | gotty | wetty |
 |---------|---------|------|--------|--------|-------|-------|
-| Web dashboard | Embedded SPA | No | No | Web UI | Web UI | Web UI |
-| REST API | 30+ endpoints | No | No | No | Limited | Limited |
-| WebSocket streaming | Incremental diff | No | No | No | Yes | Yes |
-| Per-command auth | Certificate pool | No | No | No | No | SSH |
-| TLS | Built-in | No | No | No | Built-in | SSH |
+| Web dashboard | Embedded SPA (vrunner) | No | No | Web UI | Web UI | Web UI |
+| REST API | 30+ endpoints (vrunner) | No | No | No | Limited | Limited |
+| WebSocket streaming | Incremental diff (vrunner) | No | No | No | Yes | Yes |
+| Per-command auth | Certificate pool (vrunner) | No | No | No | No | SSH |
+| TLS | Built-in (vrunner) | No | No | No | Built-in | SSH |
 | Daemon mode | Double-fork | Server mode | Detach | No | No | No |
 | Multi-instance | Yes | Yes | Yes | No | No | No |
 | Language | Rust | C | C | Go | Go | Node.js |
 | Terminal emulation | Full VTTY | Full PTY | Full PTY | PTY | PTY | PTY |
 | Configuration | YAML/TOML/JSON | .tmux.conf | .screenrc | CLI only | CLI only | CLI only |
 | Mouse support | Full | Yes | Limited | No | No | Yes |
-| Snapshots/diffs | Yes | No | No | No | No | No |
-| CI/CD integration | API-first | CLI-only | CLI-only | CLI-only | CLI-only | CLI-only |
+| Snapshots/diffs | Yes (vrunner) | No | No | No | No | No |
+| CI/CD integration | API-first (vrunner) | CLI-only | CLI-only | CLI-only | CLI-only | CLI-only |
+| Local UDS mode | Yes (vrl) | No | No | No | No | No |
 
 **When to choose vrl over alternatives:**
+
+- You need a **local-first** terminal runner with fast startup and no HTTP overhead
+- You want **UDS-based IPC** for local-only process management
+
+**When to choose vrunner over alternatives:**
 
 - You need a **web API** to programmatically manage terminal processes
 - You want a **single binary** with no external dependencies (not even Node.js)
@@ -2080,30 +2295,30 @@ cd tests/vtty && bash run_tests.sh
 
 ## B. Troubleshooting
 
-### vrl won't start
+### vrl / vrunner won't start
 
-**Port already in use:**
+**Port already in use (vrunner only):**
 ```bash
 lsof -i :9090
-vrl --port 9091
+vrunner --port 9091
 ```
 
-### Connection refused
+### Connection refused (vrunner only)
 
 **Instance not running:**
 ```bash
 vrl list          # Check if any instances are running
-vrl --bind 0.0.0.0  # If remote connections needed
+vrunner --bind 0.0.0.0  # If remote connections needed
 ```
 
-### TLS certificate errors
+### TLS certificate errors (vrunner only)
 
 **Self-signed cert not trusted:**
 ```bash
 curl --cacert ~/.config/vrl/cert.pem https://localhost:9090/api/commands
 ```
 
-### Authentication failures
+### Authentication failures (vrunner only)
 
 **Missing token in requests:**
 ```bash
@@ -2115,13 +2330,13 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:9090/api/commands
 
 **Output in scrollback or command hasn't started:**
 ```bash
-# Check scrollback
+# Check scrollback (vrunner only)
 curl http://localhost:9090/api/commands/$ID/vtty/html | jq '.data.scrollback_lines'
-# Check command status
+# Check command status (vrunner only)
 curl http://localhost:9090/api/commands | jq '.data[].status'
 ```
 
-### WebSocket disconnections
+### WebSocket disconnections (vrunner only)
 
 **Auto-reconnect is built into the admin UI.** If using a custom client, implement reconnection logic with exponential backoff. The server sends a `pong` response to `ping` messages for keepalive.
 
@@ -2137,7 +2352,7 @@ sudo sysctl -w kernel.pty.max=4096
 
 ### Build failures
 
-**Disk space:** vrl requires approximately 2GB for a full debug build. Clean old artifacts:
+**Disk space:** A full debug build requires approximately 2GB. Clean old artifacts:
 ```bash
 cargo clean
 cargo build --release
@@ -2148,8 +2363,8 @@ cargo build --release
 ### Development Server Orchestration
 
 ```bash
-# Start vrl in idle mode
-vrl --daemon --log --log-file /tmp/vrl.log
+# Start vrunner in idle mode
+vrunner --daemon --log --log-file /tmp/vrl.log
 
 # Spawn services
 curl -X POST http://127.0.0.1:9090/api/commands \
@@ -2168,8 +2383,8 @@ curl -X POST http://127.0.0.1:9090/api/commands \
 ### CI/CD Pipeline Monitoring
 
 ```bash
-# Start secure instance on CI server
-vrl --remote --tls --port 8080 --daemon
+# Start secure vrunner instance on CI server
+vrunner --remote --tls --port 8080 --daemon
 
 # CI script spawns build
 TOKEN=$(cat ~/.config/vrl/token)
@@ -2196,7 +2411,7 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 
 ```bash
 # On the remote server
-vrl --remote --tls --port 443 --daemon
+vrunner --remote --tls --port 443 --daemon
 
 # From your local machine — run interactive commands
 curl --cacert /path/to/cert.pem \
@@ -2210,7 +2425,7 @@ curl --cacert /path/to/cert.pem \
 
 ```bash
 # Developer 1 starts the server
-vrl --port 8080 --daemon
+vrunner --port 8080 --daemon
 
 # Developer 1 starts a shared session
 SHARED_ID=$(curl -s -X POST http://localhost:8080/api/commands \
@@ -2224,8 +2439,8 @@ SHARED_ID=$(curl -s -X POST http://localhost:8080/api/commands \
 ### Long-Running Background Tasks
 
 ```bash
-# Start vrl in daemon mode
-vrl --daemon
+# Start vrunner in daemon mode
+vrunner --daemon
 
 # Run a long job
 JOB_ID=$(curl -s -X POST http://127.0.0.1:9090/api/commands \
@@ -2238,19 +2453,29 @@ JOB_ID=$(curl -s -X POST http://127.0.0.1:9090/api/commands \
 curl "http://127.0.0.1:9090/api/commands/$JOB_ID/vtty/partial?offset=0&limit=20"
 ```
 
+### Local Development with vrl
+
+```bash
+# Start vrl with a local-only UDS connection
+vrl --display-all -- cargo test
+
+# The VTTY output is mirrored to your terminal
+# No HTTP server is started — fast startup, minimal overhead
+```
+
 ## D. Cookbook
 
 See [docs/cookbook/](docs/cookbook/) for step-by-step recipes:
 
 - [Run a dev server with hot reload](docs/cookbook/dev-server.md)
 - [Monitor multiple services](docs/cookbook/multi-service.md)
-- [CI pipeline with vrl](docs/cookbook/ci-pipeline.md)
+- [CI pipeline with vrunner](docs/cookbook/ci-pipeline.md)
 - [Pair programming setup](docs/cookbook/pair-programming.md)
 - [Remote access via TLS](docs/cookbook/remote-tls.md)
 
 ## E. Video Storyboard
 
-See [docs/storyboard.md](docs/storyboard.md) for the vrl introduction video storyboard.
+See [docs/storyboard.md](docs/storyboard.md) for the vrl / vrunner introduction video storyboard.
 
 ## F. Version Upgrade Guide
 
@@ -2266,12 +2491,13 @@ cargo build --release
 
 If you installed system-wide:
 ```bash
-cargo install --path .
+cargo install --bin vrl --path .
+cargo install --bin vrunner --path .
 ```
 
 ### Upgrade Checklist
 
-1. **Stop all running vrl instances** before upgrading:
+1. **Stop all running instances** before upgrading:
    ```bash
    vrl list          # find all PIDs
    vrl stop <pid>    # stop each one
@@ -2282,18 +2508,19 @@ cargo install --path .
 3. **Reinstall man pages**: If the man pages changed, copy the new versions:
    ```bash
    cp man/vrl.1 /usr/local/share/man/man1/
-   cp man/vrlctrl.1 /usr/local/share/man/man1/
+   cp man/vrunner.1 /usr/local/share/man/man1/
    mandb  # rebuild the man page index
    ```
 
 4. **Test with a simple command**: After upgrading, verify basic functionality:
    ```bash
    vrl -- echo "hello"
+   vrunner -- echo "hello"
    ```
 
 ### Configuration Migration
 
-If a config field was renamed between versions, vrl will log a warning at startup. The old field name is still accepted but deprecated. Update your config files to use the new names:
+If a config field was renamed between versions, a warning will be logged at startup. The old field name is still accepted but deprecated. Update your config files to use the new names:
 
 ```bash
 # Validate your config without starting the server

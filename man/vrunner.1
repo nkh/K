@@ -1,0 +1,982 @@
+.\" Title: vrunner
+.\" Author: vrunner contributors
+.\" Manual section: 1
+.\" Process this file with
+.\"   groff -man -Tascii vrunner.1
+
+.TH VRUNNER 1 "2025" "vrunner" "User Commands"
+
+.SH NAME
+vrunner \- virtual terminal runner and process orchestrator with web control plane
+
+.SH SYNOPSIS
+.B vrunner
+[\fIOPTIONS\fR] [\fB\-\-\fR \fICOMMAND\fR [\fIARGS...\fR]]
+
+.B vrunner
+\fBlist\fR
+
+.B vrunner
+\fBstop\fR \fIPID\fR
+
+.B vrunner
+\fBcert\fR \fBgenerate\fR \fINAME\fR
+
+.B vrunner
+\fBcert\fR \fBlist\fR
+
+.B vrunner
+\fBcert\fR \fBshow\fR \fINAME\fR
+
+.B vrunner
+\fBcert\fR \fBremove\fR \fINAME\fR
+
+.B vrunner
+\fBspawn\fR [\fIOPTIONS\fR] \fICMD\fR [\fIARGS...\fR]
+
+.B vrunner
+\fBfreeze\fR \fIPID\fR
+
+.B vrunner
+\fBthaw\fR \fIPID\fR
+
+.B vrunner
+\fBlist\-vrunner\fR
+
+.B vrunner
+\fBlist\-commands\fR
+
+.B vrunner
+\fBstop\-command\fR \fITARGET\fR
+
+.B vrunner
+\fBresize\fR \fITARGET\fR [\fB\-\-rows\fR \fIN\fR] [\fB\-\-cols\fR \fIN\fR]
+
+.B vrunner
+\fBpurge\fR [\fITARGET\fR]
+
+.B vrunner
+\fBconfig-check\fR
+
+.B vrunner
+\fBcat\fR [\fITARGET\fR] [\fB\-\-color-always\fR]
+
+.B vrunner
+\fBscreenshot\fR [\fITARGET\fR] [\fIOPTIONS\fR]
+
+.B vrunner
+\fBcompletions\fR \fISHELL\fR
+
+.SH DESCRIPTION
+\fBvrunner\fR executes commands inside virtual TTYs (VTTYs), exposes their output through a web API, and provides a built-in administrative interface for remote control. By default, it runs silently with no terminal output, making it ideal for background development servers, CI pipelines, or headless environments.
+
+Commands are run inside pseudo-terminals, giving child processes full terminal capabilities including ANSI colors, cursor movement, and interactive keyboard input. Once running, commands can be monitored and controlled from the CLI, the web admin dashboard, or the HTTP API.
+
+.SH OPTIONS
+
+.SS General Options
+
+.TP
+.BR \-c ", " "\-\-config " \fIFILE\fR
+Path to a configuration file. Supported formats: YAML (\fB.yaml\fR/\fB.yml\fR), TOML (\fB.toml\fR), JSON (\fB.json\fR). Overrides global and local config files.
+
+.TP
+.BR \-h ", " \-\-help
+Print help information and exit.
+
+.SS Server Options
+
+.TP
+.BR \-b ", " "\-\-bind " \fIADDR\fR
+Server bind address (default: \fB127.0.0.1\fR). Use \fB0.0.0.0\fR to accept remote connections.
+
+.TP
+.BR \-p ", " "\-\-port " \fIPORT\fR
+Server TCP port (default: \fB9090\fR).
+
+.TP
+.BR \-r ", " \-\-remote
+Convenience flag that binds to \fB0.0.0.0\fR and enables bearer token authentication. Equivalent to \fB\-\-bind 0.0.0.0 \-\-auth\fR.
+
+.SS Security Options
+
+.TP
+.BR \-a ", " \-\-auth
+Require bearer token authentication for all API requests.
+
+.TP
+.BR "\-\-token-file " \fIFILE\fR
+Path to the bearer token file (default: \fB~/.config/vrunner/token\fR). If the file does not exist when auth is required, a cryptographically random 256-bit token is generated and saved.
+
+.SS TLS Options
+
+.TP
+.B \-\-tls
+Enable TLS (HTTPS) with self-signed certificates. Certificates are auto-generated on first use and saved to \fB~/.config/vrunner/\fR.
+
+.TP
+.BR "\-\-cert\-file " \fIFILE\fR
+Path to a custom PEM-encoded TLS certificate file.
+
+.TP
+.BR "\-\-key\-file " \fIFILE\fR
+Path to a custom PEM-encoded TLS private key file.
+
+.SS Certificate Pool Options
+
+.TP
+.BR \-C ", " "\-\-certificate " \fINAME:CERT:KEY\fR
+Define a named certificate for the certificate pool. Can be repeated. Example: \fB\-\-certificate "myapp:/path/to/cert.pem:/path/to/key.pem"\fR.
+
+.SS VTTY Options
+
+.TP
+.BR "\-\-vtty\-rows " \fIN\fR
+Virtual terminal height in rows (default: \fB24\fR).
+
+.TP
+.BR "\-\-vtty\-cols " \fIN\fR
+Virtual terminal width in columns (default: \fB80\fR).
+
+.TP
+.BR \-T ", " "\-\-term " \fITERM\fR
+TERM value reported to child processes (default: \fBxterm-256color\fR).
+
+.TP
+.BR "\-\-scrollback " \fIN\fR
+VTTY scrollback buffer size in number of lines (default: \fB5000\fR).
+
+.TP
+.B \-\-truecolor
+Enable 24-bit truecolor (16.7 million colors) in the virtual terminal.
+
+.TP
+.B \-\-no\-truecolor
+Disable 24-bit truecolor.
+
+.TP
+.BR \-m ", " \-\-mouse
+Enable mouse event forwarding to child processes.
+
+.TP
+.B \-\-no\-mouse
+Disable mouse event forwarding.
+
+.SS Display Options
+
+.TP
+.BR \-D ", " \-\-display
+Show VTTY output on the local terminal screen.
+
+.TP
+.B \-\-no\-display
+Disable local terminal display (default).
+
+.TP
+.BR \-s ", " \-\-display\-all
+Keep displaying VTTY output after the initial CLI command exits, switching to the next available command (monitor mode). Without this flag, the display is dismissed when the CLI command finishes but the server continues running. Note: when all commands have exited (no retained commands remain), vrunner exits even in display-all mode.
+
+.TP
+.BR "\-\-refresh\-ms " \fIMS\fR
+VTTY display refresh interval in milliseconds (default: \fB100\fR).
+
+.SS Logging Options
+
+.TP
+.BR \-l ", " \-\-log
+Log API commands to the terminal.
+
+.TP
+.BR \-L ", " "\-\-log\-file " \fIFILE\fR
+Log API commands to a file (also enables logging).
+
+.SS Daemon Options
+
+.TP
+.BR \-d ", " \-\-daemon
+Run as a background daemon (Unix only). Performs a double-fork to detach from the controlling terminal. Implicitly disables local display.
+
+.TP
+.BR "\-\-stdout\-file " \fIFILE\fR
+Redirect daemon stdout to this file (default: \fB/tmp/vrunner.out\fR).
+
+.TP
+.BR "\-\-stderr\-file " \fIFILE\fR
+Redirect daemon stderr to this file (default: \fB/tmp/vrunner.err\fR).
+
+.SS Exit Handler Options
+
+.TP
+.BR "\-\-on\-exit " \fICMD\fR
+Run \fICMD\fR when a child process exits cleanly (exit code 0). The command string is split on whitespace into a binary and arguments. The handler runs as a detached (fire-and-forget) process.
+
+.TP
+.BR "\-\-on\-error " \fICMD\fR
+Run \fICMD\fR when a child process exits with a non-zero exit code. Same parsing rules as \fB\-\-on\-exit\fR. Useful for sending failure notifications or triggering cleanup/rollback scripts.
+
+.TP
+.BR "\-\-exit\-timeout " \fISECS\fR
+Maximum seconds to wait for a child process to exit after SIGINT before sending SIGKILL (default: \fB10\fR). Applies when \fBPOST /api/commands/:id/kill\fR is called or when the server shuts down. This two-phase approach prevents data corruption in processes that need to flush buffers or close connections.
+
+.TP
+.BR \-k ", " \-\-retain\-on\-exit
+Keep the VTTY buffer in memory after the child process exits. This is a \fBper\-command\fR option \[em] it only affects the command specified on the CLI, not future commands spawned via the API. The command remains visible in the tab bar and web UI with an "exited" status, allowing inspection of final output. The buffer can be manually purged via the API (DELETE /api/commands/:id) or the \fBpurge\fR subcommand. When all commands have exited and none are retained, vrunner exits even in \fB\-\-display\-all\fR mode.
+
+.TP
+.BR "\-\-snapshot\-on\-exit " \fIFILE\fR
+Save the VTTY buffer to \fIFILE\fR as plain text when the command exits. This is a per-command option. The output includes all scrollback lines followed by the visible screen rows, with each line trimmed of trailing whitespace. The snapshot is taken after the process exits but before the command is removed from the manager. Useful for capturing test output, build logs, or any command's final state.
+
+.TP
+.BR \-K ", " "\-\-send\-keys " \fIKEYS\fR
+Send keystrokes to the command after it starts. Uses the same key notation as the API's \fBsend_keys\fR endpoint. Plain text is sent as-is; special keys use \fB<...>\fR notation: \fB<Enter>\fR, \fB<Tab>\fR, \fB<Esc>\fR, \fB<Up>\fR, \fB<Down>\fR, \fB<Left>\fR, \fB<Right>\fR, \fB<F1>\fR through \fB<F12>\fR, \fB<C\-c>\fR (Ctrl+C), \fB<C\-d>\fR (Ctrl+D), \fB<A\-x>\fR (Alt+x). Example: \fB\-\-send\-keys "ls<Enter>"\fR.
+
+.TP
+.BR "\-\-log\-pty\-raw " \fIFILE\fR
+Log raw PTY output from child processes to a file. Each line records one read() call with an elapsed-time stamp and escaped bytes (printable ASCII as-is, non-printable as \fB\\xHH\fR). The resulting log can be replayed step-by-step with \fBansi-replay\fR.
+
+.SS Interactive Options
+
+.TP
+.B \-\-tabs
+Show a tab bar listing all running commands at the top of the interactive display (requires \fB\-\-display\fR). When disabled (default), only the active command is shown. This provides an \fBmprocs\fR-style multi-command view.
+
+.SS Environment Variable Options
+
+.TP
+.BR \-e ", " "\-\-env " \fIKEY=VALUE\fR
+Set environment variable for spawned commands (repeatable). Overrides config file environment variables.
+
+.TP
+.BR \-E ", " \-\-no\-env
+Ignore environment variables from the config file. Only variables set via \fB\-\-env\fR flags or the API \fBenv\fR field will be passed to the spawned command.
+
+.SS Profile Options
+
+.TP
+.BR \-P ", " "\-\-profile " \fINAME\fR
+Apply a named configuration profile from the config file. Profile fields override the base config; CLI flags override both.
+
+.TP
+.BR \-t ", " "\-\-target " \fIPID\fR
+Target a specific vrunner instance by PID when using spawn, freeze, thaw, or resize subcommands.
+
+.SS Command Specification
+
+.TP
+.B \-\-
+Separator that distinguishes vrunner's own flags from the child command. Everything after \fB\-\-\fR is passed as the command and its arguments. Required when the child command has flags that might conflict with vrunner's own flags.
+
+.SH SUBCOMMANDS
+
+.SS list
+List all running vrunner instances on the system. Displays PID, port, bind address, daemon status, display status, and current command for each instance.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner list
+.RE
+.RE
+
+.SS stop
+Gracefully shut down a vrunner instance by its PID. Sends an HTTP shutdown request to the instance. If the instance is unresponsive, use \fBkill(1)\fR as a fallback.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner stop \fIPID\fR
+.RE
+.RE
+
+.SS cert generate
+Generate a new named certificate in the certificate pool. The certificate is a self-signed X.509 certificate with a derived bearer token (SHA-256 of the certificate PEM).
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner cert generate \fINAME\fR
+.RE
+.RE
+
+.SS cert list
+List all certificates in the pool, showing name, certificate file path, key file path, and the first 16 characters of the derived token.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner cert list
+.RE
+.RE
+
+.SS cert show
+Display full details of a specific certificate, including the complete 64-character bearer token.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner cert show \fINAME\fR
+.RE
+.RE
+
+.SS cert remove
+Remove a certificate from the pool registry. Note that this does not delete the PEM files from disk.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner cert remove \fINAME\fR
+.RE
+.RE
+
+.SS spawn
+Spawn a new command in a vrunner instance. Connects to a running vrunner server and requests command creation via the HTTP API. Supports all command options including terminal dimensions, environment variables, exit handlers, and certificate binding.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner spawn [\fIOPTIONS\fR] \fICMD\fR [\fIARGS...\fR]
+.RE
+.PP
+.B Options:
+.RS
+.TP
+.BR "\-\-rows " \fIN\fR, "\-\-cols " \fIN\fR
+Set the virtual terminal dimensions for the spawned command.
+.TP
+.BR "\-\-env " \fIKEY=VALUE\fR
+Set environment variable (repeatable).
+.TP
+.B \-\-no\-env
+Ignore config file environment variables.
+.TP
+.BR \-t ", " "\-\-target " \fIPID\fR
+Target a specific vrunner instance by PID.
+.RE
+.RE
+
+.SS freeze
+Freeze (SIGSTOP) a running command by its process ID. The command is paused but not terminated; use \fBthaw\fR to resume.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner freeze \fIPID\fR
+.RE
+.RE
+
+.SS thaw
+Thaw (SIGCONT) a previously frozen command by its process ID, resuming its execution.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner thaw \fIPID\fR
+.RE
+.RE
+
+.SS list-vrunner
+List all running vrunner instances on the system. Displays PID, port, bind address, daemon status, display status, and current command for each instance.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner list-vrunner
+.RE
+.RE
+
+.SS list-commands
+List all commands running in the target vrunner instance.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner list-commands
+.RE
+.RE
+
+.SS config-check
+Validate configuration files without starting the server. Reports validation errors and warnings with field paths. Checks all config sources (global, local, explicit) and reports type mismatches, unknown fields, and deprecation warnings.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner config-check
+.RE
+.RE
+
+.SS purge
+Purge a retained (exited) command from the manager. Permanently discards the VTTY buffer and all associated state.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner purge [\fITARGET\fR]
+.RE
+.PP
+If no target is given and exactly one exited command exists, it is purged automatically. If the target is numeric, it is treated as a command ID (first 8 chars). Otherwise it is matched against command names.
+.RE
+
+.SS stop-command
+Stop a running command in a vrunner instance. If no target is given and exactly one command is running, it is stopped automatically. If the target is numeric, it is treated as a PID. Otherwise it is matched against command names (and optionally args).
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner stop-command [\fITARGET\fR]
+.RE
+.RE
+
+.SS cat
+Print the VTTY buffer of a running command to stdout. By default the output is plain text with all ANSI formatting stripped. Use \fB\-\-color-always\fR to preserve ANSI color escape sequences. When no target is given and exactly one command is running, that command is used automatically.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner cat [\fITARGET\fR] [\fB\-\-color-always\fR]
+.RE
+.PP
+.B Options:
+.RS
+.TP
+.B \-\-color-always
+Preserve ANSI color escape sequences in the output.
+.RE
+.RE
+
+.SS screenshot
+Capture the VTTY buffer of a running command as a PNG screenshot. The terminal content is rendered using a TrueType/OpenType font.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner screenshot [\fITARGET\fR] [\fIOPTIONS\fR]
+.RE
+.PP
+.B Options:
+.RS
+.TP
+.BR "\-\-output " \fIFILE\fR
+Output file path (default: \fBscreenshot.png\fR).
+.TP
+.BR "\-\-font-size " \fIN\fR
+Font size in pixels per character cell (default: \fB14\fR, range: 6\[en]48).
+.TP
+.BR "\-\-font-name " \fIPATH\fR
+Path to a TTF/OTF font file. When omitted, the server searches common system paths for a monospace font.
+.RE
+.RE
+
+.SS completions
+Generate a shell completion script for vrunner. Outputs the script to standard output; redirect to a file or source directly. Supports bash, zsh, fish, elvish, and powershell.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner completions \fISHELL\fR
+.RE
+.PP
+.B Example (bash):
+.RS
+vrunner completions bash > /etc/bash_completion.d/vrunner
+.RE
+.RE
+
+.SS resize
+Resize a command's virtual terminal. When used without explicit \fB\-\-rows\fR or \fB\-\-cols\fR flags, the terminal is automatically resized to match the dimensions of the current terminal (auto-detect mode). When one dimension is specified, the other is auto-detected from the current terminal.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrunner resize \fITARGET\fR [\fB\-\-rows\fR \fIN\fR] [\fB\-\-cols\fR \fIN\fR]
+.RE
+.RE
+
+.SH WEB ADMIN INTERFACE
+
+The built-in web admin dashboard is available at \fB/admin\fR on the running instance. Open a browser and navigate to:
+
+.PP
+.RS
+\fBhttp://localhost:9090/admin\fR (HTTP mode)
+.br
+\fBhttps://localhost:9090/admin\fR (TLS mode)
+.RE
+
+.PP
+The admin interface provides:
+.IP \(bu 4
+A list of all running commands with their status, arguments, and certificate bindings
+.IP \(bu 4
+A VTTY viewer that renders terminal output in the browser using the incremental diff WebSocket protocol
+.IP \(bu 4
+A Pause/Run button to freeze (SIGSTOP) and thaw (SIGCONT) the selected command
+.IP \(bu 4
+Controls for spawning new commands, sending keystrokes, and killing commands
+.IP \(bu 4
+Auto-selection of the first available command on load
+.IP \(bu 4
+1-second HTTP polling fallback when WebSocket is unavailable
+.IP \(bu 4
+A log viewer with search and pagination
+.RE
+
+.SH HTTP API
+
+The REST API is the primary interface for programmatic control. All responses use a standard JSON envelope with \fBstatus\fR, \fBdata\fR, and \fBerror\fR fields.
+
+.SS Endpoints
+
+.TP
+.B GET /api/commands
+List all running commands. Returns an array of objects with \fBid\fR, \fBname\fR, \fBpid\fR, \fBstatus\fR, and \fBcertificate\fR fields.
+
+.TP
+.B POST /api/commands
+Start a new command. Request body: \fB{"cmd": "string", "args": ["string"], "rows": N, "cols": N, "on_exit": "string", "on_error": "string", "exit_timeout": N, "retain_on_exit": bool, "snapshot_on_exit": "string|null", "env": {"KEY": "VALUE"}, "no_env": bool, "certificate": "string|null"}\fR. All fields except \fBcmd\fR are optional. Returns the command ID.
+
+.TP
+.B POST /api/commands/:id/keys
+Send keystrokes to a running command. Request body: \fB{"keys": "string"}\fR. Supports ANSI escape sequences for special keys.
+
+.TP
+.B POST /api/commands/:id/kill
+Kill a running command. Request body: \fB{"signal": "string"}\fR (optional, defaults to SIGTERM).
+
+.TP
+.B GET /api/commands/:id/vtty
+Get full VTTY contents as raw ANSI text.
+
+.TP
+.B GET /api/commands/:id/vtty/html
+Get VTTY contents as rendered HTML, including cursor position, terminal dimensions, and scrollback line count.
+
+.TP
+.B GET /api/commands/:id/vtty/partial?offset=N&limit=N
+Get paginated VTTY content. Default offset is 0, default limit is 50.
+
+.TP
+.B POST /api/commands/:id/resize
+Resize a command's virtual terminal. Request body: \fB{"rows": N, "cols": N}\fR. Valid ranges: rows 1-10000, cols 1-1000.
+
+.TP
+.B POST /api/commands/:id/freeze
+Freeze (SIGSTOP) a running command, pausing its execution without terminating it.
+
+.TP
+.B POST /api/commands/:id/thaw
+Thaw (SIGCONT) a previously frozen command, resuming its execution.
+
+.TP
+.B GET /api/commands/:id/handles
+List output handles attached to a command.
+
+.TP
+.B POST /api/commands/:id/handles
+Add an output handle to a command.
+
+.TP
+.B POST /api/commands/kill-pid/:pid
+Kill a running command by its OS process ID (as opposed to command UUID).
+
+.TP
+.B POST /api/commands/:id/snapshot
+Store a named snapshot of the command's VTTY buffer. Body: \fB{"name": "snapshot-name"}\fR. Returns snapshot metadata including timestamp and runtime.
+
+.TP
+.B GET /api/commands/:id/snapshots
+List all stored snapshots for a command.
+
+.TP
+.B POST /api/commands/:id/diff
+Compute a cell-level diff of the current buffer against a stored snapshot. Body: \fB{"name": "snapshot-name"}\fR. Returns the list of changed cells.
+
+.TP
+.B DELETE /api/commands/:id/snapshots/:name
+Delete a stored snapshot.
+
+.TP
+.B GET /api/certificates
+List all certificates in the pool with their names, file paths, and token previews.
+
+.TP
+.B GET /api/info
+Get instance information including command count, certificate count, and auth status.
+
+.TP
+.B GET /api/log?search=string&offset=N&limit=N
+Get command log entries with optional search filter and pagination.
+
+.TP
+.B POST /api/shutdown
+Gracefully shut down the vrunner instance.
+
+.SS Authentication
+
+When authentication is enabled (via \fB\-\-auth\fR, \fB\-\-remote\fR, or config), include a bearer token in every API request:
+
+.PP
+.RS
+\fBAuthorization: Bearer <token>\fR
+.RE
+
+.PP
+The token is stored in \fB~/.config/vrunner/token\fR by default.
+
+.SH CONFIGURATION
+
+vrunner reads configuration from multiple sources in order of increasing precedence:
+
+.PP
+.RS
+1. Built-in defaults
+.br
+2. Global config: \fB~/.config/vrunner/config.yaml\fR (or \fB.toml\fR/\fB.json\fR)
+.br
+3. Local config: \fB./vrunner.yaml\fR (or \fB.toml\fR/\fB.json\fR)
+.br
+4. Explicit config: any path via \fB\-c <FILE>\fR
+.br
+5. CLI flags (highest precedence)
+.RE
+
+.PP
+The configuration file format is detected from the file extension: \fB.yaml\fR/\fB.yml\fR for YAML, \fB.toml\fR for TOML, \fB.json\fR for JSON. All three formats are fully supported with identical schemas.
+
+.SS Configuration Sections
+
+.TP
+.B server
+Controls HTTP server binding (\fBbind\fR, \fBport\fR).
+
+.TP
+.B security
+Controls authentication (\fBrequire_auth\fR, \fBtoken_file\fR) and CORS (\fBcors.policy\fR).
+
+.RS
+.PP
+The \fBcors\fR sub-section configures Cross-Origin Resource Sharing:
+.PP
+.RS
+\fBpolicy\fR \fI\("any" | "none" | ORIGINS\)\fR
+.br
+Controls which origins are allowed for cross-origin requests. \fB"any"\fR allows all origins (default, backward compatible). \fB"none"\fR blocks all cross-origin requests. ORIGINS is a comma-separated list of allowed origins, e.g. \fB"https://myapp.example.com,https://admin.example.com"\fR.
+.RE
+.RE
+
+.TP
+.B tls
+Controls TLS encryption (\fBenabled\fR, \fBcert_file\fR, \fBkey_file\fR).
+
+.TP
+.B certificates
+Manages named certificates for per-command access control (\fBdirectory\fR, \fBentries\fR).
+
+.TP
+.B vtty
+Controls virtual terminal properties (\fBrows\fR, \fBcols\fR, \fBterm\fR, \fBscrollback\fR, \fBtruecolor\fR, \fBmouse\fR).
+
+.TP
+.B display
+Controls local terminal display (\fBenabled\fR, \fBrefresh_ms\fR).
+
+.TP
+.B command_log
+Controls command logging (\fBenabled\fR, \fBfile\fR).
+
+.TP
+.B daemon
+Controls daemon mode (\fBenabled\fR, \fBstdout_file\fR, \fBstderr_file\fR).
+
+.TP
+.B environment
+Defines environment variables for spawned commands. A mapping of key-value pairs that are set in the child process environment. Can be overridden per-command via \fB\-\-env\fR flags or the API \fBenv\fR field, or suppressed entirely with \fB\-\-no\-env\fR.
+
+.TP
+.B profiles
+Named configuration profiles that override base config fields. Each profile can specify any config section, and its values take precedence over the base configuration. CLI flags override profile values. A profile is selected with \fB\-\-profile <NAME>\fR.
+
+.TP
+.B handles
+Defines additional output sinks for spawned commands.
+
+.SH EXAMPLES
+
+.SS Basic usage
+
+.PP
+Start vrunner in idle mode (no command, waits for API requests):
+.RS
+.PP
+.nf
+\fB$ vrunner\fR
+.fi
+.RE
+
+.PP
+Run a command with local terminal display:
+.RS
+.PP
+.nf
+\fB$ vrunner \-\-display \-\- htop\fR
+.fi
+.RE
+
+.PP
+Run a command as a background daemon:
+.RS
+.PP
+.nf
+\fB$ vrunner \-\-daemon \-\- python \-m http.server 8000\fR
+.fi
+.RE
+
+.PP
+Run on a custom port:
+.RS
+.PP
+.nf
+\fB$ vrunner \-\-port 9090 \-\- npm run dev\fR
+.fi
+.RE
+
+.SS Remote access with TLS
+
+.PP
+Start a secure remote-accessible instance:
+.RS
+.PP
+.nf
+\fB$ vrunner \-\-remote \-\-tls \-\- some-server\fR
+.fi
+.RE
+
+.PP
+Connect from a remote machine with curl:
+.RS
+.PP
+.nf
+\fB$ curl \-\-cacert ~/.config/vrunner/cert.pem \e\fR
+     \fB\-H "Authorization: Bearer <token>" \e\fR
+     \fBhttps://server:9090/api/commands\fR
+.fi
+.RE
+
+.SS Using the API
+
+.PP
+Spawn a command:
+.RS
+.PP
+.nf
+\fB$ curl \-s \-X POST http://localhost:9090/api/commands \e\fR
+     \fB\-H "Content-Type: application/json" \e\fR
+     \fB\-d '{"cmd": "htop", "args": []}'\fR
+.fi
+.RE
+
+.PP
+List running commands:
+.RS
+.PP
+.nf
+\fB$ curl http://localhost:9090/api/commands\fR
+.fi
+.RE
+
+.PP
+Send keystrokes to a command:
+.RS
+.PP
+.nf
+\fB$ curl \-s \-X POST http://localhost:9090/api/commands/<id>/keys \e\fR
+     \fB\-H "Content-Type: application/json" \e\fR
+     \fB\-d '{"keys": "q"}'\fR
+.fi
+.RE
+
+.PP
+View VTTY output:
+.RS
+.PP
+.nf
+\fB$ curl http://localhost:9090/api/commands/<id>/vtty/html\fR
+.fi
+.RE
+
+.PP
+Kill a command:
+.RS
+.PP
+.nf
+\fB$ curl \-s \-X POST http://localhost:9090/api/commands/<id>/kill \e\fR
+     \fB\-H "Content-Type: application/json" \-d '{}'\fR
+.fi
+.RE
+
+.PP
+Search command logs:
+.RS
+.PP
+.nf
+\fB$ curl "http://localhost:9090/api/log?search=spawn&limit=50"\fR
+.fi
+.RE
+
+.SS Instance management
+
+.PP
+List all running instances:
+.RS
+.PP
+.nf
+\fB$ vrunner list\fR
+.fi
+.RE
+
+.PP
+Stop an instance:
+.RS
+.PP
+.nf
+\fB$ vrunner stop 12345\fR
+.fi
+.RE
+
+.SS Certificate management
+
+.PP
+Generate a certificate:
+.RS
+.PP
+.nf
+\fB$ vrunner cert generate my-app\fR
+.fi
+.RE
+
+.PP
+List certificates:
+.RS
+.PP
+.nf
+\fB$ vrunner cert list\fR
+.fi
+.RE
+
+.PP
+Spawn a command bound to a certificate:
+.RS
+.PP
+.nf
+\fB$ curl \-s \-X POST http://localhost:9090/api/commands \e\fR
+     \fB\-H "Content-Type: application/json" \e\fR
+     \fB\-d '{"cmd": "node", "args": ["server.js"], "certificate": "my-app"}'\fR
+.fi
+.RE
+
+.SH FILES
+
+.TP
+.B ~/.config/vrunner/config.yaml
+Global configuration file (also \fBconfig.toml\fR or \fBconfig.json\fR).
+
+.TP
+.B ~/.config/vrunner/token
+Default bearer token for API authentication.
+
+.TP
+.B ~/.config/vrunner/cert.pem
+Auto-generated TLS certificate.
+
+.TP
+.B ~/.config/vrunner/key.pem
+Auto-generated TLS private key.
+
+.TP
+.B ~/.config/vrunner/certs/
+Default directory for certificate pool entries.
+
+.TP
+.B ./vrunner.yaml
+Local configuration file (also \fBvrunner.toml\fR or \fBvrunner.json\fR).
+
+.TP
+.B /tmp/vrunner.out
+Default daemon stdout redirect.
+
+.TP
+.B /tmp/vrunner.err
+Default daemon stderr redirect.
+
+.SH ENVIRONMENT
+
+No environment variables are required. The following are recognized by child processes spawned by vrunner:
+
+.TP
+.B TERM
+Set to the value of the \fB\-\-term\fR option (default: \fBxterm-256color\fR).
+
+.TP
+.B LINES
+Set to the VTTY row count from \fB\-\-vtty\-rows\fR (default: \fB24\fR).
+
+.TP
+.B COLUMNS
+Set to the VTTY column count from \fB\-\-vtty\-cols\fR (default: \fB80\fR).
+
+.SH EXIT STATUS
+
+.TP
+.B 0
+Successful execution or graceful shutdown.
+
+.TP
+.B 1
+General error (invalid arguments, configuration error, etc.).
+
+.TP
+.B 2
+Child command exited with a non-zero status (when running a command directly).
+
+.SH SEE ALSO
+
+.BR vrunnerctrl (1),
+.BR vrunner\-list\-vrunner (1),
+.BR vrunner\-list\-commands (1),
+.BR vrunner\-stop\-command (1),
+.BR vrunner\-spawn (1),
+.BR vrunner\-freeze (1),
+.BR vrunner\-thaw (1),
+.BR vrunner\-cert (1),
+.BR vrunner\-cert\-generate (1),
+.BR vrunner\-cert\-list (1),
+.BR vrunner\-cert\-show (1),
+.BR vrunner\-cert\-remove (1),
+.BR vrunner\-purge (1),
+.BR vrunner\-resize (1),
+.BR vrunner\-config\-check (1),
+.BR vrunner\-cat (1),
+.BR vrunner\-screenshot (1),
+.BR vrunner\-completions (1),
+.BR curl (1),
+.BR kill (1),
+.BR lsof (8)
+
+Full documentation: \fBMANUAL.md\fR, \fBdocs/configuration.md\fR, \fBdocs/certificates.md\fR, \fBdocs/architecture.md\fR

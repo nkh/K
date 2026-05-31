@@ -1,0 +1,70 @@
+.\" Title: vrunner-cert-remove
+.\" Author: vrunner contributors
+.\" Manual section: 1
+.\" Process this file with
+.\"   groff -man -Tascii vrunner-cert-remove.1
+
+.TH VRUNNER\-CERT\-REMOVE 1 "2025" "vrunner" "User Commands"
+
+.SH NAME
+vrunner\-cert\-remove \- remove a certificate from the certificate pool
+
+.SH SYNOPSIS
+.B vrunner
+\fBcert remove\fR \fINAME\fR
+
+.SH DESCRIPTION
+Remove a certificate from the vrunner certificate pool registry. This removes the certificate entry from the configuration file so it can no longer be used to bind new commands or authorize API requests.
+
+The PEM certificate and key files on disk are \fBnot\fR deleted by this operation. Only the registry entry in the configuration file is removed. If you want to also delete the files, remove them manually from \fB~/.config/vrunner/certs/<name>/\fR.
+
+Removing a certificate does not affect commands that are already running with that certificate binding. Those commands continue to accept the certificate's bearer token until they are stopped or restarted. However, new commands can no longer be bound to the removed certificate.
+
+This subcommand is synchronous and does not require a running vrunner instance.
+
+.SH ARGUMENTS
+
+.TP
+.B NAME
+Name of the certificate to remove (as given to \fBcert generate\fR).
+
+.SH EXAMPLES
+
+.PP
+Remove a certificate:
+.RS
+.PP
+.nf
+\fB$ vrunner cert remove old-app\fR
+Certificate 'old-app' removed from pool.
+.fi
+.RE
+
+.PP
+Remove and also delete files:
+.RS
+.PP
+.nf
+\fB$ vrunner cert remove old-app\fR
+Certificate 'old-app' removed from pool.
+\fB$ rm -rf ~/.config/vrunner/certs/old-app/\fR
+.fi
+.RE
+
+.SH EXIT STATUS
+
+.TP
+.B 0
+Certificate removed successfully.
+
+.TP
+.B 1
+Error (certificate not found in pool, configuration write error, etc.).
+
+.SH SEE ALSO
+
+.BR vrunner\-cert (1),
+.BR vrunner\-cert\-generate (1),
+.BR vrunner\-cert\-list (1),
+.BR vrunner\-cert\-show (1),
+.BR vrunner (1)

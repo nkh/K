@@ -1,0 +1,103 @@
+.\" Title: vrunner-list-commands
+.\" Author: vrunner contributors
+.\" Manual section: 1
+.\" Process this file with
+.\"   groff -man -Tascii vrunner-list-commands.1
+
+.TH VRUNNER\-LIST\-COMMANDS 1 "2025" "vrunner" "User Commands"
+
+.SH NAME
+vrunner\-list\-commands \- list running commands in machine-readable format
+
+.SH SYNOPSIS
+.B vrunner
+\fBlist\-commands\fR
+
+.SH DESCRIPTION
+List all commands running inside vrunner instances in a compact, tab-separated (TSV) format suitable for parsing in scripts and automated tools. This is the machine-friendly alternative to \fBvrunner list\fR, which produces human-readable formatted output.
+
+Unlike \fBvrunner list\-vrunner\fR (which lists instances), this subcommand lists the individual commands within each instance. It connects to each instance over HTTP to retrieve its command list and emits one line per command.
+
+Each line after the header represents one command, with fields separated by tab characters. The header line is always emitted. Arguments are emitted as a JSON array string. Unreachable instances are silently skipped.
+
+.SH OPTIONS
+
+.TP
+.BR "\-\-target " \fIPID\fR
+Only list commands from the vrunner instance with the given PID. This is a global option specified before the subcommand: \fBvrunner \-\-target 12345 list\-commands\fR.
+
+.SH OUTPUT FORMAT
+
+Tab-separated fields:
+
+.TP
+.B VRUNNER_PID
+Process ID of the vrunner instance hosting the command.
+
+.TP
+.B CMD_PID
+OS process ID of the command itself.
+
+.TP
+.B NAME
+Command binary name (e.g., \fBhtop\fR, \fBvim\fR, \fBcargo\fR).
+
+.TP
+.B ARGS
+Command arguments as a JSON array string (e.g., \fB["notes.txt"]\fR, \fB[]\fR).
+
+.TP
+.B CERT
+Certificate binding for the command, or \fB\-\fR if none.
+
+.SH EXAMPLES
+
+.PP
+Basic usage:
+.RS
+.PP
+.nf
+\fB$ vrunner list\-commands\fR
+VRUNNER_PID      CMD_PID NAME    ARGS                    CERT
+12345           5678    htop     []                      -
+12345           5679    vim     ["notes.txt"]            my-app
+.fi
+.RE
+
+.PP
+Find commands bound to a specific certificate:
+.RS
+.PP
+.nf
+\fB$ vrunner list-commands | awk -F'\\t' '$5=="my-app" {print $2, $3}'\fR
+5679 vim
+.fi
+.RE
+
+.PP
+Count total running commands:
+.RS
+.PP
+.nf
+\fB$ vrunner list-commands | tail -n +2 | wc -l\fR
+2
+.fi
+.RE
+
+.SH EXIT STATUS
+
+.TP
+.B 0
+Successful listing (including empty results).
+
+.TP
+.B 1
+Error (registry access failure, invalid \fB\-\-target\fR PID, etc.).
+
+.SH SEE ALSO
+
+.BR vrunner (1),
+.BR vrunner\-list (1),
+.BR vrunner\-list\-vrunner (1),
+.BR vrunner\-stop\-command (1),
+.BR vrunner\-spawn (1)

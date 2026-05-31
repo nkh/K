@@ -1,0 +1,83 @@
+.\" Title: vrunner-list
+.\" Author: vrunner contributors
+.\" Manual section: 1
+.\" Process this file with
+.\"   groff -man -Tascii vrunner-list.1
+
+.TH VRUNNER\-LIST 1 "2025" "vrunner" "User Commands"
+
+.SH NAME
+vrunner\-list \- list running vrunner instances and their commands
+
+.SH SYNOPSIS
+.B vrunner
+\fBlist\fR
+
+.SH DESCRIPTION
+List all running vrunner instances on the system and display the commands running inside each one. Each vrunner instance registers itself in a shared registry when it starts, allowing discovery from the CLI. This subcommand queries that registry, then connects to each instance over HTTP to retrieve its command list.
+
+The output uses a two-level indented hierarchy. Instance headers show PID, port, bind address, daemon status, and display status. Under each instance, individual commands are listed with their OS PID, name (truncated to 40 characters), and certificate binding.
+
+When \fB\-\-target PID\fR is given on the parent command, only the specified instance is shown. Instances that are registered but unreachable (e.g., network issue or stale registry entry) display an \fB[ERROR]\fR line instead of their command list. Instances with no running commands show \fB(no commands)\fR.
+
+.SH OPTIONS
+
+.TP
+.BR "\-\-target " \fIPID\fR
+Only list the vrunner instance with the given PID. Useful when multiple instances are running and you want to inspect a specific one. This is a global option specified before the subcommand: \fBvrunner \-\-target 12345 list\fR.
+
+.SH EXAMPLES
+
+.PP
+List all instances and their commands:
+.RS
+.PP
+.nf
+\fB$ vrunner list\fR
+INSTANCE  PID: 12345  PORT: 9090  BIND: 127.0.0.1  DAEMON: no  DISPLAY: yes
+  5678       htop                                   CERT: -
+  5679       vim notes.txt                          CERT: my-app
+
+INSTANCE  PID: 12346  PORT: 8080  BIND: 127.0.0.1  DAEMON: yes  DISPLAY: no
+  (no commands)
+.fi
+.RE
+
+.PP
+List a specific instance:
+.RS
+.PP
+.nf
+\fB$ vrunner \-\-target 12345 list\fR
+INSTANCE  PID: 12345  PORT: 9090  BIND: 127.0.0.1  DAEMON: no  DISPLAY: yes
+  5678       htop                                   CERT: -
+.fi
+.RE
+
+.PP
+No instances running:
+.RS
+.PP
+.nf
+\fB$ vrunner list\fR
+No running vrunner instances.
+.fi
+.RE
+
+.SH EXIT STATUS
+
+.TP
+.B 0
+Successful listing (including empty results).
+
+.TP
+.B 1
+Error (no registry access, invalid \fB\-\-target\fR PID, etc.).
+
+.SH SEE ALSO
+
+.BR vrunner (1),
+.BR vrunner\-list\-vrunner (1),
+.BR vrunner\-list\-commands (1),
+.BR vrunner\-stop (1),
+.BR vrunnerctrl (1)

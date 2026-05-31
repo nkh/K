@@ -1,0 +1,105 @@
+.\" Title: vrunner-config-check
+.\" Author: vrunner contributors
+.\" Manual section: 1
+.\" Process this file with
+.\"   groff -man -Tascii vrunner-config-check.1
+
+.TH VRUNNER\-CONFIG\-CHECK 1 "2025" "vrunner" "User Commands"
+
+.SH NAME
+vrunner\-config\-check \- validate configuration files without starting the server
+
+.SH SYNOPSIS
+.B vrunner
+\fBconfig\-check\fR
+
+.SH DESCRIPTION
+Validate vrunner configuration files without starting the server or spawning any commands. This subcommand checks all configuration sources (global, local, and explicit) and reports any validation errors or warnings with their field paths.
+
+The validation covers:
+.IP \(bu 4
+Type mismatches (e.g., a string where a number is expected)
+.IP \(bu 4
+Unknown fields (keys that are not part of the configuration schema)
+.IP \(bu 4
+Value range violations (e.g., port out of range, negative dimensions)
+.IP \(bu 4
+Deprecation warnings for renamed or removed options
+.RE
+
+Configuration is loaded from multiple sources in order of increasing precedence:
+.RS
+.IP 1. 4
+Built-in defaults
+.IP 2. 4
+Global config: \fB~/.config/vrunner/config.yaml\fR (or \fB.toml\fR/\fB.json\fR)
+.IP 3. 4
+Local config: \fB./vrunner.yaml\fR (or \fB.toml\fR/\fB.json\fR)
+.IP 4. 4
+Explicit config: any path via \fB\-c <FILE>\fR
+.RE
+
+The configuration file format is detected from the file extension: \fB.yaml\fR/\fB.yml\fR for YAML, \fB.toml\fR for TOML, \fB.json\fR for JSON. All three formats are fully supported with identical schemas.
+
+This subcommand is synchronous and does not require a running vrunner instance. It is useful in CI pipelines to catch configuration errors before deployment, or as a pre-flight check before starting a vrunner server.
+
+.SH OPTIONS
+
+.TP
+.BR \-c ", " "\-\-config " \fIFILE\fR
+Path to an explicit configuration file to validate. When specified, this file is validated in addition to the global and local config files. This is a global option specified before the subcommand: \fBvrunner \-c /path/to/custom.yaml config\-check\fR.
+
+.SH EXAMPLES
+
+.PP
+Validate all config sources:
+.RS
+.PP
+.nf
+\fB$ vrunner config-check\fR
+Configuration OK
+  Global:  ~/.config/vrunner/config.yaml
+  Local:   ./vrunner.yaml
+.fi
+.RE
+
+.PP
+Validate a specific config file:
+.RS
+.PP
+.nf
+\fB$ vrunner \-c /etc/vrunner/prod.yaml config-check\fR
+Configuration OK
+  Global:  ~/.config/vrunner/config.yaml
+  Local:   ./vrunner.yaml
+  Explicit: /etc/vrunner/prod.yaml
+.fi
+.RE
+
+.PP
+Configuration with errors:
+.RS
+.PP
+.nf
+\fB$ vrunner config-check\fR
+ERROR: server.port: invalid type: string "abc", expected u16
+WARNING: deprecated field 'tty.rows' (renamed to 'vtty.rows')
+  Global:  ~/.config/vrunner/config.yaml
+  Local:   ./vrunner.yaml
+.fi
+.RE
+
+.SH EXIT STATUS
+
+.TP
+.B 0
+Configuration is valid (no errors; warnings may still be present).
+
+.TP
+.B 1
+Configuration has errors, or config file could not be read.
+
+.SH SEE ALSO
+
+.BR vrunner (1),
+.BR vrunner (1)

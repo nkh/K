@@ -1,22 +1,40 @@
-# vrl CLI Reference
+# vrl / vrunner CLI Reference
 
-Complete reference for the `vrl` command-line interface. Options are
-organized by functional category. Every flag corresponds to a configuration key
-described in [`../configuration.md`](../configuration.md); CLI flags take
-precedence over config-file values.
+Complete reference for the `vrl` and `vrunner` command-line interfaces. Both
+binaries share the same core CLI options (VTTY, display, daemon, exit handlers)
+and differ in their transport layer and binary-specific subcommands. Every flag
+corresponds to a configuration key described in [`../configuration.md`](../configuration.md);
+CLI flags take precedence over config-file values.
+
+| | vrl | vrunner |
+|--|-----|---------|
+| **Transport** | UDS IPC | HTTP + WebSocket |
+| **Default feature** | Yes | No (`--features vrunner`) |
+| **Server** | UDS socket (`control-{pid}.sock`) | HTTP server (`:9090`) |
+
+Options marked **Shared** work identically for both binaries.
 
 ---
 
 ## Synopsis
+
+### vrl
 
 ```
 vrl [GENERAL OPTIONS] [CATEGORY OPTIONS] -- <command> [args...]
 vrl <subcommand> [SUBCOMMAND OPTIONS]
 ```
 
+### vrunner
+
+```
+vrunner [GENERAL OPTIONS] [SERVER OPTIONS] [CATEGORY OPTIONS] -- <command> [args...]
+vrunner <subcommand> [SUBCOMMAND OPTIONS]
+```
+
 ---
 
-## General Options
+## General Options (Shared)
 
 These top-level flags control which configuration file is loaded and provide
 standard help/version information.
@@ -34,9 +52,25 @@ The config file is resolved in this order:
 
 ---
 
-## VTTY Options
+## Server Options (vrunner only)
 
-Control the virtual terminal (PTY) that vrl creates for the child command.
+These options control the HTTP server that vrunner starts.
+
+| Flag | Default | Config Key | Description |
+|------|---------|------------|-------------|
+| `--bind <addr>` | `127.0.0.1` | `server.bind` | Bind address for the HTTP server. |
+| `--port <n>` | `9090` | `server.port` | Port for the HTTP server. |
+| `--auth` | `false` | `security.require_auth` | Enable bearer token authentication. |
+| `--tls` | `false` | `tls.enabled` | Enable TLS with auto-generated self-signed certificates. |
+| `--remote` | `false` | — | Shorthand for `--bind 0.0.0.0 --auth --tls`. Accept connections from any interface with authentication and encryption. |
+| `--cert-file <path>` | — | `tls.cert_file` | Path to a custom TLS certificate file. |
+| `--key-file <path>` | — | `tls.key_file` | Path to a custom TLS private key file. |
+
+---
+
+## VTTY Options (Shared)
+
+Control the virtual terminal (PTY) that the binary creates for the child command.
 
 | Flag | Default | Config Key | Description |
 |------|---------|------------|-------------|
@@ -48,14 +82,14 @@ Control the virtual terminal (PTY) that vrl creates for the child command.
 | `--mouse` / `--no-mouse` | `false` | `vtty.mouse` | Enable or disable mouse event forwarding to the child PTY. |
 
 The virtual terminal dimensions can be changed at runtime via the
-[resize subcommand](#resize) or via the `vrl resize` command.
+[resize subcommand](#resize).
 
 ---
 
-## Display Options
+## Display Options (Shared)
 
 Configure the built-in terminal multiplexer rendered in the
-terminal where vrl itself is running.
+terminal where the binary itself is running.
 
 | Flag | Default | Config Key | Description |
 |------|---------|------------|-------------|
@@ -63,12 +97,12 @@ terminal where vrl itself is running.
 | `--display-all` | `false` | `display.all` | Show *all* command outputs simultaneously instead of the active pane only. Implies `--display`. |
 | `--refresh-ms <n>` | `100` | `display.refresh_ms` | Milliseconds between display redraw cycles. Lower values produce smoother output at the cost of higher CPU usage. |
 
-When `--no-display` is set (the default), vrl runs in headless mode:
+When `--no-display` is set (the default), the binary runs in headless mode:
 command output is not rendered locally.
 
 ---
 
-## Interactive Options
+## Interactive Options (Shared)
 
 | Flag | Default | Config Key | Description |
 |------|---------|------------|-------------|
@@ -79,7 +113,7 @@ Interactive keybindings are documented in full in
 
 ---
 
-## Logging Options
+## Logging Options (Shared)
 
 | Flag | Default | Config Key | Description |
 |------|---------|------------|-------------|
@@ -89,9 +123,9 @@ Interactive keybindings are documented in full in
 
 ---
 
-## Daemon Options
+## Daemon Options (Shared)
 
-Run vrl as a background daemon process.
+Run as a background daemon process.
 
 | Flag | Default | Config Key | Description |
 |------|---------|------------|-------------|
@@ -103,11 +137,12 @@ Run vrl as a background daemon process.
 
 ```bash
 vrl --daemon -- python worker.py
+vrunner --daemon -- python worker.py
 ```
 
 ---
 
-## Exit Handler Options
+## Exit Handler Options (Shared)
 
 These options control what happens when the child command exits or encounters
 an error, and allow automated keystroke injection.
@@ -124,15 +159,14 @@ an error, and allow automated keystroke injection.
 **Example**
 
 ```bash
-# Send Ctrl+C on start and wait up to 30 seconds for graceful exit
 vrl --send-keys "<C-c>" --exit-timeout 30 -- app
 ```
 
 ---
 
-## Subcommands
+## Subcommands — vrl
 
-Subcommands operate on *already running* vrl instances via UDS IPC.
+vrl subcommands operate on *already running* vrl instances via UDS IPC.
 
 ### `list`
 
@@ -152,7 +186,7 @@ vrl list --target 12345
 
 ### `stop`
 
-Stop a vrl instance by PID. Auto-selects if only one instance is running.
+Stop a vrl instance by PID. Sends `SIGTERM` to the instance process.
 
 ```bash
 vrl stop [pid]
@@ -166,7 +200,7 @@ vrl stop [pid]
 
 ### `spawn-in`
 
-Dynamically create a new command in a running vrl instance.
+Dynamically create a new command in a running vrl instance via UDS IPC.
 
 ```bash
 vrl spawn-in <pid> -- <cmd> [args...] [--rows <n>] [--cols <n>]
@@ -184,7 +218,7 @@ vrl spawn-in <pid> -- <cmd> [args...] [--rows <n>] [--cols <n>]
 
 ### `keys`
 
-Send keystrokes to a running command.
+Send keystrokes to a running command via UDS IPC.
 
 ```bash
 vrl keys <pid> <keys>
@@ -259,7 +293,7 @@ Exit codes: `0` = valid, `1` = errors found.
 
 ### `completions`
 
-Generate shell completion scripts for vrl.
+Generate shell completion scripts.
 
 ```bash
 vrl completions bash > /etc/bash_completion.d/vrl
@@ -269,7 +303,179 @@ vrl completions fish > ~/.config/fish/completions/vrl.fish
 
 ---
 
-## Special Key Notation
+## Subcommands — vrunner
+
+vrunner subcommands communicate with running instances via the HTTP API.
+
+### `list`
+
+List all running vrunner instances and their commands.
+
+```bash
+vrunner list
+```
+
+---
+
+### `stop`
+
+Stop a vrunner instance by PID. Sends a shutdown request via the HTTP API.
+
+```bash
+vrunner stop [pid]
+```
+
+---
+
+### `spawn`
+
+Spawn a new command in a running vrunner instance via the HTTP API.
+
+```bash
+vrunner spawn [OPTIONS] CMD [ARGS...]
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--env <k=v>` | — | Environment variables for the command. |
+| `--rows <n>` | config default | VTTY rows for the spawned command. |
+| `--cols <n>` | config default | VTTY columns for the spawned command. |
+| `--dir <path>` | — | Working directory for the command. |
+
+```bash
+vrunner spawn htop
+vrunner spawn --env RUST_LOG=debug -- cargo run
+vrunner --target 12345 spawn npm run dev
+```
+
+---
+
+### `stop-command`
+
+Stop a specific running command by ID or name.
+
+```bash
+vrunner stop-command <target>
+```
+
+---
+
+### `list-vrunner`
+
+List all running vrunner server instances.
+
+```bash
+vrunner list-vrunner
+```
+
+---
+
+### `list-commands`
+
+List all commands across all running vrunner instances.
+
+```bash
+vrunner list-commands
+```
+
+---
+
+### `freeze`
+
+Pause a running command by sending `SIGSTOP`.
+
+```bash
+vrunner freeze <pid>
+```
+
+---
+
+### `thaw`
+
+Resume a previously frozen command by sending `SIGCONT`.
+
+```bash
+vrunner thaw <pid>
+```
+
+---
+
+### `resize`
+
+Change the virtual terminal dimensions of a running command.
+
+```bash
+vrunner resize <target> --rows <n> --cols <n>
+```
+
+---
+
+### `purge`
+
+Remove a retained (exited) command from memory.
+
+```bash
+vrunner purge [target]
+```
+
+---
+
+### `screenshot`
+
+Capture a PNG screenshot of a running command's VTTY output.
+
+```bash
+vrunner screenshot [name] [--output <path>]
+```
+
+---
+
+### `cat`
+
+Print the VTTY buffer of a running command to stdout.
+
+```bash
+vrunner cat [name]
+```
+
+---
+
+### `config-check`
+
+Validate configuration files without starting anything.
+
+```bash
+vrunner config-check
+```
+
+---
+
+### `completions`
+
+Generate shell completion scripts.
+
+```bash
+vrunner completions bash > /etc/bash_completion.d/vrunner
+vrunner completions zsh > ~/.zsh/completions/_vrunner
+vrunner completions fish > ~/.config/fish/completions/vrunner.fish
+```
+
+---
+
+### `cert`
+
+Manage per-command client certificates (vrunner only).
+
+```bash
+vrunner cert generate <name>
+vrunner cert list
+vrunner cert show <name>
+vrunner cert remove <name>
+```
+
+---
+
+## Special Key Notation (Shared)
 
 The `--send-keys` flag accepts key sequences using `<...>` notation for special keys.
 
@@ -313,14 +519,14 @@ vrl --send-keys "<Esc>:q!<Enter>" -- vim file.txt
 
 ---
 
-## Exit Codes
+## Exit Codes (Shared)
 
 | Code | Meaning |
 |------|---------|
 | `0` | Success. |
 | `1` | General error. |
 | `2` | Child process exited with an error. |
-| `130` | vrl was interrupted by `SIGINT`. |
+| `130` | Interrupted by `SIGINT`. |
 
 ---
 
@@ -329,3 +535,5 @@ vrl --send-keys "<Esc>:q!<Enter>" -- vim file.txt
 - [`../configuration.md`](../configuration.md) — Full configuration file reference
 - [`keybindings.md`](keybindings.md) — Interactive keyboard shortcuts
 - [`../hooks.md`](../hooks.md) — Event hooks reference
+- [`../api.md`](../api.md) — vrunner REST API reference
+- [`../explanation/architecture.md`](../explanation/architecture.md) — System architecture
