@@ -208,7 +208,7 @@ pub async fn handle_list_command(cli: &Cli) -> Result<()> {
 
 /// Fetch terminal dimensions for a command by querying the VTTY HTML endpoint.
 #[cfg(feature = "vrunner")]
-async fn fetch_cmd_dimensions(
+pub async fn fetch_cmd_dimensions(
     client: &reqwest::Client,
     base_url: &str,
     cmd_id: &str,
@@ -227,6 +227,31 @@ async fn fetch_cmd_dimensions(
 
 // ── Shared formatting functions ──
 
+/// Build a display string from command JSON ("name arg1 arg2") and truncate.
+///
+/// Returns `(truncated_display, pid, runtime_secs)`.
+fn extract_command_display(cmd: &serde_json::Value) -> Option<(String, u64, f64)> {
+    let name = cmd.get("name")?.as_str()?;
+    let args = cmd.get("args")?.as_array()?;
+    let args_vec: Vec<&str> = args.iter().filter_map(|v| v.as_str()).collect();
+    let display_name = if args_vec.is_empty() {
+        name.to_string()
+    } else {
+        format!("{} {}", name, args_vec.join(" "))
+    };
+    let truncated = if display_name.len() > 30 {
+        format!("{}...", &display_name[..27])
+    } else {
+        display_name
+    };
+    let pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0);
+    let runtime = cmd
+        .get("runtime_secs")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    Some((truncated, pid, runtime))
+}
+
 /// Format an instance header line.
 pub fn format_instance_header(info: &crate::instance::info::InstanceInfo) -> String {
     let daemon = if info.daemon { "yes" } else { "no" };
@@ -238,6 +263,7 @@ pub fn format_instance_header(info: &crate::instance::info::InstanceInfo) -> Str
         .abs() as f64;
     let uptime_str = format_duration(uptime_secs);
 
+    // vrunner adds PORT and BIND columns; vrl omits them.
     #[cfg(feature = "vrunner")]
     {
         format!(
@@ -278,25 +304,8 @@ pub fn format_instance_header(info: &crate::instance::info::InstanceInfo) -> Str
 /// Format a single command line (vrl version — with status).
 #[cfg(not(feature = "vrunner"))]
 pub fn format_command(cmd: &serde_json::Value) -> Option<String> {
-    let name = cmd.get("name")?.as_str()?;
-    let args = cmd.get("args")?.as_array()?;
-    let args_vec: Vec<&str> = args.iter().filter_map(|v| v.as_str()).collect();
-    let display_name = if args_vec.is_empty() {
-        name.to_string()
-    } else {
-        format!("{} {}", name, args_vec.join(" "))
-    };
-    let truncated = if display_name.len() > 30 {
-        format!("{}...", &display_name[..27])
-    } else {
-        display_name
-    };
-    let pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0);
+    let (truncated, pid, runtime) = extract_command_display(cmd)?;
     let status = cmd.get("status").and_then(|v| v.as_str()).unwrap_or("?");
-    let runtime = cmd
-        .get("runtime_secs")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.0);
     let runtime_str = format_duration(runtime);
 
     let status_str = match status {
@@ -325,28 +334,11 @@ pub fn format_command(cmd: &serde_json::Value) -> Option<String> {
 /// Format a single command line (vrunner version — with dims and cert).
 #[cfg(feature = "vrunner")]
 pub fn format_command(cmd: &serde_json::Value, dims: Option<(usize, usize)>) -> Option<String> {
-    let name = cmd.get("name")?.as_str()?;
-    let args = cmd.get("args")?.as_array()?;
-    let args_vec: Vec<&str> = args.iter().filter_map(|v| v.as_str()).collect();
-    let display_name = if args_vec.is_empty() {
-        name.to_string()
-    } else {
-        format!("{} {}", name, args_vec.join(" "))
-    };
-    let truncated = if display_name.len() > 30 {
-        format!("{}...", &display_name[..27])
-    } else {
-        display_name
-    };
-    let pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0);
+    let (truncated, pid, runtime) = extract_command_display(cmd)?;
     let cert = cmd
         .get("certificate")
         .and_then(|v| v.as_str())
         .unwrap_or("-");
-    let runtime = cmd
-        .get("runtime_secs")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.0);
     let runtime_str = format_duration(runtime);
     let dims_str = match dims {
         Some((r, c)) => format!("{}x{}", r, c),

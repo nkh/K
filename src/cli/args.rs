@@ -4,9 +4,9 @@ use clap::{FromArgMatches, Parser, Subcommand};
 
 // Binary name used in help text and completion generation.
 #[cfg(feature = "vrunner")]
-const BINARY_NAME: &str = "vrunner";
+pub const BINARY_NAME: &str = "vrunner";
 #[cfg(not(feature = "vrunner"))]
-const BINARY_NAME: &str = "vrl";
+pub const BINARY_NAME: &str = "vrl";
 
 // Description shown in --help.
 #[cfg(feature = "vrunner")]

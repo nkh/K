@@ -6,6 +6,7 @@ use crate::cli::args::Cli;
 use crate::cli::commands::common::{
     collect_all_commands, http_client, instance_url, resolve_targeted_instances,
 };
+use crate::cli::commands::list::fetch_cmd_dimensions;
 use crate::instance::registry::InstanceRegistry;
 
 /// Handle the `vrunner screenshot [TARGET]` subcommand.
@@ -118,7 +119,7 @@ pub async fn handle_screenshot_command(
 
             // Try to fetch terminal dimensions for the filename.
             // If the fetch fails, omit dimensions rather than erroring.
-            let dims_part = match fetch_dimensions(&client, &url, &cmd_id).await {
+            let dims_part = match fetch_cmd_dimensions(&client, &url, &cmd_id).await {
                 Some((rows, cols)) => format!("{}_{}", rows, cols),
                 None => String::new(),
             };
@@ -174,23 +175,4 @@ pub async fn handle_screenshot_command(
     );
 
     Ok(())
-}
-
-/// Fetch terminal dimensions (rows, cols) for a command via the VTTY metadata
-/// endpoint. Returns None if the fetch fails (non-fatal for filename generation).
-async fn fetch_dimensions(
-    client: &reqwest::Client,
-    base_url: &str,
-    cmd_id: &str,
-) -> Option<(usize, usize)> {
-    let url = format!("{}/api/commands/{}/vtty/html", base_url, cmd_id);
-    let resp = client.get(&url).send().await.ok()?;
-    if !resp.status().is_success() {
-        return None;
-    }
-    let json: serde_json::Value = resp.json().await.ok()?;
-    let dims = json.get("data")?.get("dimensions")?;
-    let rows = dims.get("rows")?.as_u64()? as usize;
-    let cols = dims.get("cols")?.as_u64()? as usize;
-    Some((rows, cols))
 }

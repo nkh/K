@@ -80,7 +80,7 @@ pub async fn start_server(
     });
 
     // Spawn signal handler (sends on shutdown channel)
-    spawn_signal_handler(shutdown_tx);
+    crate::cli::startup::spawn_signal_handler(shutdown_tx);
 
     if tls_enabled {
         tracing::info!("Server listening on https://{}", addr_str);
@@ -105,52 +105,4 @@ pub async fn start_server(
     }
 
     Ok(())
-}
-
-fn spawn_signal_handler(shutdown_tx: broadcast::Sender<()>) {
-    // Subscribe to the shutdown channel so this task exits cleanly when
-    // the server is shut down from another source (e.g. child exit or
-    // display loop Ctrl+\).  Without this, the task stays alive waiting
-    // for SIGINT/SIGTERM and can deadlock against the tokio runtime's
-    // signal-driver cleanup during Runtime::drop — causing vrunner to
-    // hang after the child command has already exited.
-    let mut shutdown_rx = shutdown_tx.subscribe();
-    tokio::spawn(async move {
-        #[cfg(unix)]
-        {
-            use tokio::signal::unix::{signal, SignalKind};
-            let mut sigint = match signal(SignalKind::interrupt()) {
-                Ok(s) => s,
-                Err(_) => return,
-            };
-            let mut sigterm = match signal(SignalKind::terminate()) {
-                Ok(s) => s,
-                Err(_) => return,
-            };
-            tokio::select! {
-                _ = sigint.recv() => {
-                    tracing::info!("Received SIGINT, triggering shutdown");
-                    let _ = shutdown_tx.send(());
-                }
-                _ = sigterm.recv() => {
-                    tracing::info!("Received SIGTERM, triggering shutdown");
-                    let _ = shutdown_tx.send(());
-                }
-                _ = shutdown_rx.recv() => {
-                    // Server is already shutting down from another
-                    // source — exit the handler so the runtime can
-                    // drop the signal driver without deadlocking.
-                }
-            }
-        }
-        #[cfg(not(unix))]
-        {
-            tokio::select! {
-                _ = tokio::signal::ctrl_c() => {
-                    let _ = shutdown_tx.send(());
-                }
-                _ = shutdown_rx.recv() => {}
-            }
-        }
-    });
 }

@@ -29,6 +29,8 @@ pub use ipc::{
     handle_resize_command, handle_spawn_in_command, handle_thaw_command, verify_instance,
 };
 pub use list::{format_command, format_instance_header, handle_list_command};
+#[cfg(feature = "vrunner")]
+pub use list::fetch_cmd_dimensions;
 pub use stop::{handle_stop_command, resolve_stop_target};
 
 // Re-export vrunner-only handlers
@@ -38,8 +40,9 @@ pub use cat::handle_cat_command as handle_cat_command_http;
 pub use cert::handle_cert_command;
 #[cfg(feature = "vrunner")]
 pub use common::{
-    collect_all_commands, format_instance_list, http_client, instance_url, resolve_instance,
-    resolve_pid_to_id, resolve_targeted_instances,
+    collect_all_commands, format_instance_list, http_client, instance_url, post_command_action,
+    resolve_instance, resolve_pid_to_id, resolve_target_command, resolve_targeted_instances,
+    CommandTarget,
 };
 #[cfg(feature = "vrunner")]
 pub use list::{handle_list_commands_command, handle_list_vrunner_command};

@@ -81,77 +81,84 @@ impl InstanceRegistry {
     /// List running instances.
     /// Uses sysinfo on vrunner, /proc on vrl.
     pub fn list_instances(&self) -> Vec<InstanceInfo> {
+        let pid_entries = self.scan_pid_files();
         #[cfg(feature = "vrunner")]
         {
-            self.list_instances_sysinfo()
+            self.filter_alive_sysinfo(pid_entries)
         }
         #[cfg(not(feature = "vrunner"))]
         {
-            self.list_instances_proc()
+            self.filter_alive_proc(pid_entries)
         }
     }
 
-    #[cfg(not(feature = "vrunner"))]
-    fn list_instances_proc(&self) -> Vec<InstanceInfo> {
-        let mut instances = Vec::new();
-        if let Ok(entries) = fs::read_dir(&self.dir) {
-            for entry in entries.flatten() {
+    /// Scan the instance directory for PID files.
+    ///
+    /// Returns `(pid, file_content)` pairs for every JSON file whose filename
+    /// parses as a u32.  Stale files (whose PID no longer exists) are cleaned
+    /// up by the caller.
+    fn scan_pid_files(&self) -> Vec<(u32, String)> {
+        let mut entries = Vec::new();
+        if let Ok(dir_entries) = fs::read_dir(&self.dir) {
+            for entry in dir_entries.flatten() {
                 let path = entry.path();
                 if let Some(stem) = path.file_stem() {
                     if let Ok(pid) = stem.to_string_lossy().parse::<u32>() {
-                        if Self::is_pid_alive(pid) {
-                            if let Ok(content) = fs::read_to_string(&path) {
-                                if let Ok(info) = serde_json::from_str::<InstanceInfo>(&content)
-                                {
-                                    instances.push(info);
-                                }
-                            }
-                        } else {
-                            let _ = fs::remove_file(&path);
+                        if let Ok(content) = fs::read_to_string(&path) {
+                            entries.push((pid, content));
                         }
                     }
                 }
             }
         }
+        entries
+    }
+
+    /// Filter PID entries to only those whose process is alive (vrl: /proc or kill(0)).
+    #[cfg(not(feature = "vrunner"))]
+    fn filter_alive_proc(&self, entries: Vec<(u32, String)>) -> Vec<InstanceInfo> {
+        let mut instances = Vec::new();
+        for (pid, content) in entries {
+            if Self::is_pid_alive(pid) {
+                if let Ok(info) = serde_json::from_str::<InstanceInfo>(&content) {
+                    instances.push(info);
+                }
+            } else {
+                let path = self.dir.join(format!("{}.json", pid));
+                let _ = fs::remove_file(path);
+            }
+        }
         instances
     }
 
+    /// Filter PID entries to only those whose process is alive (vrunner: sysinfo).
     #[cfg(feature = "vrunner")]
-    fn list_instances_sysinfo(&self) -> Vec<InstanceInfo> {
+    fn filter_alive_sysinfo(&self, entries: Vec<(u32, String)>) -> Vec<InstanceInfo> {
         let mut system = sysinfo::System::new();
         system.refresh_all();
 
         let mut instances = Vec::new();
-        if let Ok(entries) = fs::read_dir(&self.dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if let Some(stem) = path.file_stem() {
-                    if let Ok(pid) = stem.to_string_lossy().parse::<u32>() {
-                        match system.process(sysinfo::Pid::from(pid as usize)) {
-                            Some(proc) => {
-                                let name = proc.name().to_lowercase();
-                                if name.contains(PROCESS_NAME) {
-                                    if let Ok(content) = fs::read_to_string(&path) {
-                                        if let Ok(info) =
-                                            serde_json::from_str::<InstanceInfo>(&content)
-                                        {
-                                            instances.push(info);
-                                        }
-                                    }
-                                } else {
-                                    tracing::warn!(
-                                        pid,
-                                        actual_name = %name,
-                                        "cleaning up stale instance registry entry (PID recycled)"
-                                    );
-                                    let _ = fs::remove_file(&path);
-                                }
-                            }
-                            None => {
-                                let _ = fs::remove_file(&path);
-                            }
+        for (pid, content) in entries {
+            match system.process(sysinfo::Pid::from(pid as usize)) {
+                Some(proc) => {
+                    let name = proc.name().to_lowercase();
+                    if name.contains(PROCESS_NAME) {
+                        if let Ok(info) = serde_json::from_str::<InstanceInfo>(&content) {
+                            instances.push(info);
                         }
+                    } else {
+                        tracing::warn!(
+                            pid,
+                            actual_name = %name,
+                            "cleaning up stale instance registry entry (PID recycled)"
+                        );
+                        let path = self.dir.join(format!("{}.json", pid));
+                        let _ = fs::remove_file(path);
                     }
+                }
+                None => {
+                    let path = self.dir.join(format!("{}.json", pid));
+                    let _ = fs::remove_file(path);
                 }
             }
         }

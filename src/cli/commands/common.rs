@@ -254,3 +254,141 @@ mod vrunner_tests {
         assert_eq!(full, "htop");
     }
 }
+
+// ── vrunner-only: shared target resolution ──
+
+/// A resolved command target: (instance_pid, cmd_id, cmd_pid, name, full_display).
+#[cfg(feature = "vrunner")]
+pub type CommandTarget = (u32, String, u32, String, String);
+
+/// Resolve a user-supplied target (PID, name, or None) to a single command.
+///
+/// Uses the same three-round matching strategy across cat, screenshot, resize,
+/// stop-command, and purge: numeric PID first, then exact name/full match, then
+/// prefix match.  When `target` is `None`, auto-selects the sole command or
+/// errors with a disambiguation list.
+#[cfg(feature = "vrunner")]
+pub fn resolve_target_command(
+    target: Option<&str>,
+    all_commands: &[CommandTarget],
+    error_prefix: &str,
+) -> Result<CommandTarget> {
+    match target {
+        Some(t) => {
+            // Fast path: numeric PID
+            if let Ok(pid) = t.parse::<u32>() {
+                match all_commands.iter().find(|(_, _, p, _, _)| *p == pid) {
+                    Some(entry) => return Ok(entry.clone()),
+                    None => anyhow::bail!(
+                        "No command found with PID {}. Use `vrunner list` to see running commands.",
+                        pid
+                    ),
+                }
+            }
+            // Exact name match (case-insensitive)
+            let exact: Vec<_> = all_commands
+                .iter()
+                .filter(|(_, _, _, name, _)| name.eq_ignore_ascii_case(t))
+                .collect();
+            match exact.len() {
+                1 => return Ok(exact[0].clone()),
+                0 => {}
+                _ => {
+                    let list: Vec<_> = exact.iter().map(|e| format!("  pid {}", e.2)).collect();
+                    anyhow::bail!(
+                        "Multiple commands matching '{}':\n{}\nUse a PID to disambiguate.",
+                        t,
+                        list.join("\n")
+                    );
+                }
+            }
+            // Exact full match
+            let exact_full: Vec<_> = all_commands
+                .iter()
+                .filter(|(_, _, _, _, full)| full == t)
+                .collect();
+            match exact_full.len() {
+                1 => return Ok(exact_full[0].clone()),
+                0 => {}
+                _ => {
+                    let list: Vec<_> = exact_full.iter().map(|e| format!("  pid {}", e.2)).collect();
+                    anyhow::bail!(
+                        "Multiple commands matching '{}':\n{}\nUse a PID to disambiguate.",
+                        t,
+                        list.join("\n")
+                    );
+                }
+            }
+            // Prefix match on full string
+            let prefix_full: Vec<_> = all_commands
+                .iter()
+                .filter(|(_, _, _, _, full)| full.starts_with(t))
+                .collect();
+            if prefix_full.len() == 1 {
+                return Ok(prefix_full[0].clone());
+            }
+            // Prefix match on name only
+            let prefix_name: Vec<_> = all_commands
+                .iter()
+                .filter(|(_, _, _, name, _)| name.starts_with(t))
+                .collect();
+            if prefix_name.len() == 1 {
+                return Ok(prefix_name[0].clone());
+            }
+            anyhow::bail!(
+                "{} matching '{}'. Use `vrunner list` to see running commands.",
+                error_prefix, t
+            )
+        }
+        None => match all_commands.len() {
+            0 => anyhow::bail!("{} no running commands.", error_prefix),
+            1 => Ok(all_commands[0].clone()),
+            _ => {
+                let list: Vec<_> = all_commands
+                    .iter()
+                    .map(|e| format!("  pid {}  {}", e.2, e.3))
+                    .collect();
+                anyhow::bail!(
+                    "Multiple commands running. Specify a target:\n{}",
+                    list.join("\n")
+                )
+            }
+        },
+    }
+}
+
+/// Send a POST to a command action endpoint and parse the standard
+/// `{ "status": "ok", ... }` / `{ "status": "error", "error": "..." }` response.
+///
+/// Used by freeze, thaw, stop, resize, and purge to avoid repeating the
+/// same response-check boilerplate in every handler.
+#[cfg(feature = "vrunner")]
+pub async fn post_command_action(
+    client: &reqwest::Client,
+    url: &str,
+    path: &str,
+    body: Option<&serde_json::Value>,
+) -> Result<bool> {
+    let req = match body {
+        Some(b) => client.post(format!("{}{}", url, path)).json(b),
+        None => client.post(format!("{}{}", url, path)),
+    };
+    let resp = req.send().await?;
+
+    let status = resp.status();
+    let json: serde_json::Value = resp
+        .json()
+        .await
+        .unwrap_or(serde_json::json!({"status": "unknown"}));
+
+    if status.is_success() && json.get("status").and_then(|s| s.as_str()) == Some("ok") {
+        Ok(true)
+    } else {
+        let err_msg = json
+            .get("error")
+            .and_then(|e| e.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| format!("HTTP {}", status));
+        Err(anyhow::anyhow!("{}", err_msg))
+    }
+}

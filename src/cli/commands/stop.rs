@@ -33,14 +33,35 @@ pub fn handle_stop_command(pid: Option<u32>, instances: &[InstanceInfo]) -> Resu
     Ok(())
 }
 
-/// Resolve the target PID for the `vrl stop` subcommand.
+/// Resolve the target PID for the `stop` subcommand.
+///
+/// Shared core logic: when `pid` is `None`, auto-selects the sole instance or
+/// errors with a disambiguation list.  The `binary_name` and `extra_info`
+/// closure allow each binary to customise its messages.
 #[cfg(not(feature = "vrunner"))]
 pub fn resolve_stop_target(pid: Option<u32>, instances: &[InstanceInfo]) -> u32 {
+    resolve_stop_target_impl(pid, instances, "vrl", |_| String::new())
+}
+
+#[cfg(feature = "vrunner")]
+pub fn resolve_stop_target(pid: Option<u32>, instances: &[InstanceInfo]) -> u32 {
+    resolve_stop_target_impl(pid, instances, "vrunner", |inst| {
+        format!(" — port {}", inst.port)
+    })
+}
+
+/// Common implementation for resolving which instance to stop.
+fn resolve_stop_target_impl(
+    pid: Option<u32>,
+    instances: &[InstanceInfo],
+    binary_name: &str,
+    extra_info: impl Fn(&InstanceInfo) -> String,
+) -> u32 {
     match pid {
         Some(p) => p,
         None => match instances.len() {
             0 => {
-                eprintln!("No vrl instances running.");
+                eprintln!("No {} instances running.", binary_name);
                 std::process::exit(1);
             }
             1 => {
@@ -49,11 +70,11 @@ pub fn resolve_stop_target(pid: Option<u32>, instances: &[InstanceInfo]) -> u32 
                 p
             }
             _ => {
-                eprintln!("Multiple vrl instances running. Specify which one to stop:");
+                eprintln!("Multiple {} instances running. Specify which one to stop:", binary_name);
                 for inst in instances {
-                    eprintln!("  PID {}", inst.pid);
+                    eprintln!("  PID {}{}", inst.pid, extra_info(inst));
                 }
-                eprintln!("Usage: vrl stop <PID>");
+                eprintln!("Usage: {} stop <PID>", binary_name);
                 std::process::exit(1);
             }
         },
@@ -128,34 +149,6 @@ pub async fn handle_stop_command(_cli: &crate::cli::args::Cli, target: Option<&s
     }
 
     Ok(false)
-}
-
-#[cfg(feature = "vrunner")]
-pub fn resolve_stop_target(pid: Option<u32>, instances: &[InstanceInfo]) -> u32 {
-    match pid {
-        Some(p) => p,
-        None => match instances.len() {
-            0 => {
-                tracing::error!("No vrunner instances running.");
-                std::process::exit(1);
-            }
-            1 => {
-                let p = instances[0].pid;
-                tracing::info!("Stopping only running instance (PID {})", p);
-                p
-            }
-            _ => {
-                tracing::warn!(
-                    "Multiple vrunner instances running. Specify which one to stop:"
-                );
-                for inst in instances {
-                    tracing::warn!("  PID {} — port {}", inst.pid, inst.port);
-                }
-                tracing::warn!("Usage: vrunner stop <PID>");
-                std::process::exit(1);
-            }
-        },
-    }
 }
 
 #[cfg(feature = "vrunner")]

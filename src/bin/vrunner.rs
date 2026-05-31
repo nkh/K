@@ -7,8 +7,9 @@ use tokio::sync::broadcast;
 
 use vrl_core::cli::args::Cli;
 use vrl_core::cli::dispatch;
+use vrl_core::cli::startup;
 use vrl_core::instance::registry::InstanceRegistry;
-use vrl_core::interactive::display::{detect_terminal_size, run_display_loop, wait_for_child};
+use vrl_core::interactive::display::{run_display_loop, wait_for_child};
 use vrl_core::process::manager::CommandManager;
 use vrl_core::web::auth::AuthManager;
 use vrl_core::web::server::start_server;
@@ -115,91 +116,6 @@ async fn try_client_mode(cli: &Cli) -> Result<bool> {
     }
 }
 
-fn apply_detected_terminal_size(cli: &Cli, cfg: &mut vrl_core::config::schema::Config) {
-    if !cfg.display.enabled {
-        return;
-    }
-    let detected = detect_terminal_size();
-    if let Some((rows, cols)) = detected {
-        let effective_rows = if cli.tabs {
-            rows.saturating_sub(1)
-        } else {
-            rows
-        };
-        tracing::info!(
-            rows,
-            cols,
-            effective_rows,
-            tabs = cli.tabs,
-            method = "multi",
-            "Detected terminal size for display mode"
-        );
-        if cli.vtty_rows.is_none() {
-            cfg.vtty.rows = effective_rows;
-        }
-        if cli.vtty_cols.is_none() {
-            cfg.vtty.cols = cols;
-        }
-    } else {
-        tracing::warn!("Failed to detect terminal size, using config defaults");
-    }
-}
-
-async fn spawn_initial_command(
-    cli: &Cli,
-    manager: &Arc<CommandManager>,
-    cfg: &vrl_core::config::schema::Config,
-) -> Result<Option<String>> {
-    let cmd_args = match &cli.cmd_args {
-        Some(args) if !args.is_empty() => args,
-        _ => return Ok(None),
-    };
-
-    let cmd = cmd_args[0].clone();
-    let args = cmd_args[1..].to_vec();
-
-    let per_command_exit = if cli.retain_on_exit
-        || cli.snapshot_on_exit.is_some()
-        || cli.on_exit.is_some()
-        || cli.on_error.is_some()
-        || cli.exit_timeout.is_some()
-    {
-        let mut ec = cfg.default_exit.exit.clone();
-        if cli.retain_on_exit {
-            ec.retain_on_exit = true;
-        }
-        if let Some(ref path) = cli.snapshot_on_exit {
-            ec.snapshot_on_exit = Some(path.clone());
-        }
-        Some(ec)
-    } else {
-        None
-    };
-
-    let id = manager
-        .spawn(
-            cmd,
-            args,
-            None,
-            per_command_exit,
-            cfg.environment.variables.clone(),
-            None,
-            None,
-            cli.working_directory.clone(),
-        )
-        .await?;
-
-    if let Some(ref keys) = cli.send_keys {
-        if let Err(e) = manager.send_keys(&id, keys).await {
-            tracing::warn!(error = %e, "Failed to send initial keys");
-        } else {
-            tracing::info!(keys = %keys, "Sent initial keystrokes");
-        }
-    }
-
-    Ok(Some(id))
-}
-
 async fn async_main(cli: Cli) -> Result<()> {
     tracing_subscriber::fmt::init();
 
@@ -216,7 +132,7 @@ async fn async_main(cli: Cli) -> Result<()> {
     }
 
     let mut cfg = dispatch::resolve_config(&cli)?;
-    apply_detected_terminal_size(&cli, &mut cfg);
+    startup::apply_detected_terminal_size(&cli, &mut cfg);
 
     let registry = InstanceRegistry::new()?;
     registry.register_current(&cfg)?;
@@ -234,7 +150,7 @@ async fn async_main(cli: Cli) -> Result<()> {
         anyhow::bail!("{}", e);
     }
 
-    let spawned_id = spawn_initial_command(&cli, &manager, &cfg).await?;
+    let spawned_id = startup::spawn_initial_command(&cli, &manager, &cfg).await?;
 
     let (shutdown_tx, _shutdown_rx) = broadcast::channel::<()>(1);
 

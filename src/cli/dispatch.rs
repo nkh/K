@@ -11,18 +11,12 @@ use std::io::stdout;
 
 use clap::CommandFactory;
 
-use crate::cli::args::{Cli, Commands};
+use crate::cli::args::{BINARY_NAME, Cli, Commands};
 use crate::cli::subcommands;
 use crate::config::loader::load_config;
 use crate::config::merge::apply_profile;
 use crate::config::schema::Config;
 use crate::config::validation::{validate_config, ValidationLevel};
-
-/// Binary name used for completions.
-#[cfg(feature = "vrunner")]
-const BINARY_NAME: &str = "vrunner";
-#[cfg(not(feature = "vrunner"))]
-const BINARY_NAME: &str = "vrl";
 
 /// Load, profile-merge, and CLI-override the configuration.
 pub fn resolve_config(cli: &Cli) -> Result<Config> {
