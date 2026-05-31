@@ -138,6 +138,19 @@ pub async fn handle_resize_command(
     Ok(())
 }
 
+/// Handle `vrl kill <pid>` — kill a command in a running instance.
+pub async fn handle_kill_command(pid: u32, command: Option<&str>) -> Result<()> {
+    let id = resolve_command_id(pid, command).await?;
+    let response = send_command(pid, ControlCommand::Kill { id: id.clone() }).await?;
+    match response {
+        ControlResponse::Ok { .. } => {
+            println!("Command {} killed.", id);
+        }
+        ControlResponse::Error { error } => anyhow::bail!("{}", error),
+    }
+    Ok(())
+}
+
 /// Verify a target PID is a live vrl instance.
 /// Returns an error if not.
 pub fn verify_instance(pid: u32) -> Result<()> {

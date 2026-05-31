@@ -7,6 +7,43 @@ description = "A virtual terminal runner"
 license = "GPL-3.0-or-later OR Artistic-2.0"
 repository = "https://github.com/nkh/K"
 
+[lib]
+name = "vrl_core"
+path = "src/lib.rs"
+
+[[bin]]
+name = "vrl"
+path = "src/bin/vrl.rs"
+
+[[bin]]
+name = "vrunner"
+path = "src/bin/vrunner.rs"
+required-features = ["vrunner"]
+
+[features]
+default = ["vrl"]
+vrl = []
+vrunner = [
+    "dep:axum",
+    "dep:axum-server",
+    "dep:tower",
+    "dep:tower-http",
+    "dep:reqwest",
+    "dep:rustls",
+    "dep:rustls-pemfile",
+    "dep:rcgen",
+    "dep:sysinfo",
+    "dep:rust-embed",
+    "dep:bytes",
+    "dep:futures",
+    "dep:sha2",
+    "dep:hex",
+    "dep:rand",
+    "dep:urlencoding",
+    "dep:image",
+    "dep:fontdue",
+]
+
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
@@ -28,6 +65,26 @@ dashmap = "5"
 parking_lot = "0.12"
 unicode-width = "0.2.2"
 regex = "1"
+
+# vrunner-only dependencies (gated behind feature flag)
+axum = { version = "0.7", features = ["macros", "ws"], optional = true }
+axum-server = { version = "0.7", features = ["tls-rustls"], optional = true }
+tower = { version = "0.4", optional = true }
+tower-http = { version = "0.5", features = ["cors", "trace", "fs"], optional = true }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"], optional = true }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"], optional = true }
+rustls-pemfile = { version = "2", optional = true }
+rcgen = { version = "0.13", optional = true }
+sysinfo = { version = "0.29", optional = true }
+rust-embed = { version = "8", features = ["axum", "mime-guess"], optional = true }
+bytes = { version = "1", optional = true }
+futures = { version = "0.3", optional = true }
+sha2 = { version = "0.10", optional = true }
+hex = { version = "0.4", optional = true }
+rand = { version = "0.8", optional = true }
+urlencoding = { version = "2", optional = true }
+image = { version = "0.25", default-features = false, features = ["png"], optional = true }
+fontdue = { version = "0.9", optional = true }
 
 [dev-dependencies]
 tokio-test = "0.4"

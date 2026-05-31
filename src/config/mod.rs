@@ -10,3 +10,10 @@ pub mod schema;
 pub mod templates;
 pub mod validation;
 pub mod vtty;
+
+#[cfg(feature = "vrunner")]
+pub mod security;
+#[cfg(feature = "vrunner")]
+pub mod server;
+#[cfg(feature = "vrunner")]
+pub mod web;

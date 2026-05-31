@@ -2,15 +2,81 @@ use crate::config::schema::Config;
 use clap::CommandFactory;
 use clap::{FromArgMatches, Parser, Subcommand};
 
+// Binary name used in help text and completion generation.
+#[cfg(feature = "vrunner")]
+const BINARY_NAME: &str = "vrunner";
+#[cfg(not(feature = "vrunner"))]
+const BINARY_NAME: &str = "vrl";
+
+// Description shown in --help.
+#[cfg(feature = "vrunner")]
+const ABOUT: &str = "A virtual terminal runner with web control plane";
+#[cfg(not(feature = "vrunner"))]
+const ABOUT: &str = "A virtual terminal runner";
+
 #[derive(Parser, Debug)]
-#[command(name = "vrl")]
-#[command(about = "A virtual terminal runner")]
+#[command(name = BINARY_NAME)]
+#[command(about = ABOUT)]
 #[command(trailing_var_arg = true)]
 #[command(version)]
 pub struct Cli {
     /// Path to configuration file
     #[arg(short, long, value_name = "FILE")]
     pub config: Option<String>,
+
+    // ── vrunner-only args ──
+
+    /// Server bind address (default: 127.0.0.1) [vrunner only]
+    #[cfg(feature = "vrunner")]
+    #[arg(short, long, value_name = "ADDR")]
+    pub bind: Option<String>,
+
+    /// Server port (default: 9090) [vrunner only]
+    #[cfg(feature = "vrunner")]
+    #[arg(short, long, value_name = "PORT")]
+    pub port: Option<u16>,
+
+    /// Allow remote connections (binds to 0.0.0.0 and enables auth) [vrunner only]
+    #[cfg(feature = "vrunner")]
+    #[arg(short, long)]
+    pub remote: bool,
+
+    /// Require authentication for API requests [vrunner only]
+    #[cfg(feature = "vrunner")]
+    #[arg(short, long)]
+    pub auth: bool,
+
+    /// Register this instance with another vrunner server [vrunner only]
+    #[cfg(feature = "vrunner")]
+    #[arg(long, value_name = "PORT")]
+    pub register_with: Option<u16>,
+
+    /// Path to the bearer token file [vrunner only]
+    #[cfg(feature = "vrunner")]
+    #[arg(long, value_name = "FILE")]
+    pub token_file: Option<String>,
+
+    /// Enable TLS (HTTPS) with self-signed certificates [vrunner only]
+    #[cfg(feature = "vrunner")]
+    #[arg(long)]
+    pub tls: bool,
+
+    /// Path to the TLS certificate file [vrunner only]
+    #[cfg(feature = "vrunner")]
+    #[arg(long, value_name = "FILE")]
+    pub cert_file: Option<String>,
+
+    /// Path to the TLS private key file [vrunner only]
+    #[cfg(feature = "vrunner")]
+    #[arg(long, value_name = "FILE")]
+    pub key_file: Option<String>,
+
+    /// Define a named certificate (repeatable) [vrunner only]
+    #[cfg(feature = "vrunner")]
+    #[arg(short = 'C', long, value_name = "NAME:CERT:KEY")]
+    pub certificate: Option<Vec<String>>,
+
+    // ── Shared args ──
 
     /// Run as a background daemon (Unix only)
     #[arg(short, long)]
@@ -109,7 +175,6 @@ pub struct Cli {
     pub snapshot_on_exit: Option<String>,
 
     /// Send keystrokes to the command after it starts.
-    /// Special keys use <...> notation, e.g. <Enter> <C-c> <Esc>
     #[arg(short = 'K', long, value_name = "KEYS")]
     pub send_keys: Option<String>,
 
@@ -125,7 +190,7 @@ pub struct Cli {
     #[arg(short = 'P', long, value_name = "NAME")]
     pub profile: Option<String>,
 
-    /// Target a specific vrl instance by PID
+    /// Target a specific instance by PID
     #[arg(short = 't', long, value_name = "PID")]
     pub target: Option<u32>,
 
@@ -144,27 +209,31 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// List all running vrl instances
+    /// List all running instances
     List,
 
-    /// Stop a vrl instance by PID (auto-selects if only one)
+    /// Stop an instance by PID (auto-selects if only one)
     Stop {
         /// PID of the instance to stop
         pid: Option<u32>,
     },
 
+    // ── vrl-only (UDS) commands ──
+
     /// Send keystrokes to a command in a running instance
+    #[cfg(not(feature = "vrunner"))]
     Keys {
         /// PID of the target vrl instance
         pid: u32,
         /// ID of the target command (omit for first command)
         #[arg(short = 'c', long)]
         command: Option<String>,
-        /// Keystrokes to send. Use <Enter>, <C-c>, <Esc> etc. for special keys.
+        /// Keystrokes to send
         keys: String,
     },
 
     /// Show VTTY text output of a command in a running instance
+    #[cfg(not(feature = "vrunner"))]
     Cat {
         /// PID of the target vrl instance
         pid: u32,
@@ -173,7 +242,8 @@ pub enum Commands {
         command: Option<String>,
     },
 
-    /// Spawn a command inside a running vrl instance
+    /// Spawn a command inside a running instance
+    #[cfg(not(feature = "vrunner"))]
     SpawnIn {
         /// PID of the target vrl instance
         pid: u32,
@@ -185,6 +255,7 @@ pub enum Commands {
     },
 
     /// Freeze (suspend) a command in a running instance
+    #[cfg(not(feature = "vrunner"))]
     Freeze {
         /// PID of the target vrl instance
         pid: u32,
@@ -194,6 +265,7 @@ pub enum Commands {
     },
 
     /// Thaw (resume) a frozen command in a running instance
+    #[cfg(not(feature = "vrunner"))]
     Thaw {
         /// PID of the target vrl instance
         pid: u32,
@@ -203,6 +275,7 @@ pub enum Commands {
     },
 
     /// Resize the VTTY of a command in a running instance
+    #[cfg(not(feature = "vrunner"))]
     Resize {
         /// PID of the target vrl instance
         pid: u32,
@@ -217,14 +290,149 @@ pub enum Commands {
         cols: u16,
     },
 
+    /// Kill (stop) a command inside a running instance
+    #[cfg(not(feature = "vrunner"))]
+    Kill {
+        /// PID of the target vrl instance
+        pid: u32,
+        /// ID of the target command (omit for first command)
+        #[arg(short = 'c', long)]
+        command: Option<String>,
+    },
+
+    // ── vrunner-only commands ──
+
+    /// Spawn a new command on a running vrunner instance
+    #[cfg(feature = "vrunner")]
+    Spawn {
+        /// Command to run
+        cmd: String,
+        /// Arguments for the command
+        #[arg(trailing_var_arg = true)]
+        args: Vec<String>,
+        /// VTTY rows for the spawned command
+        #[arg(long)]
+        rows: Option<u16>,
+        /// VTTY columns for the spawned command
+        #[arg(long)]
+        cols: Option<u16>,
+    },
+
+    /// Freeze (suspend) a running command via SIGSTOP
+    #[cfg(feature = "vrunner")]
+    Freeze {
+        /// PID of the command to freeze
+        pid: u32,
+    },
+
+    /// Thaw (resume) a frozen command via SIGCONT
+    #[cfg(feature = "vrunner")]
+    Thaw {
+        /// PID of the command to thaw
+        pid: u32,
+    },
+
+    /// Manage named certificates for per-command access control
+    #[cfg(feature = "vrunner")]
+    Cert {
+        #[command(subcommand)]
+        action: CertAction,
+    },
+
+    /// List vrunner instances (machine-readable, tab-separated)
+    #[cfg(feature = "vrunner")]
+    ListVrunner,
+
+    /// List running commands (machine-readable, tab-separated)
+    #[cfg(feature = "vrunner")]
+    ListCommands,
+
+    /// Stop a specific command by PID or name (not the whole instance)
+    #[cfg(feature = "vrunner")]
+    StopCommand {
+        /// PID or name of the command to stop
+        target: Option<String>,
+    },
+
+    /// Purge an exited command, discarding its VTTY buffer
+    #[cfg(feature = "vrunner")]
+    Purge {
+        /// Command ID or name of the exited command to purge
+        target: Option<String>,
+    },
+
+    /// Resize the VTTY of a running command (buffer + PTY)
+    #[cfg(feature = "vrunner")]
+    Resize {
+        /// PID or name of the command to resize
+        target: String,
+        /// Number of rows (default: terminal height)
+        #[arg(long, default_value_t = 0)]
+        rows: u16,
+        /// Number of columns (default: terminal width)
+        #[arg(long, default_value_t = 0)]
+        cols: u16,
+    },
+
+    /// Print the VTTY buffer of a running command as text
+    #[cfg(feature = "vrunner")]
+    Cat {
+        /// PID or name of the command whose buffer to print
+        target: Option<String>,
+        /// Preserve ANSI color escape sequences in the output
+        #[arg(long)]
+        color_always: bool,
+    },
+
+    /// Capture the VTTY buffer as a PNG screenshot
+    #[cfg(feature = "vrunner")]
+    Screenshot {
+        /// PID or name of the command to screenshot
+        target: Option<String>,
+        /// Output file path (default: <command_name>_<timestamp>.png)
+        #[arg(long)]
+        output: Option<String>,
+        /// Font size in pixels per character cell (default: 14)
+        #[arg(long, default_value_t = 14.0)]
+        font_size: f32,
+        /// Path to a TTF/OTF font file
+        #[arg(long)]
+        font_name: Option<String>,
+    },
+
+    // ── Shared commands ──
+
     /// Validate config files without starting
     ConfigCheck,
 
-    /// Generate shell completion scripts for vrl
+    /// Generate shell completion scripts
     Completions {
         /// The shell to generate completions for
         #[arg(value_enum)]
         shell: clap_complete::Shell,
+    },
+}
+
+/// Certificate subcommands (vrunner only).
+#[cfg(feature = "vrunner")]
+#[derive(Subcommand, Debug)]
+pub enum CertAction {
+    /// Generate a new named certificate
+    Generate {
+        /// Name for the certificate (e.g., "webapp-frontend")
+        name: String,
+    },
+    /// List all certificates in the pool
+    List,
+    /// Show details of a specific certificate
+    Show {
+        /// Name of the certificate to display
+        name: String,
+    },
+    /// Remove a certificate from the pool
+    Remove {
+        /// Name of the certificate to remove
+        name: String,
     },
 }
 
@@ -234,7 +442,7 @@ impl Cli {
         let version = include_str!(concat!(env!("OUT_DIR"), "/version.txt"));
         let mut cmd = <Self as CommandFactory>::command();
         cmd = cmd.version(version.trim());
-        cmd = cmd.name("vrl");
+        cmd = cmd.name(BINARY_NAME);
         match cmd.clone().try_get_matches() {
             Ok(matches) => {
                 <Self as FromArgMatches>::from_arg_matches(&matches)
@@ -262,8 +470,49 @@ impl Cli {
     }
 
     /// Apply CLI overrides to the loaded configuration.
-    /// CLI flags take the highest precedence (override global and local config).
     pub fn apply_overrides(&self, cfg: &mut Config) -> anyhow::Result<()> {
+        // Server (vrunner only)
+        #[cfg(feature = "vrunner")]
+        {
+            if let Some(bind) = &self.bind {
+                cfg.server.bind = bind.clone();
+            }
+            if let Some(port) = self.port {
+                cfg.server.port = port;
+            }
+            if self.remote {
+                cfg.server.bind = "0.0.0.0".to_string();
+                cfg.security.require_auth = true;
+            }
+            if self.auth {
+                cfg.security.require_auth = true;
+            }
+            if let Some(token_file) = &self.token_file {
+                cfg.security.token_file = token_file.clone();
+            }
+            if self.tls {
+                cfg.tls.enabled = true;
+            }
+            if let Some(cert_file) = &self.cert_file {
+                cfg.tls.cert_file = Some(cert_file.clone());
+            }
+            if let Some(key_file) = &self.key_file {
+                cfg.tls.key_file = Some(key_file.clone());
+            }
+            if let Some(cert_defs) = &self.certificate {
+                for cert_def in cert_defs {
+                    let parts: Vec<&str> = cert_def.splitn(3, ':').collect();
+                    if parts.len() == 3 {
+                        cfg.certificates.entries.push(crate::config::schema::CertificateEntryConfig {
+                            name: parts[0].to_string(),
+                            cert_file: parts[1].to_string(),
+                            key_file: parts[2].to_string(),
+                        });
+                    }
+                }
+            }
+        }
+
         // Daemon
         if self.daemon {
             if self.display || self.display_all || self.tabs {
@@ -383,7 +632,7 @@ mod tests {
 
     #[test]
     fn daemon_conflicts_with_display_all() {
-        let cli = Cli::try_parse_from(["vrunner", "--daemon", "--display-all", "htop"]).unwrap();
+        let cli = Cli::try_parse_from([BINARY_NAME, "--daemon", "--display-all", "htop"]).unwrap();
         let result = cli.apply_overrides(&mut default_config());
         assert!(result.is_err());
         let msg = result.unwrap_err().to_string();
@@ -395,7 +644,7 @@ mod tests {
 
     #[test]
     fn daemon_conflicts_with_display() {
-        let cli = Cli::try_parse_from(["vrunner", "--daemon", "--display", "htop"]).unwrap();
+        let cli = Cli::try_parse_from([BINARY_NAME, "--daemon", "--display", "htop"]).unwrap();
         let result = cli.apply_overrides(&mut default_config());
         assert!(result.is_err());
         let msg = result.unwrap_err().to_string();
@@ -407,7 +656,7 @@ mod tests {
 
     #[test]
     fn daemon_conflicts_with_tabs() {
-        let cli = Cli::try_parse_from(["vrunner", "--daemon", "--tabs", "htop"]).unwrap();
+        let cli = Cli::try_parse_from([BINARY_NAME, "--daemon", "--tabs", "htop"]).unwrap();
         let result = cli.apply_overrides(&mut default_config());
         assert!(result.is_err());
         let msg = result.unwrap_err().to_string();
@@ -419,14 +668,14 @@ mod tests {
 
     #[test]
     fn daemon_alone_succeeds() {
-        let cli = Cli::try_parse_from(["vrunner", "--daemon", "htop"]).unwrap();
+        let cli = Cli::try_parse_from([BINARY_NAME, "--daemon", "htop"]).unwrap();
         let result = cli.apply_overrides(&mut default_config());
         assert!(result.is_ok());
     }
 
     #[test]
     fn display_all_alone_succeeds() {
-        let cli = Cli::try_parse_from(["vrunner", "--display-all", "htop"]).unwrap();
+        let cli = Cli::try_parse_from([BINARY_NAME, "--display-all", "htop"]).unwrap();
         let result = cli.apply_overrides(&mut default_config());
         assert!(result.is_ok());
     }

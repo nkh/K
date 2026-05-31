@@ -9,3 +9,6 @@ pub mod ipc;
 pub mod logging;
 pub mod process;
 pub mod vtty;
+
+#[cfg(feature = "vrunner")]
+pub mod web;

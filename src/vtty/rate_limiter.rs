@@ -39,7 +39,7 @@ const MAX_BURST_TOKENS: f64 = 3.0;
 /// # Examples
 ///
 /// ```
-/// use vrl::vtty::rate_limiter::RateLimiter;
+/// use vrl_core::vtty::rate_limiter::RateLimiter;
 ///
 /// let mut limiter = RateLimiter::new(30); // 30 updates/sec
 /// assert!(limiter.allow()); // first call always succeeds

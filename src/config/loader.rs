@@ -5,6 +5,18 @@ use std::path::Path;
 use super::merge::merge_configs;
 use super::schema::Config;
 
+/// Config directory name: "vrl" for vrl binary, "vrunner" for vrunner binary.
+#[cfg(feature = "vrunner")]
+const APP_NAME: &str = "vrunner";
+#[cfg(not(feature = "vrunner"))]
+const APP_NAME: &str = "vrl";
+
+/// Local config file name: "vrl.yaml" / "vrunner.yaml".
+#[cfg(feature = "vrunner")]
+const LOCAL_CONFIG: &str = "vrunner";
+#[cfg(not(feature = "vrunner"))]
+const LOCAL_CONFIG: &str = "vrl";
+
 /// Try to detect the format of a config file from its extension.
 fn detect_format(path: &Path) -> Option<FileFormat> {
     match path
@@ -25,8 +37,8 @@ pub fn load_config(cli_path: Option<&str>) -> Result<Config> {
 
     // Global config — try YAML first, then TOML
     if let Some(global_dir) = dirs::config_dir() {
-        let global_yaml = global_dir.join("vrl").join("config.yaml");
-        let global_toml = global_dir.join("vrl").join("config.toml");
+        let global_yaml = global_dir.join(APP_NAME).join("config.yaml");
+        let global_toml = global_dir.join(APP_NAME).join("config.toml");
 
         if global_yaml.exists() {
             let fmt = detect_format(&global_yaml).unwrap_or(FileFormat::Yaml);
@@ -39,8 +51,8 @@ pub fn load_config(cli_path: Option<&str>) -> Result<Config> {
 
     // Local config — try YAML first, then TOML
     let cwd = std::env::current_dir()?;
-    let local_yaml = cwd.join("vrl.yaml");
-    let local_toml = cwd.join("vrl.toml");
+    let local_yaml = cwd.join(format!("{}.yaml", LOCAL_CONFIG));
+    let local_toml = cwd.join(format!("{}.toml", LOCAL_CONFIG));
     let mut local_path: Option<std::path::PathBuf> = None;
 
     if local_yaml.exists() {

@@ -10,15 +10,24 @@ pub struct InstanceRegistry {
     dir: PathBuf,
 }
 
+// Data directory name: "vrl" for vrl, "vrunner" for vrunner.
+#[cfg(feature = "vrunner")]
+const DATA_DIR: &str = "vrunner";
+#[cfg(not(feature = "vrunner"))]
+const DATA_DIR: &str = "vrl";
+
+// Process name for liveness check
+#[cfg(feature = "vrunner")]
+const PROCESS_NAME: &str = "vrunner";
+#[cfg(not(feature = "vrunner"))]
+const PROCESS_NAME: &str = "vrl";
+
 impl InstanceRegistry {
     /// Create a new registry using the system data directory.
-    ///
-    /// On Linux this resolves to `~/.local/share/vrl/instances/`.
-    /// The directory is created if it doesn't exist.
     pub fn new() -> Result<Self> {
         let dir = dirs::data_dir()
             .unwrap_or_else(|| PathBuf::from("/tmp"))
-            .join("vrl")
+            .join(DATA_DIR)
             .join("instances");
         Self::with_dir(dir)
     }
@@ -29,15 +38,29 @@ impl InstanceRegistry {
         Ok(Self { dir })
     }
 
-    /// Register the current vrl instance.
+    /// Register the current instance.
     pub fn register_current(&self, cfg: &Config) -> Result<()> {
         let pid = std::process::id();
+
+        #[cfg(feature = "vrunner")]
+        let info = InstanceInfo {
+            pid,
+            port: cfg.server.port,
+            bind: cfg.server.bind.clone(),
+            start_time: chrono::Utc::now(),
+            daemon: cfg.daemon.enabled,
+            display: cfg.display.enabled,
+            command: None,
+        };
+
+        #[cfg(not(feature = "vrunner"))]
         let info = InstanceInfo {
             pid,
             start_time: chrono::Utc::now(),
             daemon: cfg.daemon.enabled,
             display: cfg.display.enabled,
         };
+
         let path = self.dir.join(format!("{}.json", pid));
         fs::write(&path, serde_json::to_string_pretty(&info)?)?;
         Ok(())
@@ -52,15 +75,28 @@ impl InstanceRegistry {
         Ok(())
     }
 
-    /// Fast liveness check: read PID files, check /proc/<pid>/comm, return live instances.
-    pub fn list_instances_fast(&self) -> Vec<InstanceInfo> {
+    /// List running instances.
+    /// Uses sysinfo on vrunner, /proc on vrl.
+    pub fn list_instances(&self) -> Vec<InstanceInfo> {
+        #[cfg(feature = "vrunner")]
+        {
+            self.list_instances_sysinfo()
+        }
+        #[cfg(not(feature = "vrunner"))]
+        {
+            self.list_instances_proc()
+        }
+    }
+
+    #[cfg(not(feature = "vrunner"))]
+    fn list_instances_proc(&self) -> Vec<InstanceInfo> {
         let mut instances = Vec::new();
         if let Ok(entries) = fs::read_dir(&self.dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if let Some(stem) = path.file_stem() {
                     if let Ok(pid) = stem.to_string_lossy().parse::<u32>() {
-                        if Self::is_pid_vrl(pid) {
+                        if Self::is_pid_alive(pid) {
                             if let Ok(content) = fs::read_to_string(&path) {
                                 if let Ok(info) = serde_json::from_str::<InstanceInfo>(&content)
                                 {
@@ -77,14 +113,56 @@ impl InstanceRegistry {
         instances
     }
 
-    /// Check if a PID is alive and belongs to a vrl process.
-    fn is_pid_vrl(pid: u32) -> bool {
+    #[cfg(feature = "vrunner")]
+    fn list_instances_sysinfo(&self) -> Vec<InstanceInfo> {
+        let mut system = sysinfo::System::new_all();
+        system.refresh_all();
+
+        let mut instances = Vec::new();
+        if let Ok(entries) = fs::read_dir(&self.dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if let Some(stem) = path.file_stem() {
+                    if let Ok(pid) = stem.to_string_lossy().parse::<u32>() {
+                        match system.process(sysinfo::Pid::from(pid as usize)) {
+                            Some(proc) => {
+                                let name = proc.name().to_lowercase();
+                                if name.contains(PROCESS_NAME) {
+                                    if let Ok(content) = fs::read_to_string(&path) {
+                                        if let Ok(info) =
+                                            serde_json::from_str::<InstanceInfo>(&content)
+                                        {
+                                            instances.push(info);
+                                        }
+                                    }
+                                } else {
+                                    tracing::warn!(
+                                        pid,
+                                        actual_name = %name,
+                                        "cleaning up stale instance registry entry (PID recycled)"
+                                    );
+                                    let _ = fs::remove_file(&path);
+                                }
+                            }
+                            None => {
+                                let _ = fs::remove_file(&path);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        instances
+    }
+
+    /// Check if a PID is alive and belongs to our process.
+    fn is_pid_alive(pid: u32) -> bool {
         #[cfg(target_os = "linux")]
         {
             let comm_path = std::path::Path::new("/proc").join(pid.to_string()).join("comm");
             if let Ok(comm) = fs::read_to_string(&comm_path) {
                 let name = comm.trim().to_lowercase();
-                name.contains("vrl")
+                name.contains(PROCESS_NAME)
             } else {
                 false
             }
@@ -99,33 +177,65 @@ impl InstanceRegistry {
         }
     }
 
-    /// Full instance listing with /proc verification.
-    pub fn list_instances(&self) -> Vec<InstanceInfo> {
-        let mut instances = Vec::new();
-        if let Ok(entries) = fs::read_dir(&self.dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if let Some(stem) = path.file_stem() {
-                    if let Ok(pid) = stem.to_string_lossy().parse::<u32>() {
-                        if Self::is_pid_vrl(pid) {
-                            if let Ok(content) = fs::read_to_string(&path) {
-                                if let Ok(info) =
-                                    serde_json::from_str::<InstanceInfo>(&content)
-                                {
-                                    instances.push(info);
-                                }
-                            }
-                        } else {
-                            tracing::warn!(
-                                pid,
-                                "cleaning up stale instance registry entry (PID recycled)"
-                            );
-                            let _ = fs::remove_file(&path);
-                        }
+    /// Print instance list (vrunner only, used by registry directly).
+    #[cfg(feature = "vrunner")]
+    pub fn print_list(&self) {
+        let instances = self.list_instances();
+        if instances.is_empty() {
+            println!("No running vrunner instances.");
+            return;
+        }
+        println!(
+            "{:<10} {:<8} {:<20} {:<10} {:<10} COMMAND",
+            "PID", "PORT", "BIND", "DAEMON", "DISPLAY"
+        );
+        for info in instances {
+            println!(
+                "{:<10} {:<8} {:<20} {:<10} {:<10} {}",
+                info.pid,
+                info.port,
+                info.bind,
+                if info.daemon { "yes" } else { "no" },
+                if info.display { "yes" } else { "no" },
+                info.command.as_deref().unwrap_or("(idle)")
+            );
+        }
+    }
+
+    /// Stop an instance via HTTP (vrunner only).
+    #[cfg(feature = "vrunner")]
+    pub async fn stop_instance(&self, pid: u32) -> Result<()> {
+        let instances = self.list_instances();
+        let target = instances.iter().find(|i| i.pid == pid);
+        match target {
+            Some(info) => {
+                let url = format!("http://{}:{}/api/shutdown", info.bind, info.port);
+                let client = reqwest::Client::builder()
+                    .connect_timeout(std::time::Duration::from_secs(3))
+                    .timeout(std::time::Duration::from_secs(5))
+                    .build()?;
+                match client.post(&url).send().await {
+                    Ok(resp) if resp.status().is_success() => {
+                        println!("Instance {} stopped gracefully.", pid);
+                    }
+                    Ok(resp) => {
+                        let status = resp.status();
+                        tracing::error!("Shutdown request returned HTTP {}", status);
+                        println!(
+                            "Failed to stop instance {} (HTTP {}). You may need to run: kill {}",
+                            pid, status, pid
+                        );
+                    }
+                    Err(e) => {
+                        tracing::error!(pid = pid, url = %url, error = %e, "Failed to contact instance");
+                        println!("Failed to contact instance {} ({}). Is the web server running? Try: kill {}", pid, e, pid);
                     }
                 }
             }
+            None => {
+                println!("No running vrunner instance found with PID {}.", pid);
+            }
         }
-        instances
+        Ok(())
     }
 }

@@ -11,18 +11,36 @@ pub use super::profiles::ProfilesConfig;
 pub use super::templates::{TemplateConfig, TemplatesConfig};
 pub use super::vtty::VttyConfig;
 
-/// Top-level configuration for vrl.
+#[cfg(feature = "vrunner")]
+pub use super::security::{
+    CertificateEntryConfig, CertificatesConfig, CorsConfig, SecurityConfig, TlsConfig,
+};
+#[cfg(feature = "vrunner")]
+pub use super::server::ServerConfig;
+#[cfg(feature = "vrunner")]
+pub use super::web::{RateLimitConfig, WebConfig};
+
+/// Top-level configuration.
 ///
 /// All fields have sensible defaults, so a config file is entirely optional.
-/// When no config file is present, vrl runs with the default VTTY
-/// dimensions and no display.
-///
-/// Config files are searched in this order (later files override earlier):
-/// 1. ~/.config/vrl/config.yaml (or .toml)
-/// 2. ./vrl.yaml (or .toml) in the current directory
-/// 3. Path specified with --config CLI flag
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct Config {
+    /// HTTP server bind address and port (vrunner only).
+    #[cfg(feature = "vrunner")]
+    #[serde(default)]
+    pub server: ServerConfig,
+    /// Authentication settings (vrunner only).
+    #[cfg(feature = "vrunner")]
+    #[serde(default)]
+    pub security: SecurityConfig,
+    /// TLS/HTTPS certificate settings (vrunner only).
+    #[cfg(feature = "vrunner")]
+    #[serde(default)]
+    pub tls: TlsConfig,
+    /// Per-command client certificate pool (vrunner only).
+    #[cfg(feature = "vrunner")]
+    #[serde(default)]
+    pub certificates: CertificatesConfig,
     /// Virtual terminal (VTTY) dimensions and behavior.
     #[serde(default)]
     pub vtty: VttyConfig,
@@ -44,14 +62,16 @@ pub struct Config {
     /// Default exit configuration applied to all commands unless overridden per-command.
     #[serde(default)]
     pub default_exit: DefaultExitConfig,
-    /// Global event hooks -- shell commands triggered on lifecycle events.
+    /// Global event hooks — shell commands triggered on lifecycle events.
     #[serde(default)]
     pub hooks: HooksConfig,
     /// Environment variables applied to all spawned commands by default.
-    /// Can be overridden per-command via the API or CLI.
-    /// Ignored when --no-env is passed on the command line.
     #[serde(default)]
     pub environment: EnvironmentConfig,
+    /// Web admin panel and VTTY streaming configuration (vrunner only).
+    #[cfg(feature = "vrunner")]
+    #[serde(default)]
+    pub web: WebConfig,
     /// Pre-defined command templates.
     #[serde(default)]
     pub templates: TemplatesConfig,
@@ -61,11 +81,17 @@ pub struct Config {
 }
 
 /// A partial configuration used in profiles.
-///
-/// All fields are optional. When a profile is applied, only the fields
-/// that are `Some(..)` override the corresponding fields in the base Config.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct PartialConfig {
+    #[cfg(feature = "vrunner")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server: Option<ServerConfig>,
+    #[cfg(feature = "vrunner")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub security: Option<SecurityConfig>,
+    #[cfg(feature = "vrunner")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls: Option<TlsConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vtty: Option<VttyConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -80,6 +106,9 @@ pub struct PartialConfig {
     pub default_exit: Option<DefaultExitConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub environment: Option<EnvironmentConfig>,
+    #[cfg(feature = "vrunner")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub web: Option<WebConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hooks: Option<HooksConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
