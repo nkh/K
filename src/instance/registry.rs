@@ -29,8 +29,12 @@ impl InstanceRegistry {
         Ok(Self { dir })
     }
 
-    pub fn register_current(&self, cfg: &Config) -> Result<()> {
+    /// Register the current vrunner instance.
+    ///
+    /// `initial_command` should be the first CLI arg (e.g. "htop") or None.
+    pub fn register_current(&self, cfg: &Config, initial_command: Option<&str>) -> Result<()> {
         let pid = std::process::id();
+        let command_str = initial_command.map(|s| s.to_string());
         let info = InstanceInfo {
             pid,
             port: 0, // No server
@@ -38,7 +42,7 @@ impl InstanceRegistry {
             start_time: chrono::Utc::now(),
             daemon: cfg.daemon.enabled,
             display: cfg.display.enabled,
-            command: None,
+            command: command_str,
         };
         let path = self.dir.join(format!("{}.json", pid));
         fs::write(&path, serde_json::to_string_pretty(&info)?)?;
@@ -137,15 +141,12 @@ impl InstanceRegistry {
             println!("No running vrunner instances.");
             return;
         }
-        println!(
-            "{:<10} {:<20} {:<10} {:<10} COMMAND",
-            "PID", "BIND", "DAEMON", "DISPLAY"
-        );
+        let header = format!("{:<10} {:<8} {:<8} COMMAND", "PID", "DAEMON", "DISPLAY");
+        println!("{header}");
         for info in instances {
             println!(
-                "{:<10} {:<20} {:<10} {:<10} {}",
+                "{:<10} {:<8} {:<8} {}",
                 info.pid,
-                info.bind,
                 if info.daemon { "yes" } else { "no" },
                 if info.display { "yes" } else { "no" },
                 info.command.as_deref().unwrap_or("(idle)")

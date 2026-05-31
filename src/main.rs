@@ -158,7 +158,8 @@ async fn async_main(cli: Cli) -> Result<()> {
 
     // Initialize instance registry
     let registry = InstanceRegistry::new()?;
-    registry.register_current(&cfg)?;
+    let initial_command = cli.cmd_args.as_ref().and_then(|args| args.first().map(|s| s.as_str()));
+    registry.register_current(&cfg, initial_command)?;
 
     // Initialize command manager
     let manager = Arc::new(CommandManager::new(cfg.clone()));
@@ -167,7 +168,7 @@ async fn async_main(cli: Cli) -> Result<()> {
     let spawned_id = spawn_initial_command(&cli, &manager, &cfg).await?;
 
     // Create shutdown channel
-    let (shutdown_tx, _shutdown_rx) = tokio::sync::broadcast::channel::<()>(1);
+    let (shutdown_tx, shutdown_rx) = tokio::sync::broadcast::channel::<()>(1);
 
     // Install signal handler for clean shutdown
     spawn_signal_handler(shutdown_tx.clone());
@@ -198,8 +199,8 @@ async fn async_main(cli: Cli) -> Result<()> {
         )
         .await;
     } else if let Some(ref id) = spawned_id {
-        // ── Headless mode: wait for the child to exit ──
-        wait_for_child(&manager, id).await;
+        // ── Headless mode: wait for the child to exit or shutdown signal ──
+        wait_for_child(&manager, id, shutdown_rx).await;
     } else {
         // No command and no display — nothing to do
         tracing::info!("No command specified and no display. Exiting.");

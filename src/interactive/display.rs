@@ -2345,23 +2345,41 @@ pub fn detect_terminal_size() -> Option<(u16, u16)> {
         .map(|(cols, rows)| (rows, cols))
 }
 
-/// Wait for a direct child command to exit (headless, non-display mode).
+/// Wait for a child command to exit, or for a shutdown signal.
+/// In headless mode this blocks the main loop until either:
+///   1. The child process exits (natural termination), or
+///   2. A SIGTERM/SIGINT is received (external stop)
 ///
-/// Polls `kill(pid, 0)` at 500 ms intervals.  When the child is no longer
-/// alive the function returns.
-pub async fn wait_for_child(manager: &Arc<CommandManager>, id: &str) {
+/// When a shutdown signal arrives, all managed commands are killed
+/// so the instance exits cleanly.
+pub async fn wait_for_child(
+    manager: &Arc<CommandManager>,
+    id: &str,
+    mut shutdown_rx: tokio::sync::broadcast::Receiver<()>,
+) {
+    let mut interval = tokio::time::interval(std::time::Duration::from_millis(500));
     loop {
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        if let Some(handle) = manager.get(&id.to_string()) {
-            let pid = handle.pid as i32;
-            let alive = unsafe { libc::kill(pid, 0) == 0 };
-            if !alive {
-                tracing::info!(id, "Direct child exited");
+        tokio::select! {
+            _ = interval.tick() => {
+                if let Some(handle) = manager.get(&id.to_string()) {
+                    let pid = handle.pid as i32;
+                    let alive = unsafe { libc::kill(pid, 0) == 0 };
+                    if !alive {
+                        tracing::info!(id, "Direct child exited");
+                        return;
+                    }
+                } else {
+                    tracing::info!(id, "Direct child removed from manager");
+                    return;
+                }
+            }
+            _ = shutdown_rx.recv() => {
+                tracing::info!(id, "Shutdown signal received in headless mode");
+                // Kill the child so vrunner can exit cleanly
+                let id_string = id.to_string();
+                let _ = manager.kill(&id_string, None).await;
                 return;
             }
-        } else {
-            tracing::info!(id, "Direct child removed from manager");
-            return;
         }
     }
 }
