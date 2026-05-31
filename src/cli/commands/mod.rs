@@ -1,7 +1,7 @@
 //! CLI subcommand handlers organized by command type.
 //!
 //! Each sub-module contains handlers for a specific command group:
-//! - list: query running instances (PID file based)
+//! - list: query running instances (PID files + UDS live query)
 //! - stop: stop running instances (signal based)
 //! - config: configuration validation
 //! - ipc: inter-instance communication via UDS

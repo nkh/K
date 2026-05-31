@@ -91,12 +91,9 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
 
     // Handle subcommands
     match &cli.command {
+        // List — needs UDS to query commands from each instance
         Some(Commands::List) => {
-            // list is synchronous (reads PID files only)
-            // Init tracing briefly for this subcommand
-            tracing_subscriber::fmt::init();
-            subcommands::handle_list_command(&cli)?;
-            return Ok(None);
+            return Ok(Some(cli));
         }
         Some(Commands::Stop { pid }) => {
             // stop is synchronous (sends signal directly)
@@ -138,7 +135,8 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
 pub fn is_ipc_command(cli: &Cli) -> bool {
     matches!(
         cli.command,
-        Some(Commands::Keys { .. })
+        Some(Commands::List)
+            | Some(Commands::Keys { .. })
             | Some(Commands::Cat { .. })
             | Some(Commands::SpawnIn { .. })
             | Some(Commands::Freeze { .. })
@@ -152,6 +150,10 @@ pub async fn run_ipc_command(cli: Cli) -> Result<()> {
     use crate::cli::commands::verify_instance;
 
     match cli.command {
+        Some(Commands::List) => {
+            tracing_subscriber::fmt::init();
+            subcommands::handle_list_command(&cli).await
+        }
         Some(Commands::Keys { pid, command, keys }) => {
             tracing_subscriber::fmt::init();
             verify_instance(pid)?;

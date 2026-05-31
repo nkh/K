@@ -3,6 +3,8 @@ use crossterm::style::Color;
 
 use crate::cli::args::Cli;
 use crate::instance::registry::InstanceRegistry;
+use crate::ipc::client::send_command;
+use crate::ipc::protocol::{ControlCommand, ControlResponse};
 
 use super::common::c;
 
@@ -23,9 +25,10 @@ fn format_duration(secs: f64) -> String {
 
 /// Handle the `vrunner list` subcommand.
 ///
-/// Lists running vrunner instances by reading PID files.
-/// Shows instance metadata (PID, daemon, display, uptime, command).
-pub fn handle_list_command(cli: &Cli) -> Result<()> {
+/// Discovers running vrunner instances from PID files, then queries each
+/// instance via UDS to get its live command list (including commands added
+/// via spawn-in).
+pub async fn handle_list_command(cli: &Cli) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let all_instances = registry.list_instances();
 
@@ -57,12 +60,57 @@ pub fn handle_list_command(cli: &Cli) -> Result<()> {
     for info in &instances {
         println!("{}", format_instance_header(info));
 
-        let command = info.command.as_deref().unwrap_or("(idle)");
-        println!(
-            "  {} {}",
-            c("COMMAND:", Color::DarkGrey, false),
-            c(command, Color::Reset, false),
-        );
+        // Query the instance via UDS for its live command list.
+        match send_command(info.pid, ControlCommand::List).await {
+            Ok(ControlResponse::Ok { data }) => {
+                let commands = data.get("commands").and_then(|v| v.as_array());
+                match commands {
+                    Some(cmds) if !cmds.is_empty() => {
+                        for cmd in cmds {
+                            if let Some(line) = format_command(cmd) {
+                                println!("{line}");
+                            }
+                        }
+                    }
+                    _ => {
+                        println!(
+                            "  {} (no commands)",
+                            c("(idle)", Color::DarkGrey, false)
+                        );
+                    }
+                }
+            }
+            Ok(ControlResponse::Error { error }) => {
+                // Instance is alive (PID file says so) but UDS query failed.
+                // Show the initial command from PID file as fallback.
+                let fallback = info
+                    .command
+                    .as_deref()
+                    .unwrap_or("(unknown)");
+                println!(
+                    "  {} {}",
+                    c("COMMAND:", Color::DarkGrey, false),
+                    c(fallback, Color::Yellow, false),
+                );
+                eprintln!(
+                    "  {} (could not query commands via UDS: {})",
+                    c("WARNING:", Color::Yellow, true),
+                    error
+                );
+            }
+            Err(_) => {
+                // Socket not reachable — show fallback from PID file.
+                let fallback = info
+                    .command
+                    .as_deref()
+                    .unwrap_or("(unknown)");
+                println!(
+                    "  {} {}",
+                    c("COMMAND:", Color::DarkGrey, false),
+                    c(fallback, Color::Yellow, false),
+                );
+            }
+        }
 
         // Blank line between instances for readability
         if instances.len() > 1 {
@@ -99,7 +147,7 @@ pub fn format_instance_header(info: &crate::instance::info::InstanceInfo) -> Str
 
 /// Format a single command line for `vrunner list` output.
 /// Returns None if the JSON value lacks required fields.
-pub fn format_command(cmd: &serde_json::Value, _dims: Option<(usize, usize)>) -> Option<String> {
+pub fn format_command(cmd: &serde_json::Value) -> Option<String> {
     let name = cmd.get("name")?.as_str()?;
     let args = cmd.get("args")?.as_array()?;
     let args_vec: Vec<&str> = args.iter().filter_map(|v| v.as_str()).collect();
@@ -114,10 +162,32 @@ pub fn format_command(cmd: &serde_json::Value, _dims: Option<(usize, usize)>) ->
         display_name
     };
     let pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0);
+    let status = cmd.get("status").and_then(|v| v.as_str()).unwrap_or("?");
+    let runtime = cmd
+        .get("runtime_secs")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let runtime_str = format_duration(runtime);
+
+    let status_str = match status {
+        "running" => c(&format!("running  {}", runtime_str), Color::Green, false),
+        "frozen" => c(&format!("frozen   {}", runtime_str), Color::Yellow, true),
+        "exited" => {
+            let exit = cmd
+                .get("exit_code")
+                .and_then(|v| v.as_i64())
+                .map(|c| format!("exited {}  {}", c, runtime_str))
+                .unwrap_or_else(|| format!("exited ?  {}", runtime_str));
+            c(&exit, Color::DarkGrey, false)
+        }
+        other => c(other, Color::DarkGrey, false),
+    };
 
     Some(format!(
-        "  {} {}",
+        "  {} {}  {} {}",
         c(&format!("{:<10}", pid), Color::Cyan, false),
-        c(&format!("{:<20}", truncated), Color::Reset, false),
+        c(&format!("{:<30}", truncated), Color::Reset, false),
+        c("STATUS:", Color::DarkGrey, false),
+        status_str,
     ))
 }
