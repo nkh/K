@@ -11,7 +11,7 @@ vrunner\-thaw \- resume a frozen command via SIGCONT
 
 .SH SYNOPSIS
 .B vrunner
-\fBthaw\fR \fIPID\fR
+\fBthaw\fR [\fIPID\fR] [\fB\-\-interactive\fR]
 
 .SH DESCRIPTION
 Thaw (resume) a previously frozen command by sending it SIGCONT. The command resumes execution from exactly where it was suspended by \fBvrunner freeze\fR. All process state (memory, file descriptors, signal handlers) is preserved across the freeze/thaw cycle.
@@ -24,7 +24,15 @@ After thawing, the command resumes normal execution and continues producing outp
 
 .TP
 .B PID
-OS process ID of the frozen command to resume. This is the child process PID (shown in \fBvrunner list\fR output), not the vrunner instance PID.
+OS process ID of the frozen command to resume. This is the child process PID (shown in \fBvrunner list\fR output), not the vrunner instance PID. When \fB\-\-interactive\fR is used, this argument can be omitted.
+
+.SH OPTIONS
+
+.TP
+.BR \-\-interactive
+Present a numbered list of frozen commands and let the user select
+which ones to thaw by typing space-separated numbers (e.g. "1 3 5").
+Requires a terminal (stdin must be a TTY).
 
 .SH EXAMPLES
 

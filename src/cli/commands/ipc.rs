@@ -12,7 +12,7 @@ use crate::ipc::protocol::{ControlCommand, ControlResponse};
 
 /// Resolve a command ID from an optional `-c` flag or fall back to the
 /// first command returned by `list` from the target instance.
-async fn resolve_command_id(pid: u32, command: Option<&str>) -> Result<String> {
+pub(crate) async fn resolve_command_id(pid: u32, command: Option<&str>) -> Result<String> {
     match command {
         Some(id) => Ok(id.to_string()),
         None => {

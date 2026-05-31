@@ -24,6 +24,7 @@ pub async fn handle_screenshot_command(
     output: Option<&str>,
     font_size: f32,
     font_name: Option<&str>,
+    interactive: bool,
 ) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let all_instances = registry.list_instances();
@@ -31,6 +32,89 @@ pub async fn handle_screenshot_command(
     let client = http_client();
 
     let all_commands = collect_all_commands(&client, &instances).await;
+
+    // Interactive mode
+    if interactive && target.is_none() {
+        let items: Vec<_> = all_commands
+            .iter()
+            .map(|(_, id, pid, _name, full)| crate::cli::interactive_select::SelectItem {
+                label: format!("{} (PID {})", full, pid),
+                id: id.clone(),
+            })
+            .collect();
+        let selected = crate::cli::interactive_select::select_items(
+            &items, "Select commands to screenshot [space-separated numbers]",
+        )?;
+        for item in &selected {
+            let (instance_pid, cmd_id, _cmd_pid, _name, full) = all_commands
+                .iter()
+                .find(|(_, id, _, _, _)| id == &item.id)
+                .expect("selected item must exist");
+            let info = instances
+                .iter()
+                .find(|i| i.pid == *instance_pid)
+                .expect("instance must exist");
+            let url = instance_url(info, &None);
+
+            let mut png_url = format!(
+                "{}/api/commands/{}/vtty/png?font_size={}",
+                url, cmd_id, font_size
+            );
+            if let Some(font) = font_name {
+                png_url.push_str(&format!(
+                    "&font_name={}",
+                    urlencoding::encode(font)
+                ));
+            }
+
+            let resp = client.get(&png_url).send().await?;
+            if !resp.status().is_success() {
+                let status = resp.status();
+                let body = resp.text().await.unwrap_or_default();
+                anyhow::bail!("Failed to fetch screenshot (HTTP {}): {}", status, body);
+            }
+            let bytes = resp.bytes().await?;
+
+            let output_path = match output {
+                Some(p) => p.to_string(),
+                None => {
+                    let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
+                    let dims_part = match fetch_cmd_dimensions(&client, &url, &cmd_id).await {
+                        Some((rows, cols)) => format!("{}_{}", rows, cols),
+                        None => String::new(),
+                    };
+                    let cmd_part: String = full
+                        .chars()
+                        .map(|c| {
+                            if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' { c } else { '_' }
+                        })
+                        .collect();
+                    let cmd_truncated = if cmd_part.len() > 120 {
+                        format!("{}...", &cmd_part[..117])
+                    } else {
+                        cmd_part
+                    };
+                    match dims_part.as_str() {
+                        "" => format!("vrunner_{}_{}.png", ts, cmd_truncated),
+                        dims => format!("vrunner_{}_{}_{}.png", ts, dims, cmd_truncated),
+                    }
+                }
+            };
+
+            tokio::fs::write(&output_path, &bytes).await?;
+            let display_path = std::path::Path::new(&output_path);
+            let abs_path = if display_path.is_absolute() {
+                output_path.clone()
+            } else {
+                match std::env::current_dir() {
+                    Ok(cwd) => cwd.join(&output_path).to_string_lossy().to_string(),
+                    Err(_) => output_path.clone(),
+                }
+            };
+            println!("{}", abs_path);
+        }
+        return Ok(());
+    }
 
     let (instance_pid, cmd_id, _cmd_pid, name, full) = match target {
         Some(t) => {

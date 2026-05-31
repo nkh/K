@@ -11,7 +11,7 @@ vrunner\-resize \- resize the virtual terminal of a running command
 
 .SH SYNOPSIS
 .B vrunner
-\fBresize\fR \fITARGET\fR [\fB\-\-rows\fR \fIN\fR] [\fB\-\-cols\fR \fIN\fR]
+\fBresize\fR [\fITARGET\fR] [\fB\-\-rows\fR \fIN\fR] [\fB\-\-cols\fR \fIN\fR] [\fB\-\-interactive\fR]
 
 .SH DESCRIPTION
 Resize the virtual terminal (VTTY) of a running command. This resizes both the in-memory terminal buffer and the child process's PTY (by sending SIGWINCH), so applications that respond to terminal resize events (like vim, htop, or less) will adjust their layout accordingly.
@@ -37,6 +37,12 @@ New terminal height in rows (1\-200, default: auto-detect from controlling termi
 .TP
 .BR "\-\-cols " \fIN\fR
 New terminal width in columns (1\-500, default: auto-detect from controlling terminal).
+
+.TP
+.BR \-\-interactive
+Present a numbered list of commands and let the user select
+which ones to resize by typing space-separated numbers (e.g. "1 3 5").
+Requires a terminal (stdin must be a TTY).
 
 .SH EXAMPLES
 

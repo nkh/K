@@ -14,7 +14,7 @@ use super::common::{collect_all_commands, http_client, instance_url, resolve_pid
 /// Resizes the VTTY of a running command by PID or name.
 /// Resizes both the in-memory buffer and the child PTY (sends SIGWINCH).
 /// If rows/cols are 0 (default), uses the current terminal size.
-pub async fn handle_resize_command(_cli: &Cli, target: &str, rows: u16, cols: u16) -> Result<()> {
+pub async fn handle_resize_command(_cli: &Cli, target: Option<&str>, rows: u16, cols: u16, interactive: bool) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let instances = registry.list_instances();
 
@@ -43,6 +43,53 @@ pub async fn handle_resize_command(_cli: &Cli, target: &str, rows: u16, cols: u1
     };
 
     let client = http_client();
+
+    // Interactive mode: list all commands and let user select
+    if interactive && target.is_none() {
+        let all_commands = collect_all_commands(&client, &instances).await;
+        if all_commands.is_empty() {
+            anyhow::bail!("No running commands found. Use `vrunner list` to see running commands.");
+        }
+        let items: Vec<_> = all_commands
+            .iter()
+            .map(|(_, id, pid, _, full)| crate::cli::interactive_select::SelectItem {
+                label: format!("{} (PID {})", full, pid),
+                id: id.clone(),
+            })
+            .collect();
+        let selected = crate::cli::interactive_select::select_items(
+            &items,
+            "Select commands to resize [space-separated numbers]",
+        )?;
+        let mut any_error = false;
+        for item in &selected {
+            let all_cmds = collect_all_commands(&client, &instances).await;
+            if let Some((inst_pid, cmd_id, cmd_pid, _, _)) =
+                all_cmds.iter().find(|(_, id, _, _, _)| id == &item.id)
+            {
+                let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
+                let url = instance_url(info, &None);
+                if let Err(e) =
+                    resize_command_by_id(&client, &url, cmd_id, *cmd_pid, *inst_pid, rows, cols).await
+                {
+                    tracing::error!("Failed to resize command {}: {}", cmd_pid, e);
+                    any_error = true;
+                }
+            }
+        }
+        if any_error {
+            anyhow::bail!("Some commands failed to resize.");
+        }
+        return Ok(());
+    }
+
+    // If target is None, error.
+    let target = match target {
+        Some(t) => t,
+        None => anyhow::bail!(
+            "No target specified. Use `vrunner resize <PID or name>` or `vrunner resize --interactive`."
+        ),
+    };
 
     // Fast path: if target is a pure number, treat as PID.
     if let Ok(pid) = target.parse::<u32>() {

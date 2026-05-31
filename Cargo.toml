@@ -66,6 +66,7 @@ dashmap = "5"
 parking_lot = "0.12"
 unicode-width = "0.2.2"
 regex = "1"
+atty = "0.2"
 
 # vrunner-only dependencies (gated behind feature flag)
 axum = { version = "0.7", features = ["macros", "ws"], optional = true }

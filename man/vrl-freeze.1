@@ -1,0 +1,90 @@
+.\" Title: vrl-freeze
+.\" Author: vrl contributors
+.\" Manual section: 1
+.\"
+.TH VRL\-FREEZE 1 "2025" "vrl" "User Commands"
+
+.SH NAME
+vrl\-freeze \- suspend a command in a running instance via SIGSTOP
+
+.SH SYNOPSIS
+.B vrl
+\fBfreeze\fR \fIPID\fR [\fB\-c\fR \fICOMMAND\fR] [\fB\-\-interactive\fR]
+
+.SH DESCRIPTION
+Freeze (suspend) a running command by sending it SIGSTOP. The command's OS process is paused but not terminated; all its state is preserved in memory. Use \fBvrl thaw\fR to resume execution.
+
+Connects to the target instance's UDS control socket at \fB~/.local/share/vrl/control\-{pid}.sock\fR and sends the freeze request.
+
+Freezing is useful for temporarily suspending resource-intensive tasks (compilations, data processing) without losing their progress. The frozen command remains in the instance's command list and is visible via \fBvrl list\fR.
+
+.SH ARGUMENTS
+
+.TP
+.B PID
+OS process ID of the target vrl instance.
+
+.SH OPTIONS
+
+.TP
+.BR \-c ", " \-\-command " " \fICOMMAND\fR
+ID of the target command (omit for the first/only command).
+
+.TP
+.BR \-\-interactive
+Present a numbered list of all running commands in the instance and allow the user to select one or more by number (space-separated). Only running (non-frozen) commands are shown.
+
+.TP
+.BR \-h ", " \-\-help
+Print help information and exit.
+
+.SH EXAMPLES
+
+.PP
+Freeze the only command:
+.RS
+.PP
+.nf
+\fB$ vrl freeze 12345\fR
+Command cmd_abc frozen (SIGSTOP)
+.fi
+.RE
+
+.PP
+Freeze a specific command:
+.RS
+.PP
+.nf
+\fB$ vrl freeze 12345 \-c cmd_abc\fR
+.fi
+.RE
+
+.PP
+Interactively select commands to freeze:
+.RS
+.PP
+.nf
+\fB$ vrl freeze 12345 \-\-interactive\fR
+  1) cargo build (PID 5678) - running
+  2) htop (PID 5679) - running
+Select [space-separated numbers]: 1
+Command cmd_abc frozen (SIGSTOP)
+.fi
+.RE
+
+.SH EXIT STATUS
+
+.TP
+.B 0
+Command frozen successfully.
+
+.TP
+.B 1
+Error (instance not found, command not found, etc.).
+
+.SH SEE ALSO
+.BR vrl (1),
+.BR vrl\-thaw (1),
+.BR vrl\-stop (1),
+.BR vrl\-list (1),
+.BR kill (1)

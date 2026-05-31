@@ -11,7 +11,7 @@ vrunner screenshot \- capture the VTTY buffer as a PNG screenshot
 
 .SH SYNOPSIS
 .B vrunner screenshot
-[\fITARGET\fR] [\fIOPTIONS\fR]
+[\fITARGET\fR] [\fIOPTIONS\fR] [\fB\-\-interactive\fR]
 
 .SH DESCRIPTION
 Captures the virtual terminal (VTTY) buffer of a running command and renders it as a PNG image using a TrueType/OpenType font. The screenshot includes the visible screen content with all ANSI colors, bold, underline, and other formatting preserved.
@@ -37,6 +37,12 @@ Path to a TTF/OTF font file (e.g., \fB./SGr-IosevkaTerm-Medium.ttc\fR). When omi
 .TP
 .BR \-h ", " \-\-help
 Print help information and exit.
+
+.TP
+.BR \-\-interactive
+Present a numbered list of commands and let the user select
+which ones to screenshot by typing space-separated numbers (e.g. "1 3 5").
+Requires a terminal (stdin must be a TTY).
 
 .SH TARGET SELECTION
 

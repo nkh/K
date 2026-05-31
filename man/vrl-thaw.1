@@ -1,0 +1,79 @@
+.\" Title: vrl-thaw
+.\" Author: vrl contributors
+.\" Manual section: 1
+.\"
+.TH VRL\-THAW 1 "2025" "vrl" "User Commands"
+
+.SH NAME
+vrl\-thaw \- resume a frozen command in a running instance via SIGCONT
+
+.SH SYNOPSIS
+.B vrl
+\fBthaw\fR \fIPID\fR [\fB\-c\fR \fICOMMAND\fR] [\fB\-\-interactive\fR]
+
+.SH DESCRIPTION
+Thaw (resume) a frozen command by sending it SIGCONT, allowing it to continue execution from where it was suspended by \fBvrl freeze\fR.
+
+Connects to the target instance's UDS control socket at \fB~/.local/share/vrl/control\-{pid}.sock\fR and sends the thaw request.
+
+.SH ARGUMENTS
+
+.TP
+.B PID
+OS process ID of the target vrl instance.
+
+.SH OPTIONS
+
+.TP
+.BR \-c ", " \-\-command " " \fICOMMAND\fR
+ID of the target command (omit for the first/only command).
+
+.TP
+.BR \-\-interactive
+Present a numbered list of all frozen commands in the instance and allow the user to select one or more by number (space-separated). Only frozen commands are shown.
+
+.TP
+.BR \-h ", " \-\-help
+Print help information and exit.
+
+.SH EXAMPLES
+
+.PP
+Resume the only command:
+.RS
+.PP
+.nf
+\fB$ vrl thaw 12345\fR
+Command cmd_abc thawed (SIGCONT)
+.fi
+.RE
+
+.PP
+Interactively select frozen commands to resume:
+.RS
+.PP
+.nf
+\fB$ vrl thaw 12345 \-\-interactive\fR
+  1) cargo build (PID 5678) - frozen for 5m 12s
+  2) make test (PID 5680) - frozen for 1m 03s
+Select [space-separated numbers]: 1 2
+Command cmd_abc thawed (SIGCONT)
+Command cmd_def thawed (SIGCONT)
+.fi
+.RE
+
+.SH EXIT STATUS
+
+.TP
+.B 0
+Command thawed successfully.
+
+.TP
+.B 1
+Error (instance not found, command not found, etc.).
+
+.SH SEE ALSO
+.BR vrl (1),
+.BR vrl\-freeze (1),
+.BR vrl\-list (1),
+.BR kill (1)

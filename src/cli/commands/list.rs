@@ -1,7 +1,7 @@
 use anyhow::Result;
 use crossterm::style::Color;
 
-use crate::cli::args::Cli;
+use crate::cli::args::{Cli, Commands};
 use crate::instance::registry::InstanceRegistry;
 
 use super::common::c;
@@ -55,6 +55,26 @@ pub async fn handle_list_command(cli: &Cli) -> Result<()> {
                 );
             }
         }
+    } else if matches!(&cli.command, Some(Commands::List { interactive: true })) {
+        let items: Vec<_> = all_instances
+            .iter()
+            .map(|i| crate::cli::interactive_select::SelectItem {
+                label: format!("PID {}", i.pid),
+                id: i.pid.to_string(),
+            })
+            .collect();
+        let selected = crate::cli::interactive_select::select_items(
+            &items,
+            "Select instances to list [space-separated numbers]",
+        )?;
+        let selected_pids: std::collections::HashSet<u32> = selected
+            .iter()
+            .map(|s| s.id.parse::<u32>().unwrap())
+            .collect();
+        all_instances
+            .into_iter()
+            .filter(|i| selected_pids.contains(&i.pid))
+            .collect()
     } else {
         all_instances
     };
@@ -122,7 +142,30 @@ pub async fn handle_list_command(cli: &Cli) -> Result<()> {
         return Ok(());
     }
 
-    let instances: Vec<crate::instance::info::InstanceInfo> = resolve_targeted_instances(cli, &all_instances)?;
+    let is_interactive = matches!(&cli.command, Some(Commands::List { interactive: true }));
+    let instances: Vec<crate::instance::info::InstanceInfo> = if is_interactive && cli.target.is_none() {
+        let items: Vec<_> = all_instances
+            .iter()
+            .map(|i| crate::cli::interactive_select::SelectItem {
+                label: format!("PID {} — port {}", i.pid, i.port),
+                id: i.pid.to_string(),
+            })
+            .collect();
+        let selected = crate::cli::interactive_select::select_items(
+            &items,
+            "Select instances to list [space-separated numbers]",
+        )?;
+        let selected_pids: std::collections::HashSet<u32> = selected
+            .iter()
+            .map(|s| s.id.parse::<u32>().unwrap())
+            .collect();
+        all_instances
+            .into_iter()
+            .filter(|i| selected_pids.contains(&i.pid))
+            .collect()
+    } else {
+        resolve_targeted_instances(cli, &all_instances)?
+    };
 
     if instances.is_empty() {
         println!("No running vrunner instances.");

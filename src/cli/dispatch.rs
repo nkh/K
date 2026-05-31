@@ -79,13 +79,39 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
     let cli = Cli::parse_with_version();
 
     match &cli.command {
-        Some(Commands::List) => {
+        Some(Commands::List { interactive: _ }) => {
             return Ok(Some(cli));
         }
-        Some(Commands::Stop { pid }) => {
+        Some(Commands::Stop { pid, interactive }) => {
             tracing_subscriber::fmt::init();
             let registry = crate::instance::registry::InstanceRegistry::new()?;
             let instances = registry.list_instances();
+
+            // Interactive mode: let user select which instance(s) to stop
+            if *interactive && pid.is_none() {
+                if instances.is_empty() {
+                    eprintln!("No vrl instances running.");
+                    std::process::exit(1);
+                }
+                let items: Vec<_> = instances.iter().map(|i| {
+                    crate::cli::interactive_select::SelectItem {
+                        label: format!("PID {}", i.pid),
+                        id: i.pid.to_string(),
+                    }
+                }).collect();
+                let selected = crate::cli::interactive_select::select_items(
+                    &items,
+                    "Select instances to stop [space-separated numbers]",
+                )?;
+                for item in &selected {
+                    let target_pid: u32 = item.id.parse().unwrap();
+                    if let Err(e) = subcommands::handle_stop_command(Some(target_pid), &instances) {
+                        eprintln!("Failed to stop instance {}: {}", target_pid, e);
+                    }
+                }
+                std::process::exit(0);
+            }
+
             let resolved_pid = subcommands::resolve_stop_target(*pid, &instances);
             subcommands::handle_stop_command(Some(resolved_pid), &instances)?;
             return Ok(None);
@@ -121,7 +147,7 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
 pub fn is_ipc_command(cli: &Cli) -> bool {
     matches!(
         cli.command,
-        Some(Commands::List)
+        Some(Commands::List { .. })
             | Some(Commands::Keys { .. })
             | Some(Commands::Cat { .. })
             | Some(Commands::SpawnIn { .. })
@@ -138,7 +164,7 @@ pub async fn run_ipc_command(cli: Cli) -> Result<()> {
     use crate::cli::commands::verify_instance;
 
     match cli.command {
-        Some(Commands::List) => {
+        Some(Commands::List { .. }) => {
             tracing_subscriber::fmt::init();
             subcommands::handle_list_command(&cli).await
         }
@@ -147,40 +173,61 @@ pub async fn run_ipc_command(cli: Cli) -> Result<()> {
             verify_instance(pid)?;
             subcommands::handle_keys_command(pid, command.as_deref(), &keys).await
         }
-        Some(Commands::Cat { pid, command }) => {
+        Some(Commands::Cat { pid, command, interactive }) => {
             tracing_subscriber::fmt::init();
             verify_instance(pid)?;
-            subcommands::handle_cat_command(pid, command.as_deref()).await
+            if interactive {
+                subcommands::handle_cat_command_interactive(pid).await
+            } else {
+                subcommands::handle_cat_command(pid, command.as_deref()).await
+            }
         }
         Some(Commands::SpawnIn { pid, cmd, args }) => {
             tracing_subscriber::fmt::init();
             verify_instance(pid)?;
             subcommands::handle_spawn_in_command(pid, &cmd, &args).await
         }
-        Some(Commands::Freeze { pid, command }) => {
+        Some(Commands::Freeze { pid, command, interactive }) => {
             tracing_subscriber::fmt::init();
             verify_instance(pid)?;
-            subcommands::handle_freeze_command(pid, command.as_deref()).await
+            if interactive {
+                subcommands::handle_freeze_command_interactive(pid).await
+            } else {
+                subcommands::handle_freeze_command(pid, command.as_deref()).await
+            }
         }
-        Some(Commands::Thaw { pid, command }) => {
+        Some(Commands::Thaw { pid, command, interactive }) => {
             tracing_subscriber::fmt::init();
             verify_instance(pid)?;
-            subcommands::handle_thaw_command(pid, command.as_deref()).await
+            if interactive {
+                subcommands::handle_thaw_command_interactive(pid).await
+            } else {
+                subcommands::handle_thaw_command(pid, command.as_deref()).await
+            }
         }
         Some(Commands::Resize {
             pid,
             command,
             rows,
             cols,
+            interactive,
         }) => {
             tracing_subscriber::fmt::init();
             verify_instance(pid)?;
-            subcommands::handle_resize_command(pid, command.as_deref(), rows, cols).await
+            if interactive {
+                subcommands::handle_resize_command_interactive(pid, rows, cols).await
+            } else {
+                subcommands::handle_resize_command(pid, command.as_deref(), rows, cols).await
+            }
         }
-        Some(Commands::Kill { pid, command }) => {
+        Some(Commands::Kill { pid, command, interactive }) => {
             tracing_subscriber::fmt::init();
             verify_instance(pid)?;
-            subcommands::handle_kill_command(pid, command.as_deref()).await
+            if interactive {
+                subcommands::handle_kill_command_interactive(pid).await
+            } else {
+                subcommands::handle_kill_command(pid, command.as_deref()).await
+            }
         }
         _ => anyhow::bail!("Not an IPC command"),
     }
@@ -194,20 +241,20 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
     let cli = Cli::parse_with_version();
 
     match &cli.command {
-        Some(Commands::List) => {}
-        Some(Commands::Stop { pid: _ }) => {}
+        Some(Commands::List { interactive: _ }) => {}
+        Some(Commands::Stop { pid: _, interactive: _ }) => {}
         Some(Commands::Spawn { .. }) => {}
-        Some(Commands::Freeze { pid: _ }) => {}
-        Some(Commands::Thaw { pid: _ }) => {}
+        Some(Commands::Freeze { pid: _, interactive: _ }) => {}
+        Some(Commands::Thaw { pid: _, interactive: _ }) => {}
         Some(Commands::Cert { action }) => {
             subcommands::handle_cert_command(action)?;
             return Ok(None);
         }
         Some(Commands::ListVrunner) => {}
         Some(Commands::ListCommands) => {}
-        Some(Commands::StopCommand { target: _ }) => {}
+        Some(Commands::StopCommand { target: _, interactive: _ }) => {}
         Some(Commands::Purge { target: _ }) => {}
-        Some(Commands::Resize { .. }) => {}
+        Some(Commands::Resize { target: _, rows: _, cols: _, interactive: _ }) => {}
         Some(Commands::ConfigCheck) => {
             subcommands::handle_config_check_command(cli.config.as_deref())?;
             return Ok(None);
@@ -215,6 +262,7 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
         Some(Commands::Cat {
             target: _,
             color_always: _,
+            interactive: _,
         }) => {}
         Some(Commands::Screenshot { .. }) => {}
         Some(Commands::Completions { shell }) => {
@@ -232,13 +280,39 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
 #[cfg(feature = "vrunner")]
 pub async fn handle_subcommands(cli: &Cli) -> Result<bool> {
     match &cli.command {
-        Some(Commands::List) => {
+        Some(Commands::List { .. }) => {
             subcommands::handle_list_command(cli).await?;
             Ok(true)
         }
-        Some(Commands::Stop { pid }) => {
+        Some(Commands::Stop { pid, interactive }) => {
             let registry = crate::instance::registry::InstanceRegistry::new()?;
             let instances = registry.list_instances();
+
+            // Interactive mode: let user select which instance(s) to stop
+            if *interactive && pid.is_none() {
+                if instances.is_empty() {
+                    tracing::error!("No vrunner instances running.");
+                    std::process::exit(1);
+                }
+                let items: Vec<_> = instances.iter().map(|i| {
+                    crate::cli::interactive_select::SelectItem {
+                        label: format!("PID {} — port {}", i.pid, i.port),
+                        id: i.pid.to_string(),
+                    }
+                }).collect();
+                let selected = crate::cli::interactive_select::select_items(
+                    &items,
+                    "Select instances to stop [space-separated numbers]",
+                )?;
+                for item in &selected {
+                    let target_pid: u32 = item.id.parse().unwrap();
+                    if let Err(e) = registry.stop_instance(target_pid).await {
+                        tracing::error!("Failed to stop instance {}: {}", target_pid, e);
+                    }
+                }
+                return Ok(true);
+            }
+
             let pid = subcommands::resolve_stop_target(*pid, &instances);
             registry.stop_instance(pid).await?;
             Ok(true)
@@ -252,12 +326,12 @@ pub async fn handle_subcommands(cli: &Cli) -> Result<bool> {
             subcommands::handle_spawn_command(cli, cmd, args, *rows, *cols).await?;
             Ok(true)
         }
-        Some(Commands::Freeze { pid }) => {
-            subcommands::handle_freeze_command_http(cli, *pid).await?;
+        Some(Commands::Freeze { pid, interactive }) => {
+            subcommands::handle_freeze_command_http(cli, *pid, *interactive).await?;
             Ok(true)
         }
-        Some(Commands::Thaw { pid }) => {
-            subcommands::handle_thaw_command_http(cli, *pid).await?;
+        Some(Commands::Thaw { pid, interactive }) => {
+            subcommands::handle_thaw_command_http(cli, *pid, *interactive).await?;
             Ok(true)
         }
         Some(Commands::ListVrunner) => {
@@ -268,8 +342,8 @@ pub async fn handle_subcommands(cli: &Cli) -> Result<bool> {
             subcommands::handle_list_commands_command(cli).await?;
             Ok(true)
         }
-        Some(Commands::StopCommand { target }) => {
-            let stopped = subcommands::handle_stop_command(cli, target.as_deref()).await?;
+        Some(Commands::StopCommand { target, interactive }) => {
+            let stopped = subcommands::handle_stop_command(cli, target.as_deref(), *interactive).await?;
             if !stopped {
                 match target {
                     Some(t) => tracing::error!(
@@ -298,15 +372,16 @@ pub async fn handle_subcommands(cli: &Cli) -> Result<bool> {
             }
             Ok(true)
         }
-        Some(Commands::Resize { target, rows, cols }) => {
-            subcommands::handle_resize_command(cli, target, *rows, *cols).await?;
+        Some(Commands::Resize { target, rows, cols, interactive }) => {
+            subcommands::handle_resize_command(cli, target.as_deref(), *rows, *cols, *interactive).await?;
             Ok(true)
         }
         Some(Commands::Cat {
             target,
             color_always,
+            interactive,
         }) => {
-            subcommands::handle_cat_command_http(cli, target.as_deref(), *color_always).await?;
+            subcommands::handle_cat_command_http(cli, target.as_deref(), *color_always, *interactive).await?;
             Ok(true)
         }
         Some(Commands::Screenshot {
@@ -314,6 +389,7 @@ pub async fn handle_subcommands(cli: &Cli) -> Result<bool> {
             output,
             font_size,
             font_name,
+            interactive,
         }) => {
             subcommands::handle_screenshot_command(
                 cli,
@@ -321,6 +397,7 @@ pub async fn handle_subcommands(cli: &Cli) -> Result<bool> {
                 output.as_deref(),
                 *font_size,
                 font_name.as_deref(),
+                *interactive,
             )
             .await?;
             Ok(true)

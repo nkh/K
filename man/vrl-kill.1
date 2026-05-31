@@ -1,0 +1,94 @@
+.\" Title: vrl-kill
+.\" Author: vrl contributors
+.\" Manual section: 1
+.\"
+.TH VRL\-KILL 1 "2025" "vrl" "User Commands"
+
+.SH NAME
+vrl\-kill \- stop (kill) a command inside a running instance
+
+.SH SYNOPSIS
+.B vrl
+\fBkill\fR \fIPID\fR [\fB\-c\fR \fICOMMAND\fR] [\fB\-\-interactive\fR]
+
+.SH DESCRIPTION
+Stop (kill) a specific command inside a running vrl instance. This sends a graceful kill request (SIGINT followed by SIGKILL after the configured \fB\-\-exit\-timeout\fR) to the command, allowing it to clean up resources before termination.
+
+This is the vrl equivalent of vrunner's \fBvrunner stop\-command\fR. The key difference is that vrl targets a specific instance by PID and command ID, while vrunner can search across all instances.
+
+Connects to the target instance's UDS control socket at \fB~/.local/share/vrl/control\-{pid}.sock\fR.
+
+Note: \fBvrl stop\fR stops an entire instance (all commands). \fBvrl kill\fR stops a single command within an instance.
+
+.SH ARGUMENTS
+
+.TP
+.B PID
+OS process ID of the target vrl instance.
+
+.SH OPTIONS
+
+.TP
+.BR \-c ", " \-\-command " " \fICOMMAND\fR
+ID of the target command (omit for the first/only command).
+
+.TP
+.BR \-\-interactive
+Present a numbered list of all running commands in the instance and allow the user to select one or more by number (space-separated). Overrides \-c.
+
+.TP
+.BR \-h ", " \-\-help
+Print help information and exit.
+
+.SH EXAMPLES
+
+.PP
+Kill the only command in an instance:
+.RS
+.PP
+.nf
+\fB$ vrl kill 12345\fR
+Command cmd_abc killed
+.fi
+.RE
+
+.PP
+Kill a specific command by ID:
+.RS
+.PP
+.nf
+\fB$ vrl kill 12345 \-c cmd_def\fR
+.fi
+.RE
+
+.PP
+Interactively select commands to kill:
+.RS
+.PP
+.nf
+\fB$ vrl kill 12345 \-\-interactive\fR
+  1) htop (PID 5678)
+  2) vim notes.txt (PID 5679)
+  3) cargo build (PID 5680)
+Select [space-separated numbers]: 1 3
+Command cmd_abc killed
+Command cmd_ghi killed
+.fi
+.RE
+
+.SH EXIT STATUS
+
+.TP
+.B 0
+Command killed successfully.
+
+.TP
+.B 1
+Error (instance not found, command not found, etc.).
+
+.SH SEE ALSO
+.BR vrl (1),
+.BR vrl\-stop (1),
+.BR vrl\-list (1),
+.BR vrl\-freeze (1),
+.BR kill (1)

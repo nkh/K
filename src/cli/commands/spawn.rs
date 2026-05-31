@@ -100,11 +100,60 @@ pub async fn handle_spawn_command(
 }
 
 /// Handle the `vrunner freeze` subcommand.
-pub async fn handle_freeze_command(cli: &Cli, pid: u32) -> Result<()> {
+pub async fn handle_freeze_command(cli: &Cli, pid: Option<u32>, interactive: bool) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let info = resolve_instance(cli, &registry)?;
     let url = instance_url(&info, &None);
     let client = http_client();
+
+    if interactive {
+        // Fetch all commands and present interactive selection
+        let all_commands = super::common::collect_all_commands(
+            &client,
+            &[info.clone()],
+        )
+        .await;
+        let items: Vec<_> = all_commands
+            .iter()
+            .map(|(_, id, p, _name, full)| crate::cli::interactive_select::SelectItem {
+                label: format!("{} (PID {})", full, p),
+                id: id.clone(),
+            })
+            .collect();
+        let selected = crate::cli::interactive_select::select_items(
+            &items, "Select commands to freeze [space-separated numbers]",
+        )?;
+        for item in &selected {
+            let resp = client
+                .post(format!("{}/api/commands/{}/freeze", url, item.id))
+                .send()
+                .await?;
+            let status = resp.status();
+            let result: serde_json::Value = resp.json().await?;
+            if status.is_success() {
+                println!("Command {} frozen (SIGSTOP)", item.id);
+            } else {
+                let error = result["error"].as_str().unwrap_or("Unknown error");
+                tracing::error!("Failed to freeze {}: {}", item.id, error);
+            }
+        }
+        return Ok(());
+    }
+
+    let pid = match pid {
+        Some(p) => p,
+        None => {
+            let all_commands = super::common::collect_all_commands(&client, &[info.clone()]).await;
+            if all_commands.len() == 1 {
+                all_commands[0].2
+            } else {
+                anyhow::bail!(
+                    "No PID specified and {} commands running. Use --interactive or specify a PID.",
+                    all_commands.len()
+                );
+            }
+        }
+    };
 
     // Look up the command ID by PID via the instance's API
     let cmd_id = resolve_pid_to_id(&client, &url, pid).await?;
@@ -132,11 +181,59 @@ pub async fn handle_freeze_command(cli: &Cli, pid: u32) -> Result<()> {
 }
 
 /// Handle the `vrunner thaw` subcommand.
-pub async fn handle_thaw_command(cli: &Cli, pid: u32) -> Result<()> {
+pub async fn handle_thaw_command(cli: &Cli, pid: Option<u32>, interactive: bool) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let info = resolve_instance(cli, &registry)?;
     let url = instance_url(&info, &None);
     let client = http_client();
+
+    if interactive {
+        let all_commands = super::common::collect_all_commands(
+            &client,
+            &[info.clone()],
+        )
+        .await;
+        let items: Vec<_> = all_commands
+            .iter()
+            .map(|(_, id, p, _name, full)| crate::cli::interactive_select::SelectItem {
+                label: format!("{} (PID {})", full, p),
+                id: id.clone(),
+            })
+            .collect();
+        let selected = crate::cli::interactive_select::select_items(
+            &items, "Select commands to thaw [space-separated numbers]",
+        )?;
+        for item in &selected {
+            let resp = client
+                .post(format!("{}/api/commands/{}/thaw", url, item.id))
+                .send()
+                .await?;
+            let status = resp.status();
+            let result: serde_json::Value = resp.json().await?;
+            if status.is_success() {
+                println!("Command {} thawed (SIGCONT)", item.id);
+            } else {
+                let error = result["error"].as_str().unwrap_or("Unknown error");
+                tracing::error!("Failed to thaw {}: {}", item.id, error);
+            }
+        }
+        return Ok(());
+    }
+
+    let pid = match pid {
+        Some(p) => p,
+        None => {
+            let all_commands = super::common::collect_all_commands(&client, &[info.clone()]).await;
+            if all_commands.len() == 1 {
+                all_commands[0].2
+            } else {
+                anyhow::bail!(
+                    "No PID specified and {} commands running. Use --interactive or specify a PID.",
+                    all_commands.len()
+                );
+            }
+        }
+    };
 
     // Look up the command ID by PID via the instance's API
     let cmd_id = resolve_pid_to_id(&client, &url, pid).await?;

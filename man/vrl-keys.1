@@ -1,0 +1,120 @@
+.\" Title: vrl-keys
+.\" Author: vrl contributors
+.\" Manual section: 1
+.\"
+.TH VRL\-KEYS 1 "2025" "vrl" "User Commands"
+
+.SH NAME
+vrl\-keys \- send keystrokes to a running command inside a vrl instance
+
+.SH SYNOPSIS
+.B vrl
+\fBkeys\fR \fIPID\fR [\fB\-c\fR \fICOMMAND\fR] \fIKEYS\fR
+
+.SH DESCRIPTION
+Send keystrokes to the virtual terminal (VTTY) of a command running inside a vrl instance. The keys are injected into the command's input buffer as if they had been typed at the keyboard, allowing interaction with commands that are detached from any terminal.
+
+Connects to the target instance's UDS control socket at \fB~/.local/share/vrl/control\-{pid}.sock\fR and sends the key input request.
+
+This is particularly useful for sending signals or input to background or detached commands, such as interrupting a long-running process with \fBCtrl\-C\fR, answering a prompt, or typing text into an interactive program.
+
+Keystrokes are specified as a string. Special keys use the following format:
+
+.TS
+l l.
+ctrl-c	Ctrl + C (SIGINT)
+ctrl-d	Ctrl + D (EOF)
+ctrl-z	Ctrl + Z (SIGTSTP)
+enter	Newline / carriage return
+tab	Tab character
+escape	Escape character
+up	Up arrow
+down	Down arrow
+left	Left arrow
+right	Right arrow
+.TE
+
+Literal text (e.g., \fBhello world\fR) is sent as-is. Multiple keystrokes can be combined by separating them with spaces (e.g., \fBctrl-c enter\fR sends Ctrl\-C followed by Enter).
+
+.SH ARGUMENTS
+
+.TP
+.B PID
+OS process ID of the target vrl instance.
+
+.TP
+.B KEYS
+Keystrokes to send (required). See the DESCRIPTION section above for the list of supported key names and formats.
+
+.SH OPTIONS
+
+.TP
+.BR \-c ", " \-\-command " " \fICOMMAND\fR
+ID of the target command (omit for the first/only command).
+
+.TP
+.BR \-h ", " \-\-help
+Print help information and exit.
+
+.SH EXAMPLES
+
+.PP
+Send Ctrl\-C to interrupt the only command in an instance:
+.RS
+.PP
+.nf
+\fB$ vrl keys 12345 ctrl-c\fR
+.fi
+.RE
+
+.PP
+Send Ctrl\-C to a specific command by ID:
+.RS
+.PP
+.nf
+\fB$ vrl keys 12345 \-c cmd_abc ctrl-c\fR
+.fi
+.RE
+
+.PP
+Type text into a command's terminal:
+.RS
+.PP
+.nf
+\fB$ vrl keys 12345 "hello world"\fR
+.fi
+.RE
+
+.PP
+Send Ctrl\-C followed by Enter:
+.RS
+.PP
+.nf
+\fB$ vrl keys 12345 ctrl-c enter\fR
+.fi
+.RE
+
+.PP
+Answer a yes/no prompt in a running command:
+.RS
+.PP
+.nf
+\fB$ vrl keys 12345 \-c cmd_abc y enter\fR
+.fi
+.RE
+
+.SH EXIT STATUS
+
+.TP
+.B 0
+Keystrokes sent successfully.
+
+.TP
+.B 1
+Error (instance not found, command not found, connection failed, etc.).
+
+.SH SEE ALSO
+.BR vrl (1),
+.BR vrl\-list (1),
+.BR vrl\-cat (1),
+.BR vrl\-spawn\-in (1)

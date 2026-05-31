@@ -88,7 +88,7 @@ use super::common::{collect_all_commands, http_client, instance_url, resolve_pid
 
 /// Stop a specific command by PID or name on any running instance (vrunner).
 #[cfg(feature = "vrunner")]
-pub async fn handle_stop_command(_cli: &crate::cli::args::Cli, target: Option<&str>) -> Result<bool> {
+pub async fn handle_stop_command(_cli: &crate::cli::args::Cli, target: Option<&str>, interactive: bool) -> Result<bool> {
     let registry = crate::instance::registry::InstanceRegistry::new()?;
     let instances = registry.list_instances();
 
@@ -97,6 +97,37 @@ pub async fn handle_stop_command(_cli: &crate::cli::args::Cli, target: Option<&s
     }
 
     let client = http_client();
+
+    // Interactive mode: list all commands and let user select
+    if interactive && target.is_none() {
+        let all_commands = collect_all_commands(&client, &instances).await;
+        if all_commands.is_empty() {
+            tracing::warn!("No commands running.");
+            return Ok(false);
+        }
+        let items: Vec<_> = all_commands
+            .iter()
+            .map(|(_, id, pid, _name, full)| crate::cli::interactive_select::SelectItem {
+                label: format!("{} (PID {})", full, pid),
+                id: id.clone(),
+            })
+            .collect();
+        let selected = crate::cli::interactive_select::select_items(
+            &items, "Select commands to stop [space-separated numbers]",
+        )?;
+        let mut any_stopped = false;
+        for item in &selected {
+            let all_cmds = collect_all_commands(&client, &instances).await;
+            if let Some((inst_pid, cmd_id, cmd_pid, _, _)) = all_cmds.iter().find(|(_, id, _, _, _)| id == &item.id) {
+                let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
+                let url = instance_url(info, &None);
+                if stop_command_by_id(&client, &url, cmd_id, *cmd_pid, *inst_pid).await? {
+                    any_stopped = true;
+                }
+            }
+        }
+        return Ok(any_stopped);
+    }
 
     let target = match target {
         Some(t) => t,

@@ -210,12 +210,19 @@ pub struct Cli {
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     /// List all running instances
-    List,
+    List {
+        /// Interactively select instances from a numbered list
+        #[arg(long)]
+        interactive: bool,
+    },
 
     /// Stop an instance by PID (auto-selects if only one)
     Stop {
         /// PID of the instance to stop
         pid: Option<u32>,
+        /// Interactively select instances from a numbered list
+        #[arg(long)]
+        interactive: bool,
     },
 
     // ── vrl-only (UDS) commands ──
@@ -240,6 +247,9 @@ pub enum Commands {
         /// ID of the target command (omit for first command)
         #[arg(short = 'c', long)]
         command: Option<String>,
+        /// Interactively select commands from a numbered list
+        #[arg(long)]
+        interactive: bool,
     },
 
     /// Spawn a command inside a running instance
@@ -262,6 +272,9 @@ pub enum Commands {
         /// ID of the target command (omit for first command)
         #[arg(short = 'c', long)]
         command: Option<String>,
+        /// Interactively select running commands from a numbered list
+        #[arg(long)]
+        interactive: bool,
     },
 
     /// Thaw (resume) a frozen command in a running instance
@@ -272,6 +285,9 @@ pub enum Commands {
         /// ID of the target command (omit for first command)
         #[arg(short = 'c', long)]
         command: Option<String>,
+        /// Interactively select frozen commands from a numbered list
+        #[arg(long)]
+        interactive: bool,
     },
 
     /// Resize the VTTY of a command in a running instance
@@ -288,6 +304,9 @@ pub enum Commands {
         /// Number of columns
         #[arg(long, default_value_t = 80)]
         cols: u16,
+        /// Interactively select commands from a numbered list
+        #[arg(long)]
+        interactive: bool,
     },
 
     /// Kill (stop) a command inside a running instance
@@ -298,6 +317,9 @@ pub enum Commands {
         /// ID of the target command (omit for first command)
         #[arg(short = 'c', long)]
         command: Option<String>,
+        /// Interactively select commands from a numbered list
+        #[arg(long)]
+        interactive: bool,
     },
 
     // ── vrunner-only commands ──
@@ -322,14 +344,20 @@ pub enum Commands {
     #[cfg(feature = "vrunner")]
     Freeze {
         /// PID of the command to freeze
-        pid: u32,
+        pid: Option<u32>,
+        /// Interactively select running commands from a numbered list
+        #[arg(long)]
+        interactive: bool,
     },
 
     /// Thaw (resume) a frozen command via SIGCONT
     #[cfg(feature = "vrunner")]
     Thaw {
         /// PID of the command to thaw
-        pid: u32,
+        pid: Option<u32>,
+        /// Interactively select frozen commands from a numbered list
+        #[arg(long)]
+        interactive: bool,
     },
 
     /// Manage named certificates for per-command access control
@@ -352,6 +380,9 @@ pub enum Commands {
     StopCommand {
         /// PID or name of the command to stop
         target: Option<String>,
+        /// Interactively select commands from a numbered list
+        #[arg(long)]
+        interactive: bool,
     },
 
     /// Purge an exited command, discarding its VTTY buffer
@@ -365,13 +396,16 @@ pub enum Commands {
     #[cfg(feature = "vrunner")]
     Resize {
         /// PID or name of the command to resize
-        target: String,
+        target: Option<String>,
         /// Number of rows (default: terminal height)
         #[arg(long, default_value_t = 0)]
         rows: u16,
         /// Number of columns (default: terminal width)
         #[arg(long, default_value_t = 0)]
         cols: u16,
+        /// Interactively select commands from a numbered list
+        #[arg(long)]
+        interactive: bool,
     },
 
     /// Print the VTTY buffer of a running command as text
@@ -382,6 +416,9 @@ pub enum Commands {
         /// Preserve ANSI color escape sequences in the output
         #[arg(long)]
         color_always: bool,
+        /// Interactively select commands from a numbered list
+        #[arg(long)]
+        interactive: bool,
     },
 
     /// Capture the VTTY buffer as a PNG screenshot
@@ -398,6 +435,9 @@ pub enum Commands {
         /// Path to a TTF/OTF font file
         #[arg(long)]
         font_name: Option<String>,
+        /// Interactively select commands from a numbered list
+        #[arg(long)]
+        interactive: bool,
     },
 
     // ── Shared commands ──

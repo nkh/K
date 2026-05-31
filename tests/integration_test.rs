@@ -34,7 +34,7 @@ fn test_config() -> Config {
             truecolor: true,
             mouse: false,
             screenshot_font_size: 12.0,
-            screenshot_font_name: "monospace".to_string(),
+            screenshot_font_name: Some("monospace".to_string()),
         },
         display: DisplayConfig {
             enabled: false,

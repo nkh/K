@@ -23,9 +23,9 @@ use tokio::time::sleep;
 
 use vrl_core::config::schema::{
     CommandLogConfig, Config, DaemonConfig, DisplayConfig, EnvironmentConfig, ExitConfig,
-#[cfg(feature = "vrunner")]
-    SecurityConfig, ServerConfig, TlsConfig, VttyConfig,
 };
+#[cfg(feature = "vrunner")]
+use vrl_core::config::schema::{SecurityConfig, ServerConfig, TlsConfig, VttyConfig};
 use vrl_core::process::manager::CommandManager;
 
 // ─── Test helpers ───────────────────────────────────────────────────────
@@ -49,7 +49,7 @@ fn test_config() -> Config {
             truecolor: true,
             mouse: false,
             screenshot_font_size: 12.0,
-            screenshot_font_name: "monospace".to_string(),
+            screenshot_font_name: Some("monospace".to_string()),
         },
         display: DisplayConfig {
             enabled: false,
@@ -338,9 +338,9 @@ async fn regression_purge_nonexistent_returns_error() {
 // 2. IPC SIMULATION TESTS (HTTP API round-trip)
 // ═══════════════════════════════════════════════════════════════════════
 
+#[cfg(feature = "vrunner")]
 #[tokio::test]
-// NOTE: http_client test removed — http_client() is vrunner-only
-// and not exposed in the vrl_core library API.
+async fn regression_http_client_has_timeout() {
     // The HTTP client used by subcommands MUST have timeouts.
     // Regression: reqwest::Client::new() had NO timeout, causing
     // vrunner spawn and vrunner stop to block forever.

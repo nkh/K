@@ -26,6 +26,7 @@ This manual is the comprehensive reference for both **vrl** and **vrunner** — 
 - [2.7 Configuration Profiles](#27-configuration-profiles)
 - [2.8 Environment Variables](#28-environment-variables)
 - [2.9 Logging](#29-logging)
+- [2.10 Display Modes](#210-display-modes)
 
 ### [Part III — Advanced Topics](#part-iii--advanced-topics)
 - [3.1 Interactive Display](#31-interactive-display)
@@ -928,6 +929,157 @@ ws.onmessage = (e) => {
   if (msg.type === 'log_entry') console.log('[LOG]', msg.data);
 };
 ```
+
+## 2.10 Display Modes
+
+> **Shared feature** — Both vrl and vrunner support the same display mode flags.
+
+The display flags control whether and how VTTY output appears on your local terminal. Each mode serves a different workflow — from silent background execution to persistent monitoring of multiple commands. For the interactive display internals (keybindings, overlays, state machine), see [3.1 Interactive Display](#31-interactive-display).
+
+### Overview
+
+| Flag | Short | Mode | Display closes when… | After close… |
+|------|-------|------|-----------------------|--------------|
+| *(none)* | — | Headless | N/A (no display) | Instance runs until shutdown signal |
+| `--display` | `-D` | Display | The initial/main command exits | Instance continues running in the background |
+| `--display-all` | `-s` | Monitor | All commands have exited and none have `retain-on-exit` set | Instance exits |
+| `--no-display` | — | Explicit off | N/A (no display) | Same as headless; overrides config |
+| `--tabs` | — | Monitor + tab bar | Same as `--display-all` | Same as `--display-all` |
+
+### No display flag (default)
+
+When no display flag is given, the vrl/vrunner instance runs **headless** — it starts the server or socket, spawns the command (if any), and runs silently in the background:
+
+```bash
+# Headless — VTTY output is not shown on the terminal
+vrl -- cargo build --release
+vrunner --port 3000 -- npm run dev
+```
+
+- The instance runs in the background with no terminal output
+- The instance continues running after the command exits (if `--retain-on-exit` is set) or exits when the last command is removed
+- Useful for daemon mode, scripting, CI pipelines, or when you only need the web UI (vrunner)
+
+> **Tip:** Combine headless mode with `--daemon` for fully detached background execution.
+
+### `--display` (`-D`)
+
+Shows the VTTY output on the local terminal in real-time. The display is tied to the **initial/main command** — when that command exits, the display immediately closes:
+
+```bash
+# Display closes when `cargo test` finishes
+vrl --display -- cargo test
+
+# Display closes when `htop` exits (e.g. q or F10)
+vrl -D -- htop
+
+# Display closes when the command exits, but vrunner keeps running
+vrunner --display -- npm run dev
+```
+
+- VTTY output is mirrored to stdout at the refresh interval (`--refresh-ms`, default 100ms)
+- Keystrokes are forwarded to the child process in real-time
+- When the initial/main command exits, the display **immediately closes** and returns to the shell prompt
+- The vrl/vrunner instance **continues running** in the background (server or socket stays active)
+- Useful when you want to see a specific command's output but don't need to keep monitoring after it finishes
+
+> **Tip:** Use `--retain-on-exit` to keep the command's VTTY in memory after it exits. The VTTY content remains accessible via the web UI (vrunner) or `vrl list`.
+
+### `--display-all` (`-s`)
+
+Shows the VTTY output on the local terminal in real-time and enters **monitor mode** — the display stays open and automatically switches between commands:
+
+```bash
+# Monitor mode — display stays open, switches to next command
+vrl --display-all -- cargo test
+
+# Short form
+vrl -s -- cargo test
+
+# Monitor mode with retain-on-exit keeps display alive
+vrl --retain-on-exit --display-all -- cargo build --release
+```
+
+- VTTY output is mirrored to the terminal, same as `--display`
+- When the current command exits, the display **automatically switches** to the next running command
+- If no commands are running, shows a "waiting for commands" message and keeps waiting
+- The display **only exits when all commands have exited** and none have `retain-on-exit` set
+- Keystrokes are forwarded to the currently displayed command
+- Useful for monitoring multiple commands as they start and stop, or for long-running sessions where you want the display to persist
+
+> **Tip:** Combine with `--tabs` to add a tab bar at the bottom of the display for quick command switching (see below).
+
+### `--no-display`
+
+Explicitly disables the local terminal display, overriding any configuration file settings:
+
+```bash
+# Force headless even if config sets display.enabled: true
+vrl --no-display -- cargo test
+```
+
+- Disables terminal output regardless of `display.enabled` in the config file
+- Useful in scripts and CI pipelines to ensure clean output
+- CLI flags always take precedence over config, but `--no-display` makes the intent explicit
+
+### `--tabs`
+
+Shows a tab bar at the bottom of the display and enables monitor mode behavior:
+
+```bash
+# Tab bar with monitor mode
+vrl --tabs --display-all -- cargo test
+
+# Tab bar implies display-all, so this is equivalent
+vrl --tabs -- cargo test
+
+# With mouse support for tab clicking
+vrl --tabs --mouse -- cargo test
+```
+
+- Renders a tab bar at the bottom of the terminal showing all running commands
+- Click tabs (with `--mouse`) or use `Ctrl+Right`/`Ctrl+Left` to switch between commands
+- **Implies `--display-all` behavior** — the display stays open in monitor mode
+- The tab bar updates dynamically as commands start and stop
+- Useful when running multiple commands and wanting to quickly switch between them
+
+### Comparison Examples
+
+The following examples demonstrate the practical differences between the modes:
+
+```bash
+# Scenario 1: Build and immediately return to shell
+vrl --display -- cargo build --release
+# → Shows build output. When build finishes, display closes.
+# → vrl instance exits (no other commands running).
+
+# Scenario 2: Build and keep monitoring
+vrl --display-all -- cargo build --release
+# → Shows build output. When build finishes, display stays open.
+# → Shows "waiting for commands" until another command starts or instance is stopped.
+
+# Scenario 3: Build multiple targets with tab switching
+cargo build --release & cargo test &
+vrl --tabs -- cargo build --release
+# → Shows tab bar. Switch between build and test output.
+# → Display stays open until all commands exit.
+
+# Scenario 4: Silent background with web UI only
+vrunner --port 3000 -- npm run dev
+# → No terminal output. Access via http://127.0.0.1:3000/admin.
+```
+
+### Interaction with `--retain-on-exit`
+
+The `--retain-on-exit` flag affects when the display and instance decide to exit:
+
+| Mode | Command exits without `--retain-on-exit` | Command exits with `--retain-on-exit` |
+|------|------------------------------------------|--------------------------------------|
+| `--display` | Display closes; instance continues if other commands exist | Display closes; instance continues (retained VTTY keeps it alive) |
+| `--display-all` | Display switches to next command, or shows "waiting" | Display switches to next command; retained VTTY keeps instance alive |
+| Headless | Instance continues if other commands exist | Instance continues (retained VTTY keeps it alive) |
+
+A retained command's VTTY is kept in memory and displayed as an exited entry in the command list. The instance will not exit while any retained commands exist, regardless of display mode.
 
 ---
 

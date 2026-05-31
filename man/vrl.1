@@ -11,28 +11,31 @@ vrl \- a virtual terminal runner
 [\fIOPTIONS\fR] [\fICOMMAND\fR] [\fIARGS\fR...]
 .br
 .B vrl
-\fBlist\fR [\fB\-\-target\fR \fIPID\fR]
+\fBlist\fR [\fB\-\-target\fR \fIPID\fR] [\fB\-\-interactive\fR]
 .br
 .B vrl
-\fBstop\fR [\fIPID\fR]
+\fBstop\fR [\fIPID\fR] [\fB\-\-interactive\fR]
 .br
 .B vrl
 \fBkeys\fR \fIPID\fR [\fB\-c\fR \fIID\fR] \fIKEYS\fR
 .br
 .B vrl
-\fBcat\fR \fIPID\fR [\fB\-c\fR \fIID\fR]
+\fBcat\fR \fIPID\fR [\fB\-c\fR \fIID\fR] [\fB\-\-interactive\fR]
 .br
 .B vrl
 \fBspawn\-in\fR \fIPID\fR \fICMD\fR [\fIARGS\fR...]
 .br
 .B vrl
-\fBfreeze\fR \fIPID\fR [\fB\-c\fR \fIID\fR]
+\fBfreeze\fR \fIPID\fR [\fB\-c\fR \fIID\fR] [\fB\-\-interactive\fR]
 .br
 .B vrl
-\fBthaw\fR \fIPID\fR [\fB\-c\fR \fIID\fR]
+\fBthaw\fR \fIPID\fR [\fB\-c\fR \fIID\fR] [\fB\-\-interactive\fR]
 .br
 .B vrl
-\fBresize\fR \fIPID\fR [\fB\-c\fR \fIID\fR] [\fB\-\-rows\fR \fIN\fR] [\fB\-\-cols\fR \fIN\fR]
+\fBresize\fR \fIPID\fR [\fB\-c\fR \fIID\fR] [\fB\-\-rows\fR \fIN\fR] [\fB\-\-cols\fR \fIN\fR] [\fB\-\-interactive\fR]
+.br
+.B vrl
+\fBkill\fR \fIPID\fR [\fB\-c\fR \fIID\fR] [\fB\-\-interactive\fR]
 .br
 .B vrl
 \fBconfig\-check\fR
@@ -54,36 +57,40 @@ When a command is given (e.g., \fBvrl htop\fR), vrl spawns it inside a virtual t
 These connect to already-running vrl instances via UDS:
 
 .TP
-.BR list " " [\fB\-\-target\fR \fIPID\fR]
-List running instances and their commands. Queries each instance live via UDS.
+.BR list " " [\fB\-\-target\fR \fIPID\fR] [\fB\-\-interactive\fR]
+List running instances and their commands. With \fB\-\-interactive\fR, presents a numbered list to select which instances to show.
 
 .TP
-.BR stop " " [\fIPID\fR]
-Stop a running instance by sending SIGTERM.
+.BR stop " " [\fIPID\fR] [\fB\-\-interactive\fR]
+Stop a running instance by sending SIGTERM. With \fB\-\-interactive\fR, presents a numbered list to select which instances to stop.
 
 .TP
 .BR keys " " \fIPID\fR [\fB\-c\fR \fIID\fR] \fIKEYS\fR
 Send keystrokes to a command. Use \fB<Enter>\fR, \fB<C\-c>\fR, \fB<Esc>\fR, etc. for special keys.
 
 .TP
-.BR cat " " \fIPID\fR [\fB\-c\fR \fIID\fR]
-Print the plain text output of a command's VTTY buffer.
+.BR cat " " \fIPID\fR [\fB\-c\fR \fIID\fR] [\fB\-\-interactive\fR]
+Print the plain text output of a command's VTTY buffer. With \fB\-\-interactive\fR, presents a numbered list of commands to select.
 
 .TP
 .BR spawn\-in " " \fIPID\fR \fICMD\fR [\fIARGS\fR...]
 Spawn a new command inside a running instance.
 
 .TP
-.BR freeze " " \fIPID\fR [\fB\-c\fR \fIID\fR]
-Suspend a command (SIGSTOP).
+.BR freeze " " \fIPID\fR [\fB\-c\fR \fIID\fR] [\fB\-\-interactive\fR]
+Suspend a command (SIGSTOP). With \fB\-\-interactive\fR, presents a numbered list to select which commands to freeze.
 
 .TP
-.BR thaw " " \fIPID\fR [\fB\-c\fR \fIID\fR]
-Resume a suspended command (SIGCONT).
+.BR thaw " " \fIPID\fR [\fB\-c\fR \fIID\fR] [\fB\-\-interactive\fR]
+Resume a suspended command (SIGCONT). With \fB\-\-interactive\fR, presents a numbered list to select which commands to thaw.
 
 .TP
-.BR resize " " \fIPID\fR [\fB\-c\fR \fIID\fR] [\fB\-\-rows N\fR] [\fB\-\-cols N\fR]
-Resize a command's VTTY dimensions.
+.BR resize " " \fIPID\fR [\fB\-c\fR \fIID\fR] [\fB\-\-rows N\fR] [\fB\-\-cols N\fR] [\fB\-\-interactive\fR]
+Resize a command's VTTY dimensions. With \fB\-\-interactive\fR, presents a numbered list to select which commands to resize.
+
+.TP
+.BR kill " " \fIPID\fR [\fB\-c\fR \fIID\fR] [\fB\-\-interactive\fR]
+Kill a single command inside an instance. With \fB\-\-interactive\fR, presents a numbered list to select which commands to kill.
 
 .TP
 .BR config\-check
@@ -189,4 +196,9 @@ Local configuration file (overrides user config).
 .BR vrl\-list (1),
 .BR vrl\-stop (1),
 .BR vrl\-keys (1),
-.BR vrl\-spawn\-in (1)
+.BR vrl\-cat (1),
+.BR vrl\-spawn\-in (1),
+.BR vrl\-freeze (1),
+.BR vrl\-thaw (1),
+.BR vrl\-resize (1),
+.BR vrl\-kill (1)

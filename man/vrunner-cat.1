@@ -11,7 +11,7 @@ vrunner cat \- print the VTTY buffer of a running command
 
 .SH SYNOPSIS
 .B vrunner cat
-[\fITARGET\fR] [\fB\-\-color-always\fR]
+[\fITARGET\fR] [\fB\-\-color-always\fR] [\fB\-\-interactive\fR]
 
 .SH DESCRIPTION
 Prints the virtual terminal (VTTY) buffer of a running command to stdout. By default, the output is plain text with all ANSI escape sequences stripped, making it safe for piping into \fBgrep\fR(1), \fBawk\fR(1), \fBless\fR(1), or redirecting to a file.
@@ -29,6 +29,12 @@ Preserve ANSI color escape sequences in the output. When set, the buffer is rend
 .TP
 .BR \-h ", " \-\-help
 Print help information and exit.
+
+.TP
+.BR \-\-interactive
+Present a numbered list of commands and let the user select
+which ones to cat by typing space-separated numbers (e.g. "1 3 5").
+Requires a terminal (stdin must be a TTY).
 
 .SH TARGET SELECTION
 
