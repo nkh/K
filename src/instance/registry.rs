@@ -3,6 +3,9 @@ use serde_json;
 use std::fs;
 use std::path::PathBuf;
 
+#[cfg(feature = "vrunner")]
+use sysinfo::{ProcessExt, SystemExt};
+
 use super::info::InstanceInfo;
 use crate::config::schema::Config;
 
@@ -115,7 +118,7 @@ impl InstanceRegistry {
 
     #[cfg(feature = "vrunner")]
     fn list_instances_sysinfo(&self) -> Vec<InstanceInfo> {
-        let mut system = sysinfo::System::new_all();
+        let mut system = sysinfo::System::new();
         system.refresh_all();
 
         let mut instances = Vec::new();
@@ -156,6 +159,7 @@ impl InstanceRegistry {
     }
 
     /// Check if a PID is alive and belongs to our process.
+    #[cfg(not(feature = "vrunner"))]
     fn is_pid_alive(pid: u32) -> bool {
         #[cfg(target_os = "linux")]
         {

@@ -92,6 +92,9 @@ pub struct PartialConfig {
     #[cfg(feature = "vrunner")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tls: Option<TlsConfig>,
+    #[cfg(feature = "vrunner")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub certificates: Option<CertificatesConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vtty: Option<VttyConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

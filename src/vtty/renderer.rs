@@ -297,6 +297,79 @@ impl VttyRenderer {
             .join("\n")
     }
 
+    /// Render buffer as a PNG image.
+    #[cfg(feature = "vrunner")]
+    pub fn to_png(buffer: &Buffer, font_size: f32, font_path: Option<&str>) -> anyhow::Result<Vec<u8>> {
+        let font = match font_path {
+            Some(path) => {
+                let data = std::fs::read(path)?;
+                fontdue::Font::from_bytes(data, fontdue::FontSettings::default())
+                    .map_err(|e| anyhow::anyhow!("{}", e))?
+            }
+            None => {
+                // Use IBM Plex Mono bundled as a static asset
+                fontdue::Font::from_bytes(
+                    include_bytes!("../../assets/IBM_Plex_Mono-Regular.ttf") as &[u8],
+                    fontdue::FontSettings::default(),
+                )
+                .map_err(|e| anyhow::anyhow!("{}", e))?
+            }
+        };
+
+        let cell_w = font_size * 0.6;
+        let cell_h = font_size;
+        let cols = buffer.width;
+        let rows = buffer.rows.len();
+
+        let img_w = (cols as f32 * cell_w).ceil() as u32;
+        let img_h = (rows as f32 * cell_h).ceil() as u32;
+
+        let mut img = image::ImageBuffer::new(img_w, img_h);
+        // Fill background with dark terminal color
+        let bg = image::Rgb([18, 18, 18]);
+        for pixel in img.pixels_mut() {
+            *pixel = bg;
+        }
+
+        for (row_idx, row) in buffer.rows.iter().enumerate().take(rows) {
+            for (col_idx, cell) in row.iter().enumerate().take(cols) {
+                let ch = if cell.width == 0 || cell.is_empty() { ' ' } else { cell.ch };
+                let fg = if cell.reverse { cell.bg } else { cell.fg };
+
+                // Rasterize glyph
+                let (metrics, bitmap) = font.rasterize(
+                    ch,
+                    font_size,
+                );
+
+                let x0 = (col_idx as f32 * cell_w) as i32;
+                let y0 = (row_idx as f32 * cell_h) as i32;
+
+                for glyph_y in 0..metrics.height as i32 {
+                    for glyph_x in 0..metrics.width as i32 {
+                        let px = x0 + glyph_x + metrics.xmin;
+                        let py = y0 + glyph_y + metrics.ymin;
+                        if px < 0 || py < 0 || (px as u32) >= img_w || (py as u32) >= img_h {
+                            continue;
+                        }
+                        let idx = (glyph_y * metrics.width as i32 + glyph_x) as usize;
+                        let coverage = if idx < bitmap.len() { bitmap[idx] as f32 / 255.0 } else { 0.0 };
+                        let alpha = coverage;
+                        let inv_alpha = 1.0 - alpha;
+                        let img_px = img.get_pixel_mut(px as u32, py as u32);
+                        img_px[0] = (fg[0] as f32 * alpha + img_px[0] as f32 * inv_alpha) as u8;
+                        img_px[1] = (fg[1] as f32 * alpha + img_px[1] as f32 * inv_alpha) as u8;
+                        img_px[2] = (fg[2] as f32 * alpha + img_px[2] as f32 * inv_alpha) as u8;
+                    }
+                }
+            }
+        }
+
+        let mut buf = Vec::new();
+        img.write_to(&mut std::io::Cursor::new(&mut buf), image::ImageFormat::Png)?;
+        Ok(buf)
+    }
+
     /// Get a range of lines as plain text.
     pub fn lines_plain(buffer: &Buffer, start: usize, count: usize) -> Vec<String> {
         buffer

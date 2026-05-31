@@ -25,6 +25,16 @@ pub fn merge_configs(global: Config, local: Config) -> Config {
             local.templates
         },
         profiles: merge_profiles(global.profiles, local.profiles),
+        #[cfg(feature = "vrunner")]
+        server: local.server,
+        #[cfg(feature = "vrunner")]
+        security: local.security,
+        #[cfg(feature = "vrunner")]
+        tls: local.tls,
+        #[cfg(feature = "vrunner")]
+        certificates: local.certificates,
+        #[cfg(feature = "vrunner")]
+        web: local.web,
     }
 }
 
@@ -63,6 +73,16 @@ pub fn apply_profile(base: Config, profile: &PartialConfig) -> Config {
         hooks: profile.hooks.clone().unwrap_or(base.hooks),
         templates: profile.templates.clone().unwrap_or(base.templates),
         profiles: base.profiles,
+        #[cfg(feature = "vrunner")]
+        server: profile.server.clone().unwrap_or(base.server),
+        #[cfg(feature = "vrunner")]
+        security: profile.security.clone().unwrap_or(base.security),
+        #[cfg(feature = "vrunner")]
+        tls: profile.tls.clone().unwrap_or(base.tls),
+        #[cfg(feature = "vrunner")]
+        certificates: profile.certificates.clone().unwrap_or(base.certificates),
+        #[cfg(feature = "vrunner")]
+        web: profile.web.clone().unwrap_or(base.web),
     }
 }
 

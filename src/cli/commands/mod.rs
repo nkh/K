@@ -23,6 +23,7 @@ pub mod spawn;
 // Re-export shared handlers
 pub use common::c;
 pub use config::handle_config_check_command;
+#[cfg(not(feature = "vrunner"))]
 pub use ipc::{
     handle_cat_command, handle_freeze_command, handle_kill_command, handle_keys_command,
     handle_resize_command, handle_spawn_in_command, handle_thaw_command, verify_instance,
@@ -45,7 +46,7 @@ pub use list::{handle_list_commands_command, handle_list_vrunner_command};
 #[cfg(feature = "vrunner")]
 pub use purge::handle_purge_command;
 #[cfg(feature = "vrunner")]
-pub use resize::{handle_resize_by_pid, handle_resize_command, resize_command_by_id};
+pub use resize::{handle_resize_by_pid, resize_command_by_id};
 #[cfg(feature = "vrunner")]
 pub use screenshot::handle_screenshot_command;
 #[cfg(feature = "vrunner")]

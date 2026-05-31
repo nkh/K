@@ -211,10 +211,8 @@ async fn async_main(cli: Cli) -> Result<()> {
         return Ok(());
     }
 
-    if cli.port.is_none() {
-        if try_client_mode(&cli).await? {
-            return Ok(());
-        }
+    if cli.port.is_none() && try_client_mode(&cli).await? {
+        return Ok(());
     }
 
     let mut cfg = dispatch::resolve_config(&cli)?;
@@ -325,9 +323,8 @@ async fn async_main(cli: Cli) -> Result<()> {
         )
         .await;
     } else if let Some(ref id) = spawned_id {
-        wait_for_child(&manager, id).await;
-        let mut rx = shutdown_tx.subscribe();
-        let _ = rx.recv().await;
+        let rx = shutdown_tx.subscribe();
+        wait_for_child(&manager, id, rx).await;
     } else {
         let mut rx = shutdown_tx.subscribe();
         let _ = rx.recv().await;

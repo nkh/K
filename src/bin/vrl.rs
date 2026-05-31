@@ -1,3 +1,6 @@
+#![cfg(not(feature = "vrunner"))]
+#![allow(dead_code, unused_imports)]
+
 use anyhow::Result;
 use std::sync::Arc;
 

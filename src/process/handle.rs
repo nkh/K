@@ -133,6 +133,14 @@ impl CommandHandle {
         crate::vtty::renderer::VttyRenderer::to_html(&buf)
     }
 
+    /// Render VTTY buffer as a PNG image (vrunner only).
+    #[cfg(feature = "vrunner")]
+    pub async fn vtty_png(&self, font_size: f32, font_path: Option<&str>) -> anyhow::Result<Vec<u8>> {
+        let emu = self.emulator.read().await;
+        let buf = emu.snapshot();
+        crate::vtty::renderer::VttyRenderer::to_png(&buf, font_size, font_path)
+    }
+
     /// Get the VTTY buffer as HTML including scrollback lines.
     ///
     /// `scrollback_offset` shifts the viewport backward (0 = normal bottom).
