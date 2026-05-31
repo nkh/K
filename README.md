@@ -71,6 +71,9 @@ vrl -- htop
 # Run with local terminal display
 vrl --display -- htop
 
+# Keep display open after command exits (monitor mode)
+vrl --display-all -- npm run dev
+
 # Send initial keystrokes and retain buffer after exit
 vrl --retain-on-exit --send-keys "ls<Enter>" -- bash
 
@@ -79,6 +82,15 @@ vrl --daemon -- npm run dev
 
 # List running instances
 vrl list
+
+# Interactively select an instance to inspect
+vrl list --interactive
+
+# Freeze a command (interactive selection)
+vrl freeze --interactive
+
+# Cat a command's output (interactive selection)
+vrl cat --interactive
 
 # Stop an instance
 vrl stop <pid>
@@ -103,6 +115,11 @@ vrunner spawn htop
 curl -X POST http://127.0.0.1:9090/api/commands \
   -H "Content-Type: application/json" \
   -d '{"cmd": "htop", "args": []}'
+
+# Interactive selection for freeze/thaw/resize/cat/screenshot
+vrunner freeze --interactive
+vrunner cat --interactive
+vrunner screenshot --interactive
 
 # Enable TLS and remote access
 vrunner --remote --tls -- my-command
@@ -168,7 +185,7 @@ Documentation is organized using the [Diataxis framework](https://diataxis.fr/) 
 | Document | Description |
 |----------|-------------|
 | [FAQ](docs/faq.md) | Frequently asked questions |
-| [User Manual](MANUAL.md) | Comprehensive all-in-one reference |
+| [User Manual](MANUAL.md) | Comprehensive all-in-one reference (includes [Display Modes](MANUAL.md#210-display-modes)) |
 | [docs/examples/](docs/examples/) | Complete example configuration files |
 | [man/vrl.1](man/vrl.1) | vrl Unix manpage |
 | [man/vrunner.1](man/vrunner.1) | vrunner Unix manpage |
