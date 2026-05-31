@@ -100,6 +100,13 @@ impl TerminalDisplay {
             let visible_len = render_cols.min(row.len());
 
             for cell in &row[..visible_len] {
+                // Skip wide-char continuation cells (width=0) — the lead
+                // character already occupies both columns visually, so
+                // emitting anything here would shift subsequent content.
+                if cell.width == 0 {
+                    continue;
+                }
+
                 // Fast path: cell is fully default AND we are already in
                 // the default terminal state — no SGR needed at all.
                 if cell == &DEFAULT_CELL

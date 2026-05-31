@@ -1003,7 +1003,7 @@ impl VttyEmulator {
         let buf = self.buffer.read();
         buf.rows
             .iter()
-            .map(|row| row.iter().map(|c| c.ch).collect::<String>())
+            .map(|row| row.iter().filter(|c| c.width > 0).map(|c| c.ch).collect::<String>())
             .collect::<Vec<_>>()
             .join("\n")
     }
@@ -1019,6 +1019,11 @@ impl VttyEmulator {
 
         for row in &buf.rows {
             for cell in row {
+                // Skip wide-char continuation cells (width=0).
+                if cell.width == 0 {
+                    continue;
+                }
+
                 let mut codes = Vec::new();
                 if cell.bold != last_bold {
                     if cell.bold {
@@ -1069,7 +1074,7 @@ impl VttyEmulator {
         let end = (start + row_count).min(buf.rows.len());
         buf.rows[start..end]
             .iter()
-            .map(|row| row.iter().map(|c| c.ch).collect::<String>())
+            .map(|row| row.iter().filter(|c| c.width > 0).map(|c| c.ch).collect::<String>())
             .collect::<Vec<_>>()
             .join("\n")
     }

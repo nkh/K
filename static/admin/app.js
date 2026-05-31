@@ -2010,8 +2010,12 @@ function buildCellGrid(cmdId, pre, rows, cols) {
             // Server uses RLE: a single span may contain multiple characters.
             // Expand into per-cell entries for the cell grid.
             const text = child.textContent;
-            for (let i = 0; i < text.length; i++) {
-                currentRow.push({ span: child, idx: i, len: text.length });
+            // Use Array.from to iterate code points, not UTF-16 code units.
+            // Supplementary-plane emoji (e.g. 😊) are 2 UTF-16 code units
+            // but 1 terminal cell; indexing by code unit breaks the grid.
+            const chars = Array.from(text);
+            for (let i = 0; i < chars.length; i++) {
+                currentRow.push({ span: child, idx: i, len: chars.length });
             }
         }
     }
@@ -2091,11 +2095,13 @@ function _splitAndUpdateCell(cg, row, col, diff) {
     const idx = entry.idx;
     const text = span.textContent;
     const origStyle = span.getAttribute('style') || '';
+    // Use Array.from for code point-aware splitting
+    const chars = Array.from(text);
 
     // Characters before the target
-    const before = text.substring(0, idx);
+    const before = chars.slice(0, idx).join('');
     // Characters after the target
-    const after = text.substring(idx + 1);
+    const after = chars.slice(idx + 1).join('');
 
     // Create "after" span if there are trailing characters
     if (after.length > 0) {

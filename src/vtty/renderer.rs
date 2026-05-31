@@ -33,6 +33,11 @@ impl VttyRenderer {
 
         for row in &buffer.rows {
             for cell in row {
+                // Skip wide-char continuation cells (width=0).
+                if cell.width == 0 {
+                    continue;
+                }
+
                 let mut codes = Vec::new();
 
                 if cell.bold != last_bold {
@@ -292,7 +297,7 @@ impl VttyRenderer {
         buffer
             .rows
             .iter()
-            .map(|row| row.iter().map(|c| c.ch).collect::<String>())
+            .map(|row| row.iter().filter(|c| c.width > 0).map(|c| c.ch).collect::<String>())
             .collect::<Vec<_>>()
             .join("\n")
     }
@@ -377,7 +382,7 @@ impl VttyRenderer {
             .iter()
             .skip(start)
             .take(count)
-            .map(|row| row.iter().map(|c| c.ch).collect::<String>())
+            .map(|row| row.iter().filter(|c| c.width > 0).map(|c| c.ch).collect::<String>())
             .collect()
     }
 
@@ -389,7 +394,7 @@ impl VttyRenderer {
             .chain(buffer.rows.iter())
             .skip(start)
             .take(count)
-            .map(|row| row.iter().map(|c| c.ch).collect::<String>())
+            .map(|row| row.iter().filter(|c| c.width > 0).map(|c| c.ch).collect::<String>())
             .collect();
         all_lines
     }
@@ -579,6 +584,69 @@ mod tests {
         assert!(lines[0].contains('A'));
         assert!(lines[1].contains('B'));
         assert_eq!(lines[2], "", "trailing newline should produce empty final entry");
+    }
+
+    // ─── UTF-8 wide-char plain/ANSI tests ───
+
+    #[test]
+    fn test_to_plain_skips_continuation_cells() {
+        // Wide char (width=2) + continuation (width=0) + trailing char.
+        // to_plain must skip the continuation cell to preserve alignment.
+        let mut buf = Buffer::new(5, 1, 100);
+        buf.rows[0][1].ch = '你';
+        buf.rows[0][1].width = 2;
+        buf.rows[0][2].ch = ' '; // continuation placeholder
+        buf.rows[0][2].width = 0;
+        buf.rows[0][3].ch = 'X';
+        let text = VttyRenderer::to_plain(&buf);
+        // The continuation cell must NOT appear as a visible space
+        assert!(!text.contains("  X"), "continuation cell should not produce visible space");
+        assert!(text.contains("你"));
+        assert!(text.contains("X"));
+    }
+
+    #[test]
+    fn test_to_ansi_skips_continuation_cells() {
+        // Same as above but for ANSI output.
+        let mut buf = Buffer::new(5, 1, 100);
+        buf.rows[0][1].ch = '你';
+        buf.rows[0][1].width = 2;
+        buf.rows[0][2].ch = ' '; // continuation
+        buf.rows[0][2].width = 0;
+        buf.rows[0][3].ch = 'Q';
+        let ansi = VttyRenderer::to_ansi(&buf);
+        // The continuation cell should not produce any output at all
+        // Count non-escape characters to verify correct count
+        let visible: String = ansi.chars().filter(|c| *c != '\x1b' && *c != '\n').collect();
+        // Should have: ' '(col0) + '你'(col1) + 'Q'(col3) = 3 visible chars
+        // (col2 continuation is skipped)
+        assert!(visible.contains('你'), "wide char should be in ANSI output");
+        assert!(visible.contains('Q'), "trailing char should be in ANSI output");
+    }
+
+    #[test]
+    fn test_to_plain_multiple_wide_chars() {
+        // Multiple wide chars on one row: "你 好" (two CJK chars with space between)
+        // Columns: 0=你(w2), 1=cont(w0), 2=space(w1), 3=好(w2), 4=cont(w0)
+        let mut buf = Buffer::new(5, 1, 100);
+        buf.rows[0][0].ch = '你';
+        buf.rows[0][0].width = 2;
+        buf.rows[0][1].ch = ' ';
+        buf.rows[0][1].width = 0;
+        buf.rows[0][2].ch = ' ';
+        buf.rows[0][2].width = 1;
+        buf.rows[0][3].ch = '好';
+        buf.rows[0][3].width = 2;
+        buf.rows[0][4].ch = ' ';
+        buf.rows[0][4].width = 0;
+        let text = VttyRenderer::to_plain(&buf);
+        // Should have: 你 + space + 好 (no continuation spaces)
+        assert!(text.contains('你'));
+        assert!(text.contains('好'));
+        // Only one space between them (col 2)
+        let chars: Vec<char> = text.chars().filter(|c| !c.is_whitespace() || *c == ' ').collect();
+        let space_count = chars.iter().filter(|c| **c == ' ').count();
+        assert_eq!(space_count, 1, "should have exactly 1 visible space between two wide chars");
     }
 
     // ─── Performance benchmarks ───
