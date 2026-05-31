@@ -22,7 +22,7 @@ path = "src/bin/vrunner.rs"
 required-features = ["vrunner"]
 
 [features]
-default = ["vrl"]
+default = []
 vrl = []
 vrunner = [
     "dep:axum",
