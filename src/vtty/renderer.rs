@@ -1,4 +1,5 @@
 use super::buffer::Buffer;
+#[cfg(feature = "png")]
 use image::RgbaImage;
 
 /// Format an RGB triplet as a hex color string: "#RRGGBB".
@@ -323,6 +324,7 @@ impl VttyRenderer {
     }
 
     /// Render the buffer as a PNG image using a TrueType/OpenType font.
+    #[cfg(feature = "png")]
     ///
     /// `font_size`: pixel height for each character cell (default 14).
     /// `font_path`: path to a TTF/OTF font file.  When `None`, the renderer
@@ -467,8 +469,9 @@ impl VttyRenderer {
     }
 }
 
-// ─── PNG helper functions ───
+// ─── PNG helper functions (only compiled when `png` feature is enabled) ───
 
+#[cfg(feature = "png")]
 const DEFAULT_FONT_PATHS: &[&str] = &[
     "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
@@ -476,6 +479,7 @@ const DEFAULT_FONT_PATHS: &[&str] = &[
     "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
 ];
 
+#[cfg(feature = "png")]
 fn find_default_font() -> Option<&'static str> {
     DEFAULT_FONT_PATHS
         .iter()
@@ -484,6 +488,7 @@ fn find_default_font() -> Option<&'static str> {
 }
 
 /// Known font style keywords used to match TTC collection faces by filename.
+#[cfg(feature = "png")]
 const FONT_STYLE_KEYWORDS: &[&str] = &[
     "thin",
     "extralight",
@@ -507,6 +512,7 @@ const FONT_STYLE_KEYWORDS: &[&str] = &[
 /// which is not what the user expects when they specify e.g.
 /// `SGr-IosevkaTerm-Medium.ttc`. This function scans the filename for known
 /// style keywords and returns the matched keyword in lowercase.
+#[cfg(feature = "png")]
 fn extract_style_hint(path: &str) -> Option<String> {
     let filename = std::path::Path::new(path).file_stem()?.to_str()?;
     for part in filename.rsplit('-') {
@@ -532,6 +538,7 @@ fn extract_style_hint(path: &str) -> Option<String> {
 /// This function detects TTC files by their magic bytes (`ttcf`) and iterates
 /// through collection indices, matching each face's name against a style hint
 /// extracted from the filename. Falls back to index 0 if no match is found.
+#[cfg(feature = "png")]
 fn load_font(data: &[u8], path: &str) -> Result<fontdue::Font, String> {
     let is_ttc = data.len() > 12 && &data[0..4] == b"ttcf";
 
@@ -575,10 +582,12 @@ fn load_font(data: &[u8], path: &str) -> Result<fontdue::Font, String> {
     })
 }
 
+#[cfg(feature = "png")]
 use super::cell::Cell;
 
 #[allow(clippy::too_many_arguments)]
 /// Blend a glyph bitmap onto the image with alpha compositing.
+#[cfg(feature = "png")]
 fn blend_glyph(
     img: &mut RgbaImage,
     bitmap: &[u8],
@@ -613,6 +622,7 @@ fn blend_glyph(
 
 #[allow(clippy::too_many_arguments)]
 /// Render underline and/or strikethrough decorations for a cell.
+#[cfg(feature = "png")]
 fn render_deco(
     img: &mut RgbaImage,
     cell: &Cell,

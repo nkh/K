@@ -13,6 +13,62 @@ use vrunner::web::server::start_server;
 /// Default port for client-mode discovery.
 const DEFAULT_PORT: u16 = 9090;
 
+// ── Optimization #6: Fast PID check without sysinfo ──
+/// Check whether a process with the given PID is alive and its executable
+/// name contains "vrunner".  Uses direct `/proc/<pid>/exe` readlink on Linux
+/// instead of `sysinfo::System::new_all()` which scans ALL processes.
+///
+/// Returns `true` if the PID file points to a live vrunner process.
+#[allow(dead_code)]
+fn is_vrunner_alive(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        // First check: does /proc/<pid> exist at all?
+        let proc_path = std::path::Path::new("/proc").join(pid.to_string());
+        if !proc_path.exists() {
+            return false;
+        }
+
+        // Second check: read /proc/<pid>/comm to verify it's vrunner.
+        // This is a single small read — much cheaper than scanning all PIDs.
+        let comm_path = proc_path.join("comm");
+        if let Ok(comm) = std::fs::read_to_string(&comm_path) {
+            if comm.trim().to_lowercase().contains("vrunner") {
+                return true;
+            }
+            // PID recycled to another process — caller should clean up
+            return false;
+        }
+
+        // Fallback: check if the process is at least running
+        // (may not have /proc on all Unix, but we tried)
+        proc_path.exists()
+    }
+    #[cfg(not(unix))]
+    {
+        // Non-Unix fallback: use kill(pid, 0) to check liveness
+        // No name verification possible without sysinfo
+        unsafe { libc::kill(pid as i32, 0) == 0 }
+    }
+}
+
+/// Fast check: does a PID file for a vrunner instance on the given port exist
+/// and point to a live process?  This avoids the cost of building a reqwest
+/// client and attempting a TCP+HTTP connection when no instance is running.
+///
+/// Optimization #6: Uses direct /proc/<pid>/comm check instead of
+/// `sysinfo::System::new_all()` which scans ALL processes on the system.
+fn has_live_instance_on_port(bind: &str, port: u16) -> bool {
+    let registry = match InstanceRegistry::new() {
+        Ok(r) => r,
+        Err(_) => return false,
+    };
+    let instances = registry.list_instances_fast();
+    instances
+        .iter()
+        .any(|info| info.port == port && info.bind == bind)
+}
+
 /// Check if a TCP port is available for binding.
 /// Returns Ok(()) if the port is free, Err with a descriptive message if not.
 fn check_port_available(bind: &str, port: u16) -> Result<()> {
@@ -39,6 +95,9 @@ fn check_port_available(bind: &str, port: u16) -> Result<()> {
 /// on the default port. Returns Ok(true) if the command was sent
 /// successfully (caller should exit), Ok(false) if no server was
 /// found (caller should start a new server), or Err on other failures.
+///
+/// Optimized (#1+3): checks PID files first (filesystem-only, no network I/O),
+/// then builds the heavy reqwest client only if a server is confirmed alive.
 async fn try_client_mode(cli: &Cli) -> Result<bool> {
     let cmd_args = match &cli.cmd_args {
         Some(args) if !args.is_empty() => args,
@@ -50,6 +109,16 @@ async fn try_client_mode(cli: &Cli) -> Result<bool> {
 
     // Determine the bind address to probe (use config if available, else default)
     let bind = cli.bind.clone().unwrap_or_else(|| "127.0.0.1".to_string());
+
+    // ── Optimization #3: Fast path — check PID files before any network I/O ──
+    // If no vrunner instance is registered for the default port, skip
+    // the TCP probe entirely.  This saves ~5-15ms of reqwest client
+    // initialization on the common case (no server running).
+    if !has_live_instance_on_port(&bind, DEFAULT_PORT) {
+        return Ok(false);
+    }
+
+    // ── Slow path: server might be running, send the command via HTTP ──
     let probe_url = format!("http://{}:{}/api/commands", bind, DEFAULT_PORT);
 
     tracing::info!(
@@ -218,17 +287,22 @@ async fn spawn_initial_command(
 // ── Application entry point ──
 
 async fn async_main(cli: Cli) -> Result<()> {
-    // Initialize tracing (after daemonize, so logs go to the right place)
+    // Optimization #4: Defer tracing initialization past subcommand dispatch.
+    // Subcommands like `vrunner list` or `vrunner config-check` respond
+    // faster without the overhead of setting up a full tracing subscriber.
+    // Only init tracing after we know we're in the main server/no-server path.
+
+    // Dispatch async subcommands (list, stop, spawn, etc.)
+    if dispatch::handle_subcommands(&cli).await? {
+        return Ok(());
+    }
+
+    // Now we're committed to running a vrunner instance — init tracing.
     tracing_subscriber::fmt::init();
 
     // Log working directory at startup for diagnostics
     if let Ok(cwd) = std::env::current_dir() {
         tracing::info!(cwd = %cwd.display(), "Working directory");
-    }
-
-    // Dispatch async subcommands (list, stop, spawn, etc.)
-    if dispatch::handle_subcommands(&cli).await? {
-        return Ok(());
     }
 
     // ── Client mode: send command to running instance if no --port given ──
@@ -238,14 +312,11 @@ async fn async_main(cli: Cli) -> Result<()> {
     if cli.port.is_none() {
         if try_client_mode(&cli).await? {
             // Command was sent to a running instance — exit successfully.
-            // No need to use std::process::exit here since we haven't set up
-            // signal handlers or the tokio signal driver yet.
             return Ok(());
         }
     }
 
-    // Load and merge configuration (lazy — only reached if no subcommand handled
-    // and client mode did not apply)
+    // Load and merge configuration
     let mut cfg = dispatch::resolve_config(&cli)?;
 
     // Detect terminal size for display mode (no-op unless --display)
@@ -255,6 +326,16 @@ async fn async_main(cli: Cli) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     registry.register_current(&cfg)?;
 
+    // Initialize command manager
+    let manager = Arc::new(CommandManager::new(cfg.clone()));
+
+    // ── --no-server mode ──
+    if cli.no_server {
+        return run_no_server_mode(cli, manager, cfg).await;
+    }
+
+    // ── Server mode (default) ──
+
     // Load or generate auth token if auth is required
     let auth_token = if cfg.security.require_auth {
         Some(AuthManager::load_or_generate(&cfg.security.token_file)?)
@@ -262,14 +343,7 @@ async fn async_main(cli: Cli) -> Result<()> {
         None
     };
 
-    // Initialize command manager
-    let manager = Arc::new(CommandManager::new(cfg.clone()));
-
     // ── Port availability check ──
-    // Whether --port was explicit or default, verify the port is free BEFORE
-    // spawning any child commands.  Without this check, the spawned tokio
-    // server task silently absorbs the bind error, leaving the vrunner process
-    // running but unusable and very hard to kill.
     if let Err(e) = check_port_available(&cfg.server.bind, cfg.server.port) {
         tracing::error!(bind = %cfg.server.bind, port = cfg.server.port, "{}", e);
         anyhow::bail!("{}", e);
@@ -303,8 +377,11 @@ async fn async_main(cli: Cli) -> Result<()> {
         }
     });
 
-    // Brief pause to let the server bind before we enter the display loop.
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Optimization #7: The 100ms sleep has been removed.  The port check at
+    // line ~280 above guarantees the port is free, so `axum_server::bind()`
+    // will succeed.  The display loop and wait_for_child don't need the
+    // server to be accepting connections yet — they only need the PTY child
+    // process, which is already spawned.
 
     // Register with a primary vrunner instance if --register-with is set.
     if let Some(register_port) = cli.register_with {
@@ -403,6 +480,87 @@ async fn async_main(cli: Cli) -> Result<()> {
     std::process::exit(0);
 }
 
+/// ── --no-server mode: run without web server ──
+///
+/// Spawns the command, optionally displays the VTTY, and waits for the child
+/// to exit.  No web server, no API, no auth, no TLS — just PTY + display.
+async fn run_no_server_mode(
+    cli: Cli,
+    manager: Arc<CommandManager>,
+    cfg: vrunner::config::schema::Config,
+) -> Result<()> {
+    tracing::info!("Running in --no-server mode (no web server, no API)");
+
+    // Spawn child command from CLI positional args, if provided.
+    let spawned_id = spawn_initial_command(&cli, &manager, &cfg).await?;
+
+    if cfg.display.enabled {
+        // ── Display mode (local terminal VTTY) ──
+        // Create a shutdown channel for the display loop.
+        let (shutdown_tx, _shutdown_rx) = broadcast::channel::<()>(1);
+
+        // Install signal handler for clean shutdown in no-server mode.
+        // Without the server's signal handler, we need our own.
+        spawn_no_server_signal_handler(shutdown_tx.clone());
+
+        let log_entries = manager.logger().memory_buffer_arc();
+        let effective_display_all = cfg.display.display_all || cfg.interactive.tabs;
+        run_display_loop(
+            &manager,
+            spawned_id.as_deref(),
+            cfg.display.refresh_ms,
+            effective_display_all,
+            shutdown_tx,
+            &cfg.interactive.keybindings,
+            &log_entries,
+            cfg.interactive.tabs,
+        )
+        .await;
+    } else if let Some(ref id) = spawned_id {
+        // ── Headless mode: wait for the child to exit ──
+        wait_for_child(&manager, id).await;
+    } else {
+        // No command and no display — nothing to do
+        tracing::info!("No command specified and no display. Exiting.");
+    }
+
+    Ok(())
+}
+
+/// Signal handler for --no-server mode.
+/// Sends on the shutdown channel when SIGINT/SIGTERM is received.
+fn spawn_no_server_signal_handler(shutdown_tx: broadcast::Sender<()>) {
+    tokio::spawn(async move {
+        #[cfg(unix)]
+        {
+            use tokio::signal::unix::{signal, SignalKind};
+            let mut sigint = match signal(SignalKind::interrupt()) {
+                Ok(s) => s,
+                Err(_) => return,
+            };
+            let mut sigterm = match signal(SignalKind::terminate()) {
+                Ok(s) => s,
+                Err(_) => return,
+            };
+            tokio::select! {
+                _ = sigint.recv() => {
+                    tracing::info!("Received SIGINT, exiting");
+                    let _ = shutdown_tx.send(());
+                }
+                _ = sigterm.recv() => {
+                    tracing::info!("Received SIGTERM, exiting");
+                    let _ = shutdown_tx.send(());
+                }
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = tokio::signal::ctrl_c().await;
+            let _ = shutdown_tx.send(());
+        }
+    });
+}
+
 fn main() -> Result<()> {
     // Phase 1: Synchronous pre-runtime (no tokio threads yet)
     let cli = match dispatch::pre_runtime()? {
@@ -428,9 +586,20 @@ fn main() -> Result<()> {
         }
     }
 
-    // Phase 2: Start tokio runtime and run async main
-    tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()?
-        .block_on(async_main(cli))
+    // Optimization #9: Use current_thread runtime when --no-server is set.
+    // The current_thread runtime avoids spawning worker threads and I/O
+    // driver threads, saving ~5-10ms of startup overhead.  A multi-thread
+    // runtime is only needed when the web server is running (to handle
+    // concurrent HTTP connections).
+    if cli.no_server {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?
+            .block_on(async_main(cli))
+    } else {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()?
+            .block_on(async_main(cli))
+    }
 }

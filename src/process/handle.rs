@@ -171,6 +171,7 @@ impl CommandHandle {
     }
 
     /// Render the VTTY buffer as a PNG image using a TTF font.
+    #[cfg(feature = "png")]
     pub async fn vtty_png(
         &self,
         font_size: f32,

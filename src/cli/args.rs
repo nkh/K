@@ -58,6 +58,12 @@ pub struct Cli {
     #[arg(short = 'C', long, value_name = "NAME:CERT:KEY")]
     pub certificate: Option<Vec<String>>,
 
+    /// Run without starting the web server.
+    /// Only command execution and local terminal display are available.
+    /// All web UI, API, and HTTP-based subcommands are unavailable.
+    #[arg(long)]
+    pub no_server: bool,
+
     /// Run as a background daemon (Unix only)
     #[arg(short, long)]
     pub daemon: bool,
@@ -408,6 +414,19 @@ impl Cli {
             }
         }
 
+        // --no-server conflicts with flags that require a server
+        if self.no_server {
+            if self.remote {
+                anyhow::bail!("--no-server conflicts with --remote. Remote access requires the web server.");
+            }
+            if self.register_with.is_some() {
+                anyhow::bail!("--no-server conflicts with --register-with. Peer registration requires the web server.");
+            }
+            if self.auth {
+                anyhow::bail!("--no-server conflicts with --auth. Authentication is a server feature.");
+            }
+        }
+
         // Daemon
         if self.daemon {
             // --daemon detaches from the controlling terminal, making display
@@ -588,6 +607,32 @@ mod tests {
 
     fn default_config() -> Config {
         Config::default()
+    }
+
+    #[test]
+    fn no_server_conflicts_with_remote() {
+        let cli = Cli::try_parse_from(["vrunner", "--no-server", "--remote", "htop"]).unwrap();
+        let result = cli.apply_overrides(&mut default_config());
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("--no-server conflicts with --remote"),
+            "unexpected: {msg}"
+        );
+    }
+
+    #[test]
+    fn no_server_conflicts_with_register_with() {
+        let cli =
+            Cli::try_parse_from(["vrunner", "--no-server", "--register-with", "9091", "htop"])
+                .unwrap();
+        let result = cli.apply_overrides(&mut default_config());
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("--no-server conflicts with --register-with"),
+            "unexpected: {msg}"
+        );
     }
 
     #[test]

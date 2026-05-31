@@ -7,6 +7,10 @@ description = "A virtual terminal runner with web control plane"
 license = "GPL-3.0-or-later OR Artistic-2.0"
 repository = "https://github.com/nkh/K"
 
+[features]
+default = ["png"]
+png = ["image", "fontdue"]
+
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.7", features = ["macros", "ws"] }
@@ -31,7 +35,7 @@ portable-pty = "0.8"
 crossterm = "0.27"
 libc = "0.2"
 dirs = "5"
-sysinfo = "0.29"
+sysinfo = { version = "0.29", optional = true }
 async-trait = "0.1"
 rust-embed = { version = "8", features = ["axum", "mime-guess"] }
 dashmap = "5"
@@ -43,8 +47,8 @@ hex = "0.4"
 rand = "0.8"
 unicode-width = "0.2.2"
 regex = "1"
-image = { version = "0.25", default-features = false, features = ["png"] }
-fontdue = "0.9"
+image = { version = "0.25", default-features = false, features = ["png"], optional = true }
+fontdue = { version = "0.9", optional = true }
 urlencoding = "2"
 
 [dev-dependencies]

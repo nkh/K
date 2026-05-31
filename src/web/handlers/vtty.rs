@@ -270,6 +270,8 @@ pub async fn get_vtty_text(State(state): State<AppState>, Path(id): Path<String>
 /// - `font_size`: pixel height per character cell (default from config, clamped 6–48)
 /// - `font_name`: path to a TTF/OTF font file.  When omitted or "monospace", the server
 ///   searches common system paths for a monospace font.
+#[cfg(feature = "png")]
+#[cfg_attr(not(feature = "png"), allow(dead_code))]
 pub async fn get_vtty_png(
     State(state): State<AppState>,
     Path(id): Path<String>,

@@ -38,8 +38,9 @@ pub fn load_config(cli_path: Option<&str>) -> Result<Config> {
     }
 
     // Local config — try YAML first, then TOML
-    let local_yaml = std::env::current_dir()?.join("vrunner.yaml");
-    let local_toml = std::env::current_dir()?.join("vrunner.toml");
+    let cwd = std::env::current_dir()?;
+    let local_yaml = cwd.join("vrunner.yaml");
+    let local_toml = cwd.join("vrunner.toml");
     let mut local_path: Option<std::path::PathBuf> = None;
 
     if local_yaml.exists() {

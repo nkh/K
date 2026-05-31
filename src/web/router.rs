@@ -12,7 +12,7 @@ use crate::config::security::CorsConfig;
 
 pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
     // API routes — protected by auth middleware when auth is enabled
-    let api_routes = Router::new()
+    let mut api_routes = Router::new()
         .route(
             "/api/snapshot",
             get(handlers::commands::get_snapshot),
@@ -91,11 +91,15 @@ pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
         .route(
             "/api/commands/:id/vtty/text",
             get(handlers::vtty::get_vtty_text),
-        )
-        .route(
+        );
+    #[cfg(feature = "png")]
+    {
+        api_routes = api_routes.route(
             "/api/commands/:id/vtty/png",
             get(handlers::vtty::get_vtty_png),
-        )
+        );
+    }
+    api_routes = api_routes
         .route(
             "/api/commands/:id/resize",
             post(handlers::vtty::resize_vtty),
