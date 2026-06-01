@@ -133,8 +133,21 @@ async fn async_main(cli: Cli) -> Result<()> {
         return Ok(());
     }
 
-    if cli.port.is_none() && try_client_mode(&cli).await? {
-        return Ok(());
+    // Only try client mode for bare commands (no flags), matching the
+    // same heuristic used in handle_subcommands().  When any flags are
+    // present (e.g. --display, --daemon, --tabs), the user explicitly
+    // wants to start a new instance — not send the command to an
+    // existing one.  Without this guard, "vrw --display htop" would
+    // silently hand off to a running instance and skip the display loop.
+    if cli.port.is_none() {
+        let argc = std::env::args().count();
+        let bare_command = cli
+            .cmd_args
+            .as_ref()
+            .is_some_and(|args| !args.is_empty() && argc == 1 + args.len());
+        if bare_command && try_client_mode(&cli).await? {
+            return Ok(());
+        }
     }
 
     let mut cfg = dispatch::resolve_config(&cli)?;
