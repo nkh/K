@@ -8,6 +8,9 @@
 #
 set -euo pipefail
 
+# Ensure cargo is on PATH (git hooks run in a minimal environment)
+export PATH="${HOME}/.cargo/bin:${PATH}"
+
 FEATURES="vrc,vrw"
 RED='\033[0;31m'
 GREEN='\033[0;32m'
