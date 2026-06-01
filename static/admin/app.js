@@ -47,6 +47,12 @@ const state = {
     // Maps cmdId → { grid: [[span, ...], ...], rows: number, cols: number }
     // Built after each full HTML replacement; used by applyVttyDiff.
     _cellGrids: {},
+    // Cached DOM: maps cmdId → DocumentFragment holding the detached <pre> children.
+    // On switch-away, the <pre> subtree is moved into this cache so it can be
+    // re-attached instantly on switch-back without a full HTML fetch.
+    _cachedDomPre: {},
+    // Cached scroll position per command, restored on switch-back.
+    _cachedScrollPos: {},
     // Level 3: Flag indicating the client supports incremental diff.
     // Sent to server on WS connect so server knows to use vtty_diff.
     _level3Enabled: true,
@@ -1270,17 +1276,52 @@ async function loadCommands() {
     _buildSidebar();
 }
 
-/// Clear the terminal display and stale per-command state for the currently
-/// selected command.  Called before switching to a different command so that
-/// the old command's output does not linger on screen.
-function _clearTerminalForSwitch() {
+/// Cache the terminal display DOM for the currently selected command.
+/// Called before switching to a different command.  Moves the <pre> children
+/// into a detached DocumentFragment so they can be re-attached instantly on
+/// switch-back, avoiding a full HTML fetch when the command hasn't changed.
+function _cacheTerminalForSwitch() {
     const panel = getSelectedPanel();
     if (!panel) return;
-    const pre = panel.querySelector('.vtty-container pre');
-    if (pre) pre.innerHTML = '';
-    if (state.selectedCmdId) {
-        delete state._cellGrids[state.selectedCmdId];
-        delete state._lastGeneration[state.selectedCmdId];
+    const vttyEl = panel.querySelector('.vtty-container');
+    const pre = vttyEl ? vttyEl.querySelector('pre') : null;
+    const cmdId = state.selectedCmdId;
+    if (!pre || !cmdId) return;
+
+    // Detach all children into a DocumentFragment (preserves DOM nodes)
+    const frag = document.createDocumentFragment();
+    while (pre.firstChild) {
+        frag.appendChild(pre.firstChild);
+    }
+    state._cachedDomPre[cmdId] = frag;
+    // Save scroll position for this command
+    if (vttyEl) {
+        state._cachedScrollPos[cmdId] = vttyEl.scrollTop;
+    }
+    // Keep _cellGrids and _lastGeneration — they are still valid for the cached DOM.
+}
+
+/// Restore a previously cached DOM tree into the <pre> element for instant display.
+/// Called from selectCommand() when switching to a command that was viewed before.
+/// The cached DOM is moved (not cloned) back into the document, and scroll position
+/// is restored.  After this, loadVttyHttp() checks generation — if unchanged, the
+/// cached DOM stays; if changed, the full HTML fetch replaces it.
+function _restoreCachedDom(cmdId) {
+    const frag = state._cachedDomPre[cmdId];
+    if (!frag) return;
+    const panel = getSelectedPanel();
+    if (!panel) return;
+    const vttyEl = panel.querySelector('.vtty-container');
+    const pre = vttyEl ? vttyEl.querySelector('pre') : null;
+    if (!pre) return;
+    // Move the cached DocumentFragment into the <pre> (O(1), no parsing)
+    pre.appendChild(frag);
+    delete state._cachedDomPre[cmdId];
+    // Restore scroll position
+    const savedScroll = state._cachedScrollPos[cmdId];
+    if (savedScroll !== undefined) {
+        vttyEl.scrollTop = savedScroll;
+        delete state._cachedScrollPos[cmdId];
     }
 }
 
@@ -1301,25 +1342,21 @@ function selectCommand(instUrl, cmdId, name) {
         sessionStorage.removeItem('vrw_scrollback_' + state.selectedCmdId);
     }
 
-    // Clear the terminal display immediately so the old command's output
-    // doesn't linger while the new VTTY content is being fetched.
-    // Only the active command should write to the terminal display.
-    // Disconnect WS first to prevent stale messages from overwriting the cleared terminal.
+    // Cache the current command's terminal DOM before switching away.
+    // This preserves the detached DOM subtree and cell grid so we can
+    // restore them instantly on switch-back without a full HTML fetch.
     disconnectVttyWs();
-    _clearTerminalForSwitch();
+    _cacheTerminalForSwitch();
 
     state.selectedInstUrl = instUrl;
     state.selectedCmdId = cmdId;
     // Clear any buffered update — we fetch fresh data below
     state._pendingVttyData = null;
     state._pendingVttyDirty = false;
-    // Invalidate the generation cache for the target command so loadVttyHttp
-    // always performs a full DOM update on switch.  Without this, switching
-    // back to a previously-viewed idle command (whose VTTY generation hasn't
-    // changed) causes loadVttyHttp to skip the innerHTML write, leaving the
-    // terminal empty or showing stale content from a previous command.
-    delete state._lastGeneration[cmdId];
-    delete state._cellGrids[cmdId];
+    // Restore cached DOM from previous visit if available (instant display).
+    // Then loadVttyHttp will check generation — if unchanged, the cached
+    // DOM is kept; if changed, a full HTML fetch replaces it.
+    _restoreCachedDom(cmdId);
     state.bufferView = 'current';
     const globalBufferSel = document.getElementById('bufferSelect');
     if (globalBufferSel) globalBufferSel.value = 'current';
@@ -1337,7 +1374,7 @@ function selectCommand(instUrl, cmdId, name) {
     updatePanelCommandInfo();
     updateTerminalDisconnectedOverlay();
     updateSidebarSelection();
-    // Immediately load VTTY content via HTTP
+    // Fetch VTTY content — will skip DOM write if generation unchanged
     loadVttyHttp(instUrl, cmdId);
     // Start the active update mode (push or poll)
     startUpdateMode();
