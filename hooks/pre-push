@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+#
+# pre-push hook: enforces the verification sequence from
+# skills/senior-engineer-standards/SKILL.md Section 4.1
+#
+# This hook runs BEFORE every git push. It blocks the push if any step fails.
+# To bypass (emergency only), use: git push --no-verify
+#
+set -euo pipefail
+
+FEATURES="vrc,vrw"
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m'
+
+step_count=0
+pass=0
+fail=0
+
+step() {
+    step_count=$((step_count + 1))
+    echo ""
+    echo -e "${YELLOW}=== Step ${step_count}: $1 ===${NC}"
+    echo ""
+}
+
+ok() {
+    echo -e "${GREEN}PASS${NC}: $1"
+    pass=$((pass + 1))
+}
+
+fail_msg() {
+    echo -e "${RED}FAIL${NC}: $1"
+    fail=$((fail + 1))
+}
+
+echo "============================================"
+echo " Verification Gate (pre-push)"
+echo " Section 4.1: Complete Verification Sequence"
+echo "============================================"
+echo "Running on branch: $(git branch --show-current 2>/dev/null || echo 'detached')"
+echo "Features: ${FEATURES}"
+echo ""
+
+# Step 1: Build
+step "Build (cargo build --release --features \"${FEATURES}\")"
+if cargo build --release --features "${FEATURES}" 2>&1; then
+    ok "Build succeeded"
+else
+    fail_msg "Build failed. Fix before pushing."
+    exit 1
+fi
+
+# Step 2: Test
+step "Test (cargo test --features \"${FEATURES}\")"
+if cargo test --features "${FEATURES}" 2>&1; then
+    ok "All tests passed"
+else
+    fail_msg "Tests failed. Fix before pushing."
+    exit 1
+fi
+
+# Step 3: Clippy
+step "Lint (cargo clippy --features \"${FEATURES}\")"
+if cargo clippy --features "${FEATURES}" -- -D warnings 2>&1; then
+    ok "Clippy clean, zero warnings"
+else
+    fail_msg "Clippy warnings found. Fix before pushing."
+    exit 1
+fi
+
+# Step 4: Ignored/integration tests
+step "Comprehensive tests (cargo test --features \"${FEATURES}\" -- --ignored)"
+if cargo test --features "${FEATURES}" -- --ignored 2>&1; then
+    ok "All comprehensive tests passed"
+else
+    fail_msg "Comprehensive tests failed. Fix before pushing."
+    exit 1
+fi
+
+echo ""
+echo "============================================"
+echo -e "${GREEN}All ${step_count} verification steps passed.${NC}"
+echo "============================================"
+echo ""
+exit 0

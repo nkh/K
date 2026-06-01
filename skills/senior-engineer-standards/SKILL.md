@@ -238,6 +238,8 @@ Before claiming ANY work is done, execute this sequence IN ORDER:
 
 If ANY step fails, stop. Fix it. Re-run from step 1. Do NOT skip steps.
 
+**Enforcement:** This sequence is enforced by `hooks/pre-push`, which runs automatically before every `git push`. The push is blocked if any step fails. Install hooks after cloning: `bash scripts/install-hooks.sh`. Emergency bypass (not recommended): `git push --no-verify`.
+
 ### 4.2. Do NOT Claim Done Until Verified
 
 The following phrases are FORBIDDEN unless ALL verification steps above have passed:
