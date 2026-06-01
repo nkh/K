@@ -1531,10 +1531,12 @@ pub async fn run_display_loop(
                     let _ = TerminalDisplay::clear();
                     break 'outer;
                 } else {
-                    // Not in display_all (daemon) mode — exit immediately.
-                    tracing::info!("Direct CLI command exited; shutting down (commands remain)");
-                    let _ = TerminalDisplay::clear();
-                    break 'outer;
+                    // Direct child exited but other commands remain (e.g.
+                    // a restart spawned a replacement).  Switch to monitor
+                    // mode instead of exiting so the server stays alive.
+                    tracing::info!("Direct child exited but commands remain — entering monitor mode");
+                    active_id = None;
+                    exit_rx = None;
                 }
             }
 
@@ -1558,18 +1560,14 @@ pub async fn run_display_loop(
                         // (the CLI command) exited.  If a later-spawned
                         // command (via F12 / web UI) exited, switch to
                         // another running command instead.
-                        let is_direct_child = direct_child_owned.as_deref() == Some(id);
                         if manager.list().is_empty() {
                             // All commands gone — exit regardless of display_all
                             let _ = TerminalDisplay::clear();
                             break 'outer;
-                        } else if is_direct_child && !display_all {
-                            tracing::info!("Direct CLI command exited; shutting down (commands remain)");
-                            let _ = TerminalDisplay::clear();
-                            break 'outer;
                         } else {
-                            // Spawned command exited, or display_all mode —
-                            // switch to another running command.
+                            // Commands remain — switch to another running command.
+                            // This covers: restart replacement, F12-spawned
+                            // commands, and display_all mode.
                             tracing::info!("Active command exited; switching to another command");
                             let commands = manager.list();
                             if let Some((new_id, new_name, _, new_pid, _)) = commands.first() {

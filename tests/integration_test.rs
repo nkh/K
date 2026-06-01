@@ -173,3 +173,114 @@ fn test_key_encoding() {
         v
     });
 }
+
+/// Test that restarting a command (spawn replacement, kill old) leaves
+/// the manager non-empty. This validates the core logic used by the web UI
+/// restart button and `wait_for_child` — if the old command is killed
+/// but a replacement exists, the server must NOT shut down.
+#[cfg(feature = "vrunner")]
+#[tokio::test]
+async fn test_restart_keeps_manager_nonempty() {
+    let cfg = test_config();
+    let manager = Arc::new(CommandManager::new(cfg));
+
+    // Spawn initial command (simulates the CLI-spawned "direct child")
+    let old_id = manager
+        .spawn(
+            "sleep".to_string(),
+            vec!["60".to_string()],
+            None,
+            None,
+            std::collections::HashMap::new(),
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(manager.list().len(), 1, "should have exactly 1 command after spawn");
+    assert!(manager.get(&old_id).is_some(), "old command must be in manager");
+
+    // Simulate the restart handler: spawn replacement FIRST, then kill old.
+    // This matches web::handlers::commands::restart_command exactly.
+    let new_id = manager
+        .spawn(
+            "sleep".to_string(),
+            vec!["60".to_string()],
+            None,
+            None,
+            std::collections::HashMap::new(),
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+    // At this point both old and new are in the manager
+    assert_eq!(manager.list().len(), 2, "should have 2 commands before killing old");
+
+    // Kill the old command (the restart handler does this)
+    let _ = manager.kill(&old_id, None).await;
+
+    // Give the spawner task time to process the exit and remove the old command
+    sleep(Duration::from_millis(300)).await;
+
+    // The replacement must still be in the manager
+    let list = manager.list();
+    assert_eq!(list.len(), 1, "should have exactly 1 command after restart");
+    assert_eq!(list[0].0, new_id, "remaining command should be the replacement");
+    assert!(manager.get(&old_id).is_none(), "old command must be gone");
+    assert!(manager.get(&new_id).is_some(), "new command must still be present");
+
+    // Clean up
+    let _ = manager.kill(&new_id, None).await;
+}
+
+/// Test that restarting the LAST command still works — the replacement
+/// is spawned before the old is killed, so the manager is never empty.
+#[cfg(feature = "vrunner")]
+#[tokio::test]
+async fn test_restart_single_command() {
+    let cfg = test_config();
+    let manager = Arc::new(CommandManager::new(cfg));
+
+    let old_id = manager
+        .spawn(
+            "echo".to_string(),
+            vec!["hello".to_string()],
+            None,
+            None,
+            std::collections::HashMap::new(),
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+    // Spawn replacement before killing (same order as restart handler)
+    let new_id = manager
+        .spawn(
+            "sleep".to_string(),
+            vec!["60".to_string()],
+            None,
+            None,
+            std::collections::HashMap::new(),
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+    let _ = manager.kill(&old_id, None).await;
+    sleep(Duration::from_millis(300)).await;
+
+    let list = manager.list();
+    assert_eq!(list.len(), 1, "replacement should survive old command kill");
+    assert_ne!(list[0].0, old_id, "old ID should not be in list");
+
+    let _ = manager.kill(&new_id, None).await;
+}
