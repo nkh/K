@@ -898,6 +898,45 @@ mod tests {
         assert_eq!(args[2], "--release");
     }
 
+    #[test]
+    fn implicit_spawn_no_flags_argc_matches() {
+        // "vrw btop" → argc=2, cmd_args len=1 → 2 == 1+1 → implicit spawn
+        let cli = Cli::try_parse_from([BINARY_NAME, "btop"]).unwrap();
+        let cmd_args = cli.cmd_args.as_ref().unwrap();
+        assert_eq!(cmd_args.len(), 1);
+        // Verify argc would equal 1 + cmd_args.len()
+        assert_eq!(2, 1 + cmd_args.len());
+    }
+
+    #[test]
+    fn display_flag_prevents_implicit_spawn() {
+        // "vrw --display htop" → argc=3, cmd_args len=1 → 3 != 1+1 → startup
+        let cli = Cli::try_parse_from([BINARY_NAME, "--display", "htop"]).unwrap();
+        assert!(cli.display);
+        let cmd_args = cli.cmd_args.as_ref().unwrap();
+        assert_eq!(cmd_args.len(), 1);
+        // Verify argc would NOT equal 1 + cmd_args.len()
+        assert_ne!(3, 1 + cmd_args.len(), "flags present means argc > 1 + cmd_args.len()");
+    }
+
+    #[test]
+    fn daemon_flag_prevents_implicit_spawn() {
+        // "vrw --daemon htop" → argc=3, cmd_args len=1 → startup
+        let cli = Cli::try_parse_from([BINARY_NAME, "--daemon", "htop"]).unwrap();
+        assert!(cli.daemon);
+        let cmd_args = cli.cmd_args.as_ref().unwrap();
+        assert_ne!(3, 1 + cmd_args.len());
+    }
+
+    #[test]
+    fn multiple_flags_prevent_implicit_spawn() {
+        // "vrw --display --tabs --log htop" → argc=5, cmd_args len=1 → startup
+        let cli = Cli::try_parse_from([BINARY_NAME, "--display", "--tabs", "--log", "htop"]).unwrap();
+        let cmd_args = cli.cmd_args.as_ref().unwrap();
+        assert_eq!(cmd_args.len(), 1);
+        assert_ne!(5, 1 + cmd_args.len());
+    }
+
     // ── kill / stop-command alias tests ──
 
     #[cfg(feature = "vrw")]

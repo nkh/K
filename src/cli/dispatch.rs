@@ -485,13 +485,24 @@ pub async fn handle_subcommands(cli: &Cli) -> Result<bool> {
         }
         Some(Commands::Cert { .. }) | Some(Commands::ConfigCheck) | Some(Commands::Completions { .. }) => unreachable!(),
         None => {
-            // "vrw btop" is equivalent to "vrw spawn btop"
+            // "vrw btop" is equivalent to "vrw spawn btop" — but ONLY when
+            // no flags are present on the command line.  When the user passes
+            // any flags (e.g. `vrw --display htop`, `vrw --daemon htop`),
+            // they intend to start a new instance, not spawn into an existing one.
+            //
+            // We detect "no flags" by comparing raw argc with the number of
+            // positional cmd_args.  If argc > 1 + cmd_args.len(), flags exist.
             if let Some(ref cmd_args) = cli.cmd_args {
                 if !cmd_args.is_empty() {
-                    let cmd = &cmd_args[0];
-                    let args = &cmd_args[1..];
-                    subcommands::handle_spawn_command(cli, cmd, args, None, None).await?;
-                    return Ok(true);
+                    let argc = std::env::args().count();
+                    if argc == 1 + cmd_args.len() {
+                        // No flags → implicit spawn into running instance
+                        let cmd = &cmd_args[0];
+                        let args = &cmd_args[1..];
+                        subcommands::handle_spawn_command(cli, cmd, args, None, None).await?;
+                        return Ok(true);
+                    }
+                    // Flags present → let the caller start a new instance
                 }
             }
             Ok(false)
