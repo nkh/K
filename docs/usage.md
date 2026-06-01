@@ -1039,7 +1039,7 @@ curl -s -X POST http://127.0.0.1:9090/api/commands \
   }'
 ```
 
-When `--retain-on-exit` is set, the command stays in the manager after exiting (visible in the tab bar with an `[EXITED]` status). This prevents vrc from exiting even in `--display-all` mode — it waits until all retained commands are purged. When `--snapshot-on-exit` is set, the VTTY buffer (including scrollback) is saved to the specified file as plain text before the command is removed.
+When `--retain-on-exit` is set, the command stays in the manager after exiting (visible in the tab bar with an `[EXITED]` status). This prevents vrc from exiting even in `--display` mode — it waits until all retained commands are purged. When `--snapshot-on-exit` is set, the VTTY buffer (including scrollback) is saved to the specified file as plain text before the command is removed.
 
 ### Graceful Shutdown with Timeout
 
@@ -1481,10 +1481,11 @@ The interactive display mode provides a terminal-based UI for monitoring and con
 vrc --display -- htop
 
 # Stay active after the command exits, switching to other commands
-vrc --display-all -- htop
+# (--display now includes the old --display-all behavior)
+vrc --display -- htop
 
 # Show a tab bar listing all running commands
-vrc --tabs --display-all -- htop
+vrc --tabs --display -- htop
 ```
 
 ### Tab Bar
@@ -1499,8 +1500,8 @@ When the interactive display is active, you can use configurable keybindings to 
 
 | Shortcut | Action | Notes |
 |----------|--------|-------|
-| `Ctrl+Right` | Switch to next command | Requires `--display-all` and 2+ commands; wraps around |
-| `Ctrl+Left` | Switch to previous command | Requires `--display-all` and 2+ commands; wraps around |
+| `Ctrl+Right` | Switch to next command | Requires `--display` and 2+ commands; wraps around |
+| `Ctrl+Left` | Switch to previous command | Requires `--display` and 2+ commands; wraps around |
 | `Ctrl+L` | Toggle command log overlay | Shows recent log entries over the VTTY; press again to dismiss |
 | `F12` | Spawn a new command | Opens a prompt to type a command; Enter to confirm, Ctrl+C to cancel |
 | `Ctrl+H` | Show help overlay | Displays all keybindings; press any key to dismiss |
@@ -1650,6 +1651,15 @@ vrc --target 54321 stop-command 12345
 ```
 
 This is equivalent to calling `POST /api/commands/kill-pid/:pid` on the target instance.
+
+#### `kill` — Alias for stop-command
+
+`kill` is an alias for `stop-command`. Both stop a running command by PID.
+
+```bash
+vrc kill 12345
+vrc --target 54321 kill 12345
+```
 
 ---
 

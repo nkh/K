@@ -11,7 +11,7 @@ vrw\-stop \- gracefully shut down a running vrw instance
 
 .SH SYNOPSIS
 .B vrw
-\fBstop\fR [\fIPID\fR] [\fB\-\-interactive\fR]
+\fBstop\fR [\fIPID\fR] [\fB\-i\fR, \fB\-\-interactive\fR]
 
 .SH DESCRIPTION
 Gracefully shut down a running vrw instance by sending an HTTP \fBPOST /api/shutdown\fR request to its API. This allows the instance to clean up resources, kill all managed commands (using the configured exit timeout), flush logs, and exit cleanly. If no PID is given and exactly one instance is running, that instance is stopped automatically.
@@ -23,7 +23,7 @@ If the instance is unresponsive (e.g., frozen process, network issue, or stale r
 .SH OPTIONS
 
 .TP
-.BR \-\-interactive
+.BR \-i ", " \-\-interactive
 Present a numbered list of running instances and let the user select
 which ones to stop by typing space-separated numbers (e.g. "1 3 5").
 Requires a terminal (stdin must be a TTY).

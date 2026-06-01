@@ -81,7 +81,7 @@ Controls local terminal display of the VTTY output.
 | Key | Type | Default | CLI Flag | Description |
 |-----|------|---------|----------|-------------|
 | `enabled` | `bool` | `false` | `--display` / `--no-display` | Mirror VTTY output to the local terminal. |
-| `display_all` | `bool` | `false` | `--display-all` | Stay active after the initial CLI command exits, switching to the next available command. |
+| `display_all` | `bool` | `false` | `--display-all` *(deprecated)* | Stay active after the initial CLI command exits, switching to the next available command. Now implicitly set when `display.enabled = true` via `--display`. The `--display-all` flag is no longer needed. |
 | `refresh_ms` | `u64` | `100` | `--refresh-ms <MS>` | Display refresh interval in milliseconds. |
 
 **Example:**
@@ -322,7 +322,7 @@ vrc [OPTIONS] [-- <COMMAND> [ARGS...]]
 | Flag | Argument | Config Key | Description |
 |------|----------|------------|-------------|
 | `--display` | — | `display.enabled` → `true` | Show VTTY output on the local terminal. |
-| `--display-all` | — | `display.display_all` → `true` | Keep displaying after the initial CLI command exits. |
+| `--display-all` | — | *(deprecated)* | Equivalent to `--display`. Kept for backward compatibility; `--display` now includes this behavior. |
 | `--no-display` | — | `display.enabled` → `false` | Disable local terminal display. |
 | `--refresh-ms` | `<MS>` | `display.refresh_ms` | Display refresh interval in milliseconds. |
 
@@ -331,6 +331,7 @@ vrc [OPTIONS] [-- <COMMAND> [ARGS...]]
 | Flag | Argument | Config Key | Description |
 |------|----------|------------|-------------|
 | `--log` | — | `command_log.enabled` → `true` | Log commands to the terminal. |
+| `--no-log` | — | `command_log.enabled` → `false` | Suppress activity logging. Overrides `--log`. |
 | `--log-file` | `<FILE>` | `command_log.file` + `command_log.enabled` → `true` | Log commands to a file. |
 | `--log-pty-raw` | `<FILE>` | `command_log.pty_raw_log` | Log raw PTY output. |
 
@@ -389,7 +390,7 @@ vrc [OPTIONS] [-- <COMMAND> [ARGS...]]
 | `vtty` | `truecolor` | `--truecolor` / `--no-truecolor` |
 | `vtty` | `mouse` | `--mouse` / `--no-mouse` |
 | `display` | `enabled` | `--display` / `--no-display` |
-| `display` | `display_all` | `--display-all` |
+| `display` | `display_all` | `--display-all` *(deprecated; use `--display`)* |
 | `display` | `refresh_ms` | `--refresh-ms <MS>` |
 | `command_log` | `enabled` | `--log` |
 | `command_log` | `file` | `--log-file <FILE>` |

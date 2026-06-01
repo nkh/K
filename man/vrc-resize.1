@@ -9,7 +9,7 @@ vrc\-resize \- resize the VTTY of a command in a running instance
 
 .SH SYNOPSIS
 .B vrc
-\fBresize\fR \fIPID\fR [\fB\-c\fR \fICOMMAND\fR] [\fB\-\-rows\fR \fIN\fR] [\fB\-\-cols\fR \fIN\fR] [\fB\-\-interactive\fR]
+\fBresize\fR \fIPID\fR [\fB\-c\fR \fICOMMAND\fR] [\fB\-\-rows\fR \fIN\fR] [\fB\-\-cols\fR \fIN\fR] [\fB\-i\fR, \fB\-\-interactive\fR]
 
 .SH DESCRIPTION
 Resize the virtual terminal (VTTY) of a command in a running vrc instance. This resizes both the in-memory terminal buffer and the child process's PTY (by sending SIGWINCH), so applications that respond to terminal resize events (vim, htop, less) will adjust their layout.
@@ -39,7 +39,7 @@ New terminal height in rows (default: 24).
 New terminal width in columns (default: 80).
 
 .TP
-.BR \-\-interactive
+.BR \-i ", " \-\-interactive
 Present a numbered list of all running commands with their current dimensions and allow the user to select one or more by number (space-separated). Overrides \-c.
 
 .TP

@@ -14,10 +14,10 @@ vrw \- virtual terminal runner and process orchestrator with web control plane
 [\fIOPTIONS\fR] [\fB\-\-\fR \fICOMMAND\fR [\fIARGS...\fR]]
 
 .B vrw
-\fBlist\fR [\fB\-\-interactive\fR]
+\fBlist\fR [\fB\-i\fR, \fB\-\-interactive\fR]
 
 .B vrw
-\fBstop\fR [\fIPID\fR] [\fB\-\-interactive\fR]
+\fBstop\fR [\fIPID\fR] [\fB\-i\fR, \fB\-\-interactive\fR]
 
 .B vrw
 \fBcert\fR \fBgenerate\fR \fINAME\fR
@@ -35,10 +35,10 @@ vrw \- virtual terminal runner and process orchestrator with web control plane
 \fBspawn\fR [\fIOPTIONS\fR] \fICMD\fR [\fIARGS...\fR]
 
 .B vrw
-\fBfreeze\fR [\fIPID\fR] [\fB\-\-interactive\fR]
+\fBfreeze\fR [\fIPID\fR] [\fB\-i\fR, \fB\-\-interactive\fR]
 
 .B vrw
-\fBthaw\fR [\fIPID\fR] [\fB\-\-interactive\fR]
+\fBthaw\fR [\fIPID\fR] [\fB\-i\fR, \fB\-\-interactive\fR]
 
 .B vrw
 \fBlist\-vrw\fR
@@ -47,10 +47,13 @@ vrw \- virtual terminal runner and process orchestrator with web control plane
 \fBlist\-commands\fR
 
 .B vrw
-\fBstop\-command\fR [\fITARGET\fR] [\fB\-\-interactive\fR]
+\fBstop\-command\fR [\fITARGET\fR] [\fB\-i\fR, \fB\-\-interactive\fR] [\fB\-a\fR, \fB\-\-all\fR]
 
 .B vrw
-\fBresize\fR [\fITARGET\fR] [\fB\-\-rows\fR \fIN\fR] [\fB\-\-cols\fR \fIN\fR] [\fB\-\-interactive\fR]
+\fBkill\fR [\fITARGET\fR] [\fB\-i\fR, \fB\-\-interactive\fR] [\fB\-a\fR, \fB\-\-all\fR]
+
+.B vrw
+\fBresize\fR [\fITARGET\fR] [\fB\-\-rows\fR \fIN\fR] [\fB\-\-cols\fR \fIN\fR] [\fB\-i\fR, \fB\-\-interactive\fR]
 
 .B vrw
 \fBpurge\fR [\fITARGET\fR]
@@ -59,10 +62,10 @@ vrw \- virtual terminal runner and process orchestrator with web control plane
 \fBconfig-check\fR
 
 .B vrw
-\fBcat\fR [\fITARGET\fR] [\fB\-\-color-always\fR] [\fB\-\-interactive\fR]
+\fBcat\fR [\fITARGET\fR] [\fB\-\-color-always\fR] [\fB\-i\fR, \fB\-\-interactive\fR]
 
 .B vrw
-\fBscreenshot\fR [\fITARGET\fR] [\fIOPTIONS\fR] [\fB\-\-interactive\fR]
+\fBscreenshot\fR [\fITARGET\fR] [\fIOPTIONS\fR] [\fB\-i\fR, \fB\-\-interactive\fR]
 
 .B vrw
 \fBcompletions\fR \fISHELL\fR
@@ -166,19 +169,23 @@ Disable mouse event forwarding.
 
 .TP
 .BR \-D ", " \-\-display
-Show VTTY output on the local terminal screen.
+Show VTTY output on the local terminal screen. Keeps displaying after the initial command exits (equivalent to the old \-\-display\-all).
 
 .TP
 .B \-\-no\-display
 Disable local terminal display (default).
 
 .TP
-.BR \-s ", " \-\-display\-all
-Keep displaying VTTY output after the initial CLI command exits, switching to the next available command (monitor mode). Without this flag, the display is dismissed when the CLI command finishes but the server continues running. Note: when all commands have exited (no retained commands remain), vrw exits even in display-all mode.
-
-.TP
 .BR "\-\-refresh\-ms " \fIMS\fR
 VTTY display refresh interval in milliseconds (default: \fB100\fR).
+
+.TP
+.BR \-\-no\-log
+Suppress activity logging (spawning, stopping, resizing). Overrides \-\-log.
+
+.TP
+.BR \-\-handle\-sigwinch
+Resize the VTTY when the terminal where vrw is running is resized. By default VTTY dimensions are fixed at spawn time; with this flag, SIGWINCH events resize all VTTY buffers and PTYs.
 
 .SS Logging Options
 
@@ -265,6 +272,8 @@ Target a specific vrw instance by PID when using spawn, freeze, thaw, or resize 
 .TP
 .B \-\-
 Separator that distinguishes vrw's own flags from the child command. Everything after \fB\-\-\fR is passed as the command and its arguments. Required when the child command has flags that might conflict with vrw's own flags.
+
+When no separator is given and the first non-flag argument is not a known subcommand, vrw implicitly treats it as a command to spawn. For example, \fBvrw btop\fR is equivalent to \fBvrw spawn btop\fR (no \fB\-\-\fR separator needed).
 
 .SH SUBCOMMANDS
 
@@ -430,15 +439,18 @@ If no target is given and exactly one exited command exists, it is purged automa
 .RE
 
 .SS stop-command
-Stop a running command in a vrw instance. If no target is given and exactly one command is running, it is stopped automatically. If the target is numeric, it is treated as a PID. Otherwise it is matched against command names (and optionally args).
+Stop a running command in a vrw instance. If no target is given and exactly one command is running, it is stopped automatically. If the target is numeric, it is treated as a PID. Otherwise it is matched against command names (and optionally args). With \fB\-\-all\fR, stops all running commands in the instance.
 
 .RS
 .PP
 .B Usage:
 .RS
-vrw stop-command [\fITARGET\fR]
+vrw stop-command [\fITARGET\fR] [\fB\-a\fR, \fB\-\-all\fR]
 .RE
 .RE
+
+.SS kill
+Alias for stop-command.
 
 .SS cat
 Print the VTTY buffer of a running command to stdout. By default the output is plain text with all ANSI formatting stripped. Use \fB\-\-color-always\fR to preserve ANSI color escape sequences. When no target is given and exactly one command is running, that command is used automatically.
@@ -961,6 +973,7 @@ Child command exited with a non-zero status (when running a command directly).
 .BR vrw\-list\-vrw (1),
 .BR vrw\-list\-commands (1),
 .BR vrw\-stop\-command (1),
+.BR vrw\-kill (1),
 .BR vrw\-spawn (1),
 .BR vrw\-freeze (1),
 .BR vrw\-thaw (1),

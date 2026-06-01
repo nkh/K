@@ -9,7 +9,7 @@ vrc stop \- stop a running vrc instance
 
 .SH SYNOPSIS
 .B vrc
-\fBstop\fR [\fIPID\fR] [\fB\-\-interactive\fR]
+\fBstop\fR [\fIPID\fR] [\fB\-i\fR, \fB\-\-interactive\fR]
 
 .SH DESCRIPTION
 Sends SIGTERM to a running vrc instance to gracefully shut it down. If no PID is specified and exactly one instance is running, that instance is stopped automatically.
@@ -23,7 +23,7 @@ Process ID of the vrc instance to stop. If omitted and exactly one instance is r
 .SH OPTIONS
 
 .TP
-.BR \-\-interactive
+.BR \-i ", " \-\-interactive
 Present a numbered list of running instances and let the user select
 which ones to stop by typing space-separated numbers (e.g. "1 3 5").
 Requires a terminal (stdin must be a TTY).

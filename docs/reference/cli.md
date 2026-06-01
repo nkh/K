@@ -32,6 +32,8 @@ vrw [GENERAL OPTIONS] [SERVER OPTIONS] [CATEGORY OPTIONS] -- <command> [args...]
 vrw <subcommand> [SUBCOMMAND OPTIONS]
 ```
 
+When no subcommand is given, trailing arguments are treated as an implicit spawn. `vrw btop` is equivalent to `vrw spawn btop`.
+
 ---
 
 ## General Options (Shared)
@@ -93,8 +95,7 @@ terminal where the binary itself is running.
 
 | Flag | Default | Config Key | Description |
 |------|---------|------------|-------------|
-| `--display` / `--no-display` | `false` | `display.enabled` | Enable the interactive display. Must be explicitly set to render command output locally. |
-| `--display-all` | `false` | `display.all` | Show *all* command outputs simultaneously instead of the active pane only. Implies `--display`. |
+| `--display` / `--no-display` | `false` | `display.enabled` | Enable the interactive display and keep showing output after the initial command exits. Equivalent to the old --display-all. |
 | `--refresh-ms <n>` | `100` | `display.refresh_ms` | Milliseconds between display redraw cycles. Lower values produce smoother output at the cost of higher CPU usage. |
 
 When `--no-display` is set (the default), the binary runs in headless mode:
@@ -120,6 +121,15 @@ Interactive keybindings are documented in full in
 | `--log` | `false` | `command_log.enabled` | Enable command logging to the terminal. |
 | `--log-file <path>` | — | `command_log.file` | Enable command logging and write output to the given file. |
 | `--log-pty-raw <path>` | — | `command_log.pty_raw_log` | Log raw bytes received from the child PTY to the given file before any ANSI processing. |
+| `--no-log` | `false` | `command_log.enabled` | Suppress activity logging (spawning, stopping, resizing). Overrides --log. |
+
+---
+
+## Signal Options (Shared)
+
+| Flag | Default | Config Key | Description |
+|------|---------|------------|-------------|
+| `--handle-sigwinch` | `false` | — | Resize the VTTY when the terminal is resized via SIGWINCH. By default VTTY dimensions are fixed at spawn time. |
 
 ---
 
@@ -129,7 +139,7 @@ Run as a background daemon process.
 
 | Flag | Default | Config Key | Description |
 |------|---------|------------|-------------|
-| `--daemon` | `false` | `daemon.enabled` | Fork into the background after initialization. Conflicts with `--display`, `--display-all`, and `--tabs`. |
+| `--daemon` | `false` | `daemon.enabled` | Fork into the background after initialization. Conflicts with `--display` and `--tabs`. |
 | `--stdout-file <path>` | `vrc.out` | `daemon.stdout_file` | File to which the daemon's stdout is redirected. |
 | `--stderr-file <path>` | `vrc.err` | `daemon.stderr_file` | File to which the daemon's stderr is redirected. |
 
@@ -195,6 +205,28 @@ vrc stop [pid]
 | Argument | Description |
 |----------|-------------|
 | `pid` | PID of the instance to stop. Omit to auto-select the single running instance. |
+
+---
+
+### `kill`
+
+Stop (kill) a command inside a running vrc instance.
+
+```bash
+vrc kill <pid> [-c <command>] [-i] [-a]
+```
+
+| Flag | Description |
+|------|-------------|
+| `-c, --command <id>` | ID of the target command (omit for first). |
+| `-i, --interactive` | Interactively select commands to kill. |
+| `-a, --all` | Stop all commands and exit. |
+
+---
+
+### `stop-command`
+
+Alias for `vrc kill`. Stop a running command inside a running vrc instance.
 
 ---
 
@@ -355,7 +387,22 @@ vrw --target 12345 spawn npm run dev
 Stop a specific running command by ID or name.
 
 ```bash
-vrw stop-command <target>
+vrw stop-command <target> [-i] [-a]
+```
+
+| Flag | Description |
+|------|-------------|
+| `-i, --interactive` | Interactively select commands to stop. |
+| `-a, --all` | Stop all commands and exit. |
+
+---
+
+### `kill`
+
+Alias for `vrw stop-command`. Stop a running command.
+
+```bash
+vrw kill [target] [-i] [-a]
 ```
 
 ---

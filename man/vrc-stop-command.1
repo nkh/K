@@ -1,0 +1,33 @@
+.\" Title: vrc-stop-command
+.\" Author: vrc contributors
+.\" Manual section: 1
+.\"
+.TH VRC\-STOP\-COMMAND 1 "2025" "vrc" "User Commands"
+
+.SH NAME
+vrc\-stop\-command \- alias for vrc kill (stop a command inside a running instance)
+
+.SH SYNOPSIS
+.B vrc
+\fBstop\-command\fR \fIPID\fR [\fB\-c\fR \fICOMMAND\fR] [\fB\-i\fR, \fB\-\-interactive\fR] [\fB\-a\fR, \fB\-\-all\fR]
+
+.SH DESCRIPTION
+Alias for \fBvrc kill\fR. Stop (kill) a specific command inside a running vrc instance. See \fBvrc\-kill\fR(1) for full details.
+
+.SH OPTIONS
+
+.TP
+.BR \-c ", " \-\-command " " \fICOMMAND\fR
+ID of the target command (omit for the first/only command).
+
+.TP
+.BR \-i ", " \-\-interactive
+Present a numbered list of all running commands and allow the user to select one or more by number.
+
+.TP
+.BR \-a ", " \-\-all
+Stop all running commands in the instance and exit.
+
+.SH SEE ALSO
+.BR vrc\-kill (1),
+.BR vrc (1)

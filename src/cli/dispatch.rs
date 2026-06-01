@@ -300,8 +300,20 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
         }) => {}
         Some(Commands::Screenshot { .. }) => {}
         Some(Commands::Completions { shell }) => {
-            let mut cmd = <Cli as CommandFactory>::command();
             let name = runtime_binary_name();
+            let mut cmd;
+            #[cfg(all(feature = "vrc", feature = "vrw"))]
+            {
+                cmd = if name == "vrc" {
+                    crate::cli::args::build_vrc_completions_command()
+                } else {
+                    <Cli as CommandFactory>::command()
+                };
+            }
+            #[cfg(not(all(feature = "vrc", feature = "vrw")))]
+            {
+                cmd = <Cli as CommandFactory>::command();
+            }
             clap_complete::generate(*shell, &mut cmd, &name, &mut stdout());
             return Ok(None);
         }

@@ -11,7 +11,7 @@ vrw cat \- print the VTTY buffer of a running command
 
 .SH SYNOPSIS
 .B vrw cat
-[\fITARGET\fR] [\fB\-\-color-always\fR] [\fB\-\-interactive\fR]
+[\fITARGET\fR] [\fB\-\-color-always\fR] [\fB\-i\fR, \fB\-\-interactive\fR]
 
 .SH DESCRIPTION
 Prints the virtual terminal (VTTY) buffer of a running command to stdout. By default, the output is plain text with all ANSI escape sequences stripped, making it safe for piping into \fBgrep\fR(1), \fBawk\fR(1), \fBless\fR(1), or redirecting to a file.
@@ -24,14 +24,14 @@ The output includes both the visible screen content and the scrollback history.
 
 .TP
 .BR \-\-color-always
-Preserve ANSI color escape sequences in the output. When set, the buffer is rendered with its original colors, bold, underline, and other formatting exactly as the child process displayed it. Without this flag, all ANSI sequences are stripped and only plain text is printed. Useful for piping into \fBless \-R\fR or saving colored output.
+Preserve ANSI color escape sequences in the output. When set, the buffer is rendered with its original colors, bold, underline, and other formatting exactly as the child process displayed it. Without this flag, all ANSI sequences are stripped and only plain text is printed. Output ends with an ANSI reset code to avoid trailing colors affecting the terminal. Useful for piping into \fBless \-R\fR or saving colored output.
 
 .TP
 .BR \-h ", " \-\-help
 Print help information and exit.
 
 .TP
-.BR \-\-interactive
+.BR \-i ", " \-\-interactive
 Present a numbered list of commands and let the user select
 which ones to cat by typing space-separated numbers (e.g. "1 3 5").
 Requires a terminal (stdin must be a TTY).

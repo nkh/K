@@ -705,6 +705,90 @@ impl Cli {
     }
 }
 
+// ── vrc completion tree builder ──
+//
+// When both `vrc` and `vrw` features are enabled, the Commands enum only
+// contains vrw variants (vrc variants are cfg'd out with `not(feature = "vrw")`).
+// This means `vrc completions bash` would generate completions listing vrw-only
+// subcommands (spawn, cert, purge, etc.) and flags (bind, port, etc.).
+//
+// This function builds a clap::Command tree that represents the vrc CLI by:
+// 1. Starting from the vrw command tree (all we have at compile time)
+// 2. Hiding vrw-only top-level flags and subcommands
+// 3. Adding vrc-only subcommands (keys, spawn-in)
+//
+// The remaining shared subcommands (list, stop, freeze, thaw, resize, cat,
+// kill, stop-command, config-check, completions) keep their vrw signatures,
+// which is close enough for shell completion purposes.
+
+#[cfg(all(feature = "vrc", feature = "vrw"))]
+pub fn build_vrc_completions_command() -> clap::Command {
+    // Hide vrw-only top-level flags and subcommands, then add vrc-only ones.
+    <Cli as CommandFactory>::command()
+        .name("vrc")
+        .mut_arg("bind", |a| a.hide(true))
+        .mut_arg("port", |a| a.hide(true))
+        .mut_arg("remote", |a| a.hide(true))
+        .mut_arg("auth", |a| a.hide(true))
+        .mut_arg("register-with", |a| a.hide(true))
+        .mut_arg("token-file", |a| a.hide(true))
+        .mut_arg("tls", |a| a.hide(true))
+        .mut_arg("cert-file", |a| a.hide(true))
+        .mut_arg("key-file", |a| a.hide(true))
+        .mut_arg("certificate", |a| a.hide(true))
+        .mut_subcommand("spawn", |s| s.hide(true))
+        .mut_subcommand("cert", |s| s.hide(true))
+        .mut_subcommand("list-vrw", |s| s.hide(true))
+        .mut_subcommand("list-commands", |s| s.hide(true))
+        .mut_subcommand("purge", |s| s.hide(true))
+        .mut_subcommand("screenshot", |s| s.hide(true))
+        .subcommand(
+            clap::Command::new("keys")
+                .about("Send keystrokes to a command in a running instance")
+                .arg(
+                    clap::Arg::new("pid")
+                        .help("PID of the target vrc instance")
+                        .required(true)
+                        .index(1),
+                )
+                .arg(
+                    clap::Arg::new("command")
+                        .short('c')
+                        .long("command")
+                        .help("ID of the target command (omit for first command)"),
+                )
+                .arg(
+                    clap::Arg::new("keys")
+                        .help("Keystrokes to send")
+                        .required(true)
+                        .index(2),
+                ),
+        )
+        .subcommand(
+            clap::Command::new("spawn-in")
+                .about("Spawn a command inside a running instance")
+                .arg(
+                    clap::Arg::new("pid")
+                        .help("PID of the target vrc instance")
+                        .required(true)
+                        .index(1),
+                )
+                .arg(
+                    clap::Arg::new("cmd")
+                        .help("Command to run")
+                        .required(true)
+                        .index(2),
+                )
+                .arg(
+                    clap::Arg::new("args")
+                        .help("Arguments for the command")
+                        .num_args(1..)
+                        .trailing_var_arg(true)
+                        .index(3),
+                ),
+        )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -762,5 +846,55 @@ mod tests {
         let result = cli.apply_overrides(&mut cfg);
         assert!(result.is_ok());
         assert!(!cfg.command_log.enabled);
+    }
+
+    #[test]
+    fn interactive_short_flag_parses() {
+        // Verify -i is accepted as a short form for --interactive on subcommands
+        // We test that the `list` subcommand accepts -i
+        let cli = Cli::try_parse_from([BINARY_NAME, "list", "-i"]).unwrap();
+        match cli.command {
+            Some(Commands::List { interactive }) => {
+                assert!(interactive);
+            }
+            _ => panic!("expected List command"),
+        }
+    }
+
+    #[test]
+    fn handle_sigwinch_flag_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "--handle-sigwinch", "htop"]).unwrap();
+        assert!(cli.handle_sigwinch);
+    }
+
+    #[test]
+    fn no_log_standalone_disables_logging() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "--no-log", "htop"]).unwrap();
+        assert!(cli.no_log);
+        assert!(!cli.log);
+        let mut cfg = default_config();
+        cfg.command_log.enabled = true;
+        cli.apply_overrides(&mut cfg).unwrap();
+        assert!(!cfg.command_log.enabled, "--no-log should disable logging");
+    }
+
+    #[test]
+    fn implicit_cmd_args_captured() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "btop"]).unwrap();
+        assert!(cli.command.is_none(), "no subcommand should be set");
+        let args = cli.cmd_args.as_ref().unwrap();
+        assert_eq!(args.len(), 1);
+        assert_eq!(args[0], "btop");
+    }
+
+    #[test]
+    fn implicit_spawn_multiple_args() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "cargo", "run", "--release"]).unwrap();
+        assert!(cli.command.is_none());
+        let args = cli.cmd_args.as_ref().unwrap();
+        assert_eq!(args.len(), 3);
+        assert_eq!(args[0], "cargo");
+        assert_eq!(args[1], "run");
+        assert_eq!(args[2], "--release");
     }
 }

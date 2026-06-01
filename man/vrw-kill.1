@@ -1,0 +1,29 @@
+.\" Title: vrw-kill
+.\" Author: vrw contributors
+.\" Manual section: 1
+.\"
+.TH VRW\-KILL 1 "2025" "vrw" "User Commands"
+
+.SH NAME
+vrw\-kill \- alias for vrw stop\-command (stop a running command)
+
+.SH SYNOPSIS
+.B vrw
+\fBkill\fR [\fITARGET\fR] [\fB\-i\fR, \fB\-\-interactive\fR] [\fB\-a\fR, \fB\-\-all\fR]
+
+.SH DESCRIPTION
+Alias for \fBvrw stop\-command\fR. Stop a running command by PID or name. See \fBvrw\-stop\-command\fR(1) for full details.
+
+.SH OPTIONS
+
+.TP
+.BR \-i ", " \-\-interactive
+Present a numbered list of running commands and let the user select which ones to stop.
+
+.TP
+.BR \-a ", " \-\-all
+Stop all running commands and exit.
+
+.SH SEE ALSO
+.BR vrw\-stop\-command (1),
+.BR vrw (1)

@@ -9,7 +9,7 @@ vrc\-freeze \- suspend a command in a running instance via SIGSTOP
 
 .SH SYNOPSIS
 .B vrc
-\fBfreeze\fR \fIPID\fR [\fB\-c\fR \fICOMMAND\fR] [\fB\-\-interactive\fR]
+\fBfreeze\fR \fIPID\fR [\fB\-c\fR \fICOMMAND\fR] [\fB\-i\fR, \fB\-\-interactive\fR]
 
 .SH DESCRIPTION
 Freeze (suspend) a running command by sending it SIGSTOP. The command's OS process is paused but not terminated; all its state is preserved in memory. Use \fBvrc thaw\fR to resume execution.
@@ -31,7 +31,7 @@ OS process ID of the target vrc instance.
 ID of the target command (omit for the first/only command).
 
 .TP
-.BR \-\-interactive
+.BR \-i ", " \-\-interactive
 Present a numbered list of all running commands in the instance and allow the user to select one or more by number (space-separated). Only running (non-frozen) commands are shown.
 
 .TP

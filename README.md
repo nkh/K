@@ -71,8 +71,8 @@ vrc -- htop
 # Run with local terminal display
 vrc --display -- htop
 
-# Keep display open after command exits (monitor mode)
-vrc --display-all -- npm run dev
+# Keep display open after command exits (monitor mode, equivalent to old --display-all)
+vrc --display -- npm run dev
 
 # Send initial keystrokes and retain buffer after exit
 vrc --retain-on-exit --send-keys "ls<Enter>" -- bash
@@ -84,13 +84,22 @@ vrc --daemon -- npm run dev
 vrc list
 
 # Interactively select an instance to inspect
-vrc list --interactive
+vrc list -i
 
 # Freeze a command (interactive selection)
-vrc freeze --interactive
+vrc freeze -i
 
 # Cat a command's output (interactive selection)
-vrc cat --interactive
+vrc cat -i
+
+# Kill a command inside a running instance
+vrc kill 12345
+
+# Kill a command interactively
+vrc kill -i
+
+# Stop all commands and exit
+vrc kill --all
 
 # Stop an instance
 vrc stop <pid>
@@ -117,9 +126,18 @@ curl -X POST http://127.0.0.1:9090/api/commands \
   -d '{"cmd": "htop", "args": []}'
 
 # Interactive selection for freeze/thaw/resize/cat/screenshot
-vrw freeze --interactive
-vrw cat --interactive
-vrw screenshot --interactive
+vrw freeze -i
+vrw cat -i
+vrw screenshot -i
+
+# Stop a running command
+vrw stop-command htop
+
+# Alias: vrw kill
+vrw kill htop
+
+# Stop all commands and exit
+vrw kill --all
 
 # Enable TLS and remote access
 vrw --remote --tls -- my-command

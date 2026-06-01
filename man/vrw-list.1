@@ -11,7 +11,7 @@ vrw\-list \- list running vrw instances and their commands
 
 .SH SYNOPSIS
 .B vrw
-\fBlist\fR [\fB\-\-interactive\fR]
+\fBlist\fR [\fB\-i\fR, \fB\-\-interactive\fR]
 
 .SH DESCRIPTION
 List all running vrw instances on the system and display the commands running inside each one. Each vrw instance registers itself in a shared registry when it starts, allowing discovery from the CLI. This subcommand queries that registry, then connects to each instance over HTTP to retrieve its command list.
@@ -27,7 +27,7 @@ When \fB\-\-target PID\fR is given on the parent command, only the specified ins
 Only list the vrw instance with the given PID. Useful when multiple instances are running and you want to inspect a specific one. This is a global option specified before the subcommand: \fBvrw \-\-target 12345 list\fR.
 
 .TP
-.BR \-\-interactive
+.BR \-i ", " \-\-interactive
 Present a numbered list of running instances and let the user select
 which ones to show by typing space-separated numbers (e.g. "1 3 5").
 Requires a terminal (stdin must be a TTY).
