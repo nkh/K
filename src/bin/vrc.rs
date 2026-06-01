@@ -14,7 +14,7 @@ use vrc_core::ipc::socket_path_for_pid;
 use vrc_core::process::manager::CommandManager;
 
 async fn async_main(cli: Cli) -> Result<()> {
-    if cli.no_log || cli.quiet {
+    if cli.no_log {
         tracing_subscriber::fmt()
             .with_max_level(tracing::Level::WARN)
             .init();
@@ -63,7 +63,7 @@ async fn async_main(cli: Cli) -> Result<()> {
             handle_sigwinch,
         )
         .await;
-    } else if !cli.quiet {
+    } else if !cli.no_terminal_log && !cli.quiet {
         startup::run_non_display_event_loop(&manager, spawned_id.as_deref(), shutdown_rx).await;
     } else if let Some(ref id) = spawned_id {
         wait_for_child(&manager, id, shutdown_rx).await;

@@ -123,8 +123,9 @@ Interactive keybindings are documented in full in
 | `--log` | `-l` | `false` | `command_log.enabled` | Enable command logging to the terminal. |
 | `--log-file <path>` | `-L` | — | `command_log.file` | Enable command logging and write output to the given file. |
 | `--log-pty-raw <path>` | — | — | `command_log.pty_raw_log` | Log raw bytes received from the child PTY to the given file before any ANSI processing. |
-| `--no-log` | — | `false` | `command_log.enabled` | Suppress activity logging (spawning, stopping, resizing). Overrides `--log`. |
-| `--quiet` | `-q` | `false` | `command_log.enabled` | Alias for `--no-log`. Suppress all non-error logging output. Overrides `--log`. |
+| `--no-log` | — | `false` | `command_log.enabled` | Suppress activity logging entirely (spawning, stopping, resizing). Overrides `--log`. |
+| `--no-terminal-log` | — | `false` | — | Suppress terminal event output when not in `--display` mode. Events are still logged to the log file if `--log` is active. |
+| `--quiet` | `-q` | `false` | — | Hidden alias for `--no-terminal-log`. Only suppresses terminal output, not file logging. |
 
 ### Default behavior without `--display`
 
@@ -148,11 +149,11 @@ Each line is timestamped and includes the event type and relevant details:
 [2026-06-01T17:26:05.789013Z] exit: id=abc123 retained=false code=Some(0)
 ```
 
-Use `--quiet` (`-q`) to suppress this output:
+Use `--no-terminal-log` (or `-q`) to suppress this output:
 
 ```bash
-vrw -q -- python server.py        # silent — no event log
-vrw --quiet --daemon -- worker.sh  # silent daemon
+vrw --no-terminal-log -- python server.py        # silent — no event log
+vrw -q --daemon -- worker.sh                     # silent daemon
 ```
 
 ---

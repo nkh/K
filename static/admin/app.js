@@ -2580,6 +2580,11 @@ async function spawnCommand() {
     const dir = document.getElementById('spawnDir').value.trim();
     if (dir) body.dir = dir;
 
+    // Retain on exit (optional)
+    if (document.getElementById('spawnRetainOnExit').checked) {
+        body.retain_on_exit = true;
+    }
+
     try {
         const res = await fetch(apiUrl('/api/commands', { url: instUrl }), {
             method: 'POST',
@@ -2593,6 +2598,7 @@ async function spawnCommand() {
             document.getElementById('spawnDir').value = '';
             document.getElementById('spawnRows').value = '';
             document.getElementById('spawnCols').value = '';
+            document.getElementById('spawnRetainOnExit').checked = false;
             // Auto-select the newly spawned command so its terminal output appears
             const newId = json.data && json.data.id ? json.data.id : null;
             if (newId) {
@@ -2600,7 +2606,7 @@ async function spawnCommand() {
                 // Disconnect the old WS FIRST to prevent stale vtty_full
                 // messages from the previous command overwriting the cleared terminal.
                 disconnectVttyWs();
-                _clearTerminalForSwitch();
+                _cacheTerminalForSwitch();
                 state._pendingSelectId = newId;
             }
             loadCommands();
@@ -4793,7 +4799,7 @@ async function spawnFromWelcome() {
             const newId = json.data && json.data.id ? json.data.id : null;
             if (newId) {
                 state.selectedInstUrl = instUrl;
-                _clearTerminalForSwitch();
+                _cacheTerminalForSwitch();
                 state._pendingSelectId = newId;
             }
             loadCommands();
@@ -4983,7 +4989,7 @@ function spawnServerTemplate(index) {
             const newId = json.data && json.data.id ? json.data.id : null;
             if (newId) {
                 state.selectedInstUrl = instUrl;
-                _clearTerminalForSwitch();
+                _cacheTerminalForSwitch();
                 state._pendingSelectId = newId;
             }
             loadCommands();
@@ -5012,7 +5018,7 @@ function spawnUserTemplate(index) {
             const newId = json.data && json.data.id ? json.data.id : null;
             if (newId) {
                 state.selectedInstUrl = instUrl;
-                _clearTerminalForSwitch();
+                _cacheTerminalForSwitch();
                 state._pendingSelectId = newId;
             }
             loadCommands();

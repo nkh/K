@@ -205,8 +205,14 @@ pub struct Cli {
     #[arg(long)]
     pub no_log: bool,
 
-    /// Suppress activity logging (short alias for --no-log)
-    #[arg(short = 'q', long)]
+    /// Suppress terminal event output when not in --display mode.
+    /// Events (spawn, exit, resize, etc.) are still logged to the log file
+    /// if --log is active, but nothing is printed to the terminal.
+    #[arg(long)]
+    pub no_terminal_log: bool,
+
+    /// Suppress terminal event output (short alias for --no-terminal-log)
+    #[arg(short = 'q', long, hide = true)]
     pub quiet: bool,
 
     /// Subcommand
@@ -648,7 +654,7 @@ impl Cli {
             cfg.command_log.enabled = true;
             cfg.command_log.file = Some(file.clone());
         }
-        if self.no_log || self.quiet {
+        if self.no_log {
             cfg.command_log.enabled = false;
         }
         if let Some(file) = &self.log_pty_raw {
@@ -1189,6 +1195,7 @@ mod tests {
         let cli = Cli::try_parse_from([BINARY_NAME, "-q", "htop"]).unwrap();
         assert!(cli.quiet);
         assert!(!cli.no_log, "-q should not set --no-log field directly");
+        assert!(!cli.no_terminal_log, "-q should not set --no-terminal-log field directly");
     }
 
     #[test]
@@ -1198,31 +1205,40 @@ mod tests {
     }
 
     #[test]
-    fn quiet_disables_logging_like_no_log() {
+    fn no_terminal_log_flag_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "--no-terminal-log", "htop"]).unwrap();
+        assert!(cli.no_terminal_log);
+        assert!(!cli.quiet, "--no-terminal-log should not set quiet");
+        assert!(!cli.no_log, "--no-terminal-log should not set no_log");
+    }
+
+    #[test]
+    fn quiet_does_not_disable_logging() {
+        // --quiet only suppresses terminal output, not command logging
         let cli = Cli::try_parse_from([BINARY_NAME, "--quiet", "htop"]).unwrap();
         assert!(cli.quiet);
         let mut cfg = default_config();
         cfg.command_log.enabled = true;
         cli.apply_overrides(&mut cfg).unwrap();
-        assert!(!cfg.command_log.enabled, "--quiet should disable logging like --no-log");
+        assert!(cfg.command_log.enabled, "--quiet should NOT disable logging");
     }
 
     #[test]
-    fn quiet_short_disables_logging() {
+    fn quiet_short_does_not_disable_logging() {
         let cli = Cli::try_parse_from([BINARY_NAME, "-q", "htop"]).unwrap();
         let mut cfg = default_config();
         cfg.command_log.enabled = true;
         cli.apply_overrides(&mut cfg).unwrap();
-        assert!(!cfg.command_log.enabled, "-q should disable logging");
+        assert!(cfg.command_log.enabled, "-q should NOT disable logging");
     }
 
     #[test]
-    fn quiet_overrides_log_flag() {
-        // --log --quiet should result in disabled logging (quiet wins)
-        let cli = Cli::try_parse_from([BINARY_NAME, "--log", "--quiet", "htop"]).unwrap();
+    fn no_log_still_disables_logging() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "--no-log", "htop"]).unwrap();
         let mut cfg = default_config();
+        cfg.command_log.enabled = true;
         cli.apply_overrides(&mut cfg).unwrap();
-        assert!(!cfg.command_log.enabled, "--quiet should override --log");
+        assert!(!cfg.command_log.enabled, "--no-log should disable logging");
     }
 
     #[test]
@@ -1232,7 +1248,7 @@ mod tests {
         let result = cli.apply_overrides(&mut cfg);
         assert!(result.is_ok(), "--daemon + -q should not conflict");
         assert!(cfg.daemon.enabled);
-        assert!(!cfg.command_log.enabled);
+        // -q no longer disables logging
     }
 
     // ── env var parsing ──

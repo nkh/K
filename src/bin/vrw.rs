@@ -117,7 +117,7 @@ async fn try_client_mode(cli: &Cli) -> Result<bool> {
 }
 
 async fn async_main(cli: Cli) -> Result<()> {
-    if cli.no_log || cli.quiet {
+    if cli.no_log {
         tracing_subscriber::fmt()
             .with_max_level(tracing::Level::WARN)
             .init();
@@ -259,7 +259,7 @@ async fn async_main(cli: Cli) -> Result<()> {
             handle_sigwinch,
         )
         .await;
-    } else if !cli.quiet {
+    } else if !cli.no_terminal_log && !cli.quiet {
         let rx = shutdown_tx.subscribe();
         startup::run_non_display_event_loop(&manager, spawned_id.as_deref(), rx).await;
     } else if let Some(ref id) = spawned_id {
