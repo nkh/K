@@ -24,6 +24,7 @@
 - [Snapshots and Diffs](./how-to-guides/snapshots-diffs.md)
 - [Environment Variables](./how-to-guides/environment-variables.md)
 - [Event Hooks](./how-to-guides/hooks.md)
+- [Agent Browser (Screenshots & UI Testing)](./how-to-guides/agent-browser.md)
 
 # Reference
 
