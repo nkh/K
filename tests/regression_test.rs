@@ -690,6 +690,52 @@ async fn regression_resize_command() {
     let _ = manager.kill(&id, None).await;
 }
 
+/// Test resize_pty (used by web UI resize button) resizes PTY, VTTY buffer,
+/// AND marks the buffer as changed so poll-based clients detect the update.
+#[tokio::test(flavor = "multi_thread")]
+#[cfg(feature = "vrw")]
+async fn regression_resize_pty_notifies_sinks() {
+    let cfg = test_config();
+    let manager = Arc::new(CommandManager::new(cfg));
+    let id = manager
+        .spawn(
+            "sleep".into(),
+            vec!["60".into()],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+    if let Some(handle) = manager.get(&id) {
+        // Consume the initial "changed" flag from spawn
+        let _ = manager.has_changed(&id);
+        sleep(Duration::from_millis(50)).await;
+
+        // Call resize_pty (same code path as the web UI resize button)
+        let result = handle.resize_pty(40, 120).await;
+        assert!(result.is_ok(), "resize_pty should succeed");
+
+        // Verify dimensions changed
+        let (rows, cols) = handle.dimensions().await;
+        assert_eq!(rows, 40, "rows after resize_pty should be 40");
+        assert_eq!(cols, 120, "cols after resize_pty should be 120");
+
+        // Verify the buffer is marked as changed (push-mode clients get notified
+        // via notify_sinks, poll-mode clients detect via has_changed)
+        let changed = manager.has_changed(&id).unwrap_or(false);
+        assert!(
+            changed,
+            "buffer must be marked as changed after resize_pty"
+        );
+    }
+    let _ = manager.kill(&id, None).await;
+}
+
 #[tokio::test(flavor = "multi_thread")]
 #[cfg(feature = "vrw")]
 async fn regression_snapshot_store_and_retrieve() {
