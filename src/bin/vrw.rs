@@ -259,6 +259,9 @@ async fn async_main(cli: Cli) -> Result<()> {
             handle_sigwinch,
         )
         .await;
+    } else if !cli.quiet {
+        let rx = shutdown_tx.subscribe();
+        startup::run_non_display_event_loop(&manager, spawned_id.as_deref(), rx).await;
     } else if let Some(ref id) = spawned_id {
         let rx = shutdown_tx.subscribe();
         wait_for_child(&manager, id, rx).await;

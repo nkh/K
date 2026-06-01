@@ -226,6 +226,7 @@ impl ProcessSpawner {
         let global_on_exit = hooks.on_exit.clone();
         let global_on_error = hooks.on_error.clone();
         let manager_cmds = manager.commands_arc();
+        let logger = manager.logger();
         let (child_exit_tx, child_exit_rx) = tokio::sync::watch::channel(false);
         let snapshot_on_exit = exit_config.snapshot_on_exit.clone();
         let snapshot_emulator = emulator.clone();
@@ -238,6 +239,7 @@ impl ProcessSpawner {
             global_on_exit,
             global_on_error,
             manager_cmds,
+            logger,
             snapshot_emulator,
             snapshot_on_exit,
             child_exit_tx,
@@ -453,6 +455,7 @@ fn spawn_process_waiter(
     global_on_exit: Option<String>,
     global_on_error: Option<String>,
     manager_cmds: Arc<dashmap::DashMap<String, CommandHandle>>,
+    logger: Arc<crate::logging::command_log::CommandLogger>,
     snapshot_emulator: Arc<tokio::sync::RwLock<VttyEmulator>>,
     snapshot_on_exit: Option<String>,
     child_exit_tx: tokio::sync::watch::Sender<bool>,
@@ -534,6 +537,12 @@ fn spawn_process_waiter(
                 run_hook(global_hook_str, &vars);
             }
 
+            let cmd_name = manager_cmds
+                .get(&watch_id)
+                .map(|h| h.name.clone())
+                .unwrap_or_else(|| watch_id.clone());
+            logger.log("exited", &format!("id={} name={} code={:?}", watch_id, cmd_name, exit_status.code));
+
             let _ = child_exit_tx.send(true);
 
             // Save snapshot to file if snapshot_on_exit is configured.
@@ -612,9 +621,11 @@ fn spawn_process_waiter(
                 .unwrap_or(false);
             if retain {
                 tracing::info!(id = %watch_id, "Command retained after exit (retain_on_exit)");
+                logger.log("exit", &format!("id={} retained=true code={:?}", watch_id, exit_status.code));
             } else {
                 manager_cmds.remove(&watch_id);
                 tracing::info!(id = %watch_id, "Command removed from manager after exit");
+                logger.log("exit", &format!("id={} retained=false code={:?}", watch_id, exit_status.code));
             }
 
             let _ = exit_tx.send(exit_status);

@@ -63,6 +63,8 @@ async fn async_main(cli: Cli) -> Result<()> {
             handle_sigwinch,
         )
         .await;
+    } else if !cli.quiet {
+        startup::run_non_display_event_loop(&manager, spawned_id.as_deref(), shutdown_rx).await;
     } else if let Some(ref id) = spawned_id {
         wait_for_child(&manager, id, shutdown_rx).await;
     } else {

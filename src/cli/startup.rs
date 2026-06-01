@@ -110,6 +110,57 @@ pub fn apply_detected_terminal_size(cli: &Cli, cfg: &mut Config) {
     }
 }
 
+/// Run a non-display event loop: prints log entries from the CommandLogger
+/// broadcast channel to stdout until the spawned command exits.
+///
+/// This is used when vrc/vrw runs without `--display` and without `--quiet`.
+/// The function subscribes to the manager's logger and prints every event
+/// (spawn, exit, kill, resize, etc.) to the terminal in real time.
+pub async fn run_non_display_event_loop(
+    manager: &Arc<CommandManager>,
+    spawned_id: Option<&str>,
+    mut shutdown_rx: tokio::sync::broadcast::Receiver<()>,
+) {
+    let mut log_rx = manager.logger().subscribe();
+
+    if let Some(id) = spawned_id {
+        let mut child_exit_rx = {
+            let handle = manager.get(&id.to_string());
+            if let Some(h) = handle {
+                h.exit_rx.clone()
+            } else {
+                return;
+            }
+        };
+
+        loop {
+            tokio::select! {
+                _ = child_exit_rx.changed() => break,
+                _ = shutdown_rx.recv() => break,
+                entry = log_rx.recv() => {
+                    match entry {
+                        Ok(line) => println!("{}", line),
+                        Err(_) => break,
+                    }
+                }
+            }
+        }
+    } else {
+        // No initial command — wait for shutdown while printing events
+        loop {
+            tokio::select! {
+                _ = shutdown_rx.recv() => break,
+                entry = log_rx.recv() => {
+                    match entry {
+                        Ok(line) => println!("{}", line),
+                        Err(_) => break,
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Spawn an async task that listens for SIGINT / SIGTERM (or Ctrl-C on
 /// non-Unix) and forwards the signal by sending on `shutdown_tx`.
 ///
