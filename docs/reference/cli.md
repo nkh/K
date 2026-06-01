@@ -32,7 +32,7 @@ vrw [GENERAL OPTIONS] [SERVER OPTIONS] [CATEGORY OPTIONS] -- <command> [args...]
 vrw <subcommand> [SUBCOMMAND OPTIONS]
 ```
 
-When no subcommand is given, trailing arguments are treated as an implicit spawn. `vrw btop` is equivalent to `vrw spawn btop`.
+When no subcommand is given and no flags are present, trailing arguments are treated as an implicit spawn. `vrw btop` is equivalent to `vrw spawn btop` — both send the command to an already-running vrw instance. If no instance is running, the command fails. To start a **new** instance with a command, use `vrw --display btop` (or any other flag combination, e.g., `vrw --daemon -- python server.py`).
 
 ---
 
@@ -109,6 +109,8 @@ command output is not rendered locally.
 |------|---------|------------|-------------|
 | `--tabs` | `false` | `interactive.tabs` | Show a tab bar listing all running commands. |
 
+**Per-subcommand `-i, --interactive`**: Several subcommands (`list`, `stop`, `kill`, `stop-command`, `cat`, `freeze`, `thaw`, `resize`, `screenshot`) accept `-i` / `--interactive` as a subcommand flag (not a top-level flag). When given, the subcommand presents a numbered list for interactive selection instead of requiring a PID or target argument.
+
 Interactive keybindings are documented in full in
 [`keybindings.md`](keybindings.md).
 
@@ -116,12 +118,13 @@ Interactive keybindings are documented in full in
 
 ## Logging Options (Shared)
 
-| Flag | Default | Config Key | Description |
-|------|---------|------------|-------------|
-| `--log` | `false` | `command_log.enabled` | Enable command logging to the terminal. |
-| `--log-file <path>` | — | `command_log.file` | Enable command logging and write output to the given file. |
-| `--log-pty-raw <path>` | — | `command_log.pty_raw_log` | Log raw bytes received from the child PTY to the given file before any ANSI processing. |
-| `--no-log` | `false` | `command_log.enabled` | Suppress activity logging (spawning, stopping, resizing). Overrides --log. |
+| Flag | Short | Default | Config Key | Description |
+|------|-------|---------|------------|-------------|
+| `--log` | `-l` | `false` | `command_log.enabled` | Enable command logging to the terminal. |
+| `--log-file <path>` | `-L` | — | `command_log.file` | Enable command logging and write output to the given file. |
+| `--log-pty-raw <path>` | — | — | `command_log.pty_raw_log` | Log raw bytes received from the child PTY to the given file before any ANSI processing. |
+| `--no-log` | — | `false` | `command_log.enabled` | Suppress activity logging (spawning, stopping, resizing). Overrides `--log`. |
+| `--quiet` | `-q` | `false` | `command_log.enabled` | Alias for `--no-log`. Suppress all non-error logging output. Overrides `--log`. |
 
 ---
 

@@ -171,6 +171,8 @@ Disable mouse event forwarding.
 .BR \-D ", " \-\-display
 Show VTTY output on the local terminal screen. Keeps displaying after the initial command exits (equivalent to the old \-\-display\-all).
 
+When no separator is given and the first non-flag argument is not a known subcommand, vrw implicitly treats it as a command to spawn into an already-running instance. For example, \fBvrw btop\fR is equivalent to \fBvrw spawn btop\fR \[em] it requires a running vrw instance. To start a \fBnew\fR instance with a command, use \fBvrw \-\-display btop\fR or any other flag combination.
+
 .TP
 .B \-\-no\-display
 Disable local terminal display (default).
@@ -182,6 +184,10 @@ VTTY display refresh interval in milliseconds (default: \fB100\fR).
 .TP
 .BR \-\-no\-log
 Suppress activity logging (spawning, stopping, resizing). Overrides \-\-log.
+
+.TP
+.BR \-q ", " \-\-quiet
+Alias for \-\-no\-log. Suppress all non-error logging output. Overrides \-\-log.
 
 .TP
 .BR \-\-handle\-sigwinch
@@ -247,6 +253,10 @@ Log raw PTY output from child processes to a file. Each line records one read() 
 .B \-\-tabs
 Show a tab bar listing all running commands at the top of the interactive display (requires \fB\-\-display\fR). When disabled (default), only the active command is shown. This provides an \fBmprocs\fR-style multi-command view.
 
+.TP
+.BR \-i ", " \-\-interactive (per-subcommand)
+Several subcommands (\fBlist\fR, \fBstop\fR, \fBkill\fR, \fBstop-command\fR, \fBcat\fR, \fBfreeze\fR, \fBthaw\fR, \fBresize\fR, \fBscreenshot\fR) accept \fB\-i\fR / \fB\-\-interactive\fR as a subcommand flag (not a top-level flag). When given, the subcommand presents a numbered list for interactive selection instead of requiring a PID or target argument.
+
 .SS Environment Variable Options
 
 .TP
@@ -273,7 +283,7 @@ Target a specific vrw instance by PID when using spawn, freeze, thaw, or resize 
 .B \-\-
 Separator that distinguishes vrw's own flags from the child command. Everything after \fB\-\-\fR is passed as the command and its arguments. Required when the child command has flags that might conflict with vrw's own flags.
 
-When no separator is given and the first non-flag argument is not a known subcommand, vrw implicitly treats it as a command to spawn. For example, \fBvrw btop\fR is equivalent to \fBvrw spawn btop\fR (no \fB\-\-\fR separator needed).
+When no separator is given and no flags are present, and the first argument is not a known subcommand, vrw implicitly treats it as a command to spawn into an already-running instance (see Display Options above). For example, \fBvrw btop\fR sends btop to a running instance (equivalent to \fBvrw spawn btop\fR). To start a new instance with a command instead, use \fBvrw \-\-display btop\fR or any other flag.
 
 .SH SUBCOMMANDS
 

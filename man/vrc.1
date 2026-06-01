@@ -170,6 +170,10 @@ Send keystrokes after command starts.
 Suppress activity logging (spawning, stopping, resizing). Overrides \-\-log.
 
 .TP
+.BR \-q ", " \-\-quiet
+Alias for \-\-no\-log. Suppress all non-error logging output. Overrides \-\-log.
+
+.TP
 .BR \-\-handle\-sigwinch
 Resize the VTTY when the terminal where vrc is running is resized. By default VTTY dimensions are fixed at spawn time; with this flag, SIGWINCH events resize all VTTY buffers and PTYs.
 

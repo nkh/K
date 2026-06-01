@@ -117,7 +117,7 @@ async fn try_client_mode(cli: &Cli) -> Result<bool> {
 }
 
 async fn async_main(cli: Cli) -> Result<()> {
-    if cli.no_log {
+    if cli.no_log || cli.quiet {
         tracing_subscriber::fmt()
             .with_max_level(tracing::Level::WARN)
             .init();
