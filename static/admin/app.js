@@ -1313,6 +1313,13 @@ function selectCommand(instUrl, cmdId, name) {
     // Clear any buffered update — we fetch fresh data below
     state._pendingVttyData = null;
     state._pendingVttyDirty = false;
+    // Invalidate the generation cache for the target command so loadVttyHttp
+    // always performs a full DOM update on switch.  Without this, switching
+    // back to a previously-viewed idle command (whose VTTY generation hasn't
+    // changed) causes loadVttyHttp to skip the innerHTML write, leaving the
+    // terminal empty or showing stale content from a previous command.
+    delete state._lastGeneration[cmdId];
+    delete state._cellGrids[cmdId];
     state.bufferView = 'current';
     const globalBufferSel = document.getElementById('bufferSelect');
     if (globalBufferSel) globalBufferSel.value = 'current';
