@@ -1170,6 +1170,7 @@ fn rate_limiter_max_rate_config() {
 // 14. Instance Info Serialization Tests
 // ─────────────────────────────────────────────────────────────────────
 
+#[cfg(feature = "vrunner")]
 #[test]
 fn instance_info_serialization_roundtrip() {
     let info = vrl_core::instance::info::InstanceInfo {
@@ -1188,6 +1189,22 @@ fn instance_info_serialization_roundtrip() {
     assert_eq!(info.bind, info2.bind);
     assert_eq!(info.daemon, info2.daemon);
     assert_eq!(info.command, info2.command);
+}
+
+#[cfg(not(feature = "vrunner"))]
+#[test]
+fn instance_info_serialization_roundtrip_vrl() {
+    let info = vrl_core::instance::info::InstanceInfo {
+        pid: 12345,
+        start_time: chrono::Utc::now(),
+        daemon: true,
+        display: false,
+    };
+    let json = serde_json::to_string(&info).unwrap();
+    let info2: vrl_core::instance::info::InstanceInfo = serde_json::from_str(&json).unwrap();
+    assert_eq!(info.pid, info2.pid);
+    assert_eq!(info.daemon, info2.daemon);
+    assert_eq!(info.display, info2.display);
 }
 
 // ─────────────────────────────────────────────────────────────────────
