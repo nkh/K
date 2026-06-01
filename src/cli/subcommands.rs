@@ -8,7 +8,7 @@ pub use crate::cli::commands::config::handle_config_check_command;
 // vrc-specific re-exports
 #[cfg(not(feature = "vrw"))]
 pub use crate::cli::commands::ipc::{
-    handle_cat_command, handle_freeze_command, handle_kill_command, handle_keys_command,
+    handle_cat_command, handle_freeze_command, handle_kill_all_commands, handle_kill_command, handle_keys_command,
     handle_resize_command, handle_spawn_in_command, handle_thaw_command,
 };
 #[cfg(not(feature = "vrw"))]
@@ -37,7 +37,7 @@ pub use crate::cli::commands::screenshot::handle_screenshot_command;
 #[cfg(feature = "vrw")]
 pub use crate::cli::commands::spawn::{handle_spawn_command, handle_thaw_command as handle_thaw_command_http, handle_freeze_command as handle_freeze_command_http};
 #[cfg(feature = "vrw")]
-pub use crate::cli::commands::stop::{handle_stop_command, resolve_stop_target};
+pub use crate::cli::commands::stop::{handle_stop_all_commands, handle_stop_command, resolve_stop_target};
 
 // ── Shared helper: fetch UDS command list for interactive selection ──
 

@@ -90,13 +90,9 @@ pub struct Cli {
     #[arg(long, value_name = "FILE")]
     pub stderr_file: Option<String>,
 
-    /// Show VTTY on local terminal screen
+    /// Show VTTY on local terminal screen (keep displaying after command exits)
     #[arg(short = 'D', long)]
     pub display: bool,
-
-    /// Keep displaying after the initial command exits
-    #[arg(short = 's', long)]
-    pub display_all: bool,
 
     /// Disable local terminal display
     #[arg(long)]
@@ -205,6 +201,10 @@ pub struct Cli {
     #[arg(long)]
     pub handle_sigwinch: bool,
 
+    /// Suppress activity logging (spawning, stopping, resizing)
+    #[arg(long)]
+    pub no_log: bool,
+
     /// Subcommand
     #[command(subcommand)]
     pub command: Option<Commands>,
@@ -219,7 +219,7 @@ pub enum Commands {
     /// List all running instances
     List {
         /// Interactively select instances from a numbered list
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         interactive: bool,
     },
 
@@ -228,7 +228,7 @@ pub enum Commands {
         /// PID of the instance to stop
         pid: Option<u32>,
         /// Interactively select instances from a numbered list
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         interactive: bool,
     },
 
@@ -255,7 +255,7 @@ pub enum Commands {
         #[arg(short = 'c', long)]
         command: Option<String>,
         /// Interactively select commands from a numbered list
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         interactive: bool,
     },
 
@@ -280,7 +280,7 @@ pub enum Commands {
         #[arg(short = 'c', long)]
         command: Option<String>,
         /// Interactively select running commands from a numbered list
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         interactive: bool,
     },
 
@@ -293,7 +293,7 @@ pub enum Commands {
         #[arg(short = 'c', long)]
         command: Option<String>,
         /// Interactively select frozen commands from a numbered list
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         interactive: bool,
     },
 
@@ -312,7 +312,7 @@ pub enum Commands {
         #[arg(long, default_value_t = 80)]
         cols: u16,
         /// Interactively select commands from a numbered list
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         interactive: bool,
     },
 
@@ -325,8 +325,27 @@ pub enum Commands {
         #[arg(short = 'c', long)]
         command: Option<String>,
         /// Interactively select commands from a numbered list
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         interactive: bool,
+        /// Stop all commands
+        #[arg(long, short = 'a')]
+        all: bool,
+    },
+
+    /// Stop a command (alias for kill)
+    #[cfg(not(feature = "vrw"))]
+    StopCommand {
+        /// PID of the target vrc instance
+        pid: u32,
+        /// ID of the target command (omit for first command)
+        #[arg(short = 'c', long)]
+        command: Option<String>,
+        /// Interactively select commands from a numbered list
+        #[arg(short = 'i', long)]
+        interactive: bool,
+        /// Stop all commands
+        #[arg(long, short = 'a')]
+        all: bool,
     },
 
     // ── vrw-only commands ──
@@ -353,7 +372,7 @@ pub enum Commands {
         /// PID of the command to freeze
         pid: Option<u32>,
         /// Interactively select running commands from a numbered list
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         interactive: bool,
     },
 
@@ -363,7 +382,7 @@ pub enum Commands {
         /// PID of the command to thaw
         pid: Option<u32>,
         /// Interactively select frozen commands from a numbered list
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         interactive: bool,
     },
 
@@ -388,8 +407,24 @@ pub enum Commands {
         /// PID or name of the command to stop
         target: Option<String>,
         /// Interactively select commands from a numbered list
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         interactive: bool,
+        /// Stop all commands
+        #[arg(long, short = 'a')]
+        all: bool,
+    },
+
+    /// Kill a command (alias for stop-command)
+    #[cfg(feature = "vrw")]
+    Kill {
+        /// PID or name of the command to stop
+        target: Option<String>,
+        /// Interactively select commands from a numbered list
+        #[arg(short = 'i', long)]
+        interactive: bool,
+        /// Stop all commands
+        #[arg(long, short = 'a')]
+        all: bool,
     },
 
     /// Purge an exited command, discarding its VTTY buffer
@@ -411,7 +446,7 @@ pub enum Commands {
         #[arg(long, default_value_t = 0)]
         cols: u16,
         /// Interactively select commands from a numbered list
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         interactive: bool,
     },
 
@@ -427,7 +462,7 @@ pub enum Commands {
         #[arg(long, hide = true)]
         color_always: bool,
         /// Interactively select commands from a numbered list
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         interactive: bool,
     },
 
@@ -446,7 +481,7 @@ pub enum Commands {
         #[arg(long)]
         font_name: Option<String>,
         /// Interactively select commands from a numbered list
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         interactive: bool,
     },
 
@@ -565,13 +600,10 @@ impl Cli {
 
         // Daemon
         if self.daemon {
-            if self.display || self.display_all || self.tabs {
+            if self.display || self.tabs {
                 let mut flags = Vec::new();
                 if self.display {
                     flags.push("--display");
-                }
-                if self.display_all {
-                    flags.push("--display-all");
                 }
                 if self.tabs {
                     flags.push("--tabs");
@@ -593,10 +625,8 @@ impl Cli {
         }
 
         // Display
-        if self.display || self.display_all {
+        if self.display {
             cfg.display.enabled = true;
-        }
-        if self.display_all {
             cfg.display.display_all = true;
         }
         if self.no_display {
@@ -613,6 +643,9 @@ impl Cli {
         if let Some(file) = &self.log_file {
             cfg.command_log.enabled = true;
             cfg.command_log.file = Some(file.clone());
+        }
+        if self.no_log {
+            cfg.command_log.enabled = false;
         }
         if let Some(file) = &self.log_pty_raw {
             cfg.command_log.pty_raw_log = Some(file.clone());
@@ -681,18 +714,6 @@ mod tests {
     }
 
     #[test]
-    fn daemon_conflicts_with_display_all() {
-        let cli = Cli::try_parse_from([BINARY_NAME, "--daemon", "--display-all", "htop"]).unwrap();
-        let result = cli.apply_overrides(&mut default_config());
-        assert!(result.is_err());
-        let msg = result.unwrap_err().to_string();
-        assert!(
-            msg.contains("--daemon conflicts with --display-all"),
-            "unexpected: {msg}"
-        );
-    }
-
-    #[test]
     fn daemon_conflicts_with_display() {
         let cli = Cli::try_parse_from([BINARY_NAME, "--daemon", "--display", "htop"]).unwrap();
         let result = cli.apply_overrides(&mut default_config());
@@ -724,9 +745,22 @@ mod tests {
     }
 
     #[test]
-    fn display_all_alone_succeeds() {
-        let cli = Cli::try_parse_from([BINARY_NAME, "--display-all", "htop"]).unwrap();
-        let result = cli.apply_overrides(&mut default_config());
+    fn display_implies_display_all() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "--display", "htop"]).unwrap();
+        let mut cfg = default_config();
+        let result = cli.apply_overrides(&mut cfg);
         assert!(result.is_ok());
+        assert!(cfg.display.enabled);
+        assert!(cfg.display.display_all);
+    }
+
+    #[test]
+    fn no_log_disables_logging() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "--log", "--no-log", "htop"]).unwrap();
+        let mut cfg = default_config();
+        cfg.command_log.enabled = true;
+        let result = cli.apply_overrides(&mut cfg);
+        assert!(result.is_ok());
+        assert!(!cfg.command_log.enabled);
     }
 }

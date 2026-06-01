@@ -150,7 +150,8 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
         | Some(Commands::Freeze { .. })
         | Some(Commands::Thaw { .. })
         | Some(Commands::Resize { .. })
-        | Some(Commands::Kill { .. }) => {
+        | Some(Commands::Kill { .. })
+        | Some(Commands::StopCommand { .. }) => {
             return Ok(Some(cli));
         }
         None => {}
@@ -172,6 +173,7 @@ pub fn is_ipc_command(cli: &Cli) -> bool {
             | Some(Commands::Thaw { .. })
             | Some(Commands::Resize { .. })
             | Some(Commands::Kill { .. })
+            | Some(Commands::StopCommand { .. })
     )
 }
 
@@ -237,10 +239,23 @@ pub async fn run_ipc_command(cli: Cli) -> Result<()> {
                 subcommands::handle_resize_command(pid, command.as_deref(), rows, cols).await
             }
         }
-        Some(Commands::Kill { pid, command, interactive }) => {
+        Some(Commands::Kill { pid, command, interactive, all }) => {
             tracing_subscriber::fmt::init();
             verify_instance(pid)?;
-            if interactive {
+            if all {
+                subcommands::handle_kill_all_commands(pid).await
+            } else if interactive {
+                subcommands::handle_kill_command_interactive(pid).await
+            } else {
+                subcommands::handle_kill_command(pid, command.as_deref()).await
+            }
+        }
+        Some(Commands::StopCommand { pid, command, interactive, all }) => {
+            tracing_subscriber::fmt::init();
+            verify_instance(pid)?;
+            if all {
+                subcommands::handle_kill_all_commands(pid).await
+            } else if interactive {
                 subcommands::handle_kill_command_interactive(pid).await
             } else {
                 subcommands::handle_kill_command(pid, command.as_deref()).await
@@ -269,7 +284,8 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
         }
         Some(Commands::ListVrw) => {}
         Some(Commands::ListCommands) => {}
-        Some(Commands::StopCommand { target: _, interactive: _ }) => {}
+        Some(Commands::StopCommand { target: _, interactive: _, all: _ }) => {}
+        Some(Commands::Kill { target: _, interactive: _, all: _ }) => {}
         Some(Commands::Purge { target: _ }) => {}
         Some(Commands::Resize { target: _, rows: _, cols: _, interactive: _ }) => {}
         Some(Commands::ConfigCheck) => {
@@ -361,7 +377,38 @@ pub async fn handle_subcommands(cli: &Cli) -> Result<bool> {
             subcommands::handle_list_commands_command(cli).await?;
             Ok(true)
         }
-        Some(Commands::StopCommand { target, interactive }) => {
+        Some(Commands::StopCommand { target, interactive, all }) => {
+            if *all {
+                let stopped = subcommands::handle_stop_all_commands(cli).await?;
+                if !stopped {
+                    tracing::error!("No commands to stop.");
+                    std::process::exit(1);
+                }
+                return Ok(true);
+            }
+            let stopped = subcommands::handle_stop_command(cli, target.as_deref(), *interactive).await?;
+            if !stopped {
+                match target {
+                    Some(t) => tracing::error!(
+                        "No matching command found for '{}'. Use `vrw list` to see running commands.", t
+                    ),
+                    None => tracing::error!(
+                        "No command to stop. Use `vrw list` to see running commands."
+                    ),
+                }
+                std::process::exit(1);
+            }
+            Ok(true)
+        }
+        Some(Commands::Kill { target, interactive, all }) => {
+            if *all {
+                let stopped = subcommands::handle_stop_all_commands(cli).await?;
+                if !stopped {
+                    tracing::error!("No commands to stop.");
+                    std::process::exit(1);
+                }
+                return Ok(true);
+            }
             let stopped = subcommands::handle_stop_command(cli, target.as_deref(), *interactive).await?;
             if !stopped {
                 match target {
@@ -425,6 +472,17 @@ pub async fn handle_subcommands(cli: &Cli) -> Result<bool> {
             Ok(true)
         }
         Some(Commands::Cert { .. }) | Some(Commands::ConfigCheck) | Some(Commands::Completions { .. }) => unreachable!(),
-        None => Ok(false),
+        None => {
+            // "vrw btop" is equivalent to "vrw spawn btop"
+            if let Some(ref cmd_args) = cli.cmd_args {
+                if !cmd_args.is_empty() {
+                    let cmd = &cmd_args[0];
+                    let args = &cmd_args[1..];
+                    subcommands::handle_spawn_command(cli, cmd, args, None, None).await?;
+                    return Ok(true);
+                }
+            }
+            Ok(false)
+        },
     }
 }

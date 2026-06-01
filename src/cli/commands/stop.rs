@@ -182,6 +182,32 @@ pub async fn handle_stop_command(_cli: &crate::cli::args::Cli, target: Option<&s
     Ok(false)
 }
 
+/// Stop all commands across all running instances (vrw).
+#[cfg(feature = "vrw")]
+pub async fn handle_stop_all_commands(_cli: &crate::cli::args::Cli) -> Result<bool> {
+    let registry = crate::instance::registry::InstanceRegistry::new()?;
+    let instances = registry.list_instances();
+
+    if instances.is_empty() {
+        return Ok(false);
+    }
+
+    let client = http_client();
+    let mut any_stopped = false;
+
+    for info in &instances {
+        let url = instance_url(info, &None);
+        let all_commands = collect_all_commands(&client, std::slice::from_ref(info)).await;
+        for (_, cmd_id, cmd_pid, _, _) in &all_commands {
+            if stop_command_by_id(&client, &url, cmd_id, *cmd_pid, info.pid).await? {
+                any_stopped = true;
+            }
+        }
+    }
+
+    Ok(any_stopped)
+}
+
 #[cfg(feature = "vrw")]
 pub async fn stop_command_by_id(
     client: &reqwest::Client,

@@ -151,6 +151,40 @@ pub async fn handle_kill_command(pid: u32, command: Option<&str>) -> Result<()> 
     Ok(())
 }
 
+/// Kill all commands in a running vrc instance.
+pub async fn handle_kill_all_commands(pid: u32) -> Result<()> {
+    let response = send_command(pid, ControlCommand::List).await?;
+    let commands = match response {
+        ControlResponse::Ok { data } => data
+            .get("commands")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default(),
+        ControlResponse::Error { error } => anyhow::bail!("{}", error),
+    };
+
+    if commands.is_empty() {
+        println!("No commands running in instance {}.", pid);
+        return Ok(());
+    }
+
+    let mut killed = 0u32;
+    for cmd in &commands {
+        let id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("");
+        if !id.is_empty() {
+            let response = send_command(pid, ControlCommand::Kill { id: id.to_string() }).await?;
+            match response {
+                ControlResponse::Ok { .. } => { killed += 1; }
+                ControlResponse::Error { error } => {
+                    tracing::error!("Failed to kill command {}: {}", id, error);
+                }
+            }
+        }
+    }
+    println!("Killed {} command(s) in instance {}.", killed, pid);
+    Ok(())
+}
+
 /// Verify a target PID is a live vrc instance.
 /// Returns an error if not.
 pub fn verify_instance(pid: u32) -> Result<()> {

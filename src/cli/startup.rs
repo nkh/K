@@ -28,6 +28,7 @@ pub async fn spawn_initial_command(
     };
 
     let cmd = cmd_args[0].clone();
+    let cmd_display = cmd.clone();
     let args = cmd_args[1..].to_vec();
 
     let per_command_exit = if cli.retain_on_exit
@@ -60,6 +61,8 @@ pub async fn spawn_initial_command(
             cli.working_directory.clone(),
         )
         .await?;
+
+    tracing::info!("spawned command '{}' (PID {})", cmd_display, id);
 
     if let Some(ref keys) = cli.send_keys {
         if let Err(e) = manager.send_keys(&id, keys).await {

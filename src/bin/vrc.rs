@@ -14,7 +14,13 @@ use vrc_core::ipc::socket_path_for_pid;
 use vrc_core::process::manager::CommandManager;
 
 async fn async_main(cli: Cli) -> Result<()> {
-    tracing_subscriber::fmt::init();
+    if cli.no_log {
+        tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::WARN)
+            .init();
+    } else {
+        tracing_subscriber::fmt::init();
+    }
 
     if let Ok(cwd) = std::env::current_dir() {
         tracing::info!(cwd = %cwd.display(), "Working directory");
@@ -44,7 +50,7 @@ async fn async_main(cli: Cli) -> Result<()> {
 
     if cfg.display.enabled {
         let log_entries = manager.logger().memory_buffer_arc();
-        let effective_display_all = cfg.display.display_all || cfg.interactive.tabs;
+        let effective_display_all = cfg.interactive.tabs;
         run_display_loop(
             &manager,
             spawned_id.as_deref(),
