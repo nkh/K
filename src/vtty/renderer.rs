@@ -303,6 +303,11 @@ impl VttyRenderer {
     }
 
     /// Render buffer as a PNG image.
+    ///
+    /// Wide characters (CJK, emoji) are rasterized at double cell width.
+    /// The underlying monospace font may not contain glyphs for all Unicode
+    /// code points (e.g. box-drawing symbols like ▽, emoji); fontdue
+    /// substitutes a replacement glyph (tofu box) for missing glyphs.
     #[cfg(feature = "vrunner")]
     pub fn to_png(buffer: &Buffer, font_size: f32, font_path: Option<&str>) -> anyhow::Result<Vec<u8>> {
         let font = match font_path {
@@ -338,14 +343,26 @@ impl VttyRenderer {
 
         for (row_idx, row) in buffer.rows.iter().enumerate().take(rows) {
             for (col_idx, cell) in row.iter().enumerate().take(cols) {
-                let ch = if cell.width == 0 || cell.is_empty() { ' ' } else { cell.ch };
+                // Skip wide-char continuation cells; they are covered by the
+                // lead character's double-width rasterization.
+                if cell.width == 0 {
+                    continue;
+                }
+                let ch = if cell.is_empty() { ' ' } else { cell.ch };
                 let fg = if cell.reverse { cell.bg } else { cell.fg };
 
+                // Use double cell width for wide characters so their glyphs
+                // are not clipped.  fontdue rasterizes at the requested size;
+                // for a 2-column character we give it twice the horizontal
+                // space so the advance width fits naturally.
+                let raster_size = if cell.width == 2 {
+                    font_size * 2.0
+                } else {
+                    font_size
+                };
+
                 // Rasterize glyph
-                let (metrics, bitmap) = font.rasterize(
-                    ch,
-                    font_size,
-                );
+                let (metrics, bitmap) = font.rasterize(ch, raster_size);
 
                 let x0 = (col_idx as f32 * cell_w) as i32;
                 let y0 = (row_idx as f32 * cell_h) as i32;
@@ -809,5 +826,187 @@ mod tests {
                 );
             }
         }
+    }
+
+    // ─── Unicode rendering tests ───
+
+    #[test]
+    fn test_html_renders_triangle_down() {
+        // ▽ (U+25BD) must render as a literal UTF-8 character in the HTML.
+        let mut buf = Buffer::new(5, 1, 100);
+        buf.rows[0][2].ch = '\u{25bd}'; // ▽
+        let html = VttyRenderer::to_html(&buf);
+        assert!(html.contains('\u{25bd}'), "▽ must appear in HTML output");
+        // Must NOT be HTML-escaped
+        assert!(!html.contains("&#25bd;"), "▽ should not be numeric-escaped");
+    }
+
+    #[test]
+    fn test_html_renders_box_drawing_chars() {
+        // Box drawing characters are commonly used in terminal UIs.
+        let mut buf = Buffer::new(4, 1, 100);
+        buf.rows[0][0].ch = '┌';
+        buf.rows[0][1].ch = '─';
+        buf.rows[0][2].ch = '┐';
+        let html = VttyRenderer::to_html(&buf);
+        assert!(html.contains('┌'), "┌ must appear in HTML");
+        assert!(html.contains('─'), "─ must appear in HTML");
+        assert!(html.contains('┐'), "┐ must appear in HTML");
+    }
+
+    #[test]
+    fn test_html_renders_geometric_shapes() {
+        let mut buf = Buffer::new(10, 1, 100);
+        buf.rows[0][0].ch = '\u{25bd}'; // ▽
+        buf.rows[0][1].ch = '\u{25b3}'; // △
+        buf.rows[0][2].ch = '\u{25c0}'; // ◀
+        buf.rows[0][3].ch = '\u{25b6}'; // ▶
+        buf.rows[0][4].ch = '\u{25c6}'; // ◆
+        let html = VttyRenderer::to_html(&buf);
+        for ch in ['\u{25bd}', '\u{25b3}', '\u{25c0}', '\u{25b6}', '\u{25c6}'] {
+            assert!(html.contains(ch), "{:?} must appear in HTML", ch);
+        }
+    }
+
+    #[test]
+    fn test_html_renders_arrows_and_symbols() {
+        let mut buf = Buffer::new(10, 1, 100);
+        buf.rows[0][0].ch = '→';
+        buf.rows[0][1].ch = '←';
+        buf.rows[0][2].ch = '↑';
+        buf.rows[0][3].ch = '↓';
+        buf.rows[0][4].ch = '±';
+        buf.rows[0][5].ch = '°';
+        buf.rows[0][6].ch = '€';
+        buf.rows[0][7].ch = 'µ';
+        let html = VttyRenderer::to_html(&buf);
+        for ch in ['→', '←', '↑', '↓', '±', '°', '€', 'µ'] {
+            assert!(html.contains(ch), "{:?} must appear in HTML", ch);
+        }
+    }
+
+    #[test]
+    fn test_html_renders_emoji() {
+        // Emoji (supplementary plane) should render as literal UTF-8 in HTML.
+        let mut buf = Buffer::new(6, 1, 100);
+        buf.rows[0][0].ch = '😊';
+        buf.rows[0][0].width = 2;
+        buf.rows[0][1].ch = ' '; // continuation
+        buf.rows[0][1].width = 0;
+        buf.rows[0][2].ch = '🔥';
+        buf.rows[0][2].width = 2;
+        buf.rows[0][3].ch = ' '; // continuation
+        buf.rows[0][3].width = 0;
+        let html = VttyRenderer::to_html(&buf);
+        assert!(html.contains('😊'), "emoji must appear in HTML");
+        assert!(html.contains('🔥'), "emoji must appear in HTML");
+        // Should have exactly 2 zero-width spaces (2 wide char continuations)
+        let zwsp_count = html.matches('\u{200b}').count();
+        assert_eq!(zwsp_count, 2, "should have exactly 2 ZWSP for 2 emoji");
+    }
+
+    #[test]
+    fn test_ansi_renders_unicode_chars() {
+        // Unicode characters should pass through ANSI output unchanged.
+        let mut buf = Buffer::new(10, 1, 100);
+        buf.rows[0][0].ch = '\u{25bd}'; // ▽
+        buf.rows[0][0].fg = [255, 0, 0];
+        buf.rows[0][1].ch = '你';
+        buf.rows[0][1].width = 2;
+        buf.rows[0][2].ch = ' ';
+        buf.rows[0][2].width = 0;
+        let ansi = VttyRenderer::to_ansi(&buf);
+        assert!(ansi.contains('\u{25bd}'), "▽ must appear in ANSI output");
+        assert!(ansi.contains('你'), "CJK char must appear in ANSI output");
+    }
+
+    #[test]
+    fn test_plain_renders_unicode_chars() {
+        // Unicode characters should pass through plain text output.
+        let mut buf = Buffer::new(10, 1, 100);
+        buf.rows[0][0].ch = '\u{25bd}'; // ▽
+        buf.rows[0][1].ch = '你';
+        buf.rows[0][1].width = 2;
+        buf.rows[0][2].ch = ' ';
+        buf.rows[0][2].width = 0;
+        buf.rows[0][3].ch = '€';
+        let plain = VttyRenderer::to_plain(&buf);
+        assert!(plain.contains('\u{25bd}'), "▽ must appear in plain output");
+        assert!(plain.contains('你'), "CJK char must appear in plain output");
+        assert!(plain.contains('€'), "€ must appear in plain output");
+    }
+
+    #[test]
+    fn test_diff_with_unicode_chars() {
+        // Unicode characters must survive buffer diff computation and
+        // JSON serialization (as sent to the web client).
+        let a = Buffer::new(5, 1, 100);
+        let mut b_buf = Buffer::new(5, 1, 100);
+        b_buf.rows[0][0].ch = '\u{25bd}'; // ▽
+        b_buf.rows[0][1].ch = '你';
+        b_buf.rows[0][1].width = 2;
+        b_buf.rows[0][2].ch = ' ';
+        b_buf.rows[0][2].width = 0;
+        b_buf.rows[0][3].ch = '€';
+        let diff = b_buf.diff(&a);
+        // All 5 cells changed (from default to new content)
+        assert_eq!(diff.changed_count, 5);
+        // Verify the specific characters are in the diff
+        let has_triangle = diff.cells.iter().any(|c| c.ch == '\u{25bd}');
+        assert!(has_triangle, "▽ must be in diff");
+        let has_cjk = diff.cells.iter().any(|c| c.ch == '你');
+        assert!(has_cjk, "你 must be in diff");
+        let has_euro = diff.cells.iter().any(|c| c.ch == '€');
+        assert!(has_euro, "€ must be in diff");
+        // JSON round-trip must preserve Unicode characters
+        let json = serde_json::to_string(&diff).unwrap();
+        assert!(json.contains('\u{25bd}'), "▽ must survive JSON serialization");
+        assert!(json.contains("你"), "你 must survive JSON serialization");
+        assert!(json.contains('€'), "€ must survive JSON serialization");
+    }
+
+    #[test]
+    fn test_html_mixed_unicode_row() {
+        // A realistic row: "─ ▽ 你 €"
+        // Columns: 0=─(w1), 1=space(w1), 2=▽(w1), 3=space(w1), 4-5=你(w2+w0)
+        // Use a wider buffer
+        let mut buf = Buffer::new(10, 1, 100);
+        buf.rows[0][0].ch = '─';
+        buf.rows[0][0].fg = [200, 200, 200];
+        buf.rows[0][2].ch = '\u{25bd}'; // ▽
+        buf.rows[0][2].fg = [200, 200, 200];
+        buf.rows[0][4].ch = '你';
+        buf.rows[0][4].fg = [200, 200, 200];
+        buf.rows[0][4].width = 2;
+        buf.rows[0][5].ch = ' ';
+        buf.rows[0][5].width = 0;
+        buf.rows[0][5].fg = [200, 200, 200];
+        buf.rows[0][6].ch = '€';
+        buf.rows[0][6].fg = [200, 200, 200];
+        let html = VttyRenderer::to_html(&buf);
+        // All characters must be present
+        assert!(html.contains('─'));
+        assert!(html.contains('\u{25bd}'));
+        assert!(html.contains('你'));
+        assert!(html.contains('€'));
+        // Must have exactly 1 ZWSP (for the CJK continuation)
+        let zwsp_count = html.matches('\u{200b}').count();
+        assert_eq!(zwsp_count, 1);
+    }
+
+    #[test]
+    fn test_html_unicode_with_different_styles() {
+        // Unicode chars with different styles should not be merged.
+        let mut buf = Buffer::new(3, 1, 100);
+        buf.rows[0][0].ch = '\u{25bd}'; // ▽ red
+        buf.rows[0][0].fg = [255, 0, 0];
+        buf.rows[0][1].ch = '\u{25bd}'; // ▽ blue
+        buf.rows[0][1].fg = [0, 0, 255];
+        buf.rows[0][2].ch = '\u{25bd}'; // ▽ green
+        buf.rows[0][2].fg = [0, 255, 0];
+        let html = VttyRenderer::to_html(&buf);
+        // Three different styles → three separate spans
+        let span_count = html.matches("<span class=\"c\"").count();
+        assert_eq!(span_count, 3, "3 different-colored ▽ should produce 3 spans");
     }
 }
