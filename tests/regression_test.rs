@@ -77,6 +77,43 @@ fn test_config() -> Config {
     }
 }
 
+/// Create a test config for vrc-only mode (no server/security/tls fields).
+#[cfg(not(feature = "vrw"))]
+fn test_config() -> Config {
+    Config {
+        vtty: vrc_core::config::schema::VttyConfig {
+            rows: 10,
+            cols: 40,
+            term: "xterm-256color".to_string(),
+            scrollback: 100,
+            truecolor: true,
+            mouse: false,
+        },
+        display: DisplayConfig {
+            enabled: false,
+            refresh_ms: 100,
+            display_all: false,
+        },
+        command_log: CommandLogConfig {
+            enabled: false,
+            file: None,
+            pty_raw_log: None,
+        },
+        daemon: DaemonConfig {
+            enabled: false,
+            stdout_file: "/tmp/vrc-test.out".to_string(),
+            stderr_file: "/tmp/vrc-test.err".to_string(),
+        },
+        handles: vec![],
+        interactive: Default::default(),
+        default_exit: Default::default(),
+        environment: Default::default(),
+        profiles: Default::default(),
+        hooks: Default::default(),
+        templates: Default::default(),
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // 1. COMMAND LIFECYCLE REGRESSION TESTS
 // ═══════════════════════════════════════════════════════════════════════
