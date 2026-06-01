@@ -2358,19 +2358,34 @@ pub async fn wait_for_child(
     mut shutdown_rx: tokio::sync::broadcast::Receiver<()>,
 ) {
     let mut interval = tokio::time::interval(std::time::Duration::from_millis(500));
+    let mut original_alive = true;
     loop {
         tokio::select! {
             _ = interval.tick() => {
-                if let Some(handle) = manager.get(&id.to_string()) {
-                    let pid = handle.pid as i32;
-                    let alive = unsafe { libc::kill(pid, 0) == 0 };
-                    if !alive {
-                        tracing::info!(id, "Direct child exited");
-                        return;
+                if original_alive {
+                    if let Some(handle) = manager.get(&id.to_string()) {
+                        let pid = handle.pid as i32;
+                        let alive = unsafe { libc::kill(pid, 0) == 0 };
+                        if !alive {
+                            tracing::info!(id, "Direct child exited");
+                            return;
+                        }
+                    } else {
+                        // Original command removed (e.g. killed by a restart).
+                        // Only exit if no replacement commands are running.
+                        if manager.list().is_empty() {
+                            tracing::info!(id, "Direct child removed and no commands remain — exiting");
+                            return;
+                        }
+                        tracing::info!(id, "Direct child removed but commands remain (likely restart) — watching remaining");
+                        original_alive = false;
                     }
                 } else {
-                    tracing::info!(id, "Direct child removed from manager");
-                    return;
+                    // Original is gone; watch the remaining command list.
+                    if manager.list().is_empty() {
+                        tracing::info!("All commands exited — shutting down");
+                        return;
+                    }
                 }
             }
             _ = shutdown_rx.recv() => {
