@@ -281,9 +281,16 @@ impl CommandHandle {
             master.resize(rows, cols)?;
         }
 
-        // Then resize the in-memory VTTY buffer
+        // Resize the in-memory VTTY buffer.
         let mut emu = self.emulator.write().await;
         emu.resize(rows as usize, cols as usize);
+        drop(emu);
+
+        // Notify sinks so push-mode (WebSocket) clients get a vtty_dirty
+        // signal even if the child produces no new output after SIGWINCH.
+        let emu = self.emulator.read().await;
+        let buf = emu.buffer();
+        self.vtty_output.notify_sinks(&buf);
 
         Ok(())
     }

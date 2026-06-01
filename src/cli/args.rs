@@ -413,8 +413,11 @@ pub enum Commands {
     Cat {
         /// PID or name of the command whose buffer to print
         target: Option<String>,
-        /// Preserve ANSI color escape sequences in the output
+        /// Strip ANSI color escape sequences; output plain text only
         #[arg(long)]
+        plain: bool,
+        /// Preserve ANSI color escape sequences in the output (default)
+        #[arg(long, hide = true)]
         color_always: bool,
         /// Interactively select commands from a numbered list
         #[arg(long)]

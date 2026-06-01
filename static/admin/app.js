@@ -4681,10 +4681,22 @@ async function restartCommandById(instUrl, cmdId) {
         });
         const json = await res.json();
         if (json.status === 'ok' && json.data && json.data.id) {
+            const newId = json.data.id;
             state.selectedInstUrl = instUrl;
-            state.selectedCmdId = json.data.id;
+            state.selectedCmdId = newId;
             _lastCommandState = '';
-            loadCommands();
+            // Reload command list so the sidebar contains the new command.
+            await loadCommands();
+            // Find the new command's name from the refreshed list.
+            const inst = state.instanceUrls.find(i => i.url === instUrl);
+            let newName = newId;
+            if (inst && inst._commands) {
+                const newCmd = inst._commands.find(c => c.id === newId);
+                if (newCmd) newName = newCmd.name || newCmd.id;
+            }
+            // Stop the old WS/poll (connected to the now-dead old command)
+            // and start fresh with the new command.
+            selectCommand(instUrl, newId, newName);
         }
     } catch (e) { /* ignore */ }
 }

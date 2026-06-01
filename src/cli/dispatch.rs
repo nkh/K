@@ -261,6 +261,7 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
         }
         Some(Commands::Cat {
             target: _,
+            plain: _,
             color_always: _,
             interactive: _,
         }) => {}
@@ -378,10 +379,13 @@ pub async fn handle_subcommands(cli: &Cli) -> Result<bool> {
         }
         Some(Commands::Cat {
             target,
-            color_always,
+            plain,
+            color_always: _,
             interactive,
         }) => {
-            subcommands::handle_cat_command_http(cli, target.as_deref(), *color_always, *interactive).await?;
+            // Colors are the default; --plain strips them.
+            let show_color = !plain;
+            subcommands::handle_cat_command_http(cli, target.as_deref(), show_color, *interactive).await?;
             Ok(true)
         }
         Some(Commands::Screenshot {
