@@ -936,6 +936,148 @@ mod tests {
         assert!(plain.contains('€'), "€ must appear in plain output");
     }
 
+    // ─── End-to-end UTF8 column alignment tests (emulator → HTML) ───
+
+    /// Strip HTML tags and decode standard entities to get plain text content.
+    fn html_to_text(html: &str) -> String {
+        let decoded = html
+            .replace("&amp;", "&")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&#39;", "'")
+            .replace("&quot;", "\"");
+        let mut result = String::new();
+        let mut in_tag = false;
+        for ch in decoded.chars() {
+            match ch {
+                '<' => in_tag = true,
+                '>' => in_tag = false,
+                _ if !in_tag => result.push(ch),
+                _ => {}
+            }
+        }
+        result
+    }
+
+    /// Count visual columns for a text string, as a monospace <pre> would.
+    /// \u200b (zero-width space) = 0; everything else uses unicode-width.
+    fn visual_columns(text: &str) -> usize {
+        use super::super::cell::char_width;
+        text.chars()
+            .map(|c| if c == '\u{200b}' { 0 } else { char_width(c) as usize })
+            .sum()
+    }
+
+    #[test]
+    fn test_utf8_column_alignment_emulator_to_html() {
+        // Feed various UTF8 strings through the emulator, then verify:
+        //  1. Buffer rows have correct cell width sums (= buffer width)
+        //  2. HTML visual column count per row = buffer width
+        //  3. Plain text visual column count per row = buffer width
+        //  4. Each test string's characters appear in the HTML
+        use super::super::emulator::VttyEmulator;
+
+        let test_strings: &[&str] = &[
+            // Geometric symbols (ambiguous width → 1)
+            "▽△◀▶◆●★✓✗",
+            // Box drawing (ambiguous width → 1)
+            "┌──┐│└──┘├┤┬┴┼",
+            // CJK (width=2 each)
+            "你好世界",
+            // Mixed ASCII + geometric symbols
+            "Hello ▽ World △ End",
+            // Mixed ASCII + CJK
+            "Test 你好 World",
+            // Emoji (width=2 each) interspersed with ASCII
+            "A😊B🔥C🚀D",
+            // Arrows and math/special symbols
+            "→←↑↓↔±×÷°²³µ",
+            // Currency symbols
+            "€£¥¢©®™",
+            // Precomposed accented Latin (all width=1)
+            "éüñøæß",
+            // Long mixed line with many character types
+            "A▽B你C🔥D€F┌G好H✓I▶J●K→L",
+            // Multiple geometric symbols with spaces
+            "▽ △ ◀ ▶ ◆ ● ★ ✓ ✗ ▽ △",
+            // Tab + UTF8 (tab stops at 8-column boundaries)
+            "\t▽\t△",
+            // Multiple CJK chars packed together
+            "中文测试日本語テスト",
+            // Fill almost entire line to test right-margin behavior
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA▽",
+        ];
+
+        let cols: usize = 80;
+        let rows = test_strings.len() + 2; // extra rows for margin
+
+        let mut emu = VttyEmulator::new(rows as u16, cols as u16, 1000);
+
+        for s in test_strings {
+            emu.feed_str(s);
+            emu.feed_str("\n");
+        }
+
+        let buf = emu.snapshot();
+
+        // 1. Buffer column alignment: sum of cell widths = buffer width per row
+        for (row_idx, row) in buf.rows.iter().enumerate() {
+            let total_width: usize = row.iter().map(|c| c.width as usize).sum();
+            assert_eq!(
+                total_width, buf.width,
+                "Row {}: cell width sum ({}) != buffer width ({})",
+                row_idx, total_width, buf.width
+            );
+        }
+
+        // 2. HTML visual column alignment per row
+        let html = VttyRenderer::to_html(&buf);
+        let html_lines: Vec<&str> = html.split('\n').collect();
+
+        for (row_idx, line) in html_lines.iter().enumerate() {
+            if row_idx >= buf.rows.len() { break; }
+            if row_idx == html_lines.len() - 1 && line.is_empty() { continue; }
+
+            let text = html_to_text(line);
+            let vc = visual_columns(&text);
+            assert_eq!(
+                vc, buf.width,
+                "Row {}: HTML visual cols ({}) != buffer width ({})\n  text: {:?}",
+                row_idx, vc, buf.width, text
+            );
+        }
+
+        // 3. Plain text visual column alignment per row
+        let plain = VttyRenderer::to_plain(&buf);
+        let plain_lines: Vec<&str> = plain.split('\n').collect();
+
+        for (row_idx, line) in plain_lines.iter().enumerate() {
+            if row_idx >= buf.rows.len() { break; }
+            let vc = visual_columns(line);
+            assert_eq!(
+                vc, buf.width,
+                "Row {}: plain visual cols ({}) != buffer width ({})\n  text: {:?}",
+                row_idx, vc, buf.width, line
+            );
+        }
+
+        // 4. Verify each test string's printable characters appear in the HTML
+        for (i, s) in test_strings.iter().enumerate() {
+            if i >= html_lines.len() { continue; }
+            let text = html_to_text(html_lines[i]);
+            for ch in s.chars() {
+                // Control characters (tab, etc.) are processed by the emulator
+                // into spaces/tab-stops and don't appear literally.
+                if ch.is_control() { continue; }
+                assert!(
+                    text.contains(ch),
+                    "Row {}: expected char {:?} (U+{:04X}) not found in HTML text: {:?}",
+                    i, ch, ch as u32, text
+                );
+            }
+        }
+    }
+
     #[test]
     fn test_diff_with_unicode_chars() {
         // Unicode characters must survive buffer diff computation and

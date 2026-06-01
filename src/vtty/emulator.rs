@@ -239,9 +239,14 @@ impl VttyEmulator {
             return;
         }
         if ch == '\n' {
-            // LF: move cursor down only (no carriage return).
-            // Programs that want CR+LF send \r\n explicitly.
+            // LF: move cursor down and reset to column 0 (Unix newline mode).
+            // The VT100 spec defines LF as "move down only" (no CR), but Unix
+            // terminals and terminal emulators universally treat LF as a
+            // newline (CR+LF).  Programs that explicitly want LF-without-CR
+            // (e.g., to overstrike) can use the CSI 6 (DEC line mode / LN)
+            // escape sequence instead.
             self.wrap_pending = false;
+            self.cursor_col = 0;
             self.cursor_row += 1;
             self.check_scroll();
             return;
@@ -1190,11 +1195,11 @@ mod tests {
     fn test_newline() {
         let mut emu = VttyEmulator::new(10, 10, 100);
         emu.feed_str("Hello\nWorld");
-        assert_eq!(emu.cursor(), (1, 9));
-        assert!(emu.wrap_pending);
+        // LF acts as Unix newline (CR+LF): cursor moves to (row+1, col 0).
+        assert_eq!(emu.cursor(), (1, 5));
         let buf = emu.buffer();
         assert_eq!(buf.rows[0][0].ch, 'H');
-        assert_eq!(buf.rows[1][5].ch, 'W');
+        assert_eq!(buf.rows[1][0].ch, 'W');
     }
 
     #[test]
