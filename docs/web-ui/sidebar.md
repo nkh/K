@@ -4,6 +4,9 @@ The sidebar provides the primary navigation for managing commands. It contains f
 
 The sidebar width can be adjusted by dragging the resize handle on its right edge (minimum 150px, maximum 600px). It can also be fully collapsed via the toggle button in the top bar.
 
+### Sort Bar (multi-instance)
+When multiple vrw instances are connected, a sort bar appears above the command list with options to sort commands: **All** (alphabetical across instances) or by individual instance label. Clicking an instance name filters the list to show only that instance's commands.
+
 ## Commands Tab
 
 ![Commands tab](screenshots/03-sidebar-commands.png)
@@ -93,7 +96,7 @@ Displays all saved templates as cards. Each card shows the template name and com
 Opens the template creation form with fields for name, command, and arguments.
 
 ### Template Card Actions
-Each template card has a **Use** button (spawns the command) and a **Delete** button (removes the template).
+Each template card can be clicked to immediately spawn that command with the saved configuration. User-created templates also have a **Delete** button (`✕`) to remove them. Server-provided templates (from the configuration file) cannot be deleted from the web UI.
 
 ## Certificates Tab
 

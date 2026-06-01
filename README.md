@@ -2,6 +2,8 @@
 
 A virtual terminal runner and process orchestrator. Run commands in pseudo-terminals, monitor them through a local terminal display or a web dashboard, and control them via Unix Domain Socket or HTTP API — from a single statically-linked binary with under 5ms startup.
 
+![Web UI with 5 commands running](docs/web-ui/screenshots/vrw-5-commands.png)
+
 This repository contains two binaries built from a shared codebase, selected at compile time via Cargo features:
 
 | Binary | Feature Flag | IPC Mechanism | Target Use Case |

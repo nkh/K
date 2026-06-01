@@ -1270,6 +1270,20 @@ async function loadCommands() {
     _buildSidebar();
 }
 
+/// Clear the terminal display and stale per-command state for the currently
+/// selected command.  Called before switching to a different command so that
+/// the old command's output does not linger on screen.
+function _clearTerminalForSwitch() {
+    const panel = getSelectedPanel();
+    if (!panel) return;
+    const pre = panel.querySelector('.vtty-container pre');
+    if (pre) pre.innerHTML = '';
+    if (state.selectedCmdId) {
+        delete state._cellGrids[state.selectedCmdId];
+        delete state._lastGeneration[state.selectedCmdId];
+    }
+}
+
 /// Lightweight DOM-only update: toggle the .selected class on sidebar items
 /// without re-fetching /api/commands. Used by selectCommand() to avoid
 /// a redundant HTTP roundtrip that would delay the initial VTTY load.
@@ -1286,6 +1300,11 @@ function selectCommand(instUrl, cmdId, name) {
     if (state.selectedCmdId) {
         sessionStorage.removeItem('vrw_scrollback_' + state.selectedCmdId);
     }
+
+    // Clear the terminal display immediately so the old command's output
+    // doesn't linger while the new VTTY content is being fetched.
+    // Only the active command should write to the terminal display.
+    _clearTerminalForSwitch();
 
     state.selectedInstUrl = instUrl;
     state.selectedCmdId = cmdId;
@@ -1669,6 +1688,10 @@ function connectVttyWs(instUrl, cmdId) {
         ws.onmessage = (event) => {
             try {
                 const msg = JSON.parse(event.data);
+                // Guard: discard messages for a command that is no longer selected.
+                // This can happen if the WS was connected to command A and the user
+                // switched to command B before the WS closed.
+                if (msg.cmd_id && msg.cmd_id !== state.selectedCmdId) return;
                 if (msg.type === 'vtty_full' && msg.data) {
                     // Initial full snapshot — buffer or apply
                     if (state.bufferView === 'current') {
@@ -2525,7 +2548,8 @@ async function spawnCommand() {
             const newId = json.data && json.data.id ? json.data.id : null;
             if (newId) {
                 state.selectedInstUrl = instUrl;
-                state.selectedCmdId = newId;
+                _clearTerminalForSwitch();
+                state._pendingSelectId = newId;
             }
             loadCommands();
         } else {
@@ -4717,7 +4741,8 @@ async function spawnFromWelcome() {
             const newId = json.data && json.data.id ? json.data.id : null;
             if (newId) {
                 state.selectedInstUrl = instUrl;
-                state.selectedCmdId = newId;
+                _clearTerminalForSwitch();
+                state._pendingSelectId = newId;
             }
             loadCommands();
         } else {
@@ -4906,7 +4931,8 @@ function spawnServerTemplate(index) {
             const newId = json.data && json.data.id ? json.data.id : null;
             if (newId) {
                 state.selectedInstUrl = instUrl;
-                state.selectedCmdId = newId;
+                _clearTerminalForSwitch();
+                state._pendingSelectId = newId;
             }
             loadCommands();
             const cmdTab = document.querySelector('.sidebar-tab');
@@ -4934,7 +4960,8 @@ function spawnUserTemplate(index) {
             const newId = json.data && json.data.id ? json.data.id : null;
             if (newId) {
                 state.selectedInstUrl = instUrl;
-                state.selectedCmdId = newId;
+                _clearTerminalForSwitch();
+                state._pendingSelectId = newId;
             }
             loadCommands();
             const cmdTab = document.querySelector('.sidebar-tab');

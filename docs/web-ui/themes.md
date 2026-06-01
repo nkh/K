@@ -27,9 +27,6 @@ The web UI supports four theme modes, allowing you to customize the appearance t
 ### Via Dropdown
 Use the **Theme** select dropdown in the top bar right group. Choose from Auto, Dark, Light, or Grey.
 
-### Via Toggle Button
-Click the **☾** / **☀** button in the top bar to quickly toggle between light and dark. This overrides the dropdown selection.
-
 ### Persistence
 The selected theme is saved to `localStorage` and persists across page reloads and browser sessions.
 
@@ -40,5 +37,6 @@ Each terminal panel can have its own independent theme, controlled by the panel 
 1. **Inherit** (◯): Use the global theme for the terminal area
 2. **Light** (☾): Force a light terminal background
 3. **Dark** (☀): Force a dark terminal background
+4. **Inherit** (◯): Back to inheriting the global theme
 
-This is useful when you want a dark UI but need a light terminal (for screenshots or readability), or vice versa.
+The per-panel theme is persisted in `localStorage` with a panel-specific key. This is useful when you want a dark UI but need a light terminal (for screenshots or readability), or vice versa.

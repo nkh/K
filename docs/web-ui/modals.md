@@ -10,12 +10,14 @@ Displays a reference table of all available keyboard shortcuts in the web UI.
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+F` | Open terminal search within the selected panel |
-| `Ctrl+Shift+F` | Open global search across all commands |
-| `Escape` | Close any open overlay/modal |
-| `L` | Toggle log viewer |
-| `+` / `-` | Increase / decrease font size |
-| `Enter` (in send keys) | Send keystrokes to command |
+| `?` | Show this help |
+| `Ctrl+F` | Search in terminal |
+| `Ctrl+Shift+C` | Copy terminal selection |
+| `Ctrl+Shift+S` / `Alt+S` | Toggle selection mode |
+| `Escape` | Close search / menu |
+| `Alt+Left` / `Alt+Right` | Navigate prev/next command |
+| `Any key` | Focus key input (when not in a field) |
+| `Enter` | Send keystrokes to terminal |
 
 **Open**: Click the **?** button in the top bar.
 
@@ -40,6 +42,12 @@ A bearer token for authenticating with this instance. If omitted, the global tok
 
 **Open**: Click the **+ Panel** button in the top bar.
 
+## Command Picker Modal
+
+When the URL contains a command name that matches multiple running commands (e.g., `/admin/bash` when multiple bash instances are running), a picker overlay appears. Each matching command is listed with its name, PID, alive/exited status, and runtime. Click a command to view its terminal, or click **Cancel** to dismiss.
+
+The picker supports keyboard navigation: Tab and Shift+Tab cycle through the command items, and Escape closes the picker.
+
 ## Special Keys Help Modal
 
 ![Special keys help](screenshots/13-special-keys-help.png)
@@ -47,6 +55,12 @@ A bearer token for authenticating with this instance. If omitted, the global tok
 Displays a comprehensive reference for typing special keys in the send keys input field. See [Special Keys Reference](./special-keys.md) for the full listing.
 
 **Open**: Click the **?** button next to the send keys input in any panel header.
+
+## Global Search Overlay
+
+See [Global Search](./global-search.md) for details.
+
+**Open**: Click the **🔍** button in the top bar.
 
 ## Focus Management
 

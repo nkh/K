@@ -7,7 +7,6 @@ The global search overlay allows you to search for text across all command outpu
 ## Opening Global Search
 
 - Click the **🔍** button in the top bar
-- Or press **Ctrl+Shift+F**
 
 ## Search Input
 Type your search query and press **Enter** or click the **Search** button. The search is case-sensitive and matches against the plain text content of all command terminal buffers.
