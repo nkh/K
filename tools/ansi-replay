@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 # ansi-replay — step-by-step ANSI escape sequence replay tool
 #
-# Replays a PTY raw log produced by `vrunner --log-pty-raw <file>`.
+# Replays a PTY raw log produced by `vrw --log-pty-raw <file>`.
 # Each line in the log file represents one read() call from the PTY master fd,
 # containing an elapsed-time stamp and escaped bytes.
 #
@@ -324,7 +324,7 @@ sub usage {
     print "Usage: $script <logfile> [--dump|--cat]\n";
     print "\n";
     print "Step-by-step ANSI escape sequence replay tool.\n";
-    print "Replays PTY raw logs from vrunner --log-pty-raw.\n";
+    print "Replays PTY raw logs from vrw --log-pty-raw.\n";
     print "\n";
     print "Options:\n";
     print "  --dump, --cat    Output everything at once (non-interactive)\n";
