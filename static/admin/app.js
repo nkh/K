@@ -1931,13 +1931,6 @@ function updateVttyMetadata(data, panel, vttyEl) {
     const dims = data.dimensions || {};
     document.getElementById('cursorPos').textContent = `Cursor: ${cursor.row + 1},${cursor.col + 1}`;
     document.getElementById('termDims').textContent = `${dims.rows}x${dims.cols}`;
-    document.getElementById('resizeRows')?.setAttribute('value', dims.rows || 24);
-    document.getElementById('resizeCols')?.setAttribute('value', dims.cols || 80);
-    // Update panel-scoped resize inputs
-    const rowsInput = document.getElementById('resizeRows-' + panel.id);
-    const colsInput = document.getElementById('resizeCols-' + panel.id);
-    if (rowsInput) rowsInput.value = dims.rows || 24;
-    if (colsInput) colsInput.value = dims.cols || 80;
 
     // Show cursor indicator (hide when in scrollback or app hid it via ?25l)
     const panelObj = state.panels.find(p => p.id === panel.id);
@@ -2665,11 +2658,17 @@ async function resizeTerminalPanel(panelId) {
     const rows = parseInt(document.getElementById('resizeRows-' + panelId)?.value) || 24;
     const cols = parseInt(document.getElementById('resizeCols-' + panelId)?.value) || 80;
     try {
-        await fetch(apiUrl(`/api/commands/${cmdId}/resize`, { url: panelObj.instUrl }), {
+        const res = await fetch(apiUrl(`/api/commands/${cmdId}/resize`, { url: panelObj.instUrl }), {
             method: 'POST',
             headers: authHeadersForInstance({ url: panelObj.instUrl, token: panelObj.token }),
             body: JSON.stringify({ rows, cols }),
         });
+        if (res.ok) {
+            const ri = document.getElementById('resizeRows-' + panelId);
+            const ci = document.getElementById('resizeCols-' + panelId);
+            if (ri) ri.value = rows;
+            if (ci) ci.value = cols;
+        }
     } catch (e) { /* ignore */ }
 }
 
