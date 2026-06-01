@@ -126,6 +126,35 @@ Interactive keybindings are documented in full in
 | `--no-log` | — | `false` | `command_log.enabled` | Suppress activity logging (spawning, stopping, resizing). Overrides `--log`. |
 | `--quiet` | `-q` | `false` | `command_log.enabled` | Alias for `--no-log`. Suppress all non-error logging output. Overrides `--log`. |
 
+### Default behavior without `--display`
+
+When vrc/vrw runs **without** `--display` (the default), event log entries are automatically printed to the terminal in real time. This includes:
+
+- **spawn** — a new command was spawned
+- **exited** — a command process terminated (with exit code)
+- **exit** — a command was removed from or retained in the manager
+- **kill** — a command was killed via the API or CLI
+- **resize** — a command's VTTY was resized
+- **freeze** / **thaw** — a command was suspended or resumed
+- **send_keys** — keystrokes were injected into a command
+- **purge** — a retained command was discarded
+
+Each line is timestamped and includes the event type and relevant details:
+
+```
+[2026-06-01T17:25:03.123456Z] spawn: id=abc123 cmd=htop args=[] cert=None env=[] size=24x80 dir=None
+[2026-06-01T17:25:10.456789Z] resize: id=abc123 rows=40 cols=120
+[2026-06-01T17:26:05.789012Z] exited: id=abc123 name=htop code=Some(0)
+[2026-06-01T17:26:05.789013Z] exit: id=abc123 retained=false code=Some(0)
+```
+
+Use `--quiet` (`-q`) to suppress this output:
+
+```bash
+vrw -q -- python server.py        # silent — no event log
+vrw --quiet --daemon -- worker.sh  # silent daemon
+```
+
 ---
 
 ## Signal Options (Shared)
