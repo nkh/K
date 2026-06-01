@@ -247,7 +247,7 @@ vrc keys 12345 "<C-c>"  # Ctrl+C
 
 ```bash
 vrc cat
-vrc cat htop
+vrc cat --color-always htop
 vrc cat 12345
 ```
 

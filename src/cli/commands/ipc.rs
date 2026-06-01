@@ -56,9 +56,9 @@ pub async fn handle_keys_command(pid: u32, command: Option<&str>, keys: &str) ->
 }
 
 /// Handle `vrc cat <pid>`.
-pub async fn handle_cat_command(pid: u32, command: Option<&str>, plain: bool) -> Result<()> {
+pub async fn handle_cat_command(pid: u32, command: Option<&str>) -> Result<()> {
     let id = resolve_command_id(pid, command).await?;
-    let response = send_command(pid, ControlCommand::Cat { id, plain }).await?;
+    let response = send_command(pid, ControlCommand::Cat { id }).await?;
     match response {
         ControlResponse::Ok { data } => {
             let text = data.get("text").and_then(|v| v.as_str()).unwrap_or("");

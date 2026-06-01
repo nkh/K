@@ -1021,10 +1021,6 @@ impl VttyEmulator {
         let mut last_bold = false;
         let mut last_italic = false;
         let mut last_underline = false;
-        let mut last_blink = false;
-        let mut last_reverse = false;
-        let mut last_invisible = false;
-        let mut last_strikethrough = false;
 
         for row in &buf.rows {
             for cell in row {
@@ -1057,38 +1053,6 @@ impl VttyEmulator {
                         codes.push("24".to_string());
                     }
                     last_underline = cell.underline;
-                }
-                if cell.blink != last_blink {
-                    if cell.blink {
-                        codes.push("5".to_string());
-                    } else {
-                        codes.push("25".to_string());
-                    }
-                    last_blink = cell.blink;
-                }
-                if cell.reverse != last_reverse {
-                    if cell.reverse {
-                        codes.push("7".to_string());
-                    } else {
-                        codes.push("27".to_string());
-                    }
-                    last_reverse = cell.reverse;
-                }
-                if cell.invisible != last_invisible {
-                    if cell.invisible {
-                        codes.push("8".to_string());
-                    } else {
-                        codes.push("28".to_string());
-                    }
-                    last_invisible = cell.invisible;
-                }
-                if cell.strikethrough != last_strikethrough {
-                    if cell.strikethrough {
-                        codes.push("9".to_string());
-                    } else {
-                        codes.push("29".to_string());
-                    }
-                    last_strikethrough = cell.strikethrough;
                 }
                 if Some(cell.fg) != last_fg {
                     codes.push(format!("38;2;{};{};{}", cell.fg[0], cell.fg[1], cell.fg[2]));

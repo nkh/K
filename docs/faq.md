@@ -181,7 +181,7 @@ Use `vrc cat`:
 ```bash
 vrc cat           # auto-select if only one command
 vrc cat 12345      # by PID
-vrc cat --plain htop     # without ANSI colors (plain text)
+vrc cat --color-always htop  # with ANSI colors
 ```
 
 ### How do I send keystrokes to a command?

@@ -173,13 +173,13 @@ pub async fn run_ipc_command(cli: Cli) -> Result<()> {
             verify_instance(pid)?;
             subcommands::handle_keys_command(pid, command.as_deref(), &keys).await
         }
-        Some(Commands::Cat { pid, command, plain, interactive }) => {
+        Some(Commands::Cat { pid, command, interactive }) => {
             tracing_subscriber::fmt::init();
             verify_instance(pid)?;
             if interactive {
-                subcommands::handle_cat_command_interactive(pid, plain).await
+                subcommands::handle_cat_command_interactive(pid).await
             } else {
-                subcommands::handle_cat_command(pid, command.as_deref(), plain).await
+                subcommands::handle_cat_command(pid, command.as_deref()).await
             }
         }
         Some(Commands::SpawnIn { pid, cmd, args }) => {
@@ -261,7 +261,7 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
         }
         Some(Commands::Cat {
             target: _,
-            plain: _,
+            color_always: _,
             interactive: _,
         }) => {}
         Some(Commands::Screenshot { .. }) => {}
@@ -378,10 +378,10 @@ pub async fn handle_subcommands(cli: &Cli) -> Result<bool> {
         }
         Some(Commands::Cat {
             target,
-            plain,
+            color_always,
             interactive,
         }) => {
-            subcommands::handle_cat_command_http(cli, target.as_deref(), *plain, *interactive).await?;
+            subcommands::handle_cat_command_http(cli, target.as_deref(), *color_always, *interactive).await?;
             Ok(true)
         }
         Some(Commands::Screenshot {

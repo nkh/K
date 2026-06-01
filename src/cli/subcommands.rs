@@ -80,12 +80,12 @@ pub async fn fetch_uds_command_items(
 // each selected item.
 
 #[cfg(not(feature = "vrw"))]
-pub async fn handle_cat_command_interactive(pid: u32, plain: bool) -> anyhow::Result<()> {
+pub async fn handle_cat_command_interactive(pid: u32) -> anyhow::Result<()> {
     use crate::cli::interactive_select::select_items;
     let items = fetch_uds_command_items(pid).await?;
     let selected = select_items(&items, "Select commands to cat [space-separated numbers]")?;
     for item in &selected {
-        handle_cat_command(pid, Some(&item.id), plain).await?;
+        handle_cat_command(pid, Some(&item.id)).await?;
     }
     Ok(())
 }
