@@ -92,6 +92,10 @@ pub async fn handle_cat_command(cli: &Cli, target: Option<&str>, color_always: b
     cat_by_id(&client, &instances, &all_commands, &cmd_id, color_always).await
 }
 
+/// ANSI reset escape sequence appended after color output to prevent
+/// trailing color bleed into the user's terminal prompt.
+pub const ANSI_RESET: &str = "\x1b[0m";
+
 /// Cat a single command by its ID.
 async fn cat_by_id(
     client: &reqwest::Client,
@@ -124,7 +128,7 @@ async fn cat_by_id(
         }
         let content = json["data"]["content"].as_str().unwrap_or("");
         print!("{}", content);
-        print!("\x1b[0m");
+        print!("{}", ANSI_RESET);
     } else {
         let resp = client
             .get(format!("{}/api/commands/{}/vtty/text", url, cmd_id))
@@ -140,4 +144,20 @@ async fn cat_by_id(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ansi_reset_is_valid_escape_sequence() {
+        // The ANSI reset sequence must be ESC[0m ( CSI 0 m )
+        assert_eq!(ANSI_RESET, "\x1b[0m");
+        // Verify it starts with ESC and ends with 'm'
+        assert!(ANSI_RESET.starts_with('\x1b'));
+        assert!(ANSI_RESET.ends_with('m'));
+        // Length should be 4: ESC, '[', '0', 'm'
+        assert_eq!(ANSI_RESET.len(), 4);
+    }
 }

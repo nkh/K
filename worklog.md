@@ -132,3 +132,26 @@ Stage Summary:
 - Created /skills/senior-engineer-standards/SKILL.md — comprehensive engineering discipline document
 - File is designed to be living: add new FR-NNN entries whenever failures occur
 - All 10 documented failure registry entries reference specific past incidents and the rules they spawned
+---
+Task ID: 1
+Agent: main
+Task: Fix vrc bash completions, update all documentation, add tests
+
+Work Log:
+- Investigated vrc bash completion failure: when building with --features vrc,vrw, the Commands enum only contains vrw variants (vrc variants are cfg'd out with not(feature = "vrw")), so vrc completions listed vrw commands
+- Added build_vrc_completions_command() function in src/cli/args.rs (gated on cfg(all(feature = "vrc", feature = "vrw"))) that builds a vrc-specific clap::Command tree by hiding vrw-only flags/subcommands and adding vrc-only subcommands (keys, spawn-in)
+- Updated dispatch.rs Completions handler to use build_vrc_completions_command() when runtime binary name is "vrc"
+- Updated 20 manpages: added -i short form for --interactive, --no-log, --handle-sigwinch, --all/-a for kill/stop-command, updated --display to include display-all behavior, removed --display-all, fixed TH headers (VRL→VRC), added kill/stop-command aliases, added implicit spawn docs
+- Created 2 new manpages: vrc-stop-command.1, vrw-kill.1
+- Updated docs/reference/cli.md: added kill/stop-command aliases, --no-log, --handle-sigwinch, Signal Options section, implicit spawn, removed --display-all
+- Updated README.md: added kill/stop-command examples, -i short form
+- Updated docs/usage.md: updated --display-all references, added kill alias
+- Updated docs/configuration.md: deprecated display_all, added --no-log
+- Added 5 new CLI tests: interactive_short_flag_parses, handle_sigwinch_flag_parses, no_log_standalone_disables_logging, implicit_cmd_args_captured, implicit_spawn_multiple_args
+- All 532 tests pass (334 lib + 68 regression + 121 comprehensive + 6 integration + 1 debug + 2 doctests), clippy clean
+- Pushed as commit 1942bea to origin/speedup
+
+Stage Summary:
+- vrc bash completions now work correctly in dual-feature build
+- All documentation updated to reflect: -i short form, kill/stop-command aliases, --no-log, --handle-sigwinch, --all, --display simplification, implicit spawn
+- 5 new tests cover: -i parsing, --handle-sigwinch parsing, --no-log behavior, implicit spawn arg capture

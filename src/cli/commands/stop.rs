@@ -304,3 +304,64 @@ pub async fn handle_stop_command_by_pid_on_instances(
 
     Ok(false)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Helper to create an InstanceInfo for testing.
+    #[cfg(feature = "vrw")]
+    fn make_instance(pid: u32, port: u16) -> InstanceInfo {
+        InstanceInfo {
+            pid,
+            port,
+            bind: "127.0.0.1".to_string(),
+            start_time: chrono::Utc::now(),
+            daemon: false,
+            display: false,
+            command: None,
+        }
+    }
+
+    #[cfg(not(feature = "vrw"))]
+    fn make_instance(pid: u32) -> InstanceInfo {
+        InstanceInfo {
+            pid,
+            start_time: chrono::Utc::now(),
+            daemon: false,
+            display: false,
+        }
+    }
+
+    #[test]
+    fn resolve_explicit_pid_returned() {
+        // When an explicit PID is given, it should be returned as-is
+        #[cfg(feature = "vrw")]
+        let instances = vec![make_instance(9999, 9090)];
+        #[cfg(not(feature = "vrw"))]
+        let instances = vec![make_instance(9999)];
+        let result = resolve_stop_target(Some(42), &instances);
+        assert_eq!(result, 42);
+    }
+
+    #[test]
+    fn resolve_single_instance_auto_selected() {
+        // When no PID is given and only one instance exists, return its PID
+        #[cfg(feature = "vrw")]
+        let instances = vec![make_instance(1234, 9090)];
+        #[cfg(not(feature = "vrw"))]
+        let instances = vec![make_instance(1234)];
+        let result = resolve_stop_target(None, &instances);
+        assert_eq!(result, 1234);
+    }
+
+    #[test]
+    fn resolve_explicit_pid_ignored_instances() {
+        // Explicit PID should be returned regardless of what instances exist
+        #[cfg(feature = "vrw")]
+        let instances = vec![make_instance(1111, 9090), make_instance(2222, 9091)];
+        #[cfg(not(feature = "vrw"))]
+        let instances = vec![make_instance(1111), make_instance(2222)];
+        assert_eq!(resolve_stop_target(Some(5000), &instances), 5000);
+    }
+}

@@ -897,4 +897,496 @@ mod tests {
         assert_eq!(args[1], "run");
         assert_eq!(args[2], "--release");
     }
+
+    // ── kill / stop-command alias tests ──
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn kill_command_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "kill", "42"]).unwrap();
+        match cli.command {
+            Some(Commands::Kill { target, interactive, all }) => {
+                assert_eq!(target.as_deref(), Some("42"));
+                assert!(!interactive);
+                assert!(!all);
+            }
+            _ => panic!("expected Kill command, got {:?}", cli.command),
+        }
+    }
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn stop_command_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "stop-command", "btop"]).unwrap();
+        match cli.command {
+            Some(Commands::StopCommand { target, interactive, all }) => {
+                assert_eq!(target.as_deref(), Some("btop"));
+                assert!(!interactive);
+                assert!(!all);
+            }
+            _ => panic!("expected StopCommand command, got {:?}", cli.command),
+        }
+    }
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn kill_and_stop_command_same_fields() {
+        // Both aliases should parse the same arguments identically
+        let cli_kill = Cli::try_parse_from([BINARY_NAME, "kill", "--all", "-i"]).unwrap();
+        let cli_stop = Cli::try_parse_from([BINARY_NAME, "stop-command", "--all", "-i"]).unwrap();
+
+        match (&cli_kill.command, &cli_stop.command) {
+            (
+                Some(Commands::Kill { target: t1, interactive: i1, all: a1 }),
+                Some(Commands::StopCommand { target: t2, interactive: i2, all: a2 }),
+            ) => {
+                assert_eq!(t1, t2, "target field should match");
+                assert_eq!(i1, i2, "interactive field should match");
+                assert_eq!(a1, a2, "all field should match");
+                assert!(*a1, "--all should be true");
+                assert!(*i1, "-i should be true");
+            }
+            _ => panic!("expected Kill and StopCommand"),
+        }
+    }
+
+    // ── kill --all / stop-command --all tests ──
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn kill_all_flag_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "kill", "--all"]).unwrap();
+        match cli.command {
+            Some(Commands::Kill { target, all, .. }) => {
+                assert!(target.is_none(), "--all should not require a target");
+                assert!(all);
+            }
+            _ => panic!("expected Kill command"),
+        }
+    }
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn stop_command_all_flag_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "stop-command", "--all"]).unwrap();
+        match cli.command {
+            Some(Commands::StopCommand { target, all, .. }) => {
+                assert!(target.is_none(), "--all should not require a target");
+                assert!(all);
+            }
+            _ => panic!("expected StopCommand command"),
+        }
+    }
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn kill_all_short_flag_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "kill", "-a"]).unwrap();
+        match cli.command {
+            Some(Commands::Kill { all, .. }) => {
+                assert!(all);
+            }
+            _ => panic!("expected Kill command"),
+        }
+    }
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn stop_command_all_short_flag_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "stop-command", "-a"]).unwrap();
+        match cli.command {
+            Some(Commands::StopCommand { all, .. }) => {
+                assert!(all);
+            }
+            _ => panic!("expected StopCommand command"),
+        }
+    }
+
+    // ── --interactive (-i) tests for all vrw subcommands that have it ──
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn stop_command_interactive_flag_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "stop-command", "-i"]).unwrap();
+        match cli.command {
+            Some(Commands::StopCommand { interactive, .. }) => {
+                assert!(interactive);
+            }
+            _ => panic!("expected StopCommand command"),
+        }
+    }
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn kill_interactive_flag_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "kill", "-i"]).unwrap();
+        match cli.command {
+            Some(Commands::Kill { interactive, .. }) => {
+                assert!(interactive);
+            }
+            _ => panic!("expected Kill command"),
+        }
+    }
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn cat_interactive_flag_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "cat", "-i"]).unwrap();
+        match cli.command {
+            Some(Commands::Cat { interactive, .. }) => {
+                assert!(interactive);
+            }
+            _ => panic!("expected Cat command"),
+        }
+    }
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn freeze_interactive_flag_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "freeze", "-i"]).unwrap();
+        match cli.command {
+            Some(Commands::Freeze { interactive, .. }) => {
+                assert!(interactive);
+            }
+            _ => panic!("expected Freeze command"),
+        }
+    }
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn thaw_interactive_flag_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "thaw", "-i"]).unwrap();
+        match cli.command {
+            Some(Commands::Thaw { interactive, .. }) => {
+                assert!(interactive);
+            }
+            _ => panic!("expected Thaw command"),
+        }
+    }
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn resize_interactive_flag_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "resize", "-i"]).unwrap();
+        match cli.command {
+            Some(Commands::Resize { interactive, .. }) => {
+                assert!(interactive);
+            }
+            _ => panic!("expected Resize command"),
+        }
+    }
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn screenshot_interactive_flag_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "screenshot", "-i"]).unwrap();
+        match cli.command {
+            Some(Commands::Screenshot { interactive, .. }) => {
+                assert!(interactive);
+            }
+            _ => panic!("expected Screenshot command"),
+        }
+    }
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn stop_interactive_flag_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "stop", "-i"]).unwrap();
+        match cli.command {
+            Some(Commands::Stop { interactive, .. }) => {
+                assert!(interactive);
+            }
+            _ => panic!("expected Stop command"),
+        }
+    }
+
+    // ── cat color_always / plain tests ──
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn cat_plain_flag_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "cat", "--plain", "btop"]).unwrap();
+        match cli.command {
+            Some(Commands::Cat { plain, color_always, interactive, .. }) => {
+                assert!(plain);
+                assert!(!color_always);
+                assert!(!interactive);
+            }
+            _ => panic!("expected Cat command"),
+        }
+    }
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn cat_no_flags_defaults_color() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "cat", "btop"]).unwrap();
+        match cli.command {
+            Some(Commands::Cat { plain, color_always, .. }) => {
+                assert!(!plain, "plain should default to false");
+                assert!(!color_always, "color_always should default to false (implicit)");
+            }
+            _ => panic!("expected Cat command"),
+        }
+    }
+
+    // ── daemon + no_log coexistence ──
+
+    #[test]
+    fn daemon_with_no_log_succeeds() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "--daemon", "--no-log", "htop"]).unwrap();
+        let mut cfg = default_config();
+        let result = cli.apply_overrides(&mut cfg);
+        assert!(result.is_ok(), "--daemon + --no-log should not conflict");
+        assert!(cfg.daemon.enabled);
+        assert!(!cfg.command_log.enabled, "--no-log should disable logging");
+    }
+
+    // ── env var parsing ──
+
+    #[test]
+    fn env_vars_parsed_correctly() {
+        let cli = Cli::try_parse_from([
+            BINARY_NAME,
+            "-e", "FOO=bar",
+            "-e", "BAZ=qux",
+            "htop",
+        ]).unwrap();
+        let env_map = cli.parse_env_vars();
+        assert_eq!(env_map.len(), 2);
+        assert_eq!(env_map.get("FOO").unwrap(), "bar");
+        assert_eq!(env_map.get("BAZ").unwrap(), "qux");
+    }
+
+    #[test]
+    fn env_vars_applied_to_config() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "-e", "MY_VAR=hello", "htop"]).unwrap();
+        let mut cfg = default_config();
+        cfg.environment.variables.insert("PREEXIST".to_string(), "val".to_string());
+        cli.apply_overrides(&mut cfg).unwrap();
+        assert_eq!(cfg.environment.variables.get("MY_VAR").unwrap(), "hello");
+        assert_eq!(cfg.environment.variables.get("PREEXIST").unwrap(), "val");
+    }
+
+    #[test]
+    fn no_env_clears_config_env() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "--no-env", "htop"]).unwrap();
+        let mut cfg = default_config();
+        cfg.environment.variables.insert("SHOULD_BE_CLEARED".to_string(), "x".to_string());
+        cli.apply_overrides(&mut cfg).unwrap();
+        assert!(cfg.environment.variables.is_empty(), "--no-env should clear config env vars");
+    }
+
+    // ── log_file override ──
+
+    #[test]
+    fn log_file_enables_logging() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "--log-file", "/tmp/k.log", "htop"]).unwrap();
+        let mut cfg = default_config();
+        cfg.command_log.enabled = false;
+        cli.apply_overrides(&mut cfg).unwrap();
+        assert!(cfg.command_log.enabled, "--log-file should enable logging");
+        assert_eq!(cfg.command_log.file.as_deref(), Some("/tmp/k.log"));
+    }
+
+    // ── display + no_display conflict resolution ──
+
+    #[test]
+    fn no_display_overrides_display() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "--display", "--no-display", "htop"]).unwrap();
+        let mut cfg = default_config();
+        cli.apply_overrides(&mut cfg).unwrap();
+        // --display is processed first (sets enabled=true), then --no-display (sets enabled=false)
+        assert!(!cfg.display.enabled, "--no-display should override --display");
+    }
+
+    // ── truecolor / no_truecolor ──
+
+    #[test]
+    fn truecolor_overrides_config() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "--truecolor", "htop"]).unwrap();
+        let mut cfg = default_config();
+        cfg.vtty.truecolor = false;
+        cli.apply_overrides(&mut cfg).unwrap();
+        assert!(cfg.vtty.truecolor);
+    }
+
+    #[test]
+    fn no_truecolor_overrides_config() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "--no-truecolor", "htop"]).unwrap();
+        let mut cfg = default_config();
+        cfg.vtty.truecolor = true;
+        cli.apply_overrides(&mut cfg).unwrap();
+        assert!(!cfg.vtty.truecolor);
+    }
+
+    // ── mouse / no_mouse ──
+
+    #[test]
+    fn mouse_enables_in_config() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "--mouse", "htop"]).unwrap();
+        let mut cfg = default_config();
+        cfg.vtty.mouse = false;
+        cli.apply_overrides(&mut cfg).unwrap();
+        assert!(cfg.vtty.mouse);
+    }
+
+    #[test]
+    fn no_mouse_disables_in_config() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "--no-mouse", "htop"]).unwrap();
+        let mut cfg = default_config();
+        cfg.vtty.mouse = true;
+        cli.apply_overrides(&mut cfg).unwrap();
+        assert!(!cfg.vtty.mouse);
+    }
+
+    // ── refresh_ms ──
+
+    #[test]
+    fn refresh_ms_applied_to_config() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "--refresh-ms", "500", "htop"]).unwrap();
+        let mut cfg = default_config();
+        cli.apply_overrides(&mut cfg).unwrap();
+        assert_eq!(cfg.display.refresh_ms, 500);
+    }
+
+    // ── vtty_rows / vtty_cols ──
+
+    #[test]
+    fn vtty_dims_applied_to_config() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "--vtty-rows", "50", "--vtty-cols", "160", "htop"]).unwrap();
+        let mut cfg = default_config();
+        cli.apply_overrides(&mut cfg).unwrap();
+        assert_eq!(cfg.vtty.rows, 50);
+        assert_eq!(cfg.vtty.cols, 160);
+    }
+
+    // ── scrollback ──
+
+    #[test]
+    fn scrollback_applied_to_config() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "--scrollback", "10000", "htop"]).unwrap();
+        let mut cfg = default_config();
+        cli.apply_overrides(&mut cfg).unwrap();
+        assert_eq!(cfg.vtty.scrollback, 10000);
+    }
+
+    // ── tabs ──
+
+    #[test]
+    fn tabs_enables_in_config() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "--tabs", "htop"]).unwrap();
+        let mut cfg = default_config();
+        cli.apply_overrides(&mut cfg).unwrap();
+        assert!(cfg.interactive.tabs);
+    }
+
+    // ── retain_on_exit ──
+
+    #[test]
+    fn retain_on_exit_flag_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "--retain-on-exit", "htop"]).unwrap();
+        assert!(cli.retain_on_exit);
+    }
+
+    // ── config-check subcommand ──
+
+    #[test]
+    fn config_check_subcommand_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "config-check"]).unwrap();
+        match cli.command {
+            Some(Commands::ConfigCheck) => {}
+            _ => panic!("expected ConfigCheck command"),
+        }
+    }
+
+    // ── completions subcommand ──
+
+    #[test]
+    fn completions_subcommand_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "completions", "bash"]).unwrap();
+        match cli.command {
+            Some(Commands::Completions { shell }) => {
+                assert_eq!(shell, clap_complete::Shell::Bash);
+            }
+            _ => panic!("expected Completions command"),
+        }
+    }
+
+    // ── vrc-specific kill / stop-command alias tests (cfg(not(feature = "vrw"))) ──
+
+    #[cfg(not(feature = "vrw"))]
+    #[test]
+    fn vrc_kill_command_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "kill", "1234", "-c", "cmd1"]).unwrap();
+        match cli.command {
+            Some(Commands::Kill { pid, command, interactive, all }) => {
+                assert_eq!(pid, 1234);
+                assert_eq!(command.as_deref(), Some("cmd1"));
+                assert!(!interactive);
+                assert!(!all);
+            }
+            _ => panic!("expected Kill command"),
+        }
+    }
+
+    #[cfg(not(feature = "vrw"))]
+    #[test]
+    fn vrc_stop_command_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "stop-command", "1234", "-c", "cmd1"]).unwrap();
+        match cli.command {
+            Some(Commands::StopCommand { pid, command, interactive, all }) => {
+                assert_eq!(pid, 1234);
+                assert_eq!(command.as_deref(), Some("cmd1"));
+                assert!(!interactive);
+                assert!(!all);
+            }
+            _ => panic!("expected StopCommand command"),
+        }
+    }
+
+    #[cfg(not(feature = "vrw"))]
+    #[test]
+    fn vrc_kill_and_stop_command_same_fields() {
+        let cli_kill = Cli::try_parse_from([BINARY_NAME, "kill", "1234", "--all", "-i"]).unwrap();
+        let cli_stop = Cli::try_parse_from([BINARY_NAME, "stop-command", "1234", "--all", "-i"]).unwrap();
+
+        match (&cli_kill.command, &cli_stop.command) {
+            (
+                Some(Commands::Kill { pid: p1, command: c1, interactive: i1, all: a1 }),
+                Some(Commands::StopCommand { pid: p2, command: c2, interactive: i2, all: a2 }),
+            ) => {
+                assert_eq!(p1, p2, "pid field should match");
+                assert_eq!(c1, c2, "command field should match");
+                assert_eq!(i1, i2, "interactive field should match");
+                assert_eq!(a1, a2, "all field should match");
+                assert!(*a1, "--all should be true");
+                assert!(*i1, "-i should be true");
+            }
+            _ => panic!("expected Kill and StopCommand"),
+        }
+    }
+
+    #[cfg(not(feature = "vrw"))]
+    #[test]
+    fn vrc_kill_all_flag_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "kill", "1234", "--all"]).unwrap();
+        match cli.command {
+            Some(Commands::Kill { all, .. }) => {
+                assert!(all);
+            }
+            _ => panic!("expected Kill command"),
+        }
+    }
+
+    #[cfg(not(feature = "vrw"))]
+    #[test]
+    fn vrc_stop_command_all_flag_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "stop-command", "1234", "--all"]).unwrap();
+        match cli.command {
+            Some(Commands::StopCommand { all, .. }) => {
+                assert!(all);
+            }
+            _ => panic!("expected StopCommand command"),
+        }
+    }
 }
