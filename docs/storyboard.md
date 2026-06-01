@@ -1,6 +1,6 @@
-# vrunner Introduction — Video Storyboard
+# vrw Introduction — Video Storyboard
 
-A 3-minute video introducing vrunner's key features and workflow. Target audience: developers and DevOps engineers looking for a web-first terminal management tool.
+A 3-minute video introducing vrw's key features and workflow. Target audience: developers and DevOps engineers looking for a web-first terminal management tool.
 
 ---
 
@@ -16,17 +16,17 @@ A 3-minute video introducing vrunner's key features and workflow. Target audienc
 
 ---
 
-## Scene 2: Introducing vrunner (0:25 – 0:55)
+## Scene 2: Introducing vrw (0:25 – 0:55)
 
 **Visual**: Clean terminal showing:
 
 ```bash
-$ vrunner --daemon
-vrunner started (PID 12345)
+$ vrw --daemon
+vrw started (PID 12345)
 Listening on http://127.0.0.1:9090
 ```
 
-**Narrator**: "Meet vrunner — a virtual terminal runner with a web-first control plane. It runs your commands in pseudo-terminals and exposes them through a REST API and built-in admin dashboard."
+**Narrator**: "Meet vrw — a virtual terminal runner with a web-first control plane. It runs your commands in pseudo-terminals and exposes them through a REST API and built-in admin dashboard."
 
 **Visual**: Browser opens to `http://localhost:9090/admin`. Clean, dark-themed dashboard with an empty command list.
 
@@ -79,14 +79,14 @@ curl -X POST http://localhost:9090/api/commands \
 **Visual**: Terminal showing:
 
 ```bash
-$ vrunner --remote --tls --port 443 --daemon
+$ vrw --remote --tls --port 443 --daemon
 ```
 
 **Visual**: A laptop on a different network opens a browser to `https://server:443/admin`. The padlock icon shows it's using TLS. A token prompt appears.
 
-**Narrator**: "Need to access your terminals remotely? vrunner supports TLS encryption and bearer token authentication out of the box. Certificates are auto-generated — just add `--remote --tls`."
+**Narrator**: "Need to access your terminals remotely? vrw supports TLS encryption and bearer token authentication out of the box. Certificates are auto-generated — just add `--remote --tls`."
 
-**Visual**: Certificate management screen showing `vrunner cert generate frontend-team`. Two different browser windows connect with different tokens, each seeing only their own commands.
+**Visual**: Certificate management screen showing `vrw cert generate frontend-team`. Two different browser windows connect with different tokens, each seeing only their own commands.
 
 **Narrator**: "Named certificates provide per-command access isolation. Give the frontend team their own token, and they can only interact with their own commands."
 
@@ -97,7 +97,7 @@ $ vrunner --remote --tls --port 443 --daemon
 **Visual**: Full-screen terminal showing:
 
 ```bash
-$ vrunner --display-all --tabs -- cargo test
+$ vrw --display-all --tabs -- cargo test
 ```
 
 **Visual**: Terminal renders the test output with full ANSI colors. Tab bar at the top shows all commands. `Ctrl+Right` switches to the next command. `Ctrl+F` opens a search bar. Mouse selection copies text to clipboard.
@@ -112,7 +112,7 @@ $ vrunner --display-all --tabs -- cargo test
 
 ## Scene 6: API-First Integration (2:40 – 3:00)
 
-**Visual**: A CI/CD pipeline diagram. A GitHub Actions workflow triggers a vrunner API call to start a build. The build output streams to a monitoring dashboard.
+**Visual**: A CI/CD pipeline diagram. A GitHub Actions workflow triggers a vrw API call to start a build. The build output streams to a monitoring dashboard.
 
 ```bash
 JOB_ID=$(curl -s -X POST https://ci-server/api/commands \
@@ -120,12 +120,12 @@ JOB_ID=$(curl -s -X POST https://ci-server/api/commands \
   | jq -r '.data.id')
 ```
 
-**Narrator**: "vrunner is API-first. Start commands from CI scripts, monitor them from dashboards, control them from automation — all through a clean REST API with 30+ endpoints."
+**Narrator**: "vrw is API-first. Start commands from CI scripts, monitor them from dashboards, control them from automation — all through a clean REST API with 30+ endpoints."
 
 **Visual**: Fade to logo + tagline.
 
 **Text overlay**:
-> **vrunner**
+> **vrw**
 > A virtual terminal runner and process orchestrator with a web-first control plane.
 >
 > github.com/nkh/K

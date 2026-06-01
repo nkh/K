@@ -1,6 +1,6 @@
 #[test]
 fn debug_utf8_row_content() {
-    use vrl_core::vtty::emulator::VttyEmulator;
+    use vrc_core::vtty::emulator::VttyEmulator;
     
     let mut emu = VttyEmulator::new(16, 80, 1000);
     
@@ -45,7 +45,7 @@ fn debug_utf8_row_content() {
     }
     
     // Check HTML
-    let html = vrl_core::vtty::renderer::VttyRenderer::to_html(&buf2);
+    let html = vrc_core::vtty::renderer::VttyRenderer::to_html(&buf2);
     let lines: Vec<&str> = html.split('\n').take(5).collect();
     eprintln!("\nHTML first 5 lines:");
     for (i, line) in lines.iter().enumerate() {

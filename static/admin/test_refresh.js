@@ -1,4 +1,4 @@
-/// Test suite for vrunner refresh throttle and diff width handling.
+/// Test suite for vrw refresh throttle and diff width handling.
 /// Run with: node test_refresh.js
 ///
 /// These tests verify the core logic that was previously broken:

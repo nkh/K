@@ -1,10 +1,10 @@
 # Web UI Introduction
 
-The vrunner web UI is a browser-based control plane for managing terminal commands. It provides a real-time view of command output, interactive keyboard input, multi-instance panel support, and comprehensive command lifecycle management — all accessible from any web browser.
+The vrw web UI is a browser-based control plane for managing terminal commands. It provides a real-time view of command output, interactive keyboard input, multi-instance panel support, and comprehensive command lifecycle management — all accessible from any web browser.
 
 ## Accessing the Web UI
 
-By default, vrunner serves the web UI at `http://127.0.0.1:9090/admin`. The bind address and port can be configured via CLI flags (`--bind`, `--port`) or the configuration file. If the `--remote` flag is used, the server binds to `0.0.0.0` and requires authentication.
+By default, vrw serves the web UI at `http://127.0.0.1:9090/admin`. The bind address and port can be configured via CLI flags (`--bind`, `--port`) or the configuration file. If the `--remote` flag is used, the server binds to `0.0.0.0` and requires authentication.
 
 ## Layout Overview
 
@@ -26,4 +26,4 @@ The sidebar can be collapsed or resized by dragging its right edge. On screens n
 
 ## Technology
 
-The web UI is a single-page application (SPA) embedded into the vrunner binary via `rust_embed`. It uses vanilla HTML, CSS, and JavaScript with no external dependencies. Terminal rendering uses a `<pre>` element updated via WebSocket push or HTTP polling.
+The web UI is a single-page application (SPA) embedded into the vrw binary via `rust_embed`. It uses vanilla HTML, CSS, and JavaScript with no external dependencies. Terminal rendering uses a `<pre>` element updated via WebSocket push or HTTP polling.

@@ -1,6 +1,6 @@
 [book]
-title = "vrunner Web UI"
-authors = ["vrunner contributors"]
+title = "vrw Web UI"
+authors = ["vrw contributors"]
 language = "en"
 multilingual = false
 src = "."

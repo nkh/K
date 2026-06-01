@@ -1,4 +1,4 @@
-# vrunner — Development Configuration
+# vrw — Development Configuration
 # Optimized for local development with multiple services
 
 server:
@@ -38,7 +38,7 @@ environment:
 handles:
   - name: "stdout"
     type: "file"
-    path: "/tmp/vrunner-stdout.log"
+    path: "/tmp/vrw-stdout.log"
 
 # Named profiles for different workflows
 profiles:

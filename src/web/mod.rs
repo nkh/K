@@ -1,4 +1,4 @@
-#![cfg(feature = "vrunner")]
+#![cfg(feature = "vrw")]
 #![allow(dead_code, unused_imports)]
 pub mod auth;
 pub mod certs;

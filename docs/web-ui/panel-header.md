@@ -16,7 +16,7 @@ Displays the full command name and arguments of the currently selected command. 
 Shows real-time CPU percentage and memory usage for the selected command (e.g., `CPU 2.3% | 14.5MB`). This data is polled periodically from the server.
 
 ### Instance URL
-Shows the URL of the vrunner instance this panel is connected to. Truncated if too long.
+Shows the URL of the vrw instance this panel is connected to. Truncated if too long.
 
 ### Panel Font Size (`A-` / `10px` / `A+`)
 Adjusts the font size for this specific panel only, independent of the global font size setting. Each panel's font size is saved to `localStorage` with its own key.
@@ -49,7 +49,7 @@ Sends the contents of the send keys input field to the selected command's PTY. E
 Opens the special keys reference modal, which explains how to type special keys (Return, Backspace, Escape, arrow keys, etc.) in the send keys input field. See [Special Keys Reference](./special-keys.md).
 
 ### Remove Panel Button (`✕`)
-Visible only when multiple panels are open. Removes this panel from the display. The underlying vrunner instance is not affected.
+Visible only when multiple panels are open. Removes this panel from the display. The underlying vrw instance is not affected.
 
 ### Copy Button
 Copies any selected text in the terminal to the clipboard. Text must be selected using the **Select** mode first.

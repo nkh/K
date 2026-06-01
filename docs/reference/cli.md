@@ -1,15 +1,15 @@
-# vrl / vrunner CLI Reference
+# vrc / vrw CLI Reference
 
-Complete reference for the `vrl` and `vrunner` command-line interfaces. Both
+Complete reference for the `vrc` and `vrw` command-line interfaces. Both
 binaries share the same core CLI options (VTTY, display, daemon, exit handlers)
 and differ in their transport layer and binary-specific subcommands. Every flag
 corresponds to a configuration key described in [`../configuration.md`](../configuration.md);
 CLI flags take precedence over config-file values.
 
-| | vrl | vrunner |
+| | vrc | vrw |
 |--|-----|---------|
 | **Transport** | UDS IPC | HTTP + WebSocket |
-| **Default feature** | Yes | No (`--features vrunner`) |
+| **Default feature** | Yes | No (`--features vrw`) |
 | **Server** | UDS socket (`control-{pid}.sock`) | HTTP server (`:9090`) |
 
 Options marked **Shared** work identically for both binaries.
@@ -18,18 +18,18 @@ Options marked **Shared** work identically for both binaries.
 
 ## Synopsis
 
-### vrl
+### vrc
 
 ```
-vrl [GENERAL OPTIONS] [CATEGORY OPTIONS] -- <command> [args...]
-vrl <subcommand> [SUBCOMMAND OPTIONS]
+vrc [GENERAL OPTIONS] [CATEGORY OPTIONS] -- <command> [args...]
+vrc <subcommand> [SUBCOMMAND OPTIONS]
 ```
 
-### vrunner
+### vrw
 
 ```
-vrunner [GENERAL OPTIONS] [SERVER OPTIONS] [CATEGORY OPTIONS] -- <command> [args...]
-vrunner <subcommand> [SUBCOMMAND OPTIONS]
+vrw [GENERAL OPTIONS] [SERVER OPTIONS] [CATEGORY OPTIONS] -- <command> [args...]
+vrw <subcommand> [SUBCOMMAND OPTIONS]
 ```
 
 ---
@@ -41,20 +41,20 @@ standard help/version information.
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--config <path>` | `-c` | `vrl.yaml` in the current directory | Path to the configuration file. |
+| `--config <path>` | `-c` | `vrc.yaml` in the current directory | Path to the configuration file. |
 | `--help` | `-h` | — | Print usage summary and exit. |
 | `--version` | `-V` | — | Print version string and exit. |
 
 The config file is resolved in this order:
 
 1. Path given via `--config`.
-2. `./vrl.yaml` (or `./vrl.yml`).
+2. `./vrc.yaml` (or `./vrc.yml`).
 
 ---
 
-## Server Options (vrunner only)
+## Server Options (vrw only)
 
-These options control the HTTP server that vrunner starts.
+These options control the HTTP server that vrw starts.
 
 | Flag | Default | Config Key | Description |
 |------|---------|------------|-------------|
@@ -130,14 +130,14 @@ Run as a background daemon process.
 | Flag | Default | Config Key | Description |
 |------|---------|------------|-------------|
 | `--daemon` | `false` | `daemon.enabled` | Fork into the background after initialization. Conflicts with `--display`, `--display-all`, and `--tabs`. |
-| `--stdout-file <path>` | `vrl.out` | `daemon.stdout_file` | File to which the daemon's stdout is redirected. |
-| `--stderr-file <path>` | `vrl.err` | `daemon.stderr_file` | File to which the daemon's stderr is redirected. |
+| `--stdout-file <path>` | `vrc.out` | `daemon.stdout_file` | File to which the daemon's stdout is redirected. |
+| `--stderr-file <path>` | `vrc.err` | `daemon.stderr_file` | File to which the daemon's stderr is redirected. |
 
 **Example**
 
 ```bash
-vrl --daemon -- python worker.py
-vrunner --daemon -- python worker.py
+vrc --daemon -- python worker.py
+vrw --daemon -- python worker.py
 ```
 
 ---
@@ -159,37 +159,37 @@ an error, and allow automated keystroke injection.
 **Example**
 
 ```bash
-vrl --send-keys "<C-c>" --exit-timeout 30 -- app
+vrc --send-keys "<C-c>" --exit-timeout 30 -- app
 ```
 
 ---
 
-## Subcommands — vrl
+## Subcommands — vrc
 
-vrl subcommands operate on *already running* vrl instances via UDS IPC.
+vrc subcommands operate on *already running* vrc instances via UDS IPC.
 
 ### `list`
 
-List all running vrl instances and their commands.
+List all running vrc instances and their commands.
 
 ```bash
-vrl list
+vrc list
 ```
 
 Output includes instance PID, status, daemon/display flags, uptime, and commands with their PIDs, names, and running status.
 
 ```bash
-vrl list --target 12345
+vrc list --target 12345
 ```
 
 ---
 
 ### `stop`
 
-Stop a vrl instance by PID. Sends `SIGTERM` to the instance process.
+Stop a vrc instance by PID. Sends `SIGTERM` to the instance process.
 
 ```bash
-vrl stop [pid]
+vrc stop [pid]
 ```
 
 | Argument | Description |
@@ -200,15 +200,15 @@ vrl stop [pid]
 
 ### `spawn-in`
 
-Dynamically create a new command in a running vrl instance via UDS IPC.
+Dynamically create a new command in a running vrc instance via UDS IPC.
 
 ```bash
-vrl spawn-in <pid> -- <cmd> [args...] [--rows <n>] [--cols <n>]
+vrc spawn-in <pid> -- <cmd> [args...] [--rows <n>] [--cols <n>]
 ```
 
 | Argument / Flag | Description |
 |-----------------|-------------|
-| `pid` | PID of the target vrl instance. |
+| `pid` | PID of the target vrc instance. |
 | `cmd` | Command to run. |
 | `args` | Arguments for the command (everything after `--`). |
 | `--rows <n>` | VTTY rows for the spawned command. |
@@ -221,7 +221,7 @@ vrl spawn-in <pid> -- <cmd> [args...] [--rows <n>] [--cols <n>]
 Send keystrokes to a running command via UDS IPC.
 
 ```bash
-vrl keys <pid> <keys>
+vrc keys <pid> <keys>
 ```
 
 ---
@@ -231,10 +231,10 @@ vrl keys <pid> <keys>
 Print the VTTY buffer of a running command to stdout.
 
 ```bash
-vrl cat
-vrl cat --color-always
-vrl cat 12345
-vrl cat --color-always htop
+vrc cat
+vrc cat --color-always
+vrc cat 12345
+vrc cat --color-always htop
 ```
 
 | Flag | Default | Description |
@@ -248,7 +248,7 @@ vrl cat --color-always htop
 Pause a running command by sending `SIGSTOP`.
 
 ```bash
-vrl freeze <pid>
+vrc freeze <pid>
 ```
 
 ---
@@ -258,7 +258,7 @@ vrl freeze <pid>
 Resume a previously frozen command by sending `SIGCONT`.
 
 ```bash
-vrl thaw <pid>
+vrc thaw <pid>
 ```
 
 ---
@@ -268,7 +268,7 @@ vrl thaw <pid>
 Change the virtual terminal dimensions of a running command.
 
 ```bash
-vrl resize <target> --rows <n> --cols <n>
+vrc resize <target> --rows <n> --cols <n>
 ```
 
 | Argument / Flag | Default | Description |
@@ -284,7 +284,7 @@ vrl resize <target> --rows <n> --cols <n>
 Validate configuration files without starting anything.
 
 ```bash
-vrl config-check
+vrc config-check
 ```
 
 Exit codes: `0` = valid, `1` = errors found.
@@ -296,43 +296,43 @@ Exit codes: `0` = valid, `1` = errors found.
 Generate shell completion scripts.
 
 ```bash
-vrl completions bash > /etc/bash_completion.d/vrl
-vrl completions zsh > ~/.zsh/completions/_vrl
-vrl completions fish > ~/.config/fish/completions/vrl.fish
+vrc completions bash > /etc/bash_completion.d/vrc
+vrc completions zsh > ~/.zsh/completions/_vrc
+vrc completions fish > ~/.config/fish/completions/vrc.fish
 ```
 
 ---
 
-## Subcommands — vrunner
+## Subcommands — vrw
 
-vrunner subcommands communicate with running instances via the HTTP API.
+vrw subcommands communicate with running instances via the HTTP API.
 
 ### `list`
 
-List all running vrunner instances and their commands.
+List all running vrw instances and their commands.
 
 ```bash
-vrunner list
+vrw list
 ```
 
 ---
 
 ### `stop`
 
-Stop a vrunner instance by PID. Sends a shutdown request via the HTTP API.
+Stop a vrw instance by PID. Sends a shutdown request via the HTTP API.
 
 ```bash
-vrunner stop [pid]
+vrw stop [pid]
 ```
 
 ---
 
 ### `spawn`
 
-Spawn a new command in a running vrunner instance via the HTTP API.
+Spawn a new command in a running vrw instance via the HTTP API.
 
 ```bash
-vrunner spawn [OPTIONS] CMD [ARGS...]
+vrw spawn [OPTIONS] CMD [ARGS...]
 ```
 
 | Flag | Default | Description |
@@ -343,9 +343,9 @@ vrunner spawn [OPTIONS] CMD [ARGS...]
 | `--dir <path>` | — | Working directory for the command. |
 
 ```bash
-vrunner spawn htop
-vrunner spawn --env RUST_LOG=debug -- cargo run
-vrunner --target 12345 spawn npm run dev
+vrw spawn htop
+vrw spawn --env RUST_LOG=debug -- cargo run
+vrw --target 12345 spawn npm run dev
 ```
 
 ---
@@ -355,27 +355,27 @@ vrunner --target 12345 spawn npm run dev
 Stop a specific running command by ID or name.
 
 ```bash
-vrunner stop-command <target>
+vrw stop-command <target>
 ```
 
 ---
 
-### `list-vrunner`
+### `list-vrw`
 
-List all running vrunner server instances.
+List all running vrw server instances.
 
 ```bash
-vrunner list-vrunner
+vrw list-vrw
 ```
 
 ---
 
 ### `list-commands`
 
-List all commands across all running vrunner instances.
+List all commands across all running vrw instances.
 
 ```bash
-vrunner list-commands
+vrw list-commands
 ```
 
 ---
@@ -385,7 +385,7 @@ vrunner list-commands
 Pause a running command by sending `SIGSTOP`.
 
 ```bash
-vrunner freeze <pid>
+vrw freeze <pid>
 ```
 
 ---
@@ -395,7 +395,7 @@ vrunner freeze <pid>
 Resume a previously frozen command by sending `SIGCONT`.
 
 ```bash
-vrunner thaw <pid>
+vrw thaw <pid>
 ```
 
 ---
@@ -405,7 +405,7 @@ vrunner thaw <pid>
 Change the virtual terminal dimensions of a running command.
 
 ```bash
-vrunner resize <target> --rows <n> --cols <n>
+vrw resize <target> --rows <n> --cols <n>
 ```
 
 ---
@@ -415,7 +415,7 @@ vrunner resize <target> --rows <n> --cols <n>
 Remove a retained (exited) command from memory.
 
 ```bash
-vrunner purge [target]
+vrw purge [target]
 ```
 
 ---
@@ -425,7 +425,7 @@ vrunner purge [target]
 Capture a PNG screenshot of a running command's VTTY output.
 
 ```bash
-vrunner screenshot [name] [--output <path>]
+vrw screenshot [name] [--output <path>]
 ```
 
 ---
@@ -435,7 +435,7 @@ vrunner screenshot [name] [--output <path>]
 Print the VTTY buffer of a running command to stdout.
 
 ```bash
-vrunner cat [name]
+vrw cat [name]
 ```
 
 ---
@@ -445,7 +445,7 @@ vrunner cat [name]
 Validate configuration files without starting anything.
 
 ```bash
-vrunner config-check
+vrw config-check
 ```
 
 ---
@@ -455,22 +455,22 @@ vrunner config-check
 Generate shell completion scripts.
 
 ```bash
-vrunner completions bash > /etc/bash_completion.d/vrunner
-vrunner completions zsh > ~/.zsh/completions/_vrunner
-vrunner completions fish > ~/.config/fish/completions/vrunner.fish
+vrw completions bash > /etc/bash_completion.d/vrw
+vrw completions zsh > ~/.zsh/completions/_vrw
+vrw completions fish > ~/.config/fish/completions/vrw.fish
 ```
 
 ---
 
 ### `cert`
 
-Manage per-command client certificates (vrunner only).
+Manage per-command client certificates (vrw only).
 
 ```bash
-vrunner cert generate <name>
-vrunner cert list
-vrunner cert show <name>
-vrunner cert remove <name>
+vrw cert generate <name>
+vrw cert list
+vrw cert show <name>
+vrw cert remove <name>
 ```
 
 ---
@@ -511,10 +511,10 @@ The `--send-keys` flag accepts key sequences using `<...>` notation for special 
 
 ```bash
 # Send Ctrl+C followed by "y" and Enter
-vrl --send-keys "<C-c>y<Enter>" -- interactive-app
+vrc --send-keys "<C-c>y<Enter>" -- interactive-app
 
 # Send Escape, then :q! followed by Enter (Vim quit)
-vrl --send-keys "<Esc>:q!<Enter>" -- vim file.txt
+vrc --send-keys "<Esc>:q!<Enter>" -- vim file.txt
 ```
 
 ---
@@ -535,5 +535,5 @@ vrl --send-keys "<Esc>:q!<Enter>" -- vim file.txt
 - [`../configuration.md`](../configuration.md) — Full configuration file reference
 - [`keybindings.md`](keybindings.md) — Interactive keyboard shortcuts
 - [`../hooks.md`](../hooks.md) — Event hooks reference
-- [`../api.md`](../api.md) — vrunner REST API reference
+- [`../api.md`](../api.md) — vrw REST API reference
 - [`../explanation/architecture.md`](../explanation/architecture.md) — System architecture

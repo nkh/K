@@ -1,18 +1,20 @@
 # CI/CD Pipeline Integration
 
-Learn how to integrate vrunner into your CI/CD pipeline to start secure instances, run builds, monitor progress from a browser, retrieve artifacts, and clean up automatically.
+Learn how to integrate vrw into your CI/CD pipeline to start secure instances, run builds, monitor progress from a browser, retrieve artifacts, and clean up automatically.
+
+> **Using vrc for local CI?** If you don't need the web dashboard or remote monitoring, `vrc` works in CI pipelines too — see the [vrc CI alternative](#vrc-ci-alternative) section below.
 
 ## Overview
 
-vrunner fits naturally into CI pipelines as a persistent command runner that provides:
+vrw fits naturally into CI pipelines as a persistent command runner that provides:
 
 - A **web dashboard** to monitor builds in real time from any browser.
 - A **REST API** to programmatically control and query command state.
 - **Persistent logs** for post-build analysis and artifact retrieval.
 
-## Step 1: Start a Secure vrunner Instance
+## Step 1: Start a Secure vrw Instance
 
-Start vrunner at the beginning of your pipeline. Use `--daemon` to background it and `--tls` to secure access:
+Start vrw at the beginning of your pipeline. Use `--daemon` to background it and `--tls` to secure access:
 
 ```yaml
 # .gitlab-ci.yml (GitLab example)
@@ -21,43 +23,43 @@ stages:
   - cleanup
 
 variables:
-  VRUNNER_PORT: "9090"
-  VRUNNER_LOG: "/tmp/vrunner-ci.log"
+  VRW_PORT: "9090"
+  VRW_LOG: "/tmp/vrw-ci.log"
 
 test:
   stage: test
   before_script:
-    # Start vrunner as a daemon with TLS
+    # Start vrw as a daemon with TLS
     - |
-      vrunner --daemon \
-        --port $VRUNNER_PORT \
+      vrw --daemon \
+        --port $VRW_PORT \
         --tls \
         --cert /etc/ssl/ci-cert.pem \
         --key /etc/ssl/ci-key.pem \
-        --log $VRUNNER_LOG
+        --log $VRW_LOG
   script:
     # Spawn test commands
     - |
-      curl -sk -X POST https://localhost:$VRUNNER_PORT/api/commands \
+      curl -sk -X POST https://localhost:$VRW_PORT/api/commands \
         -H "Content-Type: application/json" \
         -d '{"command": "npm run test:unit", "name": "unit-tests"}'
     - |
-      curl -sk -X POST https://localhost:$VRUNNER_PORT/api/commands \
+      curl -sk -X POST https://localhost:$VRW_PORT/api/commands \
         -H "Content-Type: application/json" \
         -d '{"command": "npm run test:integration", "name": "integration-tests"}'
     # Wait for all commands to finish
     - |
       while true; do
-        RUNNING=$(curl -sk https://localhost:$VRUNNER_PORT/api/commands | jq '[.[] | select(.status=="running")] | length')
+        RUNNING=$(curl -sk https://localhost:$VRW_PORT/api/commands | jq '[.[] | select(.status=="running")] | length')
         if [ "$RUNNING" -eq 0 ]; then break; fi
         sleep 5
       done
     # Check results and retrieve logs
     - |
       for CMD_NAME in unit-tests integration-tests; do
-        CMD_ID=$(curl -sk https://localhost:$VRUNNER_PORT/api/commands | jq -r ".[] | select(.name==\"$CMD_NAME\") | .id")
-        STATUS=$(curl -sk "https://localhost:$VRUNNER_PORT/api/commands/$CMD_ID" | jq -r '.exit_code')
-        curl -sk "https://localhost:$VRUNNER_PORT/api/commands/$CMD_ID/logs" > "logs-${CMD_NAME}.txt"
+        CMD_ID=$(curl -sk https://localhost:$VRW_PORT/api/commands | jq -r ".[] | select(.name==\"$CMD_NAME\") | .id")
+        STATUS=$(curl -sk "https://localhost:$VRW_PORT/api/commands/$CMD_ID" | jq -r '.exit_code')
+        curl -sk "https://localhost:$VRW_PORT/api/commands/$CMD_ID/logs" > "logs-${CMD_NAME}.txt"
         if [ "$STATUS" != "0" ]; then
           echo "FAILED: $CMD_NAME (exit code $STATUS)"
           exit 1
@@ -72,7 +74,7 @@ cleanup:
   stage: cleanup
   when: always
   script:
-    - vrunner daemon stop --port $VRUNNER_PORT || true
+    - vrw daemon stop --port $VRW_PORT || true
 ```
 
 ## Step 2: Start Builds from CI Scripts
@@ -122,14 +124,14 @@ curl -sk https://localhost:9090/api/commands/cmd_abc123/vtty/html > build-report
 
 ## Step 5: Cleanup
 
-Always stop the vrunner instance at the end of the pipeline, even if earlier steps failed:
+Always stop the vrw instance at the end of the pipeline, even if earlier steps failed:
 
 ```yaml
 after_script:
-  - vrunner daemon stop --port $VRUNNER_PORT || true
+  - vrw daemon stop --port $VRW_PORT || true
 ```
 
-The `|| true` ensures cleanup runs even if vrunner has already stopped or was never started.
+The `|| true` ensures cleanup runs even if vrw has already stopped or was never started.
 
 ## GitHub Actions Example
 
@@ -143,12 +145,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install vrunner
-        run: curl -fsSL https://get.vrunner.dev | sh
+      - name: Install vrw
+        run: curl -fsSL https://get.vrw.dev | sh
 
-      - name: Start vrunner
+      - name: Start vrw
         run: |
-          vrunner --daemon --port 9090 --log /tmp/vrunner.log
+          vrw --daemon --port 9090 --log /tmp/vrw.log
 
       - name: Run tests
         run: |
@@ -170,7 +172,7 @@ jobs:
 
       - name: Cleanup
         if: always()
-        run: vrunner daemon stop --port 9090 || true
+        run: vrw daemon stop --port 9090 || true
 
       - name: Upload logs
         if: always()
@@ -187,5 +189,40 @@ jobs:
 - **Secure with `--tls`** if the CI runner is accessible from the network.
 - **Use `--no-env`** to isolate spawned commands from CI environment variables if they may interfere.
 - **Set resource limits** in your config to prevent commands from consuming excessive memory or CPU.
+
+## vrc CI Alternative
+
+If you don't need the web dashboard or remote browser monitoring, `vrc` provides a simpler local CI workflow:
+
+```bash
+# Start vrc in daemon mode with display logging
+vrc --daemon --log /tmp/vrc-ci.log -- npm run test
+
+# Check status
+vrc list
+
+# Capture output after completion
+vrc cat --color-always > /tmp/test-output.txt
+
+# Stop
+vrc stop
+```
+
+For headless CI where no display is available:
+
+```bash
+# Run in background, capture output to file
+vrc --daemon --stdout-file /tmp/vrc-ci-out.log --stderr-file /tmp/vrc-ci-err.log \
+  -- npm run test
+
+# Poll until done
+while vrc list | grep -q running; do sleep 5; done
+
+# Retrieve logs
+vrc cat --color-always > test-results.txt
+vrc stop
+```
+
+This approach avoids the overhead of starting an HTTP server and is ideal for local CI runners or single-machine pipelines.
 
 For API details, see [`../api.md`](../api.md). For configuration options, see [`configuration-profiles.md`](configuration-profiles.md).

@@ -11,9 +11,9 @@ pub mod templates;
 pub mod validation;
 pub mod vtty;
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 pub mod security;
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 pub mod server;
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 pub mod web;

@@ -321,9 +321,9 @@ async fn dispatch_command(manager: &Arc<CommandManager>, cmd: ControlCommand) ->
             // which the main loop listens to.  We need access to shutdown_tx
             // here — but we don't pass it through.  Instead, the client
             // can use SIGTERM directly.  For now, return an error directing
-            // to `vrl stop`.
+            // to `vrc stop`.
             ControlResponse::Error {
-                error: "Use `vrl stop <pid>` for graceful shutdown.".to_string(),
+                error: "Use `vrc stop <pid>` for graceful shutdown.".to_string(),
             }
         }
     }

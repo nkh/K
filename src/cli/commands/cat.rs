@@ -1,4 +1,4 @@
-#![cfg(feature = "vrunner")]
+#![cfg(feature = "vrw")]
 #![allow(dead_code, unused_imports)]
 use anyhow::Result;
 
@@ -6,7 +6,7 @@ use crate::cli::args::Cli;
 use crate::cli::commands::common::{collect_all_commands, http_client, instance_url, resolve_targeted_instances};
 use crate::instance::registry::InstanceRegistry;
 
-/// Handle the `vrunner cat [TARGET]` subcommand.
+/// Handle the `vrw cat [TARGET]` subcommand.
 ///
 /// Fetches the VTTY buffer of the specified (or sole) running command
 /// and prints it to stdout.  When `color_always` is true the output
@@ -44,7 +44,7 @@ pub async fn handle_cat_command(cli: &Cli, target: Option<&str>, color_always: b
                 match all_commands.iter().find(|(_, _, p, _, _)| *p == pid) {
                     Some(entry) => entry.clone(),
                     None => anyhow::bail!(
-                        "No command found with PID {}. Use `vrunner list` to see running commands.",
+                        "No command found with PID {}. Use `vrw list` to see running commands.",
                         pid
                     ),
                 }
@@ -55,7 +55,7 @@ pub async fn handle_cat_command(cli: &Cli, target: Option<&str>, color_always: b
                     .collect();
                 match matches.len() {
                     0 => anyhow::bail!(
-                        "No command found matching '{}'. Use `vrunner list` to see running commands.",
+                        "No command found matching '{}'. Use `vrw list` to see running commands.",
                         t
                     ),
                     1 => matches[0].clone(),
@@ -71,7 +71,7 @@ pub async fn handle_cat_command(cli: &Cli, target: Option<&str>, color_always: b
             }
         }
         None => match all_commands.len() {
-            0 => anyhow::bail!("No running commands. Use `vrunner list` to see commands."),
+            0 => anyhow::bail!("No running commands. Use `vrw list` to see commands."),
             1 => {
                 let cmd_id = all_commands[0].1.clone();
                 return cat_by_id(&client, &instances, &all_commands, &cmd_id, color_always).await;

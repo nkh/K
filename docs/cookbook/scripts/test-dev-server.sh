@@ -5,11 +5,11 @@
 # Validates: config file, spawn subcommand, stop-command, shutdown.
 #
 # Usage: ./docs/cookbook/scripts/test-dev-server.sh
-#   or:  VRUNNER_BIN=./target/debug/vrunner ./docs/cookbook/scripts/test-dev-server.sh
+#   or:  VRW_BIN=./target/debug/vrw ./docs/cookbook/scripts/test-dev-server.sh
 
 set -euo pipefail
 
-VRUNNER_BIN="${VRUNNER_BIN:-vrunner}"
+VRW_BIN="${VRW_BIN:-vrw}"
 PORT=$((19201 + RANDOM % 100))
 BASE_URL="http://127.0.0.1:${PORT}"
 PASS=0
@@ -22,10 +22,10 @@ section() { echo ""; echo "=== $1 ==="; }
 cleanup() {
     echo ""
     echo "--- Cleanup ---"
-    if [ -n "${VRUNNER_PID:-}" ] && kill -0 "$VRUNNER_PID" 2>/dev/null; then
-        echo "Stopping vrunner (pid $VRUNNER_PID)..."
-        kill "$VRUNNER_PID" 2>/dev/null || true
-        wait "$VRUNNER_PID" 2>/dev/null || true
+    if [ -n "${VRW_PID:-}" ] && kill -0 "$VRW_PID" 2>/dev/null; then
+        echo "Stopping vrw (pid $VRW_PID)..."
+        kill "$VRW_PID" 2>/dev/null || true
+        wait "$VRW_PID" 2>/dev/null || true
     fi
     rm -f "${CONFIG_FILE}"
     echo "Results: ${PASS} passed, ${FAIL} failed"
@@ -39,7 +39,7 @@ echo "Port: $PORT"
 # ── 1. Create a config file ──
 section "Create config file"
 
-CONFIG_FILE="/tmp/vrunner-test-devserver-$$.yaml"
+CONFIG_FILE="/tmp/vrw-test-devserver-$$.yaml"
 cat > "$CONFIG_FILE" <<EOF
 server:
   bind: "127.0.0.1"
@@ -62,11 +62,11 @@ default_exit:
 EOF
 [ -f "$CONFIG_FILE" ] && pass "Config file created at $CONFIG_FILE" || fail "Config file creation failed"
 
-# ── 2. Start vrunner with config file ──
-section "Start vrunner with config"
+# ── 2. Start vrw with config file ──
+section "Start vrw with config"
 
-$VRUNNER_BIN --config "$CONFIG_FILE" -- sleep infinity &
-VRUNNER_PID=$!
+$VRW_BIN --config "$CONFIG_FILE" -- sleep infinity &
+VRW_PID=$!
 
 for i in $(seq 1 30); do
     curl -sf "${BASE_URL}/api/info" >/dev/null 2>&1 && break
@@ -79,14 +79,14 @@ MODE=$(echo "$RESP" | jq -r '.data.web.update_mode')
 [ "$MODE" = "push" ] && pass "Config applied: web.update_mode=push" || fail "update_mode=$MODE (expected push)"
 
 # ── 3. Spawn via CLI subcommand ──
-section "Spawn via CLI 'vrunner spawn'"
+section "Spawn via CLI 'vrw spawn'"
 
-$VRUNNER_BIN --port "$PORT" spawn -- sleep 999
+$VRW_BIN --port "$PORT" spawn -- sleep 999
 sleep 0.3
 
 RESP=$(curl -sf "${BASE_URL}/api/commands")
 NAMES=$(echo "$RESP" | jq -r '.data[].name')
-echo "$NAMES" | grep -q "sleep" && pass "'vrunner spawn -- sleep 999' created a command" \
+echo "$NAMES" | grep -q "sleep" && pass "'vrw spawn -- sleep 999' created a command" \
     || fail "No 'sleep' command found. Names: $NAMES"
 
 # ── 4. Spawn via API (as in the cookbook) ──
@@ -99,11 +99,11 @@ ID=$(echo "$RESP" | jq -r '.data.id')
 [ "$ID" != "null" ] && pass "Spawned cat via API" || fail "API spawn failed: $RESP"
 
 # ── 5. stop-command subcommand ──
-section "vrunner stop-command"
+section "vrw stop-command"
 
-# The cookbook mentions "vrunner stop-command <PID>"
+# The cookbook mentions "vrw stop-command <PID>"
 # Test: stop the cat command by its ID
-$VRUNNER_BIN --port "$PORT" stop-command "$ID" >/dev/null 2>&1
+$VRW_BIN --port "$PORT" stop-command "$ID" >/dev/null 2>&1
 sleep 0.3
 
 RESP=$(curl -sf "${BASE_URL}/api/commands")

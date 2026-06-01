@@ -1,13 +1,15 @@
 # UDS IPC Usage
 
-Learn how to programmatically control vrl using the UDS IPC interface via the `vrl` CLI subcommands — from listing commands and sending keystrokes to capturing output and managing processes.
+Learn how to programmatically control vrc using the UDS IPC interface via the `vrc` CLI subcommands — from listing commands and sending keystrokes to capturing output and managing processes.
+
+> **This guide covers the vrc UDS IPC interface.** For the vrw HTTP API (REST endpoints, web dashboard, WebSocket), see [REST API Reference](../api.md). The two interfaces provide equivalent functionality — vrc uses Unix Domain Sockets and CLI subcommands, while vrw uses HTTP endpoints and a web UI.
 
 ## UDS IPC Overview
 
-All inter-instance communication in vrl uses Unix Domain Sockets (UDS). Each vrl instance creates a control socket at:
+All inter-instance communication in vrc uses Unix Domain Sockets (UDS). Each vrc instance creates a control socket at:
 
 ```
-~/.local/share/vrl/control-{pid}.sock
+~/.local/share/vrc/control-{pid}.sock
 ```
 
 The socket uses `0600` permissions (owner read/write only), providing security through filesystem permissions. The wire protocol uses length-prefixed JSON framing.
@@ -16,10 +18,10 @@ The socket uses `0600` permissions (owner read/write only), providing security t
 
 ```bash
 # List all running instances and their commands
-vrl list
+vrc list
 
 # Show a specific instance
-vrl list --target 12345
+vrc list --target 12345
 ```
 
 ## Sending Keystrokes
@@ -28,12 +30,12 @@ Send keystrokes to a running command via UDS:
 
 ```bash
 # Send text input
-vrl keys 12345 "ls -la<Enter>"
+vrc keys 12345 "ls -la<Enter>"
 
 # Send special keys
-vrl keys 12345 "<C-c>"     # Ctrl+C
-vrl keys 12345 "<Esc>:q!<Enter>"  # Quit vim
-vrl keys 12345 "q"        # Quit htop
+vrc keys 12345 "<C-c>"     # Ctrl+C
+vrc keys 12345 "<Esc>:q!<Enter>"  # Quit vim
+vrc keys 12345 "q"        # Quit htop
 ```
 
 ### Common Escape Sequences
@@ -51,17 +53,17 @@ vrl keys 12345 "q"        # Quit htop
 
 ## Viewing Terminal Output
 
-Use `vrl cat` to read a command's VTTY buffer:
+Use `vrc cat` to read a command's VTTY buffer:
 
 ```bash
 # Auto-select if only one command
-vrl cat
+vrc cat
 
 # Target a specific command by PID
-vrl cat 12345
+vrc cat 12345
 
 # With ANSI colors preserved
-vrl cat --color-always htop
+vrc cat --color-always htop
 ```
 
 ## Spawning Commands
@@ -69,14 +71,14 @@ vrl cat --color-always htop
 Spawn a new command in a running instance:
 
 ```bash
-vrl spawn-in 12345 -- htop
-vrl spawn-in 12345 -- python -m http.server 8000
+vrc spawn-in 12345 -- htop
+vrc spawn-in 12345 -- python -m http.server 8000
 ```
 
 With options:
 
 ```bash
-vrl spawn-in 12345 --rows 50 --cols 160 -- vim notes.txt
+vrc spawn-in 12345 --rows 50 --cols 160 -- vim notes.txt
 ```
 
 ## Freezing and Thawing
@@ -84,8 +86,8 @@ vrl spawn-in 12345 --rows 50 --cols 160 -- vim notes.txt
 Pause a command's output processing (freeze) and resume it later (thaw):
 
 ```bash
-vrl freeze 5678    # SIGSTOP
-vrl thaw 5678      # SIGCONT
+vrc freeze 5678    # SIGSTOP
+vrc thaw 5678      # SIGCONT
 ```
 
 ## Resizing
@@ -93,10 +95,10 @@ vrl thaw 5678      # SIGCONT
 Change the terminal dimensions of a running command:
 
 ```bash
-vrl resize htop --rows 50 --cols 160
+vrc resize htop --rows 50 --cols 160
 ```
 
-When `--rows` and `--cols` are omitted, vrl auto-detects your terminal's current size.
+When `--rows` and `--cols` are omitted, vrc auto-detects your terminal's current size.
 
 ## Scripting Example
 
@@ -109,15 +111,31 @@ set -euo pipefail
 PID=12345
 
 # Spawn commands
-vrl spawn-in $PID -- npm run build
-vrl spawn-in $PID -- npm test
+vrc spawn-in $PID -- npm run build
+vrc spawn-in $PID -- npm test
 
 # Poll until build finishes
 sleep 10
 
 # Capture output
-vrl cat $PID --color-always > /tmp/build-output.txt
+vrc cat $PID --color-always > /tmp/build-output.txt
 echo "Output retrieved."
 ```
 
 For the complete CLI reference, see [`../reference/cli.md`](../reference/cli.md).
+
+## vrw Equivalents
+
+The following table maps common vrc UDS IPC commands to their vrw HTTP API equivalents:
+
+| vrc (UDS IPC) | vrw (HTTP API) | Description |
+|---------------|-----------------|-------------|
+| `vrc list` | `GET /api/commands` | List running commands |
+| `vrc keys <pid> "text"` | `POST /api/commands/{id}/input` | Send keystrokes |
+| `vrc cat` | `GET /api/commands/{id}/vtty/html` | View terminal output |
+| `vrc spawn-in <pid> -- cmd` | `POST /api/commands` | Spawn a new command |
+| `vrc freeze <pid>` | `POST /api/commands/{id}/freeze` | Freeze a command |
+| `vrc thaw <pid>` | `POST /api/commands/{id}/thaw` | Thaw a command |
+| `vrc resize cmd --rows N --cols M` | `POST /api/commands/{id}/resize` | Resize terminal |
+
+For full vrw API documentation, see [`../api.md`](../api.md).

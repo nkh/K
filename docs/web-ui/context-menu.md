@@ -10,7 +10,7 @@ Right-clicking on a command in the sidebar opens a context menu with additional 
 Selects the command and switches to its terminal panel. Equivalent to clicking the command in the sidebar.
 
 ### Copy URL
-Copies the vrunner instance URL for the command to the clipboard. Useful when working with multi-instance setups.
+Copies the vrw instance URL for the command to the clipboard. Useful when working with multi-instance setups.
 
 ### Kill
 Terminates the selected command. Equivalent to clicking the red kill button (`✕`) in the command list.

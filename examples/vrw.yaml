@@ -1,0 +1,123 @@
+# vrw configuration file
+# Place this as vrw.yaml in your project root
+#
+# Precedence (highest wins):
+#   CLI flags > ./vrw.yaml > ~/.config/vrw/config.yaml > defaults
+
+server:
+  # Bind address. "127.0.0.1" = localhost only (safe default).
+  # "0.0.0.0" = listen on all interfaces (use with --auth).
+  bind: "127.0.0.1"
+  # TCP port to listen on.
+  port: 9090
+
+security:
+  # Require bearer token authentication for all API requests.
+  # Automatically enabled by --remote (0.0.0.0 bind).
+  # When enabled, the token is loaded from token_file (or generated if missing).
+  require_auth: false
+  # Path to the bearer token file.
+  # Generated automatically on first use if the file does not exist.
+  token_file: "~/.config/vrw/token"
+
+tls:
+  # Enable HTTPS with TLS encryption.
+  # On first use, self-signed certificates are auto-generated in ~/.config/vrw/.
+  enabled: false
+  # Custom certificate file path (optional — auto-generated if omitted).
+  cert_file: null
+  # Custom private key file path (optional — auto-generated if omitted).
+  key_file: null
+
+certificates:
+  # Base directory for generated certificate files.
+  directory: "~/.config/vrw/certs"
+  # Pre-defined certificate entries for the pool.
+  entries: []
+    # - name: "my-app"
+    #   cert_file: "my-app/cert.pem"
+    #   key_file: "my-app/key.pem"
+
+vtty:
+  # Number of rows in the virtual terminal.
+  rows: 24
+  # Number of columns in the virtual terminal.
+  cols: 80
+  # The TERM value reported to child processes.
+  term: "xterm-256color"
+  # Maximum number of scrollback lines retained.
+  scrollback: 5000
+  # Enable 24-bit truecolor support.
+  truecolor: true
+  # Enable mouse event forwarding to child processes.
+  mouse: false
+  # Default font size (in points) for PNG screenshot rendering.
+  # Used by the web UI screenshot button and `vrw screenshot` CLI.
+  screenshot_font_size: 12
+  # Default font name/path for PNG screenshots.
+  # "monospace" searches common system paths for a monospace TTF font.
+  # Set to an absolute path to use a specific font file.
+  screenshot_font_name: "monospace"
+
+display:
+  # Show VTTY output on the local terminal screen.
+  enabled: false
+  # Keep displaying after the initial CLI command exits (monitor mode).
+  display_all: false
+  # Refresh interval in milliseconds when display is enabled.
+  refresh_ms: 100
+
+command_log:
+  # Log all API commands (spawn, kill, send_keys).
+  enabled: false
+  # Path to the log file. If null, logs go to the terminal only.
+  file: null
+
+daemon:
+  # Run as a background daemon (Unix only).
+  enabled: false
+  # Redirect stdout to this file when daemonized.
+  stdout_file: "/tmp/vrw.out"
+  # Redirect stderr to this file when daemonized.
+  stderr_file: "/tmp/vrw.err"
+
+# Interactive terminal display settings.
+interactive:
+  # Show a tab bar listing all commands at the top.
+  tabs: false
+  keybindings:
+    next_command: "ctrl+right"
+    prev_command: "ctrl+left"
+    toggle_log: "ctrl+l"
+    spawn_command: "f12"
+    show_help: "ctrl+h"
+    # kill_command: "ctrl+k"
+    # toggle_pause: "ctrl+z"
+    # quit: "esc"
+
+# Default exit configuration for all commands.
+default_exit:
+  exit:
+    timeout_secs: 10
+    # on_exit: null
+    # on_error: null
+
+# Environment variables applied to every command.
+# environment:
+#   variables:
+#     RUST_LOG: "info"
+
+# Web admin panel configuration.
+web:
+  update_mode: "push"
+  dirty_check_ms: 200
+  default_poll_ms: 500
+
+# Default handles attached to every spawned command.
+# Each handle routes command output to a named sink.
+handles: []
+  # - name: "debug"       # sink identifier
+  #   sink: "file"         # "file", "vtty", or "null"
+  #   path: "./logs/debug-{id}.log"  # {id} = command UUID, {name} = command name
+  # - name: "aux"
+  #   sink: "vtty"

@@ -4,7 +4,7 @@ Learn how to share live terminal sessions between developers for pair programmin
 
 ## How It Works
 
-vrunner's web UI and WebSocket support make it natural for pair programming: one developer starts a vrunner instance with the shared commands, and the other developer connects to the same dashboard. Both see the same terminal output and can type into the focused terminal.
+vrw's web UI and WebSocket support make it natural for pair programming: one developer starts a vrw instance with the shared commands, and the other developer connects to the same dashboard. Both see the same terminal output and can type into the focused terminal.
 
 ## Local Pair Programming
 
@@ -12,10 +12,10 @@ When two developers are on the same network:
 
 ### Developer A (Host)
 
-Start vrunner with remote access enabled:
+Start vrw with remote access enabled:
 
 ```bash
-vrunner --remote --port 8080 --web \
+vrw --remote --port 8080 --web \
   --cmd "vim main.py" --name "editor"
 ```
 
@@ -38,7 +38,7 @@ Both developers now see the same `vim` session. Click on the terminal to focus i
 Run multiple shared terminals side by side:
 
 ```bash
-vrunner --remote --port 8080 --web \
+vrw --remote --port 8080 --web \
   --cmd "vim main.py" --name "editor" \
   --cmd "pytest -f" --name "tests" \
   --cmd "git log --oneline -20" --name "history"
@@ -54,7 +54,7 @@ For remote developers, secure the connection with TLS:
 
 ```bash
 # Generate a shared certificate for the pair session
-vrunner cert generate --name pair-session --commands "*"
+vrw cert generate --name pair-session --commands "*"
 ```
 
 This outputs `pair-session-cert.pem`, `pair-session-key.pem`, and `pair-session-token`.
@@ -64,7 +64,7 @@ This outputs `pair-session-cert.pem`, `pair-session-key.pem`, and `pair-session-
 **Developer A** starts the instance:
 
 ```bash
-vrunner --remote --tls --port 8443 \
+vrw --remote --tls --port 8443 \
   --cert /etc/ssl/server-cert.pem \
   --key /etc/ssl/server-key.pem \
   --cmd "vim main.py" --name "editor" \
@@ -111,16 +111,16 @@ If you have multiple pairs working simultaneously, use certificates to isolate s
 
 ```bash
 # Pair 1: Alice and Bob
-vrunner cert generate --name pair-alice-bob --commands "editor-ab,tests-ab"
+vrw cert generate --name pair-alice-bob --commands "editor-ab,tests-ab"
 
 # Pair 2: Carol and Dave
-vrunner cert generate --name pair-carol-dave --commands "editor-cd,tests-cd"
+vrw cert generate --name pair-carol-dave --commands "editor-cd,tests-cd"
 ```
 
-Start one vrunner instance with all commands:
+Start one vrw instance with all commands:
 
 ```bash
-vrunner --remote --tls --port 8443 \
+vrw --remote --tls --port 8443 \
   --cert server-cert.pem --key server-key.pem \
   --cmd "vim project-a/main.py" --name "editor-ab" \
   --cmd "pytest project-a/" --name "tests-ab" \
@@ -144,7 +144,7 @@ For ad-hoc sessions that don't need certificates:
 
 ```bash
 # Quick local session (no auth)
-vrunner --remote --port 8080 --web --cmd "vim main.py" --name "editor"
+vrw --remote --port 8080 --web --cmd "vim main.py" --name "editor"
 ```
 
 > **Warning:** Without TLS and certificates, anyone on the network can connect and type into your terminals. Use this only on trusted networks.
@@ -155,10 +155,10 @@ When the pair programming session is over, clean up:
 
 ```bash
 # Revoke the session certificate
-vrunner cert remove pair-session
+vrw cert remove pair-session
 
-# Stop vrunner
-vrunner daemon stop --port 8443
+# Stop vrw
+vrw daemon stop --port 8443
 ```
 
 Delete the certificate files from both developers' machines.

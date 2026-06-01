@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # cookbook/scripts/test-ci-pipeline.sh
 #
-# Tests the "CI Pipeline with vrunner" cookbook example.
+# Tests the "CI Pipeline with vrw" cookbook example.
 # Validates: spawn with retain_on_exit, poll status, vtty/partial,
 #           snapshot/diff, purge.
 #
 # Usage: ./docs/cookbook/scripts/test-ci-pipeline.sh
-#   or:  VRUNNER_BIN=./target/debug/vrunner ./docs/cookbook/scripts/test-ci-pipeline.sh
+#   or:  VRW_BIN=./target/debug/vrw ./docs/cookbook/scripts/test-ci-pipeline.sh
 
 set -euo pipefail
 
-VRUNNER_BIN="${VRUNNER_BIN:-vrunner}"
+VRW_BIN="${VRW_BIN:-vrw}"
 PORT=$((19301 + RANDOM % 100))
 BASE_URL="http://127.0.0.1:${PORT}"
 PASS=0
@@ -23,10 +23,10 @@ section() { echo ""; echo "=== $1 ==="; }
 cleanup() {
     echo ""
     echo "--- Cleanup ---"
-    if [ -n "${VRUNNER_PID:-}" ] && kill -0 "$VRUNNER_PID" 2>/dev/null; then
-        echo "Stopping vrunner (pid $VRUNNER_PID)..."
-        kill "$VRUNNER_PID" 2>/dev/null || true
-        wait "$VRUNNER_PID" 2>/dev/null || true
+    if [ -n "${VRW_PID:-}" ] && kill -0 "$VRW_PID" 2>/dev/null; then
+        echo "Stopping vrw (pid $VRW_PID)..."
+        kill "$VRW_PID" 2>/dev/null || true
+        wait "$VRW_PID" 2>/dev/null || true
     fi
     echo "Results: ${PASS} passed, ${FAIL} failed"
     [ "$FAIL" -eq 0 ] || exit 1
@@ -36,11 +36,11 @@ trap cleanup EXIT
 echo "=== Cookbook Test: CI Pipeline ==="
 echo "Port: $PORT"
 
-# ── Start vrunner ──
-section "Start vrunner"
+# ── Start vrw ──
+section "Start vrw"
 
-$VRUNNER_BIN --port "$PORT" --bind 127.0.0.1 -- sleep infinity &
-VRUNNER_PID=$!
+$VRW_BIN --port "$PORT" --bind 127.0.0.1 -- sleep infinity &
+VRW_PID=$!
 
 for i in $(seq 1 30); do
     curl -sf "${BASE_URL}/api/info" >/dev/null 2>&1 && break

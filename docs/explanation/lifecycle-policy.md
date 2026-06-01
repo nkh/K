@@ -1,17 +1,17 @@
 # Lifecycle Policy
 
-This document explains how vrunner decides when to start, retain, and exit
-instances and the daemon itself. It covers the "last-command-standing" principle,
+This document explains how vrc and vrw decide when to start, retain, and exit
+instances and the daemon itself. **The lifecycle policy applies to both vrc and vrw.** It covers the "last-command-standing" principle,
 the three display modes (headless, display, monitor), how per-command options
 affect lifecycle, and special considerations for daemon mode. Read this if you
-want to understand when vrunner will keep running, when it will shut down, and
+want to understand when vrw will keep running, when it will shut down, and
 how to control that behavior for your use case.
 
 ---
 
 ## The "Last-Command-Standing" Principle
 
-vrunner's daemon lives only as long as it has work to do. When the last running
+vrw's daemon lives only as long as it has work to do. When the last running
 command exits, the daemon initiates a graceful shutdown. This prevents zombie
 processes and ensures that resources (ports, PID files, TLS state) are released
 as soon as they are no longer needed.
@@ -19,7 +19,7 @@ as soon as they are no longer needed.
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                                                              │
-│   vrunner run -- web-server                                  │
+│   vrw run -- web-server                                  │
 │   ┌────────────┐                                             │
 │   │  Daemon    │  lives as long as "web-server" is running   │
 │   │  ┌───────┐ │                                             │
@@ -149,7 +149,7 @@ cleanup. This handles common scenarios:
 The monitor timeout is configurable:
 
 ```bash
-vrunner run --monitor-timeout 120s -- long-running-job
+vrw run --monitor-timeout 120s -- long-running-job
 ```
 
 A timeout of `0` disables monitoring entirely—command cleanup happens
@@ -225,7 +225,7 @@ they are attached to. If you start five commands, each can have its own
 `--retain-on-exit` and `--monitor-timeout` settings:
 
 ```bash
-vrunner run \
+vrw run \
   --retain-on-exit -- my-database      # retained after exit  \
   --snapshot-on-exit -- my-build        # snapshot saved on exit \
   -- my-web-server                     # normal lifecycle
@@ -237,13 +237,13 @@ Options set via CLI flags override the global configuration file defaults.
 
 ## Daemon Mode Considerations
 
-When vrunner is started with `--daemon`, the lifecycle policy has additional
+When vrw is started with `--daemon`, the lifecycle policy has additional
 implications:
 
 ### PID File Management
 
-The daemon writes its PID to a file (default: `/tmp/vrunner.pid` or
-`~/.config/vrunner/vrunner.pid`). This file is used by `vrunner stop` to signal
+The daemon writes its PID to a file (default: `/tmp/vrw.pid` or
+`~/.config/vrw/vrw.pid`). This file is used by `vrw stop` to signal
 the daemon. The PID file is **removed on shutdown**.
 
 ### Signal Handling
@@ -290,7 +290,7 @@ For long-lived daemon deployments (e.g., a server that runs continuously), you
 can override the last-command-standing policy with `--no-auto-shutdown`:
 
 ```bash
-vrunner daemon --no-auto-shutdown
+vrw daemon --no-auto-shutdown
 ```
 
 This keeps the daemon running even when no commands are active. New commands
@@ -353,4 +353,4 @@ The following diagram shows the complete decision flow when a command exits:
 ---
 
 *This document is part of the [Diátaxis](https://diataxis.fr/) documentation framework
-for vrunner. See the [explanation index](./) for related topics.*
+for vrc and vrw. See the [explanation index](./) for related topics.*

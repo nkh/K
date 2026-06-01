@@ -1,4 +1,4 @@
-#![cfg(feature = "vrunner")]
+#![cfg(feature = "vrw")]
 #![allow(dead_code, unused_imports)]
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -50,7 +50,7 @@ impl CertificateStore {
     pub fn new() -> Self {
         let certs_dir = dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("/tmp"))
-            .join("vrunner")
+            .join("vrw")
             .join("certs");
         Self {
             entries: HashMap::new(),
@@ -66,7 +66,7 @@ impl CertificateStore {
     pub fn load_or_generate(entries: Vec<CertificateEntry>) -> Result<Self> {
         let certs_dir = dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("/tmp"))
-            .join("vrunner")
+            .join("vrw")
             .join("certs");
 
         let mut store = Self {
@@ -148,7 +148,7 @@ impl CertificateStore {
             .push(rcgen::DnType::CommonName, name);
         params
             .distinguished_name
-            .push(rcgen::DnType::OrganizationName, "vrunner");
+            .push(rcgen::DnType::OrganizationName, "vrw");
 
         params.key_usages = vec![
             rcgen::KeyUsagePurpose::DigitalSignature,
@@ -270,15 +270,15 @@ mod tests {
 
     #[test]
     fn test_resolve_path_absolute() {
-        let base = PathBuf::from("/tmp/vrunner/certs");
+        let base = PathBuf::from("/tmp/vrw/certs");
         let result = CertificateStore::resolve_path("/etc/ssl/cert.pem", &base);
         assert_eq!(result, PathBuf::from("/etc/ssl/cert.pem"));
     }
 
     #[test]
     fn test_resolve_path_relative() {
-        let base = PathBuf::from("/tmp/vrunner/certs");
+        let base = PathBuf::from("/tmp/vrw/certs");
         let result = CertificateStore::resolve_path("my-app/cert.pem", &base);
-        assert_eq!(result, PathBuf::from("/tmp/vrunner/certs/my-app/cert.pem"));
+        assert_eq!(result, PathBuf::from("/tmp/vrw/certs/my-app/cert.pem"));
     }
 }

@@ -4,15 +4,15 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-VRUNNER_BIN="${VRUNNER_BIN:-./target/release/vrunner}"
+VRW_BIN="${VRW_BIN:-./target/release/vrw}"
 PORT=19991
 RESULTS=""
 
 run_test() {
     local name="$1" cols="$2" rows="$3" script="$4"
 
-    # Start vrunner
-    "$VRUNNER_BIN" --port "$PORT" --vtty-cols "$cols" --vtty-rows "$rows" 2>/dev/null &
+    # Start vrw
+    "$VRW_BIN" --port "$PORT" --vtty-cols "$cols" --vtty-rows "$rows" 2>/dev/null &
     local vr_pid=$!
     sleep 1
 
@@ -21,7 +21,7 @@ run_test() {
     result=$(curl -sf -X POST "http://127.0.0.1:$PORT/api/commands" \
         -H "Content-Type: application/json" \
         -d "{\"cmd\": \"bash\", \"args\": [\"$script\"]}" 2>/dev/null) || {
-        echo "SKIP: $name (vrunner not reachable)"
+        echo "SKIP: $name (vrw not reachable)"
         kill $vr_pid 2>/dev/null; wait $vr_pid 2>/dev/null
         return
     }

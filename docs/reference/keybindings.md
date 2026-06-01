@@ -1,14 +1,12 @@
-# vrunner Keybindings Reference
+# Keybindings Reference
 
-Complete reference for all keyboard shortcuts in vrunner's interactive
-terminal display. Keybindings are divided into default bindings, user-configurable
-bindings, and hardcoded system shortcuts.
+Complete reference for all keyboard shortcuts in the interactive terminal display. These keybindings are **shared by both vrc and vrw** when using `--display`, `--display-all`, or `--tabs` mode. Keybindings are divided into default bindings, user-configurable bindings, and hardcoded system shortcuts.
 
 ---
 
 ## Default Keybindings
 
-These keybindings are active when the interactive display is attached. The
+These keybindings are active when the interactive display is attached (in both `vrc --display` and `vrw --display`). The
 **Mode** column indicates when each shortcut is available.
 
 | Key | Action | Mode |
@@ -25,8 +23,8 @@ These keybindings are active when the interactive display is attached. The
 | `Ctrl+L` | Force a full redraw of the display. | `always` |
 | `Ctrl+R` | Toggle raw output mode (show ANSI escapes as text). | `active` |
 | `?` | Show the help overlay (same as `Ctrl+H`). | `always` |
-| `q` | Quit the vrunner interactive display (detaches; vrunner continues). | `always` |
-| `Q` | Quit vrunner entirely (shuts down the server). | `always` |
+| `q` | Quit the vrw interactive display (detaches; vrw continues). | `always` |
+| `Q` | Quit vrw entirely (shuts down the server). | `always` |
 
 ### Mode Descriptions
 
@@ -51,8 +49,8 @@ See [`../configuration.md`](../configuration.md) for the full syntax.
 | `keybindings.toggle_log` | `Ctrl+B` | Show or hide the scrolling log panel overlay. |
 | `keybindings.spawn_command` | `Ctrl+N` | Open the spawn dialog to create a new command. |
 | `keybindings.show_help` | `Ctrl+H` | Toggle the keybinding help overlay. |
-| `keybindings.quit` | `q` | Detach from the interactive display without stopping vrunner. |
-| `keybindings.quit_all` | `Q` | Shut down the entire vrunner instance. |
+| `keybindings.quit` | `q` | Detach from the interactive display without stopping vrw. |
+| `keybindings.quit_all` | `Q` | Shut down the entire vrw instance. |
 | `keybindings.kill_command` | `Ctrl+K` | Send `SIGKILL` to the focused command. |
 | `keybindings.toggle_pause` | `Ctrl+P` | Pause or resume the focused command. |
 
@@ -162,13 +160,13 @@ keybindings:
 ## Hardcoded Shortcuts
 
 The following shortcuts are **not configurable** and cannot be remapped. They
-are intercepted by the terminal driver or vrunner's signal handler before any
+are intercepted by the terminal driver or vrw's signal handler before any
 keybinding processing occurs.
 
 | Shortcut | Action | Details |
 |----------|--------|---------|
-| `Ctrl+\` | Quit (core dump) | Sends `SIGQUIT` to vrunner. Produces a stack trace on supported platforms. Useful for debugging. |
-| `Ctrl+C` | Shutdown | Sends `SIGINT` to vrunner. The first press initiates a graceful shutdown (equivalent to `Q`). A second press within 2 seconds forces immediate termination. |
+| `Ctrl+\` | Quit (core dump) | Sends `SIGQUIT` to vrw. Produces a stack trace on supported platforms. Useful for debugging. |
+| `Ctrl+C` | Shutdown | Sends `SIGINT` to vrw. The first press initiates a graceful shutdown (equivalent to `Q`). A second press within 2 seconds forces immediate termination. |
 
 These shortcuts bypass the keybinding system entirely and are handled by the
 process signal layer. They are active at all times, including when the help
@@ -183,7 +181,7 @@ overlay or spawn dialog is open.
 
 ## Interaction with the Child Process
 
-When a command pane is focused and vrunner is in normal (non-overlay) mode,
+When a command pane is focused and vrw is in normal (non-overlay) mode,
 keyboard input is forwarded to the child PTY. Keybindings take priority: if a
 pressed key matches a binding, the binding action is executed and the key is
 **not** forwarded to the child.
@@ -208,7 +206,7 @@ keybinding and free the original key.
 
 ## Mouse Support
 
-When `--mouse` is enabled (the default), vrunner captures and interprets mouse
+When `--mouse` is enabled (the default), vrw captures and interprets mouse
 events in the terminal:
 
 | Event | Action |

@@ -170,7 +170,7 @@ impl CommandManager {
     /// # Example
     ///
     /// ```no_run
-    /// use vrl_core::process::manager::CommandManager;
+    /// use vrc_core::process::manager::CommandManager;
     /// // Build a handle via ProcessSpawner or custom code, then:
     /// // manager.add_handle(handle, Some("my-cert".into()))?;
     /// ```

@@ -4,12 +4,12 @@
 
 set -euo pipefail
 
-VRUNNER_BIN="${VRUNNER_BIN:-vrunner}"
+VRW_BIN="${VRW_BIN:-vrw}"
 PORT=$((19201 + RANDOM % 100))
 BASE_URL="http://127.0.0.1:${PORT}"
 PASS=0
 FAIL=0
-CONFIG_FILE="/tmp/vrunner-test-devserver-$$.yaml"
+CONFIG_FILE="/tmp/vrw-test-devserver-$$.yaml"
 
 pass() { echo "  PASS: $1"; ((PASS++)) || true; }
 fail() { echo "  FAIL: $1"; ((FAIL++)) || true; }
@@ -18,11 +18,11 @@ section() { echo ""; echo "=== $1 ==="; }
 cleanup() {
     echo ""
     echo "--- Cleanup ---"
-    if [ -n "${VRUNNER_PID:-}" ] && kill -0 "$VRUNNER_PID" 2>/dev/null; then
-        echo "Stopping vrunner (pid $VRUNNER_PID)..."
-        kill -TERM "$VRUNNER_PID" 2>/dev/null || true
-        timeout 3 wait "$VRUNNER_PID" 2>/dev/null || true
-        kill -KILL "$VRUNNER_PID" 2>/dev/null || true
+    if [ -n "${VRW_PID:-}" ] && kill -0 "$VRW_PID" 2>/dev/null; then
+        echo "Stopping vrw (pid $VRW_PID)..."
+        kill -TERM "$VRW_PID" 2>/dev/null || true
+        timeout 3 wait "$VRW_PID" 2>/dev/null || true
+        kill -KILL "$VRW_PID" 2>/dev/null || true
     fi
     rm -f "${CONFIG_FILE}"
     echo "Results: ${PASS} passed, ${FAIL} failed"
@@ -50,9 +50,9 @@ default_exit:
 EOF
 [ -f "$CONFIG_FILE" ] && pass "Config file created" || fail "Config creation failed"
 
-section "Start vrunner with config"
-$VRUNNER_BIN --config "$CONFIG_FILE" -- sleep infinity &
-VRUNNER_PID=$!
+section "Start vrw with config"
+$VRW_BIN --config "$CONFIG_FILE" -- sleep infinity &
+VRW_PID=$!
 
 for i in $(seq 1 30); do
     curl -sf "${BASE_URL}/api/info" >/dev/null 2>&1 && break
@@ -63,13 +63,13 @@ RESP=$(curl -sf "${BASE_URL}/api/info")
 MODE=$(echo "$RESP" | jq -r '.data.web.update_mode')
 [ "$MODE" = "push" ] && pass "Config applied: web.update_mode=push" || fail "update_mode=$MODE"
 
-section "Spawn via CLI 'vrunner spawn'"
-$VRUNNER_BIN --port "$PORT" spawn -- sleep 999
+section "Spawn via CLI 'vrw spawn'"
+$VRW_BIN --port "$PORT" spawn -- sleep 999
 sleep 0.3
 
 RESP=$(curl -sf "${BASE_URL}/api/commands")
 NAMES=$(echo "$RESP" | jq -r '.data[].name')
-echo "$NAMES" | grep -q "sleep" && pass "'vrunner spawn -- sleep 999' works" || fail "No sleep found: $NAMES"
+echo "$NAMES" | grep -q "sleep" && pass "'vrw spawn -- sleep 999' works" || fail "No sleep found: $NAMES"
 
 section "Spawn via API"
 RESP=$(curl -sf -X POST "${BASE_URL}/api/commands" \
@@ -78,9 +78,9 @@ RESP=$(curl -sf -X POST "${BASE_URL}/api/commands" \
 ID=$(echo "$RESP" | jq -r '.data.id')
 [ "$ID" != "null" ] && pass "Spawned cat via API" || fail "API spawn failed: $RESP"
 
-section "vrunner stop-command"
+section "vrw stop-command"
 # Use command name "cat" instead of UUID (stop-command resolves by name/PID)
-$VRUNNER_BIN --port "$PORT" stop-command cat >/dev/null 2>&1
+$VRW_BIN --port "$PORT" stop-command cat >/dev/null 2>&1
 sleep 0.3
 
 RESP=$(curl -sf "${BASE_URL}/api/commands")

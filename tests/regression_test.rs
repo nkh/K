@@ -1,4 +1,4 @@
-//! Regression test suite for vrunner.
+//! Regression test suite for vrw.
 //!
 //! These tests cover the critical integration paths that have historically
 //! broken during code changes.  They are organized by scenario:
@@ -21,17 +21,17 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
 
-use vrl_core::config::schema::{
+use vrc_core::config::schema::{
     CommandLogConfig, Config, DaemonConfig, DisplayConfig, EnvironmentConfig, ExitConfig,
 };
-#[cfg(feature = "vrunner")]
-use vrl_core::config::schema::{SecurityConfig, ServerConfig, TlsConfig, VttyConfig};
-use vrl_core::process::manager::CommandManager;
+#[cfg(feature = "vrw")]
+use vrc_core::config::schema::{SecurityConfig, ServerConfig, TlsConfig, VttyConfig};
+use vrc_core::process::manager::CommandManager;
 
 // ─── Test helpers ───────────────────────────────────────────────────────
 
 /// Create a test config with a random port (0 = OS-assigned).
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 fn test_config() -> Config {
     Config {
         server: ServerConfig {
@@ -63,8 +63,8 @@ fn test_config() -> Config {
         },
         daemon: DaemonConfig {
             enabled: false,
-            stdout_file: "/tmp/vrl-test.out".to_string(),
-            stderr_file: "/tmp/vrl-test.err".to_string(),
+            stdout_file: "/tmp/vrc-test.out".to_string(),
+            stderr_file: "/tmp/vrc-test.err".to_string(),
         },
         handles: vec![],
         interactive: Default::default(),
@@ -82,7 +82,7 @@ fn test_config() -> Config {
 // ═══════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_spawn_echo_returns_valid_id() {
     // Ensures spawn() always returns a non-empty UUID string.
     // Regression: broken IPC paths used to return empty/error IDs.
@@ -107,7 +107,7 @@ async fn regression_spawn_echo_returns_valid_id() {
 }
 
 #[tokio::test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_spawn_appears_in_list() {
     // After spawning, list() must include the new command.
     // Regression: commands were spawned but not registered in DashMap.
@@ -134,7 +134,7 @@ async fn regression_spawn_appears_in_list() {
 }
 
 #[tokio::test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_kill_removes_from_list() {
     // After kill(), the command must be gone from list().
     // Regression: kill() sent SIGINT but never removed from DashMap.
@@ -164,7 +164,7 @@ async fn regression_kill_removes_from_list() {
 }
 
 #[tokio::test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_kill_nonexistent_returns_error() {
     // Killing a command that doesn't exist must not panic.
     let cfg = test_config();
@@ -176,7 +176,7 @@ async fn regression_kill_nonexistent_returns_error() {
 }
 
 #[tokio::test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_spawn_multiple_all_visible() {
     // Spawning 3 commands must show all 3 in list().
     // Regression: DashMap race condition lost commands.
@@ -235,7 +235,7 @@ async fn regression_spawn_multiple_all_visible() {
 }
 
 #[tokio::test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_kill_one_preserves_others() {
     // Killing one of multiple commands must leave the others intact.
     // Regression: kill() removed wrong command from DashMap.
@@ -275,7 +275,7 @@ async fn regression_kill_one_preserves_others() {
 }
 
 #[tokio::test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_find_by_pid_returns_correct_id() {
     // find_by_pid must return the correct command ID.
     let cfg = test_config();
@@ -300,7 +300,7 @@ async fn regression_find_by_pid_returns_correct_id() {
 }
 
 #[tokio::test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_kill_by_pid_works() {
     // kill_by_pid must remove the correct command.
     let cfg = test_config();
@@ -325,7 +325,7 @@ async fn regression_kill_by_pid_works() {
 }
 
 #[tokio::test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_purge_nonexistent_returns_error() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
@@ -338,13 +338,13 @@ async fn regression_purge_nonexistent_returns_error() {
 // 2. IPC SIMULATION TESTS (HTTP API round-trip)
 // ═══════════════════════════════════════════════════════════════════════
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 #[tokio::test]
 async fn regression_http_client_has_timeout() {
     // The HTTP client used by subcommands MUST have timeouts.
     // Regression: reqwest::Client::new() had NO timeout, causing
-    // vrunner spawn and vrunner stop to block forever.
-    let client = vrl_core::cli::subcommands::http_client();
+    // vrw spawn and vrw stop to block forever.
+    let client = vrc_core::cli::subcommands::http_client();
     // We can't easily inspect timeouts from the public API, but
     // we verify the client is constructible and functional.
     let resp = client
@@ -390,7 +390,7 @@ async fn regression_exit_config_snapshot_on_exit() {
 }
 
 #[tokio::test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_command_exits_process_removed() {
     // When a short-lived command exits WITHOUT retain_on_exit, it should
     // eventually be removed from the manager.
@@ -424,7 +424,7 @@ async fn regression_command_exits_process_removed() {
 // ═══════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_spawn_after_kill() {
     // Spawning a command after killing a previous one must work.
     // Regression: DashMap state corruption after kill prevented new spawns.
@@ -465,7 +465,7 @@ async fn regression_spawn_after_kill() {
 }
 
 #[tokio::test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_list_empty_after_all_killed() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
@@ -498,7 +498,7 @@ async fn regression_list_empty_after_all_killed() {
 }
 
 #[tokio::test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_concurrent_spawns() {
     // Spawning many commands concurrently must not lose any.
     // NOTE: use long-running commands (sleep) so they don't exit
@@ -543,7 +543,7 @@ async fn regression_concurrent_spawns() {
 // ═══════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_vtty_snapshot_returns_data() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
@@ -570,7 +570,7 @@ async fn regression_vtty_snapshot_returns_data() {
 }
 
 #[tokio::test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_vtty_html_contains_content() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
@@ -598,7 +598,7 @@ async fn regression_vtty_html_contains_content() {
 }
 
 #[tokio::test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_vtty_plain_text_readable() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
@@ -626,7 +626,7 @@ async fn regression_vtty_plain_text_readable() {
 }
 
 #[tokio::test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_resize_command() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
@@ -654,7 +654,7 @@ async fn regression_resize_command() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_snapshot_store_and_retrieve() {
     // Use a long-running command so it stays in the manager for snapshot ops.
     let cfg = test_config();
@@ -691,7 +691,7 @@ async fn regression_snapshot_store_and_retrieve() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_diff_snapshot() {
     // Use a long-running command so it stays in the manager for snapshot ops.
     let cfg = test_config();
@@ -728,7 +728,7 @@ async fn regression_diff_snapshot() {
 // a multi-threaded tokio runtime.  The default #[tokio::test] runtime is
 // current_thread, so we must specify multi_thread flavour here.
 #[tokio::test(flavor = "multi_thread")]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_has_changed_detection() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
@@ -767,7 +767,7 @@ async fn regression_has_changed_detection() {
 // ═══════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_send_keys_to_running_command() {
     // Send keys to a long-running process.
     // Regression: send_keys() panicked when stdin channel was closed.
@@ -800,7 +800,7 @@ async fn regression_send_keys_to_running_command() {
 }
 
 #[tokio::test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_send_keys_nonexistent_errors() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
@@ -813,7 +813,7 @@ async fn regression_send_keys_nonexistent_errors() {
 }
 
 #[tokio::test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_send_ctrl_c_terminates() {
     // Sending Ctrl+C should eventually terminate the process.
     let cfg = test_config();
@@ -843,7 +843,7 @@ async fn regression_send_ctrl_c_terminates() {
 #[tokio::test]
 async fn regression_encode_all_special_keys() {
     // Ensure encode_keys doesn't panic on any special key.
-    use vrl_core::process::manager::encode_keys;
+    use vrc_core::process::manager::encode_keys;
     let keys = [
         "<Up>",
         "<Down>",
@@ -888,7 +888,7 @@ async fn regression_encode_all_special_keys() {
 
 #[tokio::test]
 async fn regression_encode_plain_text_unchanged() {
-    use vrl_core::process::manager::encode_keys;
+    use vrc_core::process::manager::encode_keys;
     assert_eq!(encode_keys("hello world 123"), b"hello world 123");
 }
 
@@ -897,14 +897,14 @@ async fn regression_encode_plain_text_unchanged() {
 // ═══════════════════════════════════════════════════════════════════════
 
 #[test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 fn regression_default_config_is_valid() {
     // Default config must pass validation without errors.
     let cfg = Config::default();
-    let issues = vrl_core::config::validation::validate_config(&cfg);
+    let issues = vrc_core::config::validation::validate_config(&cfg);
     let errors: Vec<_> = issues
         .iter()
-        .filter(|i| i.level == vrl_core::config::validation::ValidationLevel::Error)
+        .filter(|i| i.level == vrc_core::config::validation::ValidationLevel::Error)
         .collect();
     assert!(
         errors.is_empty(),
@@ -914,7 +914,7 @@ fn regression_default_config_is_valid() {
 }
 
 #[test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 fn regression_config_with_custom_port() {
     let json = r#"{ "server": { "bind": "0.0.0.0", "port": 8080 } }"#;
     let cfg: Config = serde_json::from_str(json).unwrap();
@@ -923,7 +923,7 @@ fn regression_config_with_custom_port() {
 }
 
 #[test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 fn regression_config_serialize_deserialize_roundtrip() {
     let cfg = Config::default();
     let json = serde_json::to_string(&cfg).unwrap();
@@ -951,9 +951,9 @@ fn regression_exit_config_serialize() {
 }
 
 #[test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 fn regression_partial_config_all_none() {
-    let pc = vrl_core::config::schema::PartialConfig::default();
+    let pc = vrc_core::config::schema::PartialConfig::default();
     assert!(pc.server.is_none());
     assert!(pc.vtty.is_none());
     assert!(pc.hooks.is_none());
@@ -961,14 +961,14 @@ fn regression_partial_config_all_none() {
 }
 
 #[test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 fn regression_profile_override_port() {
-    use vrl_core::config::merge::apply_profile;
+    use vrc_core::config::merge::apply_profile;
     let mut base = Config::default();
     base.server.port = 9090;
-    let mut server = vrl_core::config::schema::ServerConfig::default();
+    let mut server = vrc_core::config::schema::ServerConfig::default();
     server.port = 3000;
-    let profile = vrl_core::config::schema::PartialConfig {
+    let profile = vrc_core::config::schema::PartialConfig {
         server: Some(server),
         ..Default::default()
     };
@@ -977,9 +977,9 @@ fn regression_profile_override_port() {
 }
 
 #[test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 fn regression_merge_command_env() {
-    use vrl_core::config::merge::merge_command_env;
+    use vrc_core::config::merge::merge_command_env;
     let config_env = EnvironmentConfig {
         variables: HashMap::from([
             ("GLOBAL_VAR".into(), "global_val".into()),
@@ -1001,13 +1001,13 @@ fn regression_merge_command_env() {
 // ═══════════════════════════════════════════════════════════════════════
 
 #[test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 fn regression_instance_registry_new() {
     // Use a temp directory to avoid interference from stale instance files
-    // left by previous vrunner runs in the shared system data dir.
-    let dir = std::env::temp_dir().join("vrunner-test-registry");
+    // left by previous vrw runs in the shared system data dir.
+    let dir = std::env::temp_dir().join("vrw-test-registry");
     let _ = std::fs::remove_dir_all(&dir); // clean up any previous test run
-    let reg = vrl_core::instance::registry::InstanceRegistry::with_dir(dir.clone())
+    let reg = vrc_core::instance::registry::InstanceRegistry::with_dir(dir.clone())
         .expect("InstanceRegistry::with_dir should succeed");
     assert!(reg.list_instances().is_empty());
     let _ = std::fs::remove_dir_all(&dir); // cleanup
@@ -1095,7 +1095,7 @@ async fn regression_watch_channel_already_changed() {
 // ═══════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_spawn_command_not_found() {
     // Spawning a nonexistent command must return an error, not panic.
     let cfg = test_config();
@@ -1116,7 +1116,7 @@ async fn regression_spawn_command_not_found() {
 }
 
 #[tokio::test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_spawn_with_env_vars() {
     let mut env = HashMap::new();
     env.insert("TEST_VAR".into(), "test_value".into());
@@ -1148,7 +1148,7 @@ async fn regression_spawn_with_env_vars() {
 }
 
 #[tokio::test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_spawn_with_custom_vtty_size() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
@@ -1174,7 +1174,7 @@ async fn regression_spawn_with_custom_vtty_size() {
 }
 
 #[tokio::test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_manager_logger_works() {
     // The logger is only enabled when command_log.enabled = true.
     // We need to enable it in the config, otherwise log() is a no-op.
@@ -1206,7 +1206,7 @@ async fn regression_manager_logger_works() {
 }
 
 #[tokio::test]
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 async fn regression_vtty_change_subscription() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
@@ -1542,7 +1542,7 @@ async fn regression_multiple_snapshots_same_command() {
 
 #[test]
 fn regression_emulator_bracketed_paste_roundtrip() {
-    let mut emu = vrl_core::vtty::emulator::VttyEmulator::new(24, 80, 1000);
+    let mut emu = vrc_core::vtty::emulator::VttyEmulator::new(24, 80, 1000);
     assert!(!emu.bracketed_paste_enabled());
     emu.feed(b"\x1b[?2004h");
     assert!(emu.bracketed_paste_enabled());
@@ -1552,7 +1552,7 @@ fn regression_emulator_bracketed_paste_roundtrip() {
 
 #[test]
 fn regression_emulator_focus_reporting_roundtrip() {
-    let mut emu = vrl_core::vtty::emulator::VttyEmulator::new(24, 80, 1000);
+    let mut emu = vrc_core::vtty::emulator::VttyEmulator::new(24, 80, 1000);
     assert!(!emu.focus_reporting_enabled());
     emu.feed(b"\x1b[?1004h");
     assert!(emu.focus_reporting_enabled());
@@ -1562,7 +1562,7 @@ fn regression_emulator_focus_reporting_roundtrip() {
 
 #[test]
 fn regression_emulator_mouse_tracking_roundtrip() {
-    let mut emu = vrl_core::vtty::emulator::VttyEmulator::new(24, 80, 1000);
+    let mut emu = vrc_core::vtty::emulator::VttyEmulator::new(24, 80, 1000);
     assert!(!emu.mouse_tracking_enabled());
     emu.feed(b"\x1b[?1003h");
     assert!(emu.mouse_tracking_enabled());
@@ -1572,7 +1572,7 @@ fn regression_emulator_mouse_tracking_roundtrip() {
 
 #[test]
 fn regression_emulator_sgr_reset_clears_all_attributes() {
-    let mut emu = vrl_core::vtty::emulator::VttyEmulator::new(3, 20, 1000);
+    let mut emu = vrc_core::vtty::emulator::VttyEmulator::new(3, 20, 1000);
     emu.feed(b"\x1b[1;3;4;7m"); // bold, italic, underline, reverse
     emu.feed(b"\x1b[0m"); // reset
     emu.feed_str("X");
@@ -1586,7 +1586,7 @@ fn regression_emulator_sgr_reset_clears_all_attributes() {
 
 #[test]
 fn regression_emulator_alt_screen_preserves_main() {
-    let mut emu = vrl_core::vtty::emulator::VttyEmulator::new(5, 10, 1000);
+    let mut emu = vrc_core::vtty::emulator::VttyEmulator::new(5, 10, 1000);
     emu.feed_str("MAIN_DATA");
     emu.feed(b"\x1b[?1049h"); // enter alt
     emu.feed_str("ALT_DATA");
@@ -1602,7 +1602,7 @@ fn regression_emulator_alt_screen_preserves_main() {
 
 #[test]
 fn regression_emulator_cursor_position_after_scroll() {
-    let mut emu = vrl_core::vtty::emulator::VttyEmulator::new(3, 10, 1000);
+    let mut emu = vrc_core::vtty::emulator::VttyEmulator::new(3, 10, 1000);
     // Fill the buffer
     for i in 0..3 {
         emu.feed_str(&format!("line{}\n", i));
@@ -1618,8 +1618,8 @@ fn regression_emulator_cursor_position_after_scroll() {
 
 #[test]
 fn regression_buffer_resize_preserves_content() {
-    use vrl_core::vtty::cell::Cell;
-    let mut buf = vrl_core::vtty::buffer::Buffer::new(10, 5, 100);
+    use vrc_core::vtty::cell::Cell;
+    let mut buf = vrc_core::vtty::buffer::Buffer::new(10, 5, 100);
     buf.set(0, 0, Cell::new('P'));
     buf.set(2, 9, Cell::new('Q'));
     buf.resize(8, 3); // shrink

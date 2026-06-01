@@ -1,9 +1,9 @@
 # Security Model
 
-This document describes how vrunner approaches security: from its secure-by-default
+This document describes how vrw approaches security: from its secure-by-default
 philosophy through the authentication flow, token management, TLS setup, the
 certificate pool access-control system, CORS policy, and production hardening
-recommendations. Read this if you are deploying vrunner on a shared network, exposing
+recommendations. Read this if you are deploying vrw on a shared network, exposing
 it over the internet, or need to understand how authentication and encryption are
 implemented.
 
@@ -11,7 +11,7 @@ implemented.
 
 ## Secure-by-Default Philosophy
 
-vrunner is designed so that the **default configuration is safe for local-only use**
+vrw is designed so that the **default configuration is safe for local-only use**
 and **unsafe configurations require explicit opt-in**. Specifically:
 
 | Behavior | Default | Requires Opt-In |
@@ -21,12 +21,12 @@ and **unsafe configurations require explicit opt-in**. Specifically:
 | TLS | Disabled | `--tls` to enable |
 | CORS | All origins allowed (`policy: "any"`) | Set `security.cors.policy` in the config file to restrict origins |
 
-This means that if you simply run `vrunner -- my-command`, the only clients that
+This means that if you simply run `vrw -- my-command`, the only clients that
 can connect are processes on the same machine, and no authentication is needed. The
 security surface is minimal.
 
 **Risk**: If you bind to `0.0.0.0` without enabling authentication, any client on
-the network can start, stop, and interact with your commands. vrunner warns on
+the network can start, stop, and interact with your commands. vrw warns on
 stderr when `--bind` is set to a non-loopback address and `--auth` is not
 enabled. The `--remote` flag automatically enables both external binding and
 authentication to prevent this misconfiguration.
@@ -63,7 +63,7 @@ the middleware returns a `403 Forbidden` response.
 ### Step 2: Authentication Middleware
 
 If auth is enabled (`--auth`), the middleware reads the token from the configured
-token file (default `~/.config/vrunner/token`) and extracts the `Bearer` token
+token file (default `~/.config/vrw/token`) and extracts the `Bearer` token
 from the `Authorization` header:
 
 ```
@@ -90,7 +90,7 @@ connection is trusted for its lifetime—there is no per-message authentication.
 
 ### Token Format
 
-When you enable auth with `--auth`, vrunner creates a **256-bit (32-byte)**
+When you enable auth with `--auth`, vrw creates a **256-bit (32-byte)**
 cryptographically random token encoded as **64 hex characters**:
 
 ```
@@ -102,13 +102,13 @@ system's CSPRNG (`getrandom` on Linux/macOS, `BCryptGenRandom` on Windows).
 
 ### Token File
 
-When auth is enabled, vrunner looks for the token at the configured path
-(default `~/.config/vrunner/token`, overridable with `--token-file <FILE>`).
+When auth is enabled, vrw looks for the token at the configured path
+(default `~/.config/vrw/token`, overridable with `--token-file <FILE>`).
 If the file does not exist, a random token is generated and written to the file.
 The file is created with `0600` permissions (owner read/write only):
 
 ```
--rw------- 1 user user 64 Jun 15 10:23 ~/.config/vrunner/token
+-rw------- 1 user user 64 Jun 15 10:23 ~/.config/vrw/token
 ```
 
 This ensures that other users on the same system cannot read the token.
@@ -116,7 +116,7 @@ This ensures that other users on the same system cannot read the token.
 ### Token Lifecycle
 
 ```
-┌──────────────┐     vrunner --tls --auth      ┌──────────────┐
+┌──────────────┐     vrw --tls --auth      ┌──────────────┐
 │  Generation  │     (with --token-file or      │  Storage     │
 │  (OsRng)     │      default path)              │  (file 0600) │
 └──────────────┘──────────────────────────────►└──────┬───────┘
@@ -125,8 +125,8 @@ This ensures that other users on the same system cannot read the token.
                     │
                     ▼
            ┌──────────────┐
-           │  Loading      │  vrunner reads token from file:
-           │               │  ~/.config/vrunner/token
+           │  Loading      │  vrw reads token from file:
+           │               │  ~/.config/vrw/token
            │               │  (or --token-file <FILE> path)
            └──────┬───────┘
                   │
@@ -141,7 +141,7 @@ This ensures that other users on the same system cannot read the token.
 
 ## TLS Setup Flow
 
-vrunner uses **pure-Rust TLS** via the `rustls` crate. There is no dependency on
+vrw uses **pure-Rust TLS** via the `rustls` crate. There is no dependency on
 OpenSSL, LibreSSL, or any system TLS library. This reduces the attack surface
 and simplifies cross-platform deployment.
 
@@ -150,15 +150,15 @@ and simplifies cross-platform deployment.
 When you pass `--tls` without specifying certificate paths:
 
 ```
-vrunner --tls --auth -- my-app
+vrw --tls --auth -- my-app
 ```
 
-vrunner generates a self-signed X.509 certificate using `rcgen`:
+vrw generates a self-signed X.509 certificate using `rcgen`:
 
 ```
 ┌──────────────┐
 │  rcgen       │
-│  Certificate │  Subject: CN=vrunner, O=vrunner
+│  Certificate │  Subject: CN=vrw, O=vrw
 │  Generator   │  SAN:    DNS:localhost, IP:127.0.0.1, IP:::1
 │              │  Validity: 2025-01-01 to 2030-01-01 (5 years)
 │  Key:        │  ECDSA P-256
@@ -173,12 +173,12 @@ vrunner generates a self-signed X.509 certificate using `rcgen`:
 └──────────────┘
 ```
 
-The certificate and key are written to `~/.config/vrunner/cert.pem` and
-`~/.config/vrunner/key.pem` respectively. On subsequent runs, the existing
+The certificate and key are written to `~/.config/vrw/cert.pem` and
+`~/.config/vrw/key.pem` respectively. On subsequent runs, the existing
 files are reused automatically. The key file is created with `0600` permissions
 (owner read/write only).
 
-> **Note**: Distribute `~/.config/vrunner/cert.pem` to authorized clients so they
+> **Note**: Distribute `~/.config/vrw/cert.pem` to authorized clients so they
 > can trust the self-signed certificate (e.g., `curl --cacert cert.pem`).
 
 ### Option B: Custom Certificates
@@ -186,7 +186,7 @@ files are reused automatically. The key file is created with `0600` permissions
 For production use, you can provide your own certificates:
 
 ```
-vrunner --tls --cert-file /etc/ssl/certs/vrunner.pem --key-file /etc/ssl/private/vrunner.key -- my-app
+vrw --tls --cert-file /etc/ssl/certs/vrw.pem --key-file /etc/ssl/private/vrw.key -- my-app
 ```
 
 The certificate and key are loaded via `rustls-pemfile`. Supported formats:
@@ -206,7 +206,7 @@ The certificate and key are loaded via `rustls-pemfile`. Supported formats:
 
 ## Certificate Pool System
 
-vrunner provides an advanced access-control mechanism called the **certificate
+vrw provides an advanced access-control mechanism called the **certificate
 pool**. Instead of a single shared token, each named certificate has its own
 dedicated access token derived from the certificate's PEM content.
 
@@ -259,16 +259,16 @@ fn derive_certificate_token(cert_pem: &[u8]) -> String {
 
 ### Managing Certificates
 
-Certificates in the pool can be managed via the `vrunner cert` subcommand:
+Certificates in the pool can be managed via the `vrw cert` subcommand:
 
 | Command | Description |
 |---|---|
-| `vrunner cert generate <name>` | Generate a new named certificate |
-| `vrunner cert list` | List all certificates in the pool |
-| `vrunner cert show <name>` | Show details of a specific certificate |
-| `vrunner cert remove <name>` | Remove a certificate from the pool |
+| `vrw cert generate <name>` | Generate a new named certificate |
+| `vrw cert list` | List all certificates in the pool |
+| `vrw cert show <name>` | Show details of a specific certificate |
+| `vrw cert remove <name>` | Remove a certificate from the pool |
 
-Auto-generated certificates are stored in `~/.config/vrunner/certs/<name>/` as
+Auto-generated certificates are stored in `~/.config/vrw/certs/<name>/` as
 `cert.pem` and `key.pem`. Private key files are created with `0600` permissions.
 
 ---
@@ -276,7 +276,7 @@ Auto-generated certificates are stored in `~/.config/vrunner/certs/<name>/` as
 ## CORS Policy
 
 Cross-Origin Resource Sharing (CORS) controls which web origins can make requests
-to vrunner's API. The policy is configured via the config file under
+to vrw's API. The policy is configured via the config file under
 `security.cors.policy`:
 
 | Configuration | Behavior |
@@ -286,7 +286,7 @@ to vrunner's API. The policy is configured via the config file under
 | `policy: "https://app.example.com"` | Only the specified origin is allowed |
 | `policy: "https://app.example.com,https://admin.example.com"` | Comma-separated list of allowed origins |
 
-> **Note**: There is no CLI flag for CORS. Use the config file (`~/.config/vrunner/config.toml`
+> **Note**: There is no CLI flag for CORS. Use the config file (`~/.config/vrw/config.toml`
 > or `--config <FILE>`) to set `security.cors.policy`.
 
 The CORS middleware sets the following headers on allowed requests:
@@ -304,7 +304,7 @@ Pre-flight `OPTIONS` requests are handled automatically by the middleware.
 
 ## Security Best Practices for Production
 
-When deploying vrunner on a shared network or the internet, follow these
+When deploying vrw on a shared network or the internet, follow these
 guidelines:
 
 ### Network
@@ -337,16 +337,16 @@ guidelines:
 
 | Recommendation | Reason |
 |---|---|
-| Token file: `0600` | Only the vrunner user can read the token |
+| Token file: `0600` | Only the vrw user can read the token |
 | Config file: `0600` or `0640` | Prevents unauthorized modification |
 | PID file: `0644` | Readable for monitoring, writable by owner |
-| Certificate/key: `0600` | Only the vrunner user can read private keys |
+| Certificate/key: `0600` | Only the vrw user can read private keys |
 
 ### Process Isolation
 
 | Recommendation | Reason |
 |---|---|
-| Run vrunner as a dedicated user | Limits the impact of a compromised process |
+| Run vrw as a dedicated user | Limits the impact of a compromised process |
 | Use container isolation (Docker/Podman) | Adds filesystem and network isolation |
 | Set resource limits (ulimit, cgroups) | Prevents resource exhaustion |
 
@@ -363,10 +363,10 @@ guidelines:
 | Eavesdropping on network | TLS with `rustls` (TLS 1.2 + 1.3) |
 | Cross-site attacks | Configurable CORS policy (default: allow all; restrict via `security.cors.policy`) |
 | Certificate compromise | Per-certificate token derivation from cert PEM content |
-| Compromised child process | Isolated PTY; child cannot access vrunner internals |
+| Compromised child process | Isolated PTY; child cannot access vrw internals |
 | Denial of service | Rate limiting via reverse proxy; bounded channels |
 
 ---
 
 *This document is part of the [Diátaxis](https://diataxis.fr/) documentation framework
-for vrunner. See the [explanation index](./) for related topics.*
+for vrw. See the [explanation index](./) for related topics.*

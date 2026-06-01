@@ -1,13 +1,15 @@
 # Web Dashboard
 
-Learn how to use the vrunner admin interface to monitor, interact with, and manage all spawned commands from a single browser window.
+Learn how to use the vrw admin interface to monitor, interact with, and manage all spawned commands from a single browser window.
+
+> **The web dashboard is available only in vrw.** For local terminal monitoring in vrc, use `--display` / `--display-all` (see [Interactive Display](interactive-display.md)).
 
 ## Accessing the Dashboard
 
-Start vrunner with web UI enabled and open the admin interface in your browser:
+Start vrw with web UI enabled and open the admin interface in your browser:
 
 ```bash
-vrunner --web --port 8080
+vrw --web --port 8080
 # Open http://localhost:8080/admin
 ```
 
@@ -44,7 +46,7 @@ The sidebar lists every spawned command with:
 - **Status** — Row background indicates running, frozen, or exited state.
 - **Badges** — Exit code, runtime, resource usage, certificate.
 
-When multiple vrunner instances are connected, a sort bar at the top lets you group commands by instance or view all sorted alphabetically.
+When multiple vrw instances are connected, a sort bar at the top lets you group commands by instance or view all sorted alphabetically.
 
 ### Search
 
@@ -118,7 +120,7 @@ Press **?** or click the keyboard icon in the top bar to open the shortcuts pane
 
 ## Auto-Reconnect
 
-If the connection to vrunner drops, the dashboard automatically attempts to reconnect every 3 seconds. A connection status indicator in the top bar shows the current state:
+If the connection to vrw drops, the dashboard automatically attempts to reconnect every 3 seconds. A connection status indicator in the top bar shows the current state:
 
 - **Green** — Connected
 - **Yellow** — Reconnecting
@@ -145,10 +147,10 @@ Bookmark or share these links to jump directly to a specific command's terminal 
 
 ## Multi-Instance View
 
-When running multiple vrunner instances, you can configure the dashboard to show commands from several instances in a single view. Set the `VRUNNER_PEERS` environment variable:
+When running multiple vrw instances, you can configure the dashboard to show commands from several instances in a single view. Set the `VRW_PEERS` environment variable:
 
 ```bash
-VRUNNER_PEERS="http://host1:8080,http://host2:8080" vrunner --web
+VRW_PEERS="http://host1:8080,http://host2:8080" vrw --web
 ```
 
 Each command in the sidebar shows which instance it belongs to, with a colored indicator.

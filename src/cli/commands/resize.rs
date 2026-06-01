@@ -1,4 +1,4 @@
-#![cfg(feature = "vrunner")]
+#![cfg(feature = "vrw")]
 #![allow(dead_code, unused_imports)]
 use anyhow::Result;
 
@@ -9,7 +9,7 @@ use crate::interactive::display::detect_terminal_size;
 
 use super::common::{collect_all_commands, http_client, instance_url, resolve_pid_to_id};
 
-/// Handle the `vrunner resize-command` subcommand.
+/// Handle the `vrw resize-command` subcommand.
 ///
 /// Resizes the VTTY of a running command by PID or name.
 /// Resizes both the in-memory buffer and the child PTY (sends SIGWINCH).
@@ -20,7 +20,7 @@ pub async fn handle_resize_command(_cli: &Cli, target: Option<&str>, rows: u16, 
 
     if instances.is_empty() {
         anyhow::bail!(
-            "No running vrunner instances found. Start one first with: vrunner -- <command>"
+            "No running vrw instances found. Start one first with: vrw -- <command>"
         );
     }
 
@@ -48,7 +48,7 @@ pub async fn handle_resize_command(_cli: &Cli, target: Option<&str>, rows: u16, 
     if interactive && target.is_none() {
         let all_commands = collect_all_commands(&client, &instances).await;
         if all_commands.is_empty() {
-            anyhow::bail!("No running commands found. Use `vrunner list` to see running commands.");
+            anyhow::bail!("No running commands found. Use `vrw list` to see running commands.");
         }
         let items: Vec<_> = all_commands
             .iter()
@@ -87,7 +87,7 @@ pub async fn handle_resize_command(_cli: &Cli, target: Option<&str>, rows: u16, 
     let target = match target {
         Some(t) => t,
         None => anyhow::bail!(
-            "No target specified. Use `vrunner resize <PID or name>` or `vrunner resize --interactive`."
+            "No target specified. Use `vrw resize <PID or name>` or `vrw resize --interactive`."
         ),
     };
 
@@ -100,7 +100,7 @@ pub async fn handle_resize_command(_cli: &Cli, target: Option<&str>, rows: u16, 
     let all_commands = collect_all_commands(&client, &instances).await;
 
     if all_commands.is_empty() {
-        anyhow::bail!("No running commands found. Use `vrunner list` to see running commands.");
+        anyhow::bail!("No running commands found. Use `vrw list` to see running commands.");
     }
 
     // Exact match on name alone or full "name args" string.
@@ -147,7 +147,7 @@ pub async fn handle_resize_command(_cli: &Cli, target: Option<&str>, rows: u16, 
     }
 
     anyhow::bail!(
-        "No command matching '{}' found. Use `vrunner list` to see running commands.",
+        "No command matching '{}' found. Use `vrw list` to see running commands.",
         target
     );
 }
@@ -206,7 +206,7 @@ pub async fn handle_resize_by_pid(
         }
     }
     anyhow::bail!(
-        "No command found with PID {}. Use `vrunner list` to see running commands.",
+        "No command found with PID {}. Use `vrw list` to see running commands.",
         pid
     );
 }

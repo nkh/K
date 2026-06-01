@@ -1,10 +1,12 @@
 # Environment Variables
 
-Learn how to control the environment variables passed to spawned commands using vrl's three-layer model: configuration file, CLI flags, and API parameters.
+Learn how to control the environment variables passed to spawned commands using the three-layer model: configuration file, CLI flags, and API parameters.
+
+> **Both vrc and vrw** share the same three-layer environment variable model. Config paths differ: vrc uses `~/.config/vrc/config.yaml`, vrw uses `~/.config/vrw/config.yaml`. Replace `vrc` with `vrw` in CLI examples below — they work identically. The API layer applies to vrw only (vrc uses UDS IPC; see [UDS IPC Usage](api-usage.md)).
 
 ## Three-Layer Model
 
-vrl resolves environment variables for each command from three sources, merged in order of increasing precedence:
+vrc resolves environment variables for each command from three sources, merged in order of increasing precedence:
 
 1. **Config file** — `env` key in the command definition.
 2. **CLI flags** — `--env` flags passed at spawn time.
@@ -17,7 +19,8 @@ Higher-priority layers override lower-priority ones. If a key appears in multipl
 Define environment variables in your YAML config:
 
 ```yaml
-# ~/.config/vrl/config.yaml
+# ~/.config/vrc/config.yaml
+# (For vrw: ~/.config/vrw/config.yaml)
 commands:
   - name: frontend
     command: "npm run dev"
@@ -36,13 +39,15 @@ Override or add environment variables with `--env` flags:
 
 ```bash
 # Override NODE_ENV from the config
-vrl --cmd "npm run dev" --name "frontend" --env NODE_ENV=production
+vrc --cmd "npm run dev" --name "frontend" --env NODE_ENV=production
+# With vrw:
+vrw --cmd "npm run dev" --name "frontend" --env NODE_ENV=production
 
 # Add a new variable not in the config
-vrl --cmd "npm run dev" --name "frontend" --env DEBUG=true
+vrc --cmd "npm run dev" --name "frontend" --env DEBUG=true
 
 # Set multiple variables
-vrl --cmd "npm run dev" --name "frontend" \
+vrc --cmd "npm run dev" --name "frontend" \
   --env NODE_ENV=staging --env PORT=4000 --env DEBUG=true
 ```
 
@@ -85,7 +90,7 @@ commands:
 
 ```bash
 # CLI
-vrl --cmd "./server" --name "app" --env LOG_LEVEL=info --env CACHE=true
+vrc --cmd "./server" --name "app" --env LOG_LEVEL=info --env CACHE=true
 ```
 
 ```json
@@ -105,15 +110,15 @@ The final environment for the `app` command:
 
 ## Isolation with `--no-env`
 
-By default, spawned commands inherit vrl's own environment. Use `--no-env` to start commands with a clean environment containing only what you explicitly set:
+By default, spawned commands inherit vrc's own environment. Use `--no-env` to start commands with a clean environment containing only what you explicitly set:
 
 ```bash
-vrl --no-env \
+vrc --no-env \
   --cmd "./server" --name "app" \
   --env PORT=3000 --env DATABASE_URL=postgres://localhost/mydb
 ```
 
-The command receives only `PORT` and `DATABASE_URL` — none of the variables from vrl's process or the config file (except what you explicitly pass via `--env`).
+The command receives only `PORT` and `DATABASE_URL` — none of the variables from vrc's process or the config file (except what you explicitly pass via `--env`).
 
 This is useful for:
 
@@ -123,23 +128,23 @@ This is useful for:
 
 ## TERM Variable
 
-vrl **always** sets the `TERM` environment variable for spawned commands, regardless of other settings:
+vrc **always** sets the `TERM` environment variable for spawned commands, regardless of other settings:
 
 - Default value: `xterm-256color`
 - Override with `--env TERM=xterm` if needed.
 
-The `TERM` variable is set because vrl provides a virtual terminal (PTY) for each command, and the command needs to know the terminal type to render correctly.
+The `TERM` variable is set because vrc provides a virtual terminal (PTY) for each command, and the command needs to know the terminal type to render correctly.
 
 ```bash
 # TERM is always set, even with --no-env
-vrl --no-env --cmd "htop" --name "monitor"
+vrc --no-env --cmd "htop" --name "monitor"
 # htop receives: TERM=xterm-256color (and nothing else)
 ```
 
 To use a different terminal type:
 
 ```bash
-vrl --cmd "vim" --name "editor" --env TERM=screen-256color
+vrc --cmd "vim" --name "editor" --env TERM=screen-256color
 ```
 
 ## Practical Examples
@@ -147,7 +152,7 @@ vrl --cmd "vim" --name "editor" --env TERM=screen-256color
 ### Development Environment
 
 ```bash
-vrl \
+vrc \
   --cmd "npm run dev" --name "frontend" \
   --env NODE_ENV=development \
   --env PORT=3000 \
@@ -157,7 +162,7 @@ vrl \
 ### Production Environment (Isolated)
 
 ```bash
-vrl --no-env --daemon \
+vrc --no-env --daemon \
   --cmd "./server" --name "api" \
   --env NODE_ENV=production \
   --env PORT=8080 \
@@ -188,7 +193,7 @@ Avoid putting secrets in the config file. Pass them via `--env` or the API inste
 
 ```bash
 # Pass API key from an environment variable on the host
-vrl --cmd "./server" --name "api" \
+vrc --cmd "./server" --name "api" \
   --env API_KEY="$MY_API_KEY"
 ```
 

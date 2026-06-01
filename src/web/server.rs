@@ -1,4 +1,4 @@
-#![cfg(feature = "vrunner")]
+#![cfg(feature = "vrw")]
 #![allow(dead_code, unused_imports)]
 use anyhow::Result;
 use std::sync::Arc;
@@ -74,7 +74,7 @@ pub async fn start_server(
     tokio::spawn(async move {
         let _ = shutdown_rx.recv().await;
         tracing::info!("Graceful shutdown initiated");
-        // Use a 2-second timeout so vrunner doesn't hang waiting for
+        // Use a 2-second timeout so vrw doesn't hang waiting for
         // persistent connections (HTTP keep-alive, SSE, WebSocket) to drain.
         shutdown_handle.graceful_shutdown(Some(std::time::Duration::from_secs(2)));
     });

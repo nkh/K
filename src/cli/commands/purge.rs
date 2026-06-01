@@ -1,4 +1,4 @@
-#![cfg(feature = "vrunner")]
+#![cfg(feature = "vrw")]
 #![allow(dead_code, unused_imports)]
 use anyhow::Result;
 
@@ -74,7 +74,7 @@ pub async fn handle_purge_command(_cli: &Cli, target: Option<&str>) -> Result<bo
                 for (_, cmd_id, _, _, full) in &all_commands {
                     tracing::warn!("  {} — {}", &cmd_id[..8.min(cmd_id.len())], full);
                 }
-                tracing::warn!("Usage: vrunner purge <ID or name>");
+                tracing::warn!("Usage: vrw purge <ID or name>");
                 return Ok(false);
             }
         },

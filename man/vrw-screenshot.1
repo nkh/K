@@ -1,0 +1,106 @@
+.\" Title: vrw-screenshot
+.\" Author: vrw contributors
+.\" Manual section: 1
+.\" Process this file with
+.\"   groff -man -Tascii vrw-screenshot.1
+
+.TH VRW-SCREENSHOT 1 "2025" "vrw" "User Commands"
+
+.SH NAME
+vrw screenshot \- capture the VTTY buffer as a PNG screenshot
+
+.SH SYNOPSIS
+.B vrw screenshot
+[\fITARGET\fR] [\fIOPTIONS\fR] [\fB\-\-interactive\fR]
+
+.SH DESCRIPTION
+Captures the virtual terminal (VTTY) buffer of a running command and renders it as a PNG image using a TrueType/OpenType font. The screenshot includes the visible screen content with all ANSI colors, bold, underline, and other formatting preserved.
+
+The rendering engine uses \fBfontdue\fR for font rasterization with proper baseline alignment, supporting 256-color and true-color output, CJK wide characters, box-drawing characters, and bold overstrike emulation.
+
+When no target is specified and exactly one command is running, that command is selected automatically. If multiple commands are running, a target must be specified either by PID (numeric) or by command name.
+
+.SH OPTIONS
+
+.TP
+.BR "\-\-output " \fIFILE\fR
+Output file path for the PNG image. When omitted, the filename is auto-generated from the pattern \fBvrw_YYYYMMDD_HHMMSS_rows_cols_command_args.png\fR, where \fIrows\fR and \fIcols\fR are the terminal dimensions of the captured command, and \fIcommand_args\fR is the full command line with spaces replaced by underscores. The full absolute path of the saved file is printed to stdout after the screenshot is taken.
+
+.TP
+.BR "\-\-font-size " \fIN\fR
+Font size in pixels per character cell (default: \fB14\fR, valid range: 6\[en]48). Smaller values produce more compact screenshots; larger values produce higher-resolution output suitable for presentations or documentation.
+
+.TP
+.BR "\-\-font-name " \fIPATH\fR
+Path to a TTF/OTF font file (e.g., \fB./SGr-IosevkaTerm-Medium.ttc\fR). When omitted, the server searches common system paths for a monospace font: \fBDejaVuSansMono.ttf\fR, \fBLiberationMono-Regular.ttf\fR, and \fBFreeMono.ttf\fR.
+
+.TP
+.BR \-h ", " \-\-help
+Print help information and exit.
+
+.TP
+.BR \-\-interactive
+Present a numbered list of commands and let the user select
+which ones to screenshot by typing space-separated numbers (e.g. "1 3 5").
+Requires a terminal (stdin must be a TTY).
+
+.SH TARGET SELECTION
+
+If \fITARGET\fR is provided:
+.RS
+.IP \(bu 4
+Numeric values are treated as a process ID (PID).
+.IP \(bu 4
+Non-numeric values are matched case-insensitively against command names.
+.RE
+
+If no \fITARGET\fR is provided and exactly one command is running, it is selected automatically. If multiple commands are running, an error is printed listing available commands.
+
+.SH RENDERING DETAILS
+
+The PNG renderer uses the font's horizontal line metrics for correct baseline alignment:
+.RS
+.IP \(bu 4
+\fBcell_width\fR is derived from the font's advance width for a typical character.
+.IP \(bu 4
+\fBcell_height\fR is computed from the font's \fBascent\fR and \fBdescent\fR metrics.
+.IP \(bu 4
+All glyphs are positioned relative to a shared baseline using the font's \fBbearing_y\fR (top sidebearing) and \fBymin\fR (bottom edge) metrics, ensuring characters with and without descenders align correctly.
+.IP \(bu 4
+Bold text is rendered with a 1-pixel overstrike to the right.
+.IP \(bu 4
+Underline and strikethrough are rendered as pixel lines.
+.RE
+
+.SH EXAMPLES
+
+Capture a screenshot with auto-generated filename:
+.RS
+.PP
+\fB$ vrw screenshot\fR
+.PP
+Output: \fI/home/user/vrw_20260530_092208_80_24_htop.png\fR
+.RE
+
+Specify output path and custom font:
+.RS
+.PP
+\fB$ vrw screenshot \-\-output /tmp/term.png \-\-font-name ./SGr-IosevkaTerm-Medium.ttc\fR
+.RE
+
+Use a large font for high-resolution output:
+.RS
+.PP
+\fB$ vrw screenshot \-\-font-size 20 \-\-output screenshot-hires.png\fR
+.RE
+
+Target a specific command:
+.RS
+.PP
+\fB$ vrw screenshot htop \-\-output htop-capture.png\fR
+.RE
+
+.SH SEE ALSO
+.BR vrw (1),
+.BR vrw-cat (1),
+.BR vrw-list-commands (1)

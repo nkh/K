@@ -1,4 +1,4 @@
-#![cfg(feature = "vrunner")]
+#![cfg(feature = "vrw")]
 #![allow(dead_code, unused_imports)]
 use anyhow::Result;
 
@@ -6,7 +6,7 @@ use crate::cli::args::CertAction;
 use crate::config::loader::load_config;
 use crate::web::certs::{CertificateEntry, CertificateStore};
 
-/// Handle the `vrunner cert` subcommands (generate, list, show, remove).
+/// Handle the `vrw cert` subcommands (generate, list, show, remove).
 ///
 /// These are synchronous operations that don't require the tokio runtime.
 pub fn handle_cert_command(action: &CertAction) -> Result<()> {

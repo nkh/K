@@ -1,0 +1,63 @@
+.\" Title: vrc-completions
+.\" Author: vrc contributors
+.\" Manual section: 1
+.\"
+.TH VRL\-COMPLETIONS 1 "2025" "vrc" "User Commands"
+
+.SH NAME
+vrc\-completions \- generate shell completion scripts for vrc
+
+.SH SYNOPSIS
+.B vrc
+\fBcompletions\fR \fISHELL\fR
+
+.SH DESCRIPTION
+Generate shell completion scripts for vrc, enabling tab completion of commands, options, and arguments in the user's shell. The output is written to stdout and should be redirected or piped into the appropriate shell completion directory.
+
+.SH ARGUMENTS
+
+.TP
+.B SHELL
+The shell to generate completions for. One of: \fBbash\fR, \fBelvish\fR, \fBfish\fR, \fBpowershell\fR, \fBzsh\fR.
+
+.SH EXAMPLES
+
+.PP
+Generate bash completions:
+.RS
+.PP
+.nf
+\fB$ vrc completions bash > /etc/bash_completion.d/vrc\fR
+.fi
+.RE
+
+.PP
+Generate zsh completions:
+.RS
+.PP
+.nf
+\fB$ vrc completions zsh > ~/.zsh/completions/_vrc\fR
+.fi
+.RE
+
+.PP
+Generate fish completions:
+.RS
+.PP
+.nf
+\fB$ vrc completions fish > ~/.config/fish/completions/vrc.fish\fR
+.fi
+.RE
+
+.SH EXIT STATUS
+
+.TP
+.B 0
+Completion script generated successfully.
+
+.TP
+.B 1
+Invalid shell name or generation error.
+
+.SH SEE ALSO
+.BR vrc (1)

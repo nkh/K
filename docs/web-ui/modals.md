@@ -23,10 +23,10 @@ Displays a reference table of all available keyboard shortcuts in the web UI.
 
 ![Add panel modal](screenshots/20-add-panel-modal.png)
 
-Used to connect to an additional vrunner instance in a new panel.
+Used to connect to an additional vrw instance in a new panel.
 
 ### Instance URL
-The base URL of the vrunner instance (e.g., `http://localhost:9090`).
+The base URL of the vrw instance (e.g., `http://localhost:9090`).
 
 ### Label (optional)
 A friendly name for this instance, displayed in the panel header and instance URL field.

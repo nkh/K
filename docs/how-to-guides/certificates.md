@@ -1,10 +1,10 @@
 # Managing Certificates
 
-Learn how to create, distribute, and manage per-command certificates that grant fine-grained access control to specific commands in your vrunner instance.
+Learn how to create, distribute, and manage per-command certificates that grant fine-grained access control to specific commands in your vrw instance.
 
 ## What Are Per-Command Certificates?
 
-Per-command certificates are client TLS certificates that vrunner validates on every API request. Each certificate is bound to a specific command (or set of commands), so holders can only interact with the commands they are authorized to access.
+Per-command certificates are client TLS certificates that vrw validates on every API request. Each certificate is bound to a specific command (or set of commands), so holders can only interact with the commands they are authorized to access.
 
 This is useful for:
 
@@ -16,22 +16,22 @@ This is useful for:
 
 ### CLI Subcommands
 
-Use the `vrunner cert` subcommand to manage certificates:
+Use the `vrw cert` subcommand to manage certificates:
 
 ```bash
 # Generate a certificate bound to specific commands
-vrunner cert generate \
+vrw cert generate \
   --name team-frontend \
   --commands "frontend,storybook"
 
 # Generate a certificate with an expiry
-vrunner cert generate \
+vrw cert generate \
   --name ci-bot \
   --commands "build,test" \
   --expires 90d
 
 # Generate a wildcard certificate (access to all commands)
-vrunner cert generate \
+vrw cert generate \
   --name admin \
   --commands "*"
 ```
@@ -44,15 +44,15 @@ The command outputs three files:
 
 ### CA Configuration
 
-For production use, configure vrunner with a certificate authority:
+For production use, configure vrw with a certificate authority:
 
 ```yaml
-# ~/.config/vrunner/config.yaml
+# ~/.config/vrw/config.yaml
 tls:
-  ca-cert: /etc/ssl/vrunner-ca.crt
-  ca-key: /etc/ssl/vrunner-ca.key
-  cert: /etc/ssl/vrunner-server.crt
-  key: /etc/ssl/vrunner-server.key
+  ca-cert: /etc/ssl/vrw-ca.crt
+  ca-key: /etc/ssl/vrw-ca.key
+  cert: /etc/ssl/vrw-server.crt
+  key: /etc/ssl/vrw-server.key
 ```
 
 All generated client certificates will be signed by this CA.
@@ -62,7 +62,7 @@ All generated client certificates will be signed by this CA.
 View all issued certificates and their bindings:
 
 ```bash
-vrunner cert list
+vrw cert list
 ```
 
 Output:
@@ -79,7 +79,7 @@ admin             *                   2025-01-10 12:00:00  -
 Inspect a specific certificate's full details:
 
 ```bash
-vrunner cert show team-frontend
+vrw cert show team-frontend
 ```
 
 Output:
@@ -98,7 +98,7 @@ Token:       vr_tok_efgh5678
 Revoke an issued certificate:
 
 ```bash
-vrunner cert remove team-frontend
+vrw cert remove team-frontend
 ```
 
 After removal, any requests using that certificate will be rejected with a `403 Forbidden` response.
@@ -108,10 +108,10 @@ After removal, any requests using that certificate will be rejected with a `403 
 Define certificates in your configuration file for persistent management:
 
 ```yaml
-# ~/.config/vrunner/config.yaml
+# ~/.config/vrw/config.yaml
 tls:
-  cert: /etc/ssl/vrunner-server.crt
-  key: /etc/ssl/vrunner-server.key
+  cert: /etc/ssl/vrw-server.crt
+  key: /etc/ssl/vrw-server.key
 
 certificates:
   - name: team-frontend
@@ -133,7 +133,7 @@ certificates:
 When spawning commands, specify which certificate is required to access them:
 
 ```bash
-vrunner --tls \
+vrw --tls \
   --cert /etc/ssl/server.crt --key /etc/ssl/server.key \
   --cmd "npm run dev" --name "frontend" --cert-name team-frontend \
   --cmd "./server" --name "api" --cert-name team-backend
@@ -146,10 +146,10 @@ Each certificate comes with a bearer token that provides an alternative to TLS c
 ```bash
 # Use the token as a Bearer auth header
 curl -H "Authorization: Bearer vr_tok_efgh5678" \
-  https://vrunner.example.com:8443/api/commands
+  https://vrw.example.com:8443/api/commands
 
 # Use as a query parameter
-curl "https://vrunner.example.com:8443/api/commands?token=vr_tok_efgh5678"
+curl "https://vrw.example.com:8443/api/commands?token=vr_tok_efgh5678"
 ```
 
 The token inherits the same command-level restrictions as its parent certificate.

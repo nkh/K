@@ -1,6 +1,6 @@
 # Log Viewer
 
-The log viewer provides access to vrunner's internal event log, showing command lifecycle events, errors, and system messages.
+The log viewer provides access to vrw's internal event log, showing command lifecycle events, errors, and system messages.
 
 ![Log viewer](screenshots/11-log-viewer.png)
 

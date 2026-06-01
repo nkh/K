@@ -358,7 +358,7 @@ impl VttyRenderer {
     /// The underlying monospace font may not contain glyphs for all Unicode
     /// code points (e.g. box-drawing symbols like ▽, emoji); fontdue
     /// substitutes a replacement glyph (tofu box) for missing glyphs.
-    #[cfg(feature = "vrunner")]
+    #[cfg(feature = "vrw")]
     pub fn to_png(buffer: &Buffer, font_size: f32, font_path: Option<&str>) -> anyhow::Result<Vec<u8>> {
         let font = match font_path {
             Some(path) => {

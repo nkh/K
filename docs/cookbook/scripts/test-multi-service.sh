@@ -6,11 +6,11 @@
 #           retain_on_exit, kill, purge.
 #
 # Usage: ./docs/cookbook/scripts/test-multi-service.sh
-#   or:  VRUNNER_BIN=./target/debug/vrunner ./docs/cookbook/scripts/test-multi-service.sh
+#   or:  VRW_BIN=./target/debug/vrw ./docs/cookbook/scripts/test-multi-service.sh
 
 set -euo pipefail
 
-VRUNNER_BIN="${VRUNNER_BIN:-vrunner}"
+VRW_BIN="${VRW_BIN:-vrw}"
 PORT=$((19001 + RANDOM % 100))
 BASE_URL="http://127.0.0.1:${PORT}"
 PASS=0
@@ -23,10 +23,10 @@ section() { echo ""; echo "=== $1 ==="; }
 cleanup() {
     echo ""
     echo "--- Cleanup ---"
-    if [ -n "${VRUNNER_PID:-}" ] && kill -0 "$VRUNNER_PID" 2>/dev/null; then
-        echo "Stopping vrunner (pid $VRUNNER_PID)..."
-        kill "$VRUNNER_PID" 2>/dev/null || true
-        wait "$VRUNNER_PID" 2>/dev/null || true
+    if [ -n "${VRW_PID:-}" ] && kill -0 "$VRW_PID" 2>/dev/null; then
+        echo "Stopping vrw (pid $VRW_PID)..."
+        kill "$VRW_PID" 2>/dev/null || true
+        wait "$VRW_PID" 2>/dev/null || true
     fi
     echo "Results: ${PASS} passed, ${FAIL} failed"
     [ "$FAIL" -eq 0 ] || exit 1
@@ -36,10 +36,10 @@ trap cleanup EXIT
 echo "=== Cookbook Test: Monitor Multiple Services ==="
 echo "Port: $PORT"
 
-# ── Start vrunner (no command, daemon-style via &) ──
-section "Start vrunner"
-$VRUNNER_BIN --port "$PORT" --bind 127.0.0.1 -- sleep infinity &
-VRUNNER_PID=$!
+# ── Start vrw (no command, daemon-style via &) ──
+section "Start vrw"
+$VRW_BIN --port "$PORT" --bind 127.0.0.1 -- sleep infinity &
+VRW_PID=$!
 sleep 1
 
 # Wait for server

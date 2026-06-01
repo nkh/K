@@ -1,5 +1,5 @@
-# vrunner — Multi-Service Configuration
-# Run and manage multiple services from a single vrunner instance
+# vrw — Multi-Service Configuration
+# Run and manage multiple services from a single vrw instance
 
 server:
   bind: "127.0.0.1"
@@ -62,11 +62,11 @@ profiles:
 default_exit:
   exit:
     on_exit: null
-    on_error: "notify-send 'vrunner' 'Command failed'"
+    on_error: "notify-send 'vrw' 'Command failed'"
     timeout_secs: 15
 
 # Capture stdout from all commands
 handles:
   - name: "combined-log"
     type: "file"
-    path: "/tmp/vrunner-services.log"
+    path: "/tmp/vrw-services.log"

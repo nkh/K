@@ -1,0 +1,94 @@
+.\" Title: vrc-resize
+.\" Author: vrc contributors
+.\" Manual section: 1
+.\"
+.TH VRL\-RESIZE 1 "2025" "vrc" "User Commands"
+
+.SH NAME
+vrc\-resize \- resize the VTTY of a command in a running instance
+
+.SH SYNOPSIS
+.B vrc
+\fBresize\fR \fIPID\fR [\fB\-c\fR \fICOMMAND\fR] [\fB\-\-rows\fR \fIN\fR] [\fB\-\-cols\fR \fIN\fR] [\fB\-\-interactive\fR]
+
+.SH DESCRIPTION
+Resize the virtual terminal (VTTY) of a command in a running vrc instance. This resizes both the in-memory terminal buffer and the child process's PTY (by sending SIGWINCH), so applications that respond to terminal resize events (vim, htop, less) will adjust their layout.
+
+Connects to the target instance's UDS control socket at \fB~/.local/share/vrc/control\-{pid}.sock\fR.
+
+Default dimensions: 24 rows x 80 columns.
+
+.SH ARGUMENTS
+
+.TP
+.B PID
+OS process ID of the target vrc instance.
+
+.SH OPTIONS
+
+.TP
+.BR \-c ", " \-\-command " " \fICOMMAND\fR
+ID of the target command (omit for the first/only command).
+
+.TP
+.BR \-\-rows " " \fIN\fR
+New terminal height in rows (default: 24).
+
+.TP
+.BR \-\-cols " " \fIN\fR
+New terminal width in columns (default: 80).
+
+.TP
+.BR \-\-interactive
+Present a numbered list of all running commands with their current dimensions and allow the user to select one or more by number (space-separated). Overrides \-c.
+
+.TP
+.BR \-h ", " \-\-help
+Print help information and exit.
+
+.SH EXAMPLES
+
+.PP
+Resize the only command:
+.RS
+.PP
+.nf
+\fB$ vrc resize 12345 \-\-rows 40 \-\-cols 120\fR
+.fi
+.RE
+
+.PP
+Resize a specific command:
+.RS
+.PP
+.nf
+\fB$ vrc resize 12345 \-c cmd_abc \-\-rows 50 \-\-cols 200\fR
+.fi
+.RE
+
+.PP
+Interactively select commands to resize:
+.RS
+.PP
+.nf
+\fB$ vrc resize 12345 \-\-interactive \-\-rows 60 \-\-cols 200\fR
+  1) htop (PID 5678) - 24x80
+  2) vim (PID 5679) - 24x80
+Select [space-separated numbers]: 1 2
+.fi
+.RE
+
+.SH EXIT STATUS
+
+.TP
+.B 0
+Resize successful.
+
+.TP
+.B 1
+Error (instance not found, command not found, etc.).
+
+.SH SEE ALSO
+.BR vrc (1),
+.BR vrc\-list (1),
+.BR vrc\-spawn\-in (1)

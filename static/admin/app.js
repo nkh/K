@@ -15,9 +15,9 @@ const state = {
     // Store instUrl and cmdId separately to avoid ':' conflicts in URLs.
     selectedInstUrl: null,
     selectedCmdId: null,
-    authToken: localStorage.getItem('vrunner_auth_token') || '',
+    authToken: localStorage.getItem('vrw_auth_token') || '',
     refreshInterval: null,
-    fontSize: parseInt(localStorage.getItem('vrunner_font_size') || '10'),
+    fontSize: parseInt(localStorage.getItem('vrw_font_size') || '10'),
     instanceUrls: [],
     currentView: 'vtty',
     // WebSocket for real-time VTTY streaming
@@ -52,14 +52,14 @@ const state = {
     _level3Enabled: true,
     // VTTY update mode: 'push' (server sends dirty signals via WS)
     // or 'poll' (client polls /api/commands/:id/vtty/changed)
-    updateMode: localStorage.getItem('vrunner_update_mode') || 'push',
-    pollInterval: parseInt(localStorage.getItem('vrunner_poll_interval') || '500'),
+    updateMode: localStorage.getItem('vrw_update_mode') || 'push',
+    pollInterval: parseInt(localStorage.getItem('vrw_poll_interval') || '500'),
     _pollTimer: null,
     // Client-side refresh throttle (ms).  In push mode, this throttles how
     // often VTTY updates are applied to the DOM even if the server sends them
     // faster.  0 = no throttle (apply immediately).  Range: 0–2000 in 100ms
     // steps.
-    refreshMs: parseInt(localStorage.getItem('vrunner_refresh_ms') || '0'),
+    refreshMs: parseInt(localStorage.getItem('vrw_refresh_ms') || '0'),
     _refreshThrottleTimer: null,
     // Server-configured defaults (fetched from /api/info)
     serverUpdateMode: null,
@@ -82,16 +82,16 @@ const state = {
     _resourceCache: {},
     _resourceInterval: null,
     // Whether to show CPU/memory resource badges in panel headers
-    showResources: localStorage.getItem('vrunner_show_resources') === 'true',
+    showResources: localStorage.getItem('vrw_show_resources') === 'true',
     // Sound notifications
-    soundEnabled: localStorage.getItem('vrunner_sound') !== 'false',
+    soundEnabled: localStorage.getItem('vrw_sound') !== 'false',
     // Whether the primary instance is reachable (fetched from /api/info)
     serverReachable: false,
 };
 
 // ─── Theme ───
 function initTheme() {
-    const saved = localStorage.getItem('vrunner_theme');
+    const saved = localStorage.getItem('vrw_theme');
     if (saved) {
         document.documentElement.setAttribute('data-theme', saved);
     }
@@ -107,7 +107,7 @@ function toggleTheme() {
     const current = document.documentElement.getAttribute('data-theme');
     const next = current === 'light' ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('vrunner_theme', next);
+    localStorage.setItem('vrw_theme', next);
     updateThemeButton();
     // Sync select dropdown
     const select = document.getElementById('themeSelect');
@@ -117,10 +117,10 @@ function toggleTheme() {
 function applyThemeSelect(value) {
     if (value) {
         document.documentElement.setAttribute('data-theme', value);
-        localStorage.setItem('vrunner_theme', value);
+        localStorage.setItem('vrw_theme', value);
     } else {
         document.documentElement.removeAttribute('data-theme');
-        localStorage.removeItem('vrunner_theme');
+        localStorage.removeItem('vrw_theme');
     }
     updateThemeButton();
 }
@@ -471,9 +471,9 @@ function apiUrl(path, inst) {
 function saveToken() {
     state.authToken = document.getElementById('authToken').value.trim();
     if (state.authToken) {
-        localStorage.setItem('vrunner_auth_token', state.authToken);
+        localStorage.setItem('vrw_auth_token', state.authToken);
     } else {
-        localStorage.removeItem('vrunner_auth_token');
+        localStorage.removeItem('vrw_auth_token');
     }
 }
 
@@ -487,7 +487,7 @@ function applyFontSize() {
     document.documentElement.style.setProperty('--font-size', state.fontSize + 'px');
     const label = document.getElementById('fontSizeLabel');
     if (label) label.textContent = state.fontSize + 'px';
-    localStorage.setItem('vrunner_font_size', state.fontSize.toString());
+    localStorage.setItem('vrw_font_size', state.fontSize.toString());
 }
 
 // Per-panel font size: changes only the specified panel's font size.
@@ -495,7 +495,7 @@ function changePanelFontSize(panelId, delta) {
     const panelObj = state.panels.find(p => p.id === panelId);
     if (!panelObj) return;
     panelObj.fontSize = Math.max(8, Math.min(28, panelObj.fontSize + delta));
-    localStorage.setItem('vrunner_panel_font_' + panelId, panelObj.fontSize.toString());
+    localStorage.setItem('vrw_panel_font_' + panelId, panelObj.fontSize.toString());
     // Apply inline style on the VTTY container
     const vttyEl = document.getElementById('vtty-' + panelId);
     if (vttyEl) vttyEl.style.fontSize = panelObj.fontSize + 'px';
@@ -515,7 +515,7 @@ function changeRefreshMs(delta) {
     if (state.refreshMs > 0 && state.refreshMs % 100 !== 0) {
         state.refreshMs = Math.round(state.refreshMs / 100) * 100;
     }
-    localStorage.setItem('vrunner_refresh_ms', state.refreshMs.toString());
+    localStorage.setItem('vrw_refresh_ms', state.refreshMs.toString());
     // Update all panel widgets
     _syncRefreshMsUI();
 }
@@ -528,7 +528,7 @@ function applyRefreshMs() {
     if (state.refreshMs > 0 && state.refreshMs % 100 !== 0) {
         state.refreshMs = Math.round(state.refreshMs / 100) * 100;
     }
-    localStorage.setItem('vrunner_refresh_ms', state.refreshMs.toString());
+    localStorage.setItem('vrw_refresh_ms', state.refreshMs.toString());
     document.getElementById('refreshMs').value = state.refreshMs;
     _syncRefreshMsUI();
 }
@@ -570,7 +570,7 @@ function togglePanelTheme(panelId) {
     if (!panelObj) return;
     const next = panelObj.theme === '' ? 'light' : panelObj.theme === 'light' ? 'dark' : '';
     panelObj.theme = next;
-    localStorage.setItem('vrunner_panel_theme_' + panelId, next);
+    localStorage.setItem('vrw_panel_theme_' + panelId, next);
     applyPanelTheme(panelId, next);
 }
 
@@ -596,7 +596,7 @@ function toggleSelectionMode(panelId) {
     const panelObj = state.panels.find(p => p.id === panelId);
     if (!panelObj) return;
     panelObj.selectionMode = !panelObj.selectionMode;
-    localStorage.setItem('vrunner_panel_sel_' + panelId, panelObj.selectionMode.toString());
+    localStorage.setItem('vrw_panel_sel_' + panelId, panelObj.selectionMode.toString());
     const vttyEl = document.getElementById('vtty-' + panelId);
     if (vttyEl) vttyEl.classList.toggle('selection-mode', panelObj.selectionMode);
     const btn = document.getElementById('selectBtn-' + panelId);
@@ -620,7 +620,7 @@ function toggleSidebar() {
 // ─── Resource toggle ───
 function toggleResources() {
     state.showResources = !state.showResources;
-    localStorage.setItem('vrunner_show_resources', state.showResources.toString());
+    localStorage.setItem('vrw_show_resources', state.showResources.toString());
     const display = state.showResources ? '' : 'none';
     document.querySelectorAll('.resource-badge, .instance-url').forEach(el => {
         el.style.display = display;
@@ -637,11 +637,11 @@ function toggleBottombar() {
         btn.style.background = isHidden ? '' : 'var(--accent)';
         btn.style.color = isHidden ? '' : '#fff';
     }
-    localStorage.setItem('vrunner_bottombar_hidden', isHidden ? 'true' : 'false');
+    localStorage.setItem('vrw_bottombar_hidden', isHidden ? 'true' : 'false');
 }
 
 function initBottombar() {
-    const shouldHide = localStorage.getItem('vrunner_bottombar_hidden') !== 'false'; // hidden by default
+    const shouldHide = localStorage.getItem('vrw_bottombar_hidden') !== 'false'; // hidden by default
     const bar = document.getElementById('bottomBar');
     const btn = document.getElementById('statusBtn');
     if (shouldHide) {
@@ -691,7 +691,7 @@ function switchSidebarTab(tab, el) {
 }
 
 // Update sidebar tab visibility based on server reachability.
-// When no vrunner instance is reachable, hide the Spawn tab.
+// When no vrw instance is reachable, hide the Spawn tab.
 function updateSidebarTabsVisibility() {
     const spawnTab = document.querySelector('.sidebar-tab:nth-child(2)');
     const spawnContent = document.getElementById('tab-spawn');
@@ -818,7 +818,7 @@ function addDiscoveredPeer(url, label, token) {
     });
     // Add a panel so the user can see this instance's commands
     addPanelDirect(url, label, token);
-    console.log('[vrunner] Peer discovered:', label, '(' + url + ')');
+    console.log('[vrw] Peer discovered:', label, '(' + url + ')');
 }
 
 /// Handle a peer_registered or peer_unregistered WS message.
@@ -845,12 +845,12 @@ function savePeersToStorage() {
     const peers = state.instanceUrls.filter(i => i.url !== window.location.origin);
     if (peers.length > 0) {
         try {
-            localStorage.setItem('vrunner_peers', JSON.stringify(
+            localStorage.setItem('vrw_peers', JSON.stringify(
                 peers.map(p => ({ url: p.url, label: p.label, token: p.token }))
             ));
         } catch (e) { /* quota exceeded — not critical */ }
     } else {
-        localStorage.removeItem('vrunner_peers');
+        localStorage.removeItem('vrw_peers');
     }
 }
 
@@ -1284,7 +1284,7 @@ function updateSidebarSelection() {
 function selectCommand(instUrl, cmdId, name) {
     // Clear stored scrollback for the previously selected command
     if (state.selectedCmdId) {
-        sessionStorage.removeItem('vrunner_scrollback_' + state.selectedCmdId);
+        sessionStorage.removeItem('vrw_scrollback_' + state.selectedCmdId);
     }
 
     state.selectedInstUrl = instUrl;
@@ -1302,7 +1302,7 @@ function selectCommand(instUrl, cmdId, name) {
     });
 
     // Restore scrollback offset from sessionStorage for the new command
-    const savedOffset = sessionStorage.getItem('vrunner_scrollback_' + cmdId);
+    const savedOffset = sessionStorage.getItem('vrw_scrollback_' + cmdId);
     const restoredOffset = savedOffset !== null ? parseInt(savedOffset, 10) : 0;
     state.panels.forEach(p => p.scrollbackOffset = restoredOffset);
 
@@ -1537,10 +1537,10 @@ async function fetchServerConfig() {
             state.serverPollMs = json.data.web.default_poll_ms;
             state.serverDirtyMs = json.data.web.dirty_check_ms;
             // If no user preference is set, use the server default
-            if (!localStorage.getItem('vrunner_update_mode')) {
+            if (!localStorage.getItem('vrw_update_mode')) {
                 state.updateMode = state.serverUpdateMode || 'push';
             }
-            if (!localStorage.getItem('vrunner_poll_interval')) {
+            if (!localStorage.getItem('vrw_poll_interval')) {
                 state.pollInterval = state.serverPollMs || 500;
             }
         }
@@ -1568,7 +1568,7 @@ function applyUpdateModeUI() {
 /// Switch update mode (called from the dropdown).
 function switchUpdateMode(mode) {
     state.updateMode = mode;
-    localStorage.setItem('vrunner_update_mode', mode);
+    localStorage.setItem('vrw_update_mode', mode);
     applyUpdateModeUI();
     // Stop existing update mechanism and restart with new mode
     stopUpdateMode();
@@ -1581,7 +1581,7 @@ function switchUpdateMode(mode) {
 function applyPollInterval() {
     const val = parseInt(document.getElementById('pollInterval').value) || 500;
     state.pollInterval = Math.max(50, Math.min(5000, val));
-    localStorage.setItem('vrunner_poll_interval', state.pollInterval.toString());
+    localStorage.setItem('vrw_poll_interval', state.pollInterval.toString());
     document.getElementById('pollInterval').value = state.pollInterval;
     // If currently polling, restart the timer with new interval
     if (state.updateMode === 'poll' && state._pollTimer) {
@@ -2433,7 +2433,7 @@ function switchBuffer(view) {
     // Reset scrollback when switching buffer views
     state.panels.forEach(p => p.scrollbackOffset = 0);
     // Clear stored scrollback since we reset
-    sessionStorage.removeItem('vrunner_scrollback_' + state.selectedCmdId);
+    sessionStorage.removeItem('vrw_scrollback_' + state.selectedCmdId);
 
     if (view === 'current') {
         // Re-enable the active update mode for live updates
@@ -2683,7 +2683,7 @@ function switchBufferPanel(panelId, view) {
     if (panelObj.instUrl === state.selectedInstUrl && state.selectedCmdId) {
         state.bufferView = view;
         state.panels.forEach(p => p.scrollbackOffset = 0);
-        sessionStorage.removeItem('vrunner_scrollback_' + state.selectedCmdId);
+        sessionStorage.removeItem('vrw_scrollback_' + state.selectedCmdId);
         if (view === 'current') {
             startUpdateMode();
         } else {
@@ -2751,11 +2751,11 @@ function updateInstanceDropdown() {
 // ─── Panels (Multi-view) ───
 function addPanelDirect(instUrl, label, token) {
     const id = 'panel-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
-    const savedFontSize = parseInt(localStorage.getItem('vrunner_panel_font_' + id));
+    const savedFontSize = parseInt(localStorage.getItem('vrw_panel_font_' + id));
     const fontSize = (savedFontSize >= 8 && savedFontSize <= 28) ? savedFontSize : state.fontSize;
-    const savedSelMode = localStorage.getItem('vrunner_panel_sel_' + id);
+    const savedSelMode = localStorage.getItem('vrw_panel_sel_' + id);
     const selectionMode = savedSelMode === 'true';
-    const savedTheme = localStorage.getItem('vrunner_panel_theme_' + id);
+    const savedTheme = localStorage.getItem('vrw_panel_theme_' + id);
     // Per-panel theme: 'light', 'dark', or '' (inherit global). Default is inherit.
     const theme = (savedTheme === 'light' || savedTheme === 'dark') ? savedTheme : '';
     const panel = { id, instUrl, label, token, scrollbackOffset: 0, mouseTracking: false, mouseSgr: false, focused: false, fontSize, selectionMode, theme };
@@ -2828,14 +2828,14 @@ function renderPanels() {
 
     if (state.panels.length === 1 && !hasAnyCommands && !state.selectedCmdId && !state.serverReachable) {
         _showingWelcome = true;
-        // Server is unreachable — vrunner is not running
+        // Server is unreachable — vrw is not running
         html += `
             <div class="welcome-panel">
                 <div class="welcome-card">
-                    <img src="/favicon.png" alt="vrunner" style="height:2rem;width:auto;margin-bottom:0.75rem;">
-                    <p class="welcome-not-running">vrunner is not running</p>
-                    <p style="margin-top:0.25rem;">No vrunner instance could be reached at <span class="welcome-url">${escHtml(getBaseUrl())}</span></p>
-                    <p>Start vrunner and refresh this page to connect.</p>
+                    <img src="/favicon.png" alt="vrw" style="height:2rem;width:auto;margin-bottom:0.75rem;">
+                    <p class="welcome-not-running">vrw is not running</p>
+                    <p style="margin-top:0.25rem;">No vrw instance could be reached at <span class="welcome-url">${escHtml(getBaseUrl())}</span></p>
+                    <p>Start vrw and refresh this page to connect.</p>
                 </div>
             </div>`;
     } else {
@@ -3295,16 +3295,16 @@ function renderMarkdown(md) {
 
 function renderEmbeddedDocs() {
     return `
-<h1>vrunner Administration</h1>
+<h1>vrw Administration</h1>
 
 <h2>Overview</h2>
-<p>vrunner is a virtual terminal runner with a web control plane. It manages terminal applications, exposing their output through a web interface and REST API. This admin panel provides real-time monitoring and control of all running commands.</p>
+<p>vrw is a virtual terminal runner with a web control plane. It manages terminal applications, exposing their output through a web interface and REST API. This admin panel provides real-time monitoring and control of all running commands.</p>
 
 <h2>Getting Started</h2>
-<p>The admin panel connects to one or more vrunner instances. Each instance manages its own set of terminal commands. Use the <strong>+ Panel</strong> button in the top bar to add connections to additional vrunner instances.</p>
+<p>The admin panel connects to one or more vrw instances. Each instance manages its own set of terminal commands. Use the <strong>+ Panel</strong> button in the top bar to add connections to additional vrw instances.</p>
 
 <h3>Connecting to an Instance</h3>
-<p>By default, the admin panel connects to the vrunner instance serving it. To add more instances:</p>
+<p>By default, the admin panel connects to the vrw instance serving it. To add more instances:</p>
 <ol>
     <li>Click <strong>+ Panel</strong> in the top bar</li>
     <li>Enter the instance URL (e.g., <code>http://localhost:9090</code>)</li>
@@ -3317,7 +3317,7 @@ function renderEmbeddedDocs() {
 <p>The admin page accepts query parameters to pre-configure multi-panel views:</p>
 <table>
     <tr><th>Parameter</th><th>Description</th><th>Example</th></tr>
-    <tr><td><code>instance</code></td><td>vrunner instance URL (repeatable)</td><td><code>?instance=http://host:8080</code></td></tr>
+    <tr><td><code>instance</code></td><td>vrw instance URL (repeatable)</td><td><code>?instance=http://host:8080</code></td></tr>
     <tr><td><code>label</code></td><td>Panel label (matches instance order)</td><td><code>&label=Production</code></td></tr>
     <tr><td><code>token</code></td><td>Auth token for instance (matches order)</td><td><code>&token=abc123</code></td></tr>
 </table>
@@ -3335,7 +3335,7 @@ function renderEmbeddedDocs() {
 </ul>
 
 <h3>Spawning Commands</h3>
-<p>Switch to the <strong>Spawn</strong> tab in the sidebar to create new commands. Specify the command path, optional arguments, an optional certificate for access control, and the target vrunner instance.</p>
+<p>Switch to the <strong>Spawn</strong> tab in the sidebar to create new commands. Specify the command path, optional arguments, an optional certificate for access control, and the target vrw instance.</p>
 
 <h3>Sending Keystrokes</h3>
 <p>Use the key input field in the panel header to send keystrokes to the selected command. Press <strong>Enter</strong> or click <strong>Send</strong> to transmit. Supports special keys using angle bracket notation:</p>
@@ -3357,7 +3357,7 @@ function renderEmbeddedDocs() {
 <p>When spawning a command, you can select a certificate to bind it. The certificate badge next to each command in the sidebar shows its binding status.</p>
 
 <h2>Log Viewer</h2>
-<p>The <strong>Logs</strong> tab provides access to the vrunner command log. Use the search bar to filter log entries by content. Each entry shows a timestamp, the command type (spawn, kill, send_keys, etc.), and relevant details.</p>
+<p>The <strong>Logs</strong> tab provides access to the vrw command log. Use the search bar to filter log entries by content. Each entry shows a timestamp, the command type (spawn, kill, send_keys, etc.), and relevant details.</p>
 
 <h2>Font Size</h2>
 <p>Use the <strong>A-</strong> and <strong>A+</strong> buttons in the top bar to adjust the terminal font size (8px-28px). Your preference is saved in localStorage.</p>
@@ -3374,7 +3374,7 @@ function renderEmbeddedDocs() {
 <p>Poll mode is useful when WebSocket connections are unreliable — for example, when a reverse proxy buffers WebSocket frames, when network conditions cause frequent WS reconnections, or when the client wants full control over refresh timing. The bandwidth overhead is slightly higher than push mode because the changed-check runs continuously even when nothing is changing.</p>
 
 <h3>Server Configuration</h3>
-<p>The server-side update settings can be configured in the vrunner config file under the <code>web</code> section:</p>
+<p>The server-side update settings can be configured in the vrw config file under the <code>web</code> section:</p>
 <pre><code>web:
   update_mode: push       # "push" (default) or "poll"
   dirty_check_ms: 200     # server dirty-check interval (push mode)
@@ -3751,7 +3751,7 @@ document.addEventListener('wheel', (e) => {
             // User scrolled up at the top edge — enter scrollback history
             e.preventDefault();
             panelObj.scrollbackOffset += 3;
-            sessionStorage.setItem('vrunner_scrollback_' + state.selectedCmdId, panelObj.scrollbackOffset.toString());
+            sessionStorage.setItem('vrw_scrollback_' + state.selectedCmdId, panelObj.scrollbackOffset.toString());
             loadVttyHttp(panelObj.instUrl, state.selectedCmdId);
             // Show scrollback indicator
             const sbIndicator = document.getElementById('scrollbackIndicator');
@@ -3791,20 +3791,20 @@ document.addEventListener('wheel', (e) => {
             if (newOffset === 0) {
                 // Reached the live buffer — restore native scroll
                 p.scrollbackOffset = 0;
-                sessionStorage.removeItem('vrunner_scrollback_' + state.selectedCmdId);
+                sessionStorage.removeItem('vrw_scrollback_' + state.selectedCmdId);
                 loadVttyHttp(p.instUrl, state.selectedCmdId);
                 // Scroll to bottom after returning to live view
                 const vtty = panelEl.querySelector('.vtty-container');
                 if (vtty) vtty.scrollTop = vtty.scrollHeight;
             } else {
                 p.scrollbackOffset = newOffset;
-                sessionStorage.setItem('vrunner_scrollback_' + state.selectedCmdId, p.scrollbackOffset.toString());
+                sessionStorage.setItem('vrw_scrollback_' + state.selectedCmdId, p.scrollbackOffset.toString());
                 loadVttyHttp(p.instUrl, state.selectedCmdId);
             }
         } else {
             // Wheel up: increase scrollback offset (move into history)
             p.scrollbackOffset += lines;
-            sessionStorage.setItem('vrunner_scrollback_' + state.selectedCmdId, p.scrollbackOffset.toString());
+            sessionStorage.setItem('vrw_scrollback_' + state.selectedCmdId, p.scrollbackOffset.toString());
             loadVttyHttp(p.instUrl, state.selectedCmdId);
         }
 
@@ -4090,7 +4090,7 @@ function scrollTerminalBottom(panelId) {
         panelObj.scrollbackOffset = 0;
         // Clear stored scrollback since we reset
         if (state.selectedCmdId) {
-            sessionStorage.removeItem('vrunner_scrollback_' + state.selectedCmdId);
+            sessionStorage.removeItem('vrw_scrollback_' + state.selectedCmdId);
         }
         const sbIndicator = document.getElementById('scrollbackIndicator');
         if (sbIndicator) sbIndicator.style.display = 'none';
@@ -4124,11 +4124,11 @@ function notifyCommandEnded(cmdId) {
 
     if ('Notification' in window) {
         if (Notification.permission === 'granted') {
-            new Notification('vrunner: Command exited', { body: cmdName, icon: '/favicon.ico' });
+            new Notification('vrw: Command exited', { body: cmdName, icon: '/favicon.ico' });
         } else if (Notification.permission !== 'denied') {
             Notification.requestPermission().then(perm => {
                 if (perm === 'granted') {
-                    new Notification('vrunner: Command exited', { body: cmdName, icon: '/favicon.ico' });
+                    new Notification('vrw: Command exited', { body: cmdName, icon: '/favicon.ico' });
                 }
             });
         }
@@ -4292,8 +4292,8 @@ async function screenshotPanel(panelId) {
         const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
 
-        // Build filename: vrunner_YYYYMMDD_HHMMSS_rowsxcols_command_args.png
-        let cmdInfo = 'vrunner';
+        // Build filename: vrw_YYYYMMDD_HHMMSS_rowsxcols_command_args.png
+        let cmdInfo = 'vrw';
         for (const inst of state.instanceUrls) {
             if (inst._commands) {
                 const cmd = inst._commands.find(c => c.id === cmdId);
@@ -4318,8 +4318,8 @@ async function screenshotPanel(panelId) {
 
         const truncated = cmdInfo.length > 120 ? cmdInfo.substring(0, 117) + '...' : cmdInfo;
         const filename = dims
-            ? `vrunner_${ts}_${dims}_${truncated}.png`
-            : `vrunner_${ts}_${truncated}.png`;
+            ? `vrw_${ts}_${dims}_${truncated}.png`
+            : `vrw_${ts}_${truncated}.png`;
 
         a.href = blobUrl;
         a.download = filename;
@@ -4720,12 +4720,12 @@ async function spawnFromWelcome() {
 // ─── Command Pinning / Favorites ───
 function getPinnedNames() {
     try {
-        return JSON.parse(localStorage.getItem('vrunner_pinned_cmds') || '[]');
+        return JSON.parse(localStorage.getItem('vrw_pinned_cmds') || '[]');
     } catch { return []; }
 }
 
 function setPinnedNames(names) {
-    localStorage.setItem('vrunner_pinned_cmds', JSON.stringify(names));
+    localStorage.setItem('vrw_pinned_cmds', JSON.stringify(names));
 }
 
 function togglePinCmd(cmdName) {
@@ -4793,7 +4793,7 @@ function rearrangePinnedCommands(container) {
 }
 
 // ─── Command Templates ───
-// Server-side templates are loaded from the vrunner config file ([[templates]]).
+// Server-side templates are loaded from the vrw config file ([[templates]]).
 // User templates are stored in localStorage and are editable in the web UI.
 let _serverTemplates = []; // cached from /api/templates
 
@@ -4813,12 +4813,12 @@ async function fetchServerTemplates() {
 
 function getUserTemplates() {
     try {
-        return JSON.parse(localStorage.getItem('vrunner_templates') || '[]');
+        return JSON.parse(localStorage.getItem('vrw_templates') || '[]');
     } catch { return []; }
 }
 
 function saveUserTemplates(templates) {
-    localStorage.setItem('vrunner_templates', JSON.stringify(templates));
+    localStorage.setItem('vrw_templates', JSON.stringify(templates));
 }
 
 function renderTemplates() {
@@ -5035,7 +5035,7 @@ function onPanelDrop(e, targetPanelId) {
         if (p) newOrder.push(p);
     });
     state.panels = newOrder;
-    localStorage.setItem('vrunner_panel_order', JSON.stringify(newOrder.map(p => p.id)));
+    localStorage.setItem('vrw_panel_order', JSON.stringify(newOrder.map(p => p.id)));
     onPanelDragEnd(e);
 }
 
@@ -5114,7 +5114,7 @@ function initSoundToggle() {
 
 function toggleSoundNotifications() {
     state.soundEnabled = !state.soundEnabled;
-    localStorage.setItem('vrunner_sound', state.soundEnabled.toString());
+    localStorage.setItem('vrw_sound', state.soundEnabled.toString());
     const btn = document.getElementById('soundBtn');
     if (btn) btn.classList.toggle('sound-btn-active', state.soundEnabled);
 }

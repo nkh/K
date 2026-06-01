@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # examples/external-interact.sh
 #
-# Demonstrates how an external script can interact with a running vrunner
+# Demonstrates how an external script can interact with a running vrw
 # instance via its HTTP REST API.  This script:
 #
-#   1. Starts vrunner in headless mode with `cat` (simple command)
+#   1. Starts vrw in headless mode with `cat` (simple command)
 #   2. Sends keystrokes to the running command
 #   3. Waits for VTTY buffer changes (polls until content changes)
 #   4. Checks what the change is (reads the VTTY plain text)
 #   5. Sends another command
-#   6. Kills the command and triggers vrunner shutdown
+#   6. Kills the command and triggers vrw shutdown
 #
 # Prerequisites:
-#   - vrunner binary in PATH (or set VRUNNER_BIN below)
+#   - vrw binary in PATH (or set VRW_BIN below)
 #   - curl, jq installed
 #
 # Usage:
@@ -20,19 +20,19 @@
 
 set -euo pipefail
 
-VRUNNER_BIN="${VRUNNER_BIN:-vrunner}"
+VRW_BIN="${VRW_BIN:-vrw}"
 BASE_URL="http://127.0.0.1:9091"
 TMPDIR="${TMPDIR:-/tmp}"
-SNAPSHOT_FILE="${TMPDIR}/vrunner-snapshot-$$.txt"
+SNAPSHOT_FILE="${TMPDIR}/vrw-snapshot-$$.txt"
 
 # ── Cleanup ──
 cleanup() {
     echo "--- Cleanup ---"
-    # Kill vrunner if still running
-    if [ -n "${VRUNNER_PID:-}" ] && kill -0 "$VRUNNER_PID" 2>/dev/null; then
-        echo "Stopping vrunner (pid $VRUNNER_PID)..."
-        kill "$VRUNNER_PID" 2>/dev/null || true
-        wait "$VRUNNER_PID" 2>/dev/null || true
+    # Kill vrw if still running
+    if [ -n "${VRW_PID:-}" ] && kill -0 "$VRW_PID" 2>/dev/null; then
+        echo "Stopping vrw (pid $VRW_PID)..."
+        kill "$VRW_PID" 2>/dev/null || true
+        wait "$VRW_PID" 2>/dev/null || true
     fi
     rm -f "$SNAPSHOT_FILE"
 }
@@ -41,13 +41,13 @@ trap cleanup EXIT
 echo "=== VRunner External Interaction Example ==="
 echo ""
 
-# ── 1. Start vrunner in headless mode ──
-echo "--- Step 1: Starting vrunner with 'cat' ---"
+# ── 1. Start vrw in headless mode ──
+echo "--- Step 1: Starting vrw with 'cat' ---"
 # Use a unique port to avoid conflicts
 PORT=9091
-$VRUNNER_BIN --port "$PORT" --snapshot-on-exit "$SNAPSHOT_FILE" -- cat
-VRUNNER_PID=$!
-echo "vrunner started with pid=$VRUNNER_PID on port=$PORT"
+$VRW_BIN --port "$PORT" --snapshot-on-exit "$SNAPSHOT_FILE" -- cat
+VRW_PID=$!
+echo "vrw started with pid=$VRW_PID on port=$PORT"
 
 # Wait for the server to be ready
 echo "Waiting for server..."
@@ -127,12 +127,12 @@ else
     echo "Snapshot file not found (command may still be running)"
 fi
 
-# ── 7. Shutdown vrunner ──
+# ── 7. Shutdown vrw ──
 echo ""
-echo "--- Step 7: Shutting down vrunner ---"
+echo "--- Step 7: Shutting down vrw ---"
 curl -sf -X POST "${BASE_URL}/api/shutdown" | jq '.' 2>/dev/null || echo "Shutdown sent"
-wait "$VRUNNER_PID" 2>/dev/null || true
-echo "vrunner exited"
+wait "$VRW_PID" 2>/dev/null || true
+echo "vrw exited"
 
 echo ""
 echo "=== Example complete ==="

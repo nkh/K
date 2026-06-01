@@ -1,0 +1,61 @@
+.\" Title: vrc-config-check
+.\" Author: vrc contributors
+.\" Manual section: 1
+.\"
+.TH VRL\-CONFIG\-CHECK 1 "2025" "vrc" "User Commands"
+
+.SH NAME
+vrc\-config\-check \- validate configuration files without starting
+
+.SH SYNOPSIS
+.B vrc
+\fBconfig\-check\fR [\fB\-c\fR \fICONFIG\fR]
+
+.SH DESCRIPTION
+Validate vrc configuration files without starting an instance. Checks all configuration files in the standard load order (user config \fB~/.config/vrc/config.yaml\fR or \fBconfig.toml\fR, then local \fB./vrc.yaml\fR or \fBvrc.toml\fR) and reports any errors or warnings.
+
+Configuration validation checks include: valid field types, value ranges (e.g., rows 1\-200, cols 1\-500), required fields, conflicting options, and deprecated settings.
+
+.SH OPTIONS
+
+.TP
+.BR \-c ", " \-\-config " " \fIFILE\fR
+Path to a specific configuration file to validate. When omitted, the standard config file locations are checked.
+
+.TP
+.BR \-h ", " \-\-help
+Print help information and exit.
+
+.SH EXAMPLES
+
+.PP
+Validate default configuration files:
+.RS
+.PP
+.nf
+\fB$ vrc config\-check\fR
+Configuration OK: ~/.config/vrc/config.yaml
+.fi
+.RE
+
+.PP
+Validate a specific config file:
+.RS
+.PP
+.nf
+\fB$ vrc config\-check \-c /path/to/custom.yaml\fR
+.fi
+.RE
+
+.SH EXIT STATUS
+
+.TP
+.B 0
+Configuration is valid (no errors).
+
+.TP
+.B 1
+Configuration has errors. Warning messages may also be shown but do not cause a non-zero exit.
+
+.SH SEE ALSO
+.BR vrc (1)

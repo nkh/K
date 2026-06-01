@@ -1,13 +1,13 @@
 # Architecture
 
-This document provides a comprehensive technical architecture overview of **vrl** and
-its companion binary **vrunner**. Both are built from the shared `vrl_core` library and
+This document provides a comprehensive technical architecture overview of **vrc** and
+its companion binary **vrw**. Both are built from the shared `vrc_core` library and
 provide the same core process-management capabilities, but differ in their transport
 layer and operating model. It covers the dual-binary design, the design principles
 that guide every module, the system context and module relationships, data-flow
 diagrams for common operations, the concurrency model, the lifecycle policy, and
 extension points for contributors. You should read this document if you want to
-understand how vrl and vrunner are structured, how data moves through the system, or
+understand how vrc and vrw are structured, how data moves through the system, or
 where to add new functionality.
 
 ---
@@ -28,16 +28,16 @@ where to add new functionality.
 
 ## Dual-Binary Architecture
 
-The project produces two binaries from a single `vrl_core` library:
+The project produces two binaries from a single `vrc_core` library:
 
-| Aspect | `vrl` | `vrunner` |
+| Aspect | `vrc` | `vrw` |
 |---|---|---|
-| **Cargo feature** | `vrl` (default) | `vrunner` |
-| **Entry point** | `src/bin/vrl.rs` | `src/bin/vrunner.rs` |
+| **Cargo feature** | `vrc` (default) | `vrw` |
+| **Entry point** | `src/bin/vrc.rs` | `src/bin/vrw.rs` |
 | **Transport** | Unix Domain Socket (UDS) | HTTP / WebSocket (Axum) |
-| **Address** | `~/.local/share/vrl/control-{pid}.sock` | `127.0.0.1:9090` (configurable) |
+| **Address** | `~/.local/share/vrc/control-{pid}.sock` | `127.0.0.1:9090` (configurable) |
 | **Security model** | Filesystem permissions (`0600`) | Optional bearer-token auth + TLS |
-| **CLI client** | Built-in (`vrl list`, `vrl keys`, …) | Any HTTP client / embedded admin UI |
+| **CLI client** | Built-in (`vrc list`, `vrc keys`, …) | Any HTTP client / embedded admin UI |
 | **Tokio runtime** | Current-thread (single-threaded) | Multi-threaded |
 | **Wire protocol** | Length-prefixed JSON over UDS | REST JSON + WebSocket over TCP |
 | **Exclusive module** | `ipc/` (client, server, protocol) | `web/` (server, router, handlers, middleware, auth, TLS, certs, static assets) |
@@ -52,17 +52,17 @@ pub mod handles;    // output fan-out sinks
 pub mod hooks;      // lifecycle hooks
 pub mod instance;   // instance registry (PID files, liveness)
 pub mod interactive; // terminal display loop
-pub mod ipc;        // UDS IPC (used by vrl)
+pub mod ipc;        // UDS IPC (used by vrc)
 pub mod logging;    // structured logging
 pub mod process;    // process management (spawn, monitor, I/O)
 pub mod vtty;       // terminal emulator
 
-#[cfg(feature = "vrunner")]
-pub mod web;        // HTTP server (used by vrunner)
+#[cfg(feature = "vrw")]
+pub mod web;        // HTTP server (used by vrw)
 ```
 
-The `ipc` module is always compiled (vrl needs it), but `web` is gated behind the
-`vrunner` feature flag and pulls in Axum, tower, rustls, and other HTTP-specific
+The `ipc` module is always compiled (vrc needs it), but `web` is gated behind the
+`vrw` feature flag and pulls in Axum, tower, rustls, and other HTTP-specific
 dependencies.
 
 ---
@@ -72,24 +72,24 @@ dependencies.
 Both binaries share a common foundation, but each follows a distinct design
 philosophy for its transport layer.
 
-### Silent by Default (vrl)
+### Silent by Default (vrc)
 
-vrl produces no output unless something requires the user's attention. When a
+vrc produces no output unless something requires the user's attention. When a
 command exits cleanly there is no fanfare, no summary table, no timestamp. This makes
-vrl ideal as a wrapper in scripts and pipes—stdout and stderr belong to the
+vrc ideal as a wrapper in scripts and pipes—stdout and stderr belong to the
 child process. Diagnostic messages are routed to logging subsystems and only surface
 when the user explicitly raises verbosity.
 
-### Web-First by Design (vrunner)
+### Web-First by Design (vrw)
 
-vrunner is designed to be accessed primarily through its HTTP API and embedded admin
+vrw is designed to be accessed primarily through its HTTP API and embedded admin
 UI rather than a CLI. It starts an HTTP server on port 9090 (configurable via
-`--port` or `VRUNNER_PORT`) and exposes a full REST API, WebSocket streams for
+`--port` or `VRW_PORT`) and exposes a full REST API, WebSocket streams for
 real-time VTTY output, and an embedded single-page admin UI. When no `--port` is
-specified and a command is given, vrunner transparently forwards the command to an
+specified and a command is given, vrw transparently forwards the command to an
 already-running instance on the default port (client-mode auto-detection).
 
-### Local IPC Only (vrl)
+### Local IPC Only (vrc)
 
 All inter-process communication uses Unix Domain Sockets. There is no HTTP server,
 no network binding, no TLS, and no authentication mechanism. The UDS socket is
@@ -97,9 +97,9 @@ created with `0600` permissions, ensuring only the owning user can connect.
 This provides security through filesystem permissions without the complexity of TLS,
 certificates, or bearer tokens.
 
-### Optional Network Security (vrunner)
+### Optional Network Security (vrw)
 
-vrunner binds to a TCP socket and therefore requires explicit security controls:
+vrw binds to a TCP socket and therefore requires explicit security controls:
 - **Bearer-token auth** — when `security.require_auth` is true, a token is
   generated (or loaded from `security.token_file`) and required on all `/api/`
   requests.
@@ -111,15 +111,15 @@ vrunner binds to a TCP socket and therefore requires explicit security controls:
 ### Separation of Concerns
 
 Each module owns exactly one responsibility. The daemon starts processes; the IPC
-server (vrl) or HTTP server (vrunner) handles control commands; the instance registry
+server (vrc) or HTTP server (vrw) handles control commands; the instance registry
 tracks state; the VTTY emulator renders terminal output. Modules communicate through
 well-defined interfaces—never by reaching into each other's internals.
 
 ### Extensibility
 
-vrl is designed so that new features can be added without modifying core logic.
-IPC commands register themselves with a central `CommandManager` (vrl) or are added
-as Axum handlers (vrunner). Handle sinks receive process output without being coupled
+vrc is designed so that new features can be added without modifying core logic.
+IPC commands register themselves with a central `CommandManager` (vrc) or are added
+as Axum handlers (vrw). Handle sinks receive process output without being coupled
 to the transport layer. New handle sinks (database writers, file loggers, alerting
 systems) can be plugged in behind the same interface.
 
@@ -132,9 +132,9 @@ channels so they never block the async runtime.
 
 ### Multi-Instance Awareness
 
-A single vrl or vrunner invocation can manage dozens of commands simultaneously. The
+A single vrc or vrw invocation can manage dozens of commands simultaneously. The
 instance registry ensures that resources are cleaned up when instances exit, and that
-clients can address instances by PID. vrunner additionally supports **peer
+clients can address instances by PID. vrw additionally supports **peer
 registration** for multi-instance discovery and failover via the `/api/peers`
 endpoint.
 
@@ -150,14 +150,14 @@ endpoint.
        ▼               ▼                           ▼
 ┌──────────────┐ ┌───────────────┐    ┌──────────────────────────────────────────┐
 │    CLI       │ │   Config      │    │         Transport Layer                    │
-│  (bin/vrl.rs │ │  (config/)    │    │                                           │
+│  (bin/vrc.rs │ │  (config/)    │    │                                           │
 │   or         │ │               │    │  ┌──────────────────┐ ┌────────────────┐  │
 │  bin/        │ │ • vtty        │    │  │ UDS Clients      │ │ HTTP Clients   │  │
-│  vrunner.rs) │ │ • display     │    │  │  (vrl binary)    │ │ (browser, curl,│  │
+│  vrw.rs) │ │ • display     │    │  │  (vrc binary)    │ │ (browser, curl,│  │
 │              │ │ • daemon      │    │  │                  │ │  admin UI, ws) │  │
-│ • args       │ │ • per-cmd opts│    │  │ • vrl list      │ │ • GET /api/... │  │
-│ • subcommands│ │ • hooks       │    │  │ • vrl keys      │ │ • POST /api/.. │  │
-│ • daemonize │ │ • env vars    │    │  │ • vrl cat       │ │ • WS /api/...  │  │
+│ • args       │ │ • per-cmd opts│    │  │ • vrc list      │ │ • GET /api/... │  │
+│ • subcommands│ │ • hooks       │    │  │ • vrc keys      │ │ • POST /api/.. │  │
+│ • daemonize │ │ • env vars    │    │  │ • vrc cat       │ │ • WS /api/...  │  │
 │              │ │ • profiles     │    │  └────────┬─────────┘ └──────┬─────────┘  │
 └──────┬───────┘ │ • server/tls  │    │           │                  │            │
        │         └──────┬────────┘    │           │                  │            │
@@ -165,7 +165,7 @@ endpoint.
        ▼                ▼             │  ┌──────────────────┐ ┌────────────────┐  │
 ┌─────────────────────────────────┐   │  │ UDS Control Socket│ │  Axum HTTP     │  │
 │       Instance Registry        │   │  │  ~/.local/share/  │ │  Server        │  │
-│       (instance/)               │   │  │   vrl/control-    │ │  :9090         │  │
+│       (instance/)               │   │  │   vrc/control-    │ │  :9090         │  │
 │                                 │   │  │   {pid}.sock      │ │                │  │
 │  ┌─────────┐ ┌───────────────┐  │   │  │                    │ │  • REST API    │  │
 │  │ Instance │ │ Command       │  │   │  │  • Ping           │ │  • WebSocket  │  │
@@ -243,17 +243,17 @@ and the same argument parser (`clap`). The subcommand set includes:
 
 | Subcommand | Purpose | Available in |
 |---|---|---|
-| `list` | List all running instances with their commands | vrl, vrunner |
-| `stop` | Stop a running instance | vrl, vrunner |
-| `spawn-in` | Spawn a new command in a running instance | vrl |
-| `keys` | Send keystrokes to a command | vrl |
-| `cat` | Print VTTY buffer of a command | vrl |
-| `freeze` | Pause a command (SIGSTOP) | vrl |
-| `thaw` | Resume a command (SIGCONT) | vrl |
-| `resize` | Resize a command's VTTY | vrl |
-| `config-check` | Validate configuration files | vrl, vrunner |
+| `list` | List all running instances with their commands | vrc, vrw |
+| `stop` | Stop a running instance | vrc, vrw |
+| `spawn-in` | Spawn a new command in a running instance | vrc |
+| `keys` | Send keystrokes to a command | vrc |
+| `cat` | Print VTTY buffer of a command | vrc |
+| `freeze` | Pause a command (SIGSTOP) | vrc |
+| `thaw` | Resume a command (SIGCONT) | vrc |
+| `resize` | Resize a command's VTTY | vrc |
+| `config-check` | Validate configuration files | vrc, vrw |
 
-vrunner additionally supports `--port`, `--bind`, `--tls`, and `--register-with`
+vrw additionally supports `--port`, `--bind`, `--tls`, and `--register-with`
 flags for controlling the HTTP server and peer registration.
 
 ### Configuration — `config/`
@@ -263,19 +263,19 @@ Configuration is a layered system with clear precedence:
 ```
 Priority (highest → lowest):
   1. CLI flags               (--vtty-rows, --display, --port, --tls, etc.)
-  2. Environment variables   (VRUNNER_PORT, etc.)
-  3. Configuration file       (~/.config/vrl/config.yaml)
+  2. Environment variables   (VRW_PORT, etc.)
+  3. Configuration file       (~/.config/vrc/config.yaml)
   4. Built-in defaults
 ```
 
-vrunner extends the configuration schema with HTTP/TLS-specific sections:
+vrw extends the configuration schema with HTTP/TLS-specific sections:
 `server.bind`, `server.port`, `tls.enabled`, `tls.cert_file`, `tls.key_file`,
 `security.require_auth`, `security.token_file`, `security.cors`, and
 `certificates.entries`.
 
-### IPC Server — `ipc/` (vrl-only)
+### IPC Server — `ipc/` (vrc-only)
 
-The UDS IPC server replaces the entire HTTP server stack for the vrl binary. It
+The UDS IPC server replaces the entire HTTP server stack for the vrc binary. It
 listens on a Unix Domain Socket and dispatches commands to the `CommandManager`.
 
 #### Wire Protocol
@@ -287,7 +287,7 @@ Messages use length-prefixed JSON framing:
 ```
 
 The socket is created with `0600` permissions at
-`~/.local/share/vrl/control-{pid}.sock`.
+`~/.local/share/vrc/control-{pid}.sock`.
 
 **Client → Server (`ControlCommand`):**
 ```json
@@ -315,10 +315,10 @@ The socket is created with `0600` permissions at
 | `ipc/server.rs` | Accept loop, frame parsing, command dispatch |
 | `ipc/client.rs` | Client-side connect, send, receive for CLI subcommands |
 
-### Web Server — `web/` (vrunner-only)
+### Web Server — `web/` (vrw-only)
 
 The web module replaces the UDS IPC stack with a full-featured HTTP server built on
-Axum. It is gated behind the `#[cfg(feature = "vrunner")]` feature flag and consists
+Axum. It is gated behind the `#[cfg(feature = "vrw")]` feature flag and consists
 of 22 source files organized into a handler-based architecture.
 
 #### Module Files
@@ -399,7 +399,7 @@ of 22 source files organized into a handler-based architecture.
 ### Instance Registry — `instance/`
 
 The instance registry is the single source of truth for all running commands.
-It reads PID files from `~/.local/share/vrl/instances/` and validates liveness
+It reads PID files from `~/.local/share/vrc/instances/` and validates liveness
 via `/proc/<pid>/comm` on Linux. Both binaries use the same registry.
 
 ### Daemon — `daemon/`
@@ -438,7 +438,7 @@ The handle represents a running process. It provides:
 
 ### VTTY Emulator — `vtty/`
 
-The VTTY emulator is vrl's terminal rendering engine. It interprets VT100 /
+The VTTY emulator is vrc's terminal rendering engine. It interprets VT100 /
 xterm escape sequences and maintains an in-memory grid of cells.
 
 #### `emulator.rs`
@@ -459,7 +459,7 @@ save/restore, and line insertion/deletion.
 #### `display.rs`
 
 `display.rs` implements the **display mode** state machine that governs how
-vrl exposes terminal output to the user (headless, active, monitor modes).
+vrc exposes terminal output to the user (headless, active, monitor modes).
 
 ### Handle System — `handles/`
 
@@ -481,12 +481,12 @@ process to its PTY is routed through the handle system to one or more **sinks**:
 
 ## Data Flow
 
-### Starting an Instance (vrl)
+### Starting an Instance (vrc)
 
 ```
  CLI                        Instance Registry         Process Mgmt          VTTY
    │                              │                         │                │
-   │  vrl -- htop                  │                         │                │
+   │  vrc -- htop                  │                         │                │
    │─────────────────────────────►│                         │                │
    │                              │  register(pid)            │                │
    │                              │─────────────────────────►│                │
@@ -508,12 +508,12 @@ process to its PTY is routed through the handle system to one or more **sinks**:
    │◄─────────────────────────────│                         │                │
 ```
 
-### Starting an Instance (vrunner)
+### Starting an Instance (vrw)
 
 ```
  CLI                        Instance Registry         Process Mgmt          VTTY
    │                              │                         │                │
-   │  vrunner -- htop              │                         │                │
+   │  vrw -- htop              │                         │                │
    │─────────────────────────────►│                         │                │
    │                              │  register(pid)            │                │
    │                              │─────────────────────────►│                │
@@ -535,12 +535,12 @@ process to its PTY is routed through the handle system to one or more **sinks**:
    │◄─────────────────────────────│                         │                │
 ```
 
-### Listing Instances (vrl)
+### Listing Instances (vrc)
 
 ```
  CLI                        Instance Registry
    │                              │
-   │  vrl list                    │
+   │  vrc list                    │
    │─────────────────────────────►│
    │                              │  read pidfiles + /proc check
    │                              │─────────────────────────►│
@@ -552,7 +552,7 @@ process to its PTY is routed through the handle system to one or more **sinks**:
    │◄─────────────────────────────│                         │
 ```
 
-### Listing Instances (vrunner)
+### Listing Instances (vrw)
 
 ```
  HTTP Client                   Instance Registry
@@ -569,18 +569,18 @@ process to its PTY is routed through the handle system to one or more **sinks**:
    │◄─────────────────────────────│                         │
 ```
 
-### Stopping an Instance (vrl)
+### Stopping an Instance (vrc)
 
 ```
  CLI
    │
-   │  vrl stop 12345
+   │  vrc stop 12345
    │─────────►
    │  kill(SIGTERM, 12345)
    │
 ```
 
-### Stopping an Instance (vrunner)
+### Stopping an Instance (vrw)
 
 ```
  HTTP Client
@@ -600,7 +600,7 @@ process to its PTY is routed through the handle system to one or more **sinks**:
 Both binaries are built on the **Tokio** asynchronous runtime, but with different
 runtime configurations tuned to their transport layer.
 
-### vrl: Current-Thread Runtime
+### vrc: Current-Thread Runtime
 
 ```
 ┌────────────────────────────────────────────┐
@@ -611,12 +611,12 @@ runtime configurations tuned to their transport layer.
 └────────────────────────────────────────────┘
 ```
 
-vrl uses `tokio::runtime::Builder::new_current_thread()` for all code paths
+vrc uses `tokio::runtime::Builder::new_current_thread()` for all code paths
 (IPC client mode and daemon/server mode). A single-threaded runtime is sufficient
 because UDS I/O is inherently single-connection-at-a-time from the CLI, and PTY
 read loops are light enough to share one thread.
 
-### vrunner: Multi-Thread Runtime
+### vrw: Multi-Thread Runtime
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -628,7 +628,7 @@ read loops are light enough to share one thread.
 └──────────────────────────────────────────────────────────────┘
 ```
 
-vrunner uses `tokio::runtime::Builder::new_multi_thread()` because it must serve
+vrw uses `tokio::runtime::Builder::new_multi_thread()` because it must serve
 concurrent HTTP requests, maintain persistent WebSocket connections for real-time
 VTTY streaming, handle SSE log streams, and process REST API calls simultaneously.
 The multi-threaded runtime ensures that a slow HTTP client or long-polling
@@ -637,14 +637,14 @@ connection does not block PTY I/O or other requests.
 ### DashMap for Concurrent Commands
 
 The `CommandManager` uses `DashMap` rather than a `Mutex<HashMap>` to provide
-lock-free concurrent access. This is critical for vrunner where multiple HTTP
+lock-free concurrent access. This is critical for vrw where multiple HTTP
 handlers may read/write command state simultaneously.
 
 ### Per-Command Tasks
 
 Each running command gets its own set of tasks:
 
-**vrl:**
+**vrc:**
 ```
 Command "web-server"
 ├── Task 1: PTY read loop  (PTY stdout → VTTY → Handle sinks)
@@ -652,7 +652,7 @@ Command "web-server"
 └── Task 3: UDS IPC handler (control commands from CLI)
 ```
 
-**vrunner:**
+**vrw:**
 ```
 Command "web-server"
 ├── Task 1: PTY read loop  (PTY stdout → VTTY → Handle sinks)
@@ -693,14 +693,14 @@ Graceful shutdown uses Tokio's `broadcast` channel:
 1. The CLI, signal handler, or HTTP shutdown endpoint sends `()` on `shutdown_tx`.
 2. All tasks that hold a `shutdown_rx` receive the signal.
 3. Each task performs its cleanup and exits.
-4. vrunner additionally calls `axum_server::Handle::graceful_shutdown()` with a
+4. vrw additionally calls `axum_server::Handle::graceful_shutdown()` with a
    2-second timeout to drain persistent connections.
 
 ---
 
 ## Lifecycle Policy
 
-vrl's lifecycle is governed by the **"Last-Command-Standing"** principle.
+vrc's lifecycle is governed by the **"Last-Command-Standing"** principle.
 
 | Mode | Description | Behavior on Last Command Exit |
 |---|---|---|
@@ -709,17 +709,17 @@ vrl's lifecycle is governed by the **"Last-Command-Standing"** principle.
 | **Monitor** | No active client, buffering | Exits when no commands remain |
 | **Retain-on-Exit** | Per-command override | Command entry persists in registry |
 
-vrunner follows the same lifecycle policy. In addition, when started without an
-explicit `--port` and a command is specified, vrunner attempts **client-mode
+vrw follows the same lifecycle policy. In addition, when started without an
+explicit `--port` and a command is specified, vrw attempts **client-mode
 auto-detection**: it probes `http://127.0.0.1:9090/api/commands` and, if a running
 instance responds, forwards the spawn request over HTTP and exits without starting
-a new server. If the probe fails, vrunner starts a new server on the default port.
+a new server. If the probe fails, vrw starts a new server on the default port.
 
 ---
 
 ## Extension Points
 
-### Adding a New IPC Command (vrl)
+### Adding a New IPC Command (vrc)
 
 1. **Define the command** — Add a variant to `ControlCommand` in `ipc/protocol.rs`.
 2. **Handle the command** — Add dispatch logic in `ipc/server.rs`.
@@ -727,7 +727,7 @@ a new server. If the probe fails, vrunner starts a new server on the default por
 4. **Add CLI subcommand** — Register the subcommand variant in `cli/args.rs`.
 5. **Update tests** — Add unit and integration tests.
 
-### Adding a New HTTP Endpoint (vrunner)
+### Adding a New HTTP Endpoint (vrw)
 
 1. **Define the handler** — Add a handler function in the appropriate `web/handlers/*.rs` file.
 2. **Register the route** — Add the route in `web/router.rs` under `api_routes`.
@@ -764,18 +764,18 @@ a new server. If the probe fails, vrunner starts a new server on the default por
 | `parking_lot` | Fast mutex/rwlock | Both |
 | `crossterm` | Local terminal display | Both |
 | `libc` | POSIX signals, daemonization | Both |
-| `axum` | HTTP framework (routes, extractors, WebSocket) | vrunner |
-| `axum-server` | HTTP/TLS server with graceful shutdown | vrunner |
-| `tower` / `tower-http` | Middleware layers (CORS, tracing, fs) | vrunner |
-| `reqwest` | HTTP client (peer registration, client-mode probe) | vrunner |
-| `rustls` / `rustls-pemfile` | TLS support | vrunner |
-| `rcgen` | Self-signed certificate generation | vrunner |
-| `rust-embed` | Embedded static assets (admin UI) | vrunner |
-| `sha2` / `hex` / `rand` | Auth token generation and hashing | vrunner |
-| `sysinfo` | System resource queries | vrunner |
-| `image` / `fontdue` | VTTY PNG screenshot rendering | vrunner |
+| `axum` | HTTP framework (routes, extractors, WebSocket) | vrw |
+| `axum-server` | HTTP/TLS server with graceful shutdown | vrw |
+| `tower` / `tower-http` | Middleware layers (CORS, tracing, fs) | vrw |
+| `reqwest` | HTTP client (peer registration, client-mode probe) | vrw |
+| `rustls` / `rustls-pemfile` | TLS support | vrw |
+| `rcgen` | Self-signed certificate generation | vrw |
+| `rust-embed` | Embedded static assets (admin UI) | vrw |
+| `sha2` / `hex` / `rand` | Auth token generation and hashing | vrw |
+| `sysinfo` | System resource queries | vrw |
+| `image` / `fontdue` | VTTY PNG screenshot rendering | vrw |
 
 ---
 
 *This document is part of the [Diátaxis](https://diataxis.fr/) documentation framework
-for vrl. See the [explanation index](./) for related topics.*
+for vrc. See the [explanation index](./) for related topics.*

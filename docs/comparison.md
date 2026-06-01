@@ -1,10 +1,10 @@
-# vrunner vs Alternatives
+# vrw vs Alternatives
 
-A feature comparison between vrunner and similar tools for running and managing terminal processes.
+A feature comparison between vrw and similar tools for running and managing terminal processes.
 
 ## Feature Comparison Matrix
 
-| Feature | vrunner | tmux | screen | mprocs | gotty | wetty |
+| Feature | vrw | tmux | screen | mprocs | gotty | wetty |
 |---------|---------|------|--------|--------|-------|-------|
 | **Language** | Rust | C | C | Go | Go | Node.js |
 | **Binary Size** | ~5MB static | ~2MB | ~1.5MB | ~3MB | ~8MB + deps | ~40MB + deps |
@@ -43,9 +43,9 @@ A feature comparison between vrunner and similar tools for running and managing 
 | **Hooks** | Configurable | No | No | No | No | No |
 | **PTY Raw Log** | With replay tool | No | No | No | No | No |
 
-## When to Choose vrunner
+## When to Choose vrw
 
-**vrunner excels when:**
+**vrw excels when:**
 
 - You need a **web API** to programmatically manage terminal processes from scripts, CI/CD pipelines, or custom dashboards
 - You want a **single binary with zero external dependencies** — no Node.js, no Go runtime, no ncurses on the target machine
@@ -81,7 +81,7 @@ A feature comparison between vrunner and similar tools for running and managing 
 
 ## Key Architectural Differences
 
-| Aspect | vrunner | tmux/screen |
+| Aspect | vrw | tmux/screen |
 |--------|---------|-------------|
 | **Communication** | HTTP/WebSocket | Unix sockets |
 | **State** | RESTful (stateless handlers) | In-process (shared memory) |

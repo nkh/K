@@ -1,6 +1,6 @@
-# vrl Architecture Overview
+# vrc Architecture Overview
 
-This document describes the high-level architecture of **vrl**, a Rust-based virtual terminal runner with UDS (Unix Domain Socket) IPC, daemon mode, and instance registry.
+This document describes the high-level architecture of **vrc**, a Rust-based virtual terminal runner with UDS (Unix Domain Socket) IPC, daemon mode, and instance registry.
 
 ---
 
@@ -11,7 +11,7 @@ This document describes the high-level architecture of **vrl**, a Rust-based vir
 3. **Separation of Concerns** — CLI parsing, config loading, process management, terminal emulation, and instance tracking are distinct modules.
 4. **Speed** — No HTTP server, no TLS, no heavy dependencies. Startup in under 5ms.
 5. **Async-First** — Built on `tokio` (single-threaded) to handle concurrent connections, processes, and I/O loops.
-6. **Multi-Instance Awareness** — The tool manages not only commands but also peer `vrl` processes on the same machine.
+6. **Multi-Instance Awareness** — The tool manages not only commands but also peer `vrc` processes on the same machine.
 
 ---
 
@@ -19,7 +19,7 @@ This document describes the high-level architecture of **vrl**, a Rust-based vir
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                         vrl binary                                  │
+│                         vrc binary                                  │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌───────────┐  │
 │  │   CLI       │  │   Config    │  │   Instance  │  │  Daemon   │  │
 │  │   Parser    │  │   Loader    │  │   Registry  │  │  Mode     │  │
@@ -47,8 +47,8 @@ This document describes the high-level architecture of **vrl**, a Rust-based vir
 │                          │                                         │
 │              ┌───────────▼────────────┐                            │
 │              │   UDS Clients          │                            │
-│              │  (vrl list, vrl keys,  │                            │
-│              │   vrl cat, vrl spawn-in)│                            │
+│              │  (vrc list, vrc keys,  │                            │
+│              │   vrc cat, vrc spawn-in)│                            │
 │              └────────────────────────┘                            │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -62,7 +62,7 @@ This document describes the high-level architecture of **vrl**, a Rust-based vir
 `main.rs` is a thin binary wrapper that parses CLI arguments, loads configuration, optionally daemonizes, and delegates to the library crate. `src/lib.rs` is the single source of truth for all `mod` declarations.
 
 Uses `clap` with derive macros. Supports:
-- Options before `--` (vrl flags)
+- Options before `--` (vrc flags)
 - Command + args after `--` (child process)
 - Subcommands: `list`, `stop`, `spawn-in`, `keys`, `cat`, `freeze`, `thaw`, `resize`, `config-check`, `completions`
 
@@ -70,7 +70,7 @@ Uses `clap` with derive macros. Supports:
 
 | Component | Responsibility |
 |-----------|-------------|
-| `loader.rs` | Discovers global (`~/.config/vrl/config.yaml`) and local (`./vrl.yaml`) YAML configs, plus any CLI-specified path. |
+| `loader.rs` | Discovers global (`~/.config/vrc/config.yaml`) and local (`./vrc.yaml`) YAML configs, plus any CLI-specified path. |
 | `schema.rs` | Typed structs with serde: `Config`, `VttyConfig`, `DisplayConfig`, `CommandLogConfig`, `DaemonConfig`, `HandleConfig`. |
 | `merge.rs` | Override logic: local config overrides global config. CLI flags applied on top. |
 
@@ -80,7 +80,7 @@ The UDS IPC server is the heart of the speedup branch, replacing the entire HTTP
 
 | Component | Responsibility |
 |-----------|-------------|
-| `server.rs` | Binds UDS socket at `~/.local/share/vrl/control-{pid}.sock` (permissions `0600`). Accept loop dispatches incoming commands to the `CommandManager`. |
+| `server.rs` | Binds UDS socket at `~/.local/share/vrc/control-{pid}.sock` (permissions `0600`). Accept loop dispatches incoming commands to the `CommandManager`. |
 | `protocol.rs` | Wire protocol: `ControlCommand` enum, `ControlResponse` enum, length-prefixed JSON framing (`[4-byte big-endian u32][JSON payload]`). |
 | `client.rs` | UDS client for CLI subcommands: connect, send `ControlCommand`, receive `ControlResponse`. |
 | `mod.rs` | Module declarations + `socket_path_for_pid()` helper. |
@@ -102,14 +102,14 @@ The UDS IPC server is the heart of the speedup branch, replacing the entire HTTP
 
 #### Socket Security
 
-- Socket path: `~/.local/share/vrl/control-{pid}.sock`
+- Socket path: `~/.local/share/vrc/control-{pid}.sock`
 - File permissions: `0600` (owner read/write only)
 - Only processes running as the same user can connect
 - No network exposure (UDS is local-only by definition)
 
 ### 3.4 Instance Registry (`src/instance/`)
 
-Manages a directory of JSON pidfiles (`~/.local/share/vrl/instances/<PID>.json`).
+Manages a directory of JSON pidfiles (`~/.local/share/vrc/instances/<PID>.json`).
 
 | Component | Responsibility |
 |-----------|-------------|
@@ -163,11 +163,11 @@ Extensible file descriptor routing.
 ### 4.1 Starting an Instance
 
 ```
-CLI: vrl -- htop
+CLI: vrc -- htop
        │
        ▼
 ┌──────────────┐
-│ CLI Parser   │──► Extract vrl flags + child command
+│ CLI Parser   │──► Extract vrc flags + child command
 └──────────────┘
        │
        ▼
@@ -195,7 +195,7 @@ CLI: vrl -- htop
        │
        ▼
 ┌──────────────┐
-│ IPC Server   │──► Start UDS listener on ~/.local/share/vrl/control-{pid}.sock
+│ IPC Server   │──► Start UDS listener on ~/.local/share/vrc/control-{pid}.sock
 └──────────────┘
        │
        ▼
@@ -218,11 +218,11 @@ CLI: vrl -- htop
 ### 4.2 Listing Instances
 
 ```
-CLI: vrl list
+CLI: vrc list
        │
        ▼
 ┌──────────────┐
-│ Instance     │──► Read all pidfiles from ~/.local/share/vrl/instances/
+│ Instance     │──► Read all pidfiles from ~/.local/share/vrc/instances/
 │ Registry     │──► Filter out stale entries (check /proc/<pid>/comm)
 └──────────────┘
        │
@@ -233,7 +233,7 @@ CLI: vrl list
 ### 4.3 Stopping an Instance
 
 ```
-CLI: vrl stop 12345
+CLI: vrc stop 12345
        │
        ▼
 ┌──────────────┐
@@ -252,7 +252,7 @@ CLI: vrl stop 12345
 - **Sync/Async Bridge**: PTY reads happen on a blocking thread (`portable-pty`). Data is sent through a bounded `tokio::sync::mpsc::channel(64)` to a single async receiver task that feeds the VTTY emulator.
 - **Command Logger**: `Arc<CommandLogger>` shared between process manager.
 - **Shutdown**: `broadcast::Sender<()>` distributed. Signal handler sends on the channel; listener triggers graceful shutdown.
-- **Lifecycle Policy**: "Last-command-standing" — vrl remains alive as long as at least one command exists. Shutdown occurs only when the command count reaches zero.
+- **Lifecycle Policy**: "Last-command-standing" — vrc remains alive as long as at least one command exists. Shutdown occurs only when the command count reaches zero.
 
 ---
 
@@ -301,5 +301,5 @@ CLI: vrl stop 12345
 
 - **Unit tests**: VTTY parser, buffer operations, config merging, key encoding.
 - **Integration tests**: Spawn command, send keys via UDS, assert VTTY contents.
-- **Instance tests**: Start two instances, verify `vrl list` shows both, verify `vrl stop` shuts one down.
+- **Instance tests**: Start two instances, verify `vrc list` shows both, verify `vrc stop` shuts one down.
 - **Platform tests**: CI matrix for Linux, macOS, Windows.

@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 # VTTY buffer fidelity test suite
 # Runs test scripts, captures their raw terminal output to reference files,
-# then runs the same commands inside vrunner and captures the VTTY buffer
+# then runs the same commands inside vrw and captures the VTTY buffer
 # for comparison.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REF_DIR="$SCRIPT_DIR/reference"
-VRUNNER_DIR="$SCRIPT_DIR/vrunner_output"
-VRUNNER_BIN="${VRUNNER_BIN:-./target/release/vrunner}"
+VRW_DIR="$SCRIPT_DIR/vrw_output"
+VRW_BIN="${VRW_BIN:-./target/release/vrw}"
 PORT=19990
 PASS=0
 FAIL=0
 SKIP=0
 
-mkdir -p "$REF_DIR" "$VRUNNER_DIR"
+mkdir -p "$REF_DIR" "$VRW_DIR"
 
 # We need to run tests inside a real PTY to get proper ANSI output.
 # Use `script` to capture terminal output with escape sequences.
@@ -28,13 +28,13 @@ capture_ref() {
     echo "$ref_file"
 }
 
-run_in_vrunner() {
+run_in_vrw() {
     local name="$1" cols="$2" rows="$3" script="$4"
-    local out_file="$VRUNNER_DIR/${name}.plain"
-    local out_raw="$VRUNNER_DIR/${name}.raw"
+    local out_file="$VRW_DIR/${name}.plain"
+    local out_raw="$VRW_DIR/${name}.raw"
 
-    # Start vrunner with the specified dimensions
-    "$VRUNNER_BIN" --port "$PORT" --vtty-cols "$cols" --vtty-rows "$rows" &
+    # Start vrw with the specified dimensions
+    "$VRW_BIN" --port "$PORT" --vtty-cols "$cols" --vtty-rows "$rows" &
     local vr_pid=$!
     sleep 1
 
@@ -43,7 +43,7 @@ run_in_vrunner() {
     result=$(curl -sf -X POST "http://127.0.0.1:$PORT/api/commands" \
         -H "Content-Type: application/json" \
         -d "{\"cmd\": \"bash\", \"args\": [\"$script\"]}" 2>/dev/null) || {
-        echo "FAIL: could not reach vrunner on port $PORT"
+        echo "FAIL: could not reach vrw on port $PORT"
         kill $vr_pid 2>/dev/null; wait $vr_pid 2>/dev/null
         return 1
     }
@@ -132,7 +132,7 @@ for i, l in enumerate(plain_lines[:10]):
     print(f'LINE_{i}_LEN={len(l)}')
 " > "$out_raw"
 
-    # Shutdown vrunner
+    # Shutdown vrw
     curl -sf -X POST "http://127.0.0.1:$PORT/api/shutdown" >/dev/null 2>&1
     sleep 0.5
     kill $vr_pid 2>/dev/null; wait $vr_pid 2>/dev/null
@@ -148,18 +148,18 @@ run_test() {
     echo "  Dimensions: ${cols}x${rows}"
     echo "=========================================="
 
-    # Run in vrunner
+    # Run in vrw
     local vr_out
-    vr_out=$(run_in_vrunner "$name" "$cols" "$rows" "$script")
+    vr_out=$(run_in_vrw "$name" "$cols" "$rows" "$script")
 
     if [ ! -f "$vr_out" ]; then
-        echo "  FAIL: vrunner output file not found"
+        echo "  FAIL: vrw output file not found"
         FAIL=$((FAIL + 1))
         return
     fi
 
     # Show diagnostics
-    local diag_file="$VRUNNER_DIR/${name}.raw"
+    local diag_file="$VRW_DIR/${name}.raw"
     if [ -f "$diag_file" ]; then
         echo "  --- Buffer diagnostics ---"
         cat "$diag_file"
@@ -199,7 +199,7 @@ run_test() {
 
 echo "============================================="
 echo " VTTY Buffer Dimension Fidelity Test Suite"
-echo " Binary: $VRUNNER_BIN"
+echo " Binary: $VRW_BIN"
 echo "============================================="
 
 # Test 1: Simple grid pattern at 80x24
@@ -326,6 +326,6 @@ echo " RESULTS: $PASS passed, $FAIL failed, $SKIP skipped"
 echo "============================================="
 echo ""
 echo "Reference files: $REF_DIR/"
-echo "Vrunner output:   $VRUNNER_DIR/"
+echo "Vrunner output:   $VRW_DIR/"
 
 exit $FAIL

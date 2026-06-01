@@ -1,0 +1,106 @@
+.\" Title: vrw-list-vrw
+.\" Author: vrw contributors
+.\" Manual section: 1
+.\" Process this file with
+.\"   groff -man -Tascii vrw-list-vrw.1
+
+.TH VRW\-LIST\-VRW 1 "2025" "vrw" "User Commands"
+
+.SH NAME
+vrw\-list\-vrw \- list running vrw instances in machine-readable format
+
+.SH SYNOPSIS
+.B vrw
+\fBlist\-vrw\fR
+
+.SH DESCRIPTION
+List all running vrw instances in a compact, tab-separated (TSV) format suitable for parsing in scripts and automated tools. This is the machine-friendly alternative to \fBvrw list\fR, which produces human-readable formatted output with ANSI colors.
+
+Each line after the header represents one vrw instance, with fields separated by tab characters. The header line is always emitted, making it easy to parse with tools like \fBawk\fR, \fBcut\fR, or any TSV-aware processor. Unreachable instances are silently skipped (no error row is emitted).
+
+This subcommand queries the shared instance registry directly and does not connect to individual instances over HTTP. It only shows registry metadata, not the commands running inside each instance.
+
+.SH OPTIONS
+
+.TP
+.BR "\-\-target " \fIPID\fR
+Only list the vrw instance with the given PID. This is a global option specified before the subcommand: \fBvrw \-\-target 12345 list\-vrw\fR.
+
+.SH OUTPUT FORMAT
+
+Tab-separated fields:
+
+.TP
+.B PID
+Process ID of the vrw instance.
+
+.TP
+.B PORT
+TCP port the instance is listening on.
+
+.TP
+.B BIND
+Bind address (e.g., \fB127.0.0.1\fR or \fB0.0.0.0\fR).
+
+.TP
+.B DAEMON
+Whether the instance is running as a background daemon (\fByes\fR/\fBno\fR).
+
+.TP
+.B DISPLAY
+Whether local VTTY display is enabled (\fByes\fR/\fBno\fR).
+
+.TP
+.B STARTUP_CMD
+The initial command the instance was started with, or \fB(idle)\fR if no command was given.
+
+.SH EXAMPLES
+
+.PP
+Basic usage:
+.RS
+.PP
+.nf
+\fB$ vrw list\-vrw\fR
+PID     PORT    BIND            DAEMON   DISPLAY  STARTUP_CMD
+12345   9090    127.0.0.1       no       no       (idle)
+12346   8080    127.0.0.1       yes      no       htop
+.fi
+.RE
+
+.PP
+Parse with awk:
+.RS
+.PP
+.nf
+\fB$ vrw list-vrw | awk -F'\\t' 'NR>1 && $3=="0.0.0.0" {print $1}'\fR
+12347
+.fi
+.RE
+
+.PP
+Count running instances:
+.RS
+.PP
+.nf
+\fB$ vrw list-vrw | tail -n +2 | wc -l\fR
+2
+.fi
+.RE
+
+.SH EXIT STATUS
+
+.TP
+.B 0
+Successful listing (including empty results).
+
+.TP
+.B 1
+Error (registry access failure, invalid \fB\-\-target\fR PID, etc.).
+
+.SH SEE ALSO
+
+.BR vrw (1),
+.BR vrw\-list (1),
+.BR vrw\-list\-commands (1),
+.BR vrw\-stop (1)

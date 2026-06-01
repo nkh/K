@@ -2,9 +2,11 @@
 
 Learn how to configure event hooks that trigger custom scripts when commands are spawned, exit, encounter errors, or are killed.
 
+> **Hooks work for both vrc and vrw.** The hook system, events, and configuration syntax are identical. The only difference is in environment variable prefixes: vrc uses `$VRC_*` placeholders, vrw uses `$VRW_*` placeholders (see below).
+
 ## What Are Hooks?
 
-Hooks are shell commands that vrl executes automatically when specific events occur. They let you integrate vrl with external tools — sending notifications, logging to external systems, triggering alerts, or running cleanup scripts.
+Hooks are shell commands that the binary executes automatically when specific events occur. They let you integrate with external tools — sending notifications, logging to external systems, triggering alerts, or running cleanup scripts.
 
 ## Supported Events
 
@@ -13,20 +15,22 @@ Hooks are shell commands that vrl executes automatically when specific events oc
 | `on_spawn` | A command is successfully spawned |
 | `on_exit` | A command exits (any exit code) |
 | `on_error` | A command exits with a non-zero exit code |
-| `on_kill` | A command is killed by vrl or via the API |
+| `on_kill` | A command is killed by vrc or via the API |
 
 ## Placeholders
 
-Hook commands support placeholders that vrl replaces with actual values at runtime:
+Hook commands support placeholders that vrc replaces with actual values at runtime:
 
-| Placeholder | Value |
-|-------------|-------|
-| `$VRUNNER_CMD_ID` | The command's unique ID (e.g., `cmd_a1b2c3`) |
-| `$VRUNNER_CMD_NAME` | The command's name (or command string if unnamed) |
-| `$VRUNNER_CMD_COMMAND` | The full command string |
-| `$VRUNNER_EXIT_CODE` | The exit code (available in `on_exit`, `on_error`, `on_kill`) |
-| `$VRUNNER_PID` | The process ID of the spawned command |
-| `$VRUNNER_TIMESTAMP` | ISO 8601 timestamp of the event |
+| Placeholder | vrc name | vrw name | Value |
+|-------------|----------|----------|-------|
+| `{PREFIX}_CMD_ID` | `$VRC_CMD_ID` | `$VRW_CMD_ID` | The command's unique ID (e.g., `cmd_a1b2c3`) |
+| `{PREFIX}_CMD_NAME` | `$VRC_CMD_NAME` | `$VRW_CMD_NAME` | The command's name (or command string if unnamed) |
+| `{PREFIX}_CMD_COMMAND` | `$VRC_CMD_COMMAND` | `$VRW_CMD_COMMAND` | The full command string |
+| `{PREFIX}_EXIT_CODE` | `$VRC_EXIT_CODE` | `$VRW_EXIT_CODE` | The exit code (available in `on_exit`, `on_error`, `on_kill`) |
+| `{PREFIX}_PID` | `$VRC_PID` | `$VRW_PID` | The process ID of the spawned command |
+| `{PREFIX}_TIMESTAMP` | `$VRC_TIMESTAMP` | `$VRW_TIMESTAMP` | ISO 8601 timestamp of the event |
+
+> **Note:** When writing hooks in a config file, use the placeholder names matching the binary you're running: `$VRC_*` for vrc, `$VRW_*` for vrw. The examples below show both conventions.
 
 ## Config File Examples
 
@@ -35,24 +39,34 @@ Hook commands support placeholders that vrl replaces with actual values at runti
 Define hooks at the top level of your config to apply to every command:
 
 ```yaml
-# ~/.config/vrl/config.yaml
+# ~/.config/vrc/config.yaml  (vrc hooks use $VRC_* prefixes)
 hooks:
   on_spawn: |
-    echo "[vrl] $VRUNNER_CMD_NAME ($VRUNNER_CMD_ID) started at $VRUNNER_TIMESTAMP" \
-      >> /var/log/vrl/events.log
+    echo "[vrc] $VRC_CMD_NAME ($VRC_CMD_ID) started at $VRC_TIMESTAMP" \
+      >> /var/log/vrc/events.log
 
   on_exit: |
-    echo "[vrl] $VRUNNER_CMD_NAME exited with code $VRUNNER_EXIT_CODE" \
-      >> /var/log/vrl/events.log
+    echo "[vrc] $VRC_CMD_NAME exited with code $VRC_EXIT_CODE" \
+      >> /var/log/vrc/events.log
 
   on_error: |
     /opt/scripts/notify-slack.sh '#alerts' \
-      "Command $VRUNNER_CMD_NAME failed with exit code $VRUNNER_EXIT_CODE"
+      "Command $VRC_CMD_NAME failed with exit code $VRC_EXIT_CODE"
 
   on_kill: |
-    echo "[vrl] $VRUNNER_CMD_NAME was killed (was PID $VRUNNER_PID)" \
-      >> /var/log/vrl/events.log
+    echo "[vrc] $VRC_CMD_NAME was killed (was PID $VRC_PID)" \
+      >> /var/log/vrc/events.log
 ```
+
+> **vrw equivalent:** Same config, but use `$VRW_*` prefixes and place the file at `~/.config/vrw/config.yaml`:
+>
+> ```yaml
+> # ~/.config/vrw/config.yaml  (vrw hooks use $VRW_* prefixes)
+> hooks:
+>   on_spawn: |
+>     echo "[vrw] $VRW_CMD_NAME ($VRW_CMD_ID) started at $VRW_TIMESTAMP" \
+>       >> /var/log/vrw/events.log
+> ```
 
 ### Per-Command Hooks
 
@@ -71,9 +85,9 @@ commands:
     command: "npm run build"
     cwd: /home/user/project
     hooks:
-      on_spawn: "echo 'Build started at $VRUNNER_TIMESTAMP'"
+      on_spawn: "echo 'Build started at $VRC_TIMESTAMP'"
       on_exit: |
-        if [ "$VRUNNER_EXIT_CODE" -eq 0 ]; then
+        if [ "$VRC_EXIT_CODE" -eq 0 ]; then
           /opt/scripts/upload-artifacts.sh
         else
           /opt/scripts/notify-failed-build.sh
@@ -126,8 +140,10 @@ hooks:
   on_error: |
     curl -s -X POST https://hooks.slack.com/services/XXX/YYY/ZZZ \
       -H "Content-Type: application/json" \
-      -d "{\"text\": \"❌ $VRUNNER_CMD_NAME failed (exit $VRUNNER_EXIT_CODE) at $VRUNNER_TIMESTAMP\"}"
+      -d "{\"text\": \"❌ $VRC_CMD_NAME failed (exit $VRC_EXIT_CODE) at $VRC_TIMESTAMP\"}"
 ```
+
+> **vrw:** Replace `$VRC_*` with `$VRW_*` above.
 
 ### PagerDuty Alert on Critical Error
 
@@ -138,8 +154,8 @@ commands:
     hooks:
       on_error: |
         /opt/scripts/pagerduty-trigger.sh \
-          --service "$VRUNNER_CMD_NAME" \
-          --details "Exit code: $VRUNNER_EXIT_CODE"
+          --service "$VRC_CMD_NAME" \
+          --details "Exit code: $VRC_EXIT_CODE"
 ```
 
 ### Log Rotation on Exit
@@ -147,9 +163,9 @@ commands:
 ```yaml
 hooks:
   on_exit: |
-    if [ -f "/var/log/vrl/$VRUNNER_CMD_NAME.log" ]; then
-      mv "/var/log/vrl/$VRUNNER_CMD_NAME.log" \
-         "/var/log/vrl/$VRUNNER_CMD_NAME-$VRUNNER_TIMESTAMP.log"
+    if [ -f "/var/log/vrc/$VRC_CMD_NAME.log" ]; then
+      mv "/var/log/vrc/$VRC_CMD_NAME.log" \
+         "/var/log/vrc/$VRC_CMD_NAME-$VRC_TIMESTAMP.log"
     fi
 ```
 
@@ -162,7 +178,7 @@ commands:
     hooks:
       on_error: |
         sleep 5
-        vrl spawn --command "./worker" --name "worker"
+        vrc spawn-in <pid> -- ./worker  # For vrw: vrw spawn --command "./worker" --name "worker"
 ```
 
 ### Datadog Metric on Spawn
@@ -172,25 +188,29 @@ hooks:
   on_spawn: |
     curl -s -X POST "https://api.datadoghq.com/api/v1/series?api_key=$DD_API_KEY" \
       -H "Content-Type: application/json" \
-      -d "{\"series\": [{\"metric\": \"vrl.commands.spawned\", \"points\": [[$(date +%s), 1]], \"tags\": [\"command:$VRUNNER_CMD_NAME\"]}]}"
+      -d "{\"series\": [{\"metric\": \"vrc.commands.spawned\", \"points\": [[$(date +%s), 1]], \"tags\": [\"command:$VRC_CMD_NAME\"]}]}"
 ```
+
+> **vrw:** Replace `$VRC_CMD_NAME` with `$VRW_CMD_NAME`.
 
 ### Webhook on Any Exit
 
 ```yaml
 hooks:
   on_exit: |
-    curl -s -X POST https://webhook.example.com/vrl \
+    curl -s -X POST https://webhook.example.com/vrc \
       -H "Content-Type: application/json" \
-      -d "{\"event\": \"exit\", \"command\": \"$VRUNNER_CMD_NAME\", \"exit_code\": $VRUNNER_EXIT_CODE, \"timestamp\": \"$VRUNNER_TIMESTAMP\"}"
+      -d "{\"event\": \"exit\", \"command\": \"$VRC_CMD_NAME\", \"exit_code\": $VRC_EXIT_CODE, \"timestamp\": \"$VRC_TIMESTAMP\"}"
 ```
+
+> **vrw:** Replace `$VRC_*` with `$VRW_*` above.
 
 ## Hook Execution Notes
 
 - **Synchronous** — Hooks block the event loop briefly. Keep hook scripts fast.
 - **Timeout** — Hooks that run longer than 30 seconds are killed and logged as warnings.
-- **Environment** — Hook commands inherit vrl's environment plus the placeholder variables.
-- **Error handling** — If a hook command fails (non-zero exit), vrl logs a warning but does not affect the spawned command.
+- **Environment** — Hook commands inherit vrc's environment plus the placeholder variables.
+- **Error handling** — If a hook command fails (non-zero exit), vrc logs a warning but does not affect the spawned command.
 - **Shell** — Hook commands are executed with `/bin/sh -c`.
 
 ## Debugging Hooks
@@ -202,11 +222,13 @@ hooks:
   on_spawn: |
     {
       echo "=== on_spawn ==="
-      echo "CMD_ID: $VRUNNER_CMD_ID"
-      echo "CMD_NAME: $VRUNNER_CMD_NAME"
-      echo "PID: $VRUNNER_PID"
-      echo "TIMESTAMP: $VRUNNER_TIMESTAMP"
-    } >> /tmp/vrl-hooks-debug.log
+      echo "CMD_ID: $VRC_CMD_ID"
+      echo "CMD_NAME: $VRC_CMD_NAME"
+      echo "PID: $VRC_PID"
+      echo "TIMESTAMP: $VRC_TIMESTAMP"
+    } >> /tmp/vrc-hooks-debug.log
 ```
+
+> **vrw:** Replace `$VRC_*` with `$VRW_*` above.
 
 For the full configuration reference, see [`configuration-profiles.md`](configuration-profiles.md). For the complete placeholder list, see [`../certificates.md`](../certificates.md).

@@ -1,0 +1,70 @@
+.\" Title: vrw-cert-remove
+.\" Author: vrw contributors
+.\" Manual section: 1
+.\" Process this file with
+.\"   groff -man -Tascii vrw-cert-remove.1
+
+.TH VRW\-CERT\-REMOVE 1 "2025" "vrw" "User Commands"
+
+.SH NAME
+vrw\-cert\-remove \- remove a certificate from the certificate pool
+
+.SH SYNOPSIS
+.B vrw
+\fBcert remove\fR \fINAME\fR
+
+.SH DESCRIPTION
+Remove a certificate from the vrw certificate pool registry. This removes the certificate entry from the configuration file so it can no longer be used to bind new commands or authorize API requests.
+
+The PEM certificate and key files on disk are \fBnot\fR deleted by this operation. Only the registry entry in the configuration file is removed. If you want to also delete the files, remove them manually from \fB~/.config/vrw/certs/<name>/\fR.
+
+Removing a certificate does not affect commands that are already running with that certificate binding. Those commands continue to accept the certificate's bearer token until they are stopped or restarted. However, new commands can no longer be bound to the removed certificate.
+
+This subcommand is synchronous and does not require a running vrw instance.
+
+.SH ARGUMENTS
+
+.TP
+.B NAME
+Name of the certificate to remove (as given to \fBcert generate\fR).
+
+.SH EXAMPLES
+
+.PP
+Remove a certificate:
+.RS
+.PP
+.nf
+\fB$ vrw cert remove old-app\fR
+Certificate 'old-app' removed from pool.
+.fi
+.RE
+
+.PP
+Remove and also delete files:
+.RS
+.PP
+.nf
+\fB$ vrw cert remove old-app\fR
+Certificate 'old-app' removed from pool.
+\fB$ rm -rf ~/.config/vrw/certs/old-app/\fR
+.fi
+.RE
+
+.SH EXIT STATUS
+
+.TP
+.B 0
+Certificate removed successfully.
+
+.TP
+.B 1
+Error (certificate not found in pool, configuration write error, etc.).
+
+.SH SEE ALSO
+
+.BR vrw\-cert (1),
+.BR vrw\-cert\-generate (1),
+.BR vrw\-cert\-list (1),
+.BR vrw\-cert\-show (1),
+.BR vrw (1)

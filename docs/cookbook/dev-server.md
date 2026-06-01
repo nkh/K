@@ -1,6 +1,8 @@
 # Dev Server with Hot Reload
 
-Run multiple development services in a single vrunner instance, all visible from one web dashboard.
+Run multiple development services in a single vrw instance, all visible from one web dashboard.
+
+> **For local-only development without HTTP**, `vrc` with `--display-all --tabs -- cargo run` provides a similar terminal-based monitoring experience. Use vrw when you need the web dashboard or remote access.
 
 ## Scenario
 
@@ -11,7 +13,7 @@ You are developing a web application with a frontend (React/Vue), backend API (N
 ### 1. Create a config file
 
 ```yaml
-# vrunner.yaml
+# vrw.yaml
 server:
   bind: "127.0.0.1"
   port: 8080
@@ -32,23 +34,23 @@ default_exit:
     timeout_secs: 5
 ```
 
-### 2. Start vrunner
+### 2. Start vrw
 
 ```bash
-vrunner --daemon
+vrw --daemon
 ```
 
 ### 3. Spawn your services
 
 ```bash
 # Frontend dev server
-vrunner spawn -- npm run dev:frontend
+vrw spawn -- npm run dev:frontend
 
 # Backend API server
-vrunner spawn -- cargo run
+vrw spawn -- cargo run
 
 # Database migration watcher
-vrunner spawn -- npm run watch:migrations
+vrw spawn -- npm run watch:migrations
 ```
 
 ### 4. Open the dashboard
@@ -58,10 +60,10 @@ Open `http://127.0.0.1:8080/admin` in your browser.
 ## Workflow
 
 - **Monitor** — Click between services in the sidebar to see their output in real time.
-- **Restart** — Kill a service and re-spawn it via the web UI or `vrunner spawn`.
+- **Restart** — Kill a service and re-spawn it via the web UI or `vrw spawn`.
 - **Debug** — Use the scrollback feature to review past output by scrolling up in the terminal viewer.
 - **Kill all** — Use the "Kill All" button in the top bar to stop everything at once.
-- **Shutdown** — `vrunner stop-command <PID>` or `curl -X POST http://127.0.0.1:8080/api/shutdown`.
+- **Shutdown** — `vrw stop-command <PID>` or `curl -X POST http://127.0.0.1:8080/api/shutdown`.
 
 ## Tips
 

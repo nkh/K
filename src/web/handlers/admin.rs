@@ -1,4 +1,4 @@
-#![cfg(feature = "vrunner")]
+#![cfg(feature = "vrw")]
 #![allow(dead_code, unused_imports)]
 use axum::{
     body::Body,
@@ -30,7 +30,7 @@ pub async fn admin_page() -> Response {
             .status(StatusCode::OK)
             .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
             .body(Body::from(
-                "<html><body><h1>vrunner Admin</h1><p>Assets not found.</p></body></html>",
+                "<html><body><h1>vrw Admin</h1><p>Assets not found.</p></body></html>",
             ))
             .unwrap(),
     }
@@ -136,7 +136,7 @@ pub async fn share_page(State(state): State<AppState>, Path(token): Path<String>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shared Terminal — vrunner</title>
+<title>Shared Terminal — vrw</title>
 <link rel="icon" type="image/x-icon" href="/favicon.ico">
 <style>
 :root {{

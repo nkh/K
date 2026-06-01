@@ -3,15 +3,15 @@ use clap::CommandFactory;
 use clap::{FromArgMatches, Parser, Subcommand};
 
 // Binary name used in help text and completion generation.
-#[cfg(feature = "vrunner")]
-pub const BINARY_NAME: &str = "vrunner";
-#[cfg(not(feature = "vrunner"))]
-pub const BINARY_NAME: &str = "vrl";
+#[cfg(feature = "vrw")]
+pub const BINARY_NAME: &str = "vrw";
+#[cfg(not(feature = "vrw"))]
+pub const BINARY_NAME: &str = "vrc";
 
 // Description shown in --help.
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 const ABOUT: &str = "A virtual terminal runner with web control plane";
-#[cfg(not(feature = "vrunner"))]
+#[cfg(not(feature = "vrw"))]
 const ABOUT: &str = "A virtual terminal runner";
 
 #[derive(Parser, Debug)]
@@ -24,55 +24,55 @@ pub struct Cli {
     #[arg(short, long, value_name = "FILE")]
     pub config: Option<String>,
 
-    // ── vrunner-only args ──
+    // ── vrw-only args ──
 
-    /// Server bind address (default: 127.0.0.1) [vrunner only]
-    #[cfg(feature = "vrunner")]
+    /// Server bind address (default: 127.0.0.1) [vrw only]
+    #[cfg(feature = "vrw")]
     #[arg(short, long, value_name = "ADDR")]
     pub bind: Option<String>,
 
-    /// Server port (default: 9090) [vrunner only]
-    #[cfg(feature = "vrunner")]
+    /// Server port (default: 9090) [vrw only]
+    #[cfg(feature = "vrw")]
     #[arg(short, long, value_name = "PORT")]
     pub port: Option<u16>,
 
-    /// Allow remote connections (binds to 0.0.0.0 and enables auth) [vrunner only]
-    #[cfg(feature = "vrunner")]
+    /// Allow remote connections (binds to 0.0.0.0 and enables auth) [vrw only]
+    #[cfg(feature = "vrw")]
     #[arg(short, long)]
     pub remote: bool,
 
-    /// Require authentication for API requests [vrunner only]
-    #[cfg(feature = "vrunner")]
+    /// Require authentication for API requests [vrw only]
+    #[cfg(feature = "vrw")]
     #[arg(short, long)]
     pub auth: bool,
 
-    /// Register this instance with another vrunner server [vrunner only]
-    #[cfg(feature = "vrunner")]
+    /// Register this instance with another vrw server [vrw only]
+    #[cfg(feature = "vrw")]
     #[arg(long, value_name = "PORT")]
     pub register_with: Option<u16>,
 
-    /// Path to the bearer token file [vrunner only]
-    #[cfg(feature = "vrunner")]
+    /// Path to the bearer token file [vrw only]
+    #[cfg(feature = "vrw")]
     #[arg(long, value_name = "FILE")]
     pub token_file: Option<String>,
 
-    /// Enable TLS (HTTPS) with self-signed certificates [vrunner only]
-    #[cfg(feature = "vrunner")]
+    /// Enable TLS (HTTPS) with self-signed certificates [vrw only]
+    #[cfg(feature = "vrw")]
     #[arg(long)]
     pub tls: bool,
 
-    /// Path to the TLS certificate file [vrunner only]
-    #[cfg(feature = "vrunner")]
+    /// Path to the TLS certificate file [vrw only]
+    #[cfg(feature = "vrw")]
     #[arg(long, value_name = "FILE")]
     pub cert_file: Option<String>,
 
-    /// Path to the TLS private key file [vrunner only]
-    #[cfg(feature = "vrunner")]
+    /// Path to the TLS private key file [vrw only]
+    #[cfg(feature = "vrw")]
     #[arg(long, value_name = "FILE")]
     pub key_file: Option<String>,
 
-    /// Define a named certificate (repeatable) [vrunner only]
-    #[cfg(feature = "vrunner")]
+    /// Define a named certificate (repeatable) [vrw only]
+    #[cfg(feature = "vrw")]
     #[arg(short = 'C', long, value_name = "NAME:CERT:KEY")]
     pub certificate: Option<Vec<String>>,
 
@@ -225,12 +225,12 @@ pub enum Commands {
         interactive: bool,
     },
 
-    // ── vrl-only (UDS) commands ──
+    // ── vrc-only (UDS) commands ──
 
     /// Send keystrokes to a command in a running instance
-    #[cfg(not(feature = "vrunner"))]
+    #[cfg(not(feature = "vrw"))]
     Keys {
-        /// PID of the target vrl instance
+        /// PID of the target vrc instance
         pid: u32,
         /// ID of the target command (omit for first command)
         #[arg(short = 'c', long)]
@@ -240,9 +240,9 @@ pub enum Commands {
     },
 
     /// Show VTTY text output of a command in a running instance
-    #[cfg(not(feature = "vrunner"))]
+    #[cfg(not(feature = "vrw"))]
     Cat {
-        /// PID of the target vrl instance
+        /// PID of the target vrc instance
         pid: u32,
         /// ID of the target command (omit for first command)
         #[arg(short = 'c', long)]
@@ -253,9 +253,9 @@ pub enum Commands {
     },
 
     /// Spawn a command inside a running instance
-    #[cfg(not(feature = "vrunner"))]
+    #[cfg(not(feature = "vrw"))]
     SpawnIn {
-        /// PID of the target vrl instance
+        /// PID of the target vrc instance
         pid: u32,
         /// Command to run
         cmd: String,
@@ -265,9 +265,9 @@ pub enum Commands {
     },
 
     /// Freeze (suspend) a command in a running instance
-    #[cfg(not(feature = "vrunner"))]
+    #[cfg(not(feature = "vrw"))]
     Freeze {
-        /// PID of the target vrl instance
+        /// PID of the target vrc instance
         pid: u32,
         /// ID of the target command (omit for first command)
         #[arg(short = 'c', long)]
@@ -278,9 +278,9 @@ pub enum Commands {
     },
 
     /// Thaw (resume) a frozen command in a running instance
-    #[cfg(not(feature = "vrunner"))]
+    #[cfg(not(feature = "vrw"))]
     Thaw {
-        /// PID of the target vrl instance
+        /// PID of the target vrc instance
         pid: u32,
         /// ID of the target command (omit for first command)
         #[arg(short = 'c', long)]
@@ -291,9 +291,9 @@ pub enum Commands {
     },
 
     /// Resize the VTTY of a command in a running instance
-    #[cfg(not(feature = "vrunner"))]
+    #[cfg(not(feature = "vrw"))]
     Resize {
-        /// PID of the target vrl instance
+        /// PID of the target vrc instance
         pid: u32,
         /// ID of the target command (omit for first command)
         #[arg(short = 'c', long)]
@@ -310,9 +310,9 @@ pub enum Commands {
     },
 
     /// Kill (stop) a command inside a running instance
-    #[cfg(not(feature = "vrunner"))]
+    #[cfg(not(feature = "vrw"))]
     Kill {
-        /// PID of the target vrl instance
+        /// PID of the target vrc instance
         pid: u32,
         /// ID of the target command (omit for first command)
         #[arg(short = 'c', long)]
@@ -322,10 +322,10 @@ pub enum Commands {
         interactive: bool,
     },
 
-    // ── vrunner-only commands ──
+    // ── vrw-only commands ──
 
-    /// Spawn a new command on a running vrunner instance
-    #[cfg(feature = "vrunner")]
+    /// Spawn a new command on a running vrw instance
+    #[cfg(feature = "vrw")]
     Spawn {
         /// Command to run
         cmd: String,
@@ -341,7 +341,7 @@ pub enum Commands {
     },
 
     /// Freeze (suspend) a running command via SIGSTOP
-    #[cfg(feature = "vrunner")]
+    #[cfg(feature = "vrw")]
     Freeze {
         /// PID of the command to freeze
         pid: Option<u32>,
@@ -351,7 +351,7 @@ pub enum Commands {
     },
 
     /// Thaw (resume) a frozen command via SIGCONT
-    #[cfg(feature = "vrunner")]
+    #[cfg(feature = "vrw")]
     Thaw {
         /// PID of the command to thaw
         pid: Option<u32>,
@@ -361,22 +361,22 @@ pub enum Commands {
     },
 
     /// Manage named certificates for per-command access control
-    #[cfg(feature = "vrunner")]
+    #[cfg(feature = "vrw")]
     Cert {
         #[command(subcommand)]
         action: CertAction,
     },
 
-    /// List vrunner instances (machine-readable, tab-separated)
-    #[cfg(feature = "vrunner")]
-    ListVrunner,
+    /// List vrw instances (machine-readable, tab-separated)
+    #[cfg(feature = "vrw")]
+    ListVrw,
 
     /// List running commands (machine-readable, tab-separated)
-    #[cfg(feature = "vrunner")]
+    #[cfg(feature = "vrw")]
     ListCommands,
 
     /// Stop a specific command by PID or name (not the whole instance)
-    #[cfg(feature = "vrunner")]
+    #[cfg(feature = "vrw")]
     StopCommand {
         /// PID or name of the command to stop
         target: Option<String>,
@@ -386,14 +386,14 @@ pub enum Commands {
     },
 
     /// Purge an exited command, discarding its VTTY buffer
-    #[cfg(feature = "vrunner")]
+    #[cfg(feature = "vrw")]
     Purge {
         /// Command ID or name of the exited command to purge
         target: Option<String>,
     },
 
     /// Resize the VTTY of a running command (buffer + PTY)
-    #[cfg(feature = "vrunner")]
+    #[cfg(feature = "vrw")]
     Resize {
         /// PID or name of the command to resize
         target: Option<String>,
@@ -409,7 +409,7 @@ pub enum Commands {
     },
 
     /// Print the VTTY buffer of a running command as text
-    #[cfg(feature = "vrunner")]
+    #[cfg(feature = "vrw")]
     Cat {
         /// PID or name of the command whose buffer to print
         target: Option<String>,
@@ -422,7 +422,7 @@ pub enum Commands {
     },
 
     /// Capture the VTTY buffer as a PNG screenshot
-    #[cfg(feature = "vrunner")]
+    #[cfg(feature = "vrw")]
     Screenshot {
         /// PID or name of the command to screenshot
         target: Option<String>,
@@ -453,8 +453,8 @@ pub enum Commands {
     },
 }
 
-/// Certificate subcommands (vrunner only).
-#[cfg(feature = "vrunner")]
+/// Certificate subcommands (vrw only).
+#[cfg(feature = "vrw")]
 #[derive(Subcommand, Debug)]
 pub enum CertAction {
     /// Generate a new named certificate
@@ -511,8 +511,8 @@ impl Cli {
 
     /// Apply CLI overrides to the loaded configuration.
     pub fn apply_overrides(&self, cfg: &mut Config) -> anyhow::Result<()> {
-        // Server (vrunner only)
-        #[cfg(feature = "vrunner")]
+        // Server (vrw only)
+        #[cfg(feature = "vrw")]
         {
             if let Some(bind) = &self.bind {
                 cfg.server.bind = bind.clone();

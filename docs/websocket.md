@@ -1,6 +1,6 @@
-# vrunner WebSocket Protocol Specification
+# vrw WebSocket Protocol Specification
 
-This document specifies the WebSocket message formats used by vrunner's two WebSocket endpoints.
+This document specifies the WebSocket message formats used by vrw's two WebSocket endpoints.
 
 ---
 
@@ -10,7 +10,7 @@ WebSocket connections upgrade from standard HTTP requests. Both endpoints use JS
 
 ### With TLS
 
-When vrunner runs with `--tls`, use `wss://` instead of `ws://`:
+When vrw runs with `--tls`, use `wss://` instead of `ws://`:
 
 ```javascript
 const ws = new WebSocket('wss://host:9090/api/commands/.../ws');

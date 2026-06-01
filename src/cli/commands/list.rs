@@ -21,22 +21,22 @@ fn format_duration(secs: f64) -> String {
     }
 }
 
-// ── vrl (UDS-based) implementation ──
+// ── vrc (UDS-based) implementation ──
 
-#[cfg(not(feature = "vrunner"))]
+#[cfg(not(feature = "vrw"))]
 use crate::ipc::client::send_command;
-#[cfg(not(feature = "vrunner"))]
+#[cfg(not(feature = "vrw"))]
 use crate::ipc::protocol::{ControlCommand, ControlResponse};
 
-/// Handle the `vrl list` subcommand.
+/// Handle the `vrc list` subcommand.
 /// Discovers running instances from PID files, queries each via UDS.
-#[cfg(not(feature = "vrunner"))]
+#[cfg(not(feature = "vrw"))]
 pub async fn handle_list_command(cli: &Cli) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let all_instances = registry.list_instances();
 
     if all_instances.is_empty() {
-        println!("No running vrl instances.");
+        println!("No running vrc instances.");
         return Ok(());
     }
 
@@ -45,7 +45,7 @@ pub async fn handle_list_command(cli: &Cli) -> Result<()> {
             Some(info) => vec![info.clone()],
             None => {
                 anyhow::bail!(
-                    "No vrl instance found with PID {}. Running instances:\n{}",
+                    "No vrc instance found with PID {}. Running instances:\n{}",
                     target_pid,
                     all_instances
                         .iter()
@@ -125,20 +125,20 @@ pub async fn handle_list_command(cli: &Cli) -> Result<()> {
     Ok(())
 }
 
-// ── vrunner (HTTP-based) implementation ──
+// ── vrw (HTTP-based) implementation ──
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 use super::common::{http_client, instance_url, resolve_targeted_instances};
 
-/// Handle the `vrunner list` subcommand.
+/// Handle the `vrw list` subcommand.
 /// Queries running instances via HTTP API.
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 pub async fn handle_list_command(cli: &Cli) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let all_instances = registry.list_instances();
 
     if all_instances.is_empty() {
-        println!("No running vrunner instances.");
+        println!("No running vrw instances.");
         return Ok(());
     }
 
@@ -168,7 +168,7 @@ pub async fn handle_list_command(cli: &Cli) -> Result<()> {
     };
 
     if instances.is_empty() {
-        println!("No running vrunner instances.");
+        println!("No running vrw instances.");
         return Ok(());
     }
 
@@ -250,7 +250,7 @@ pub async fn handle_list_command(cli: &Cli) -> Result<()> {
 }
 
 /// Fetch terminal dimensions for a command by querying the VTTY HTML endpoint.
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 pub async fn fetch_cmd_dimensions(
     client: &reqwest::Client,
     base_url: &str,
@@ -306,8 +306,8 @@ pub fn format_instance_header(info: &crate::instance::info::InstanceInfo) -> Str
         .abs() as f64;
     let uptime_str = format_duration(uptime_secs);
 
-    // vrunner adds PORT and BIND columns; vrl omits them.
-    #[cfg(feature = "vrunner")]
+    // vrw adds PORT and BIND columns; vrc omits them.
+    #[cfg(feature = "vrw")]
     {
         format!(
             "{}  {} {}  {} {}  {} {}  {} {}  {} {}  {} {}",
@@ -327,7 +327,7 @@ pub fn format_instance_header(info: &crate::instance::info::InstanceInfo) -> Str
         )
     }
 
-    #[cfg(not(feature = "vrunner"))]
+    #[cfg(not(feature = "vrw"))]
     {
         format!(
             "{}  {} {}  {} {}  {} {}  {} {}",
@@ -344,8 +344,8 @@ pub fn format_instance_header(info: &crate::instance::info::InstanceInfo) -> Str
     }
 }
 
-/// Format a single command line (vrl version — with status).
-#[cfg(not(feature = "vrunner"))]
+/// Format a single command line (vrc version — with status).
+#[cfg(not(feature = "vrw"))]
 pub fn format_command(cmd: &serde_json::Value) -> Option<String> {
     let (truncated, pid, runtime) = extract_command_display(cmd)?;
     let status = cmd.get("status").and_then(|v| v.as_str()).unwrap_or("?");
@@ -374,8 +374,8 @@ pub fn format_command(cmd: &serde_json::Value) -> Option<String> {
     ))
 }
 
-/// Format a single command line (vrunner version — with dims and cert).
-#[cfg(feature = "vrunner")]
+/// Format a single command line (vrw version — with dims and cert).
+#[cfg(feature = "vrw")]
 pub fn format_command(cmd: &serde_json::Value, dims: Option<(usize, usize)>) -> Option<String> {
     let (truncated, pid, runtime) = extract_command_display(cmd)?;
     let cert = cmd
@@ -400,11 +400,11 @@ pub fn format_command(cmd: &serde_json::Value, dims: Option<(usize, usize)>) -> 
     ))
 }
 
-// ── vrunner-only list subcommands ──
+// ── vrw-only list subcommands ──
 
-/// Handle the `vrunner list-vrunner` subcommand (TSV format).
-#[cfg(feature = "vrunner")]
-pub async fn handle_list_vrunner_command(cli: &Cli) -> Result<()> {
+/// Handle the `vrw list-vrw` subcommand (TSV format).
+#[cfg(feature = "vrw")]
+pub async fn handle_list_vrw_command(cli: &Cli) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let all_instances = registry.list_instances();
     let instances = super::common::resolve_targeted_instances(cli, &all_instances)?;
@@ -422,15 +422,15 @@ pub async fn handle_list_vrunner_command(cli: &Cli) -> Result<()> {
     Ok(())
 }
 
-/// Handle the `vrunner list-commands` subcommand (TSV format).
-#[cfg(feature = "vrunner")]
+/// Handle the `vrw list-commands` subcommand (TSV format).
+#[cfg(feature = "vrw")]
 pub async fn handle_list_commands_command(cli: &Cli) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let all_instances = registry.list_instances();
     let instances = super::common::resolve_targeted_instances(cli, &all_instances)?;
     let client = http_client();
 
-    println!("VRUNNER_PID\tCMD_PID\tNAME\tARGS\tCERT");
+    println!("VRW_PID\tCMD_PID\tNAME\tARGS\tCERT");
 
     for info in &instances {
         let url = instance_url(info, &None);

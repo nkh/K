@@ -1,0 +1,78 @@
+.\" Title: vrw-completions
+.\" Author: vrw contributors
+.\" Manual section: 1
+.\" Process this file with
+.\"   groff -man -Tascii vrw-completions.1
+
+.TH VRW-COMPLETIONS 1 "2026" "vrw" "User Commands"
+
+.SH NAME
+vrw completions \- generate shell completion scripts for vrw
+
+.SH SYNOPSIS
+.B vrw completions
+\fISHELL\fR
+
+.SH DESCRIPTION
+Generates a shell completion script for \fBvrw\fR and writes it to
+standard output. The script can be redirected to a file, sourced directly,
+or installed to a system-wide completion directory.
+
+Completions cover all vrw subcommands (list, stop, spawn, freeze, thaw,
+cert, screenshot, cat, resize, purge, config-check, completions),
+global options (--config, --bind, --port, --remote, --tls, etc.),
+and subcommand-specific flags.
+
+.SH ARGUMENTS
+
+.TP
+.BR bash ", " zsh ", " fish ", " elvish ", " powershell
+The shell to generate completions for. Case-insensitive.
+
+.SH EXAMPLES
+
+Generate and activate bash completions for the current session:
+.RS
+.PP
+.nf
+\fB$ vrw completions bash > /tmp/vrw.bash && source /tmp/vrw.bash\fR
+.fi
+.RE
+
+Install bash completions system-wide:
+.RS
+.PP
+.nf
+\fB$ vrw completions bash > /etc/bash_completion.d/vrw\fR
+.fi
+.RE
+
+Install zsh completions:
+.RS
+.PP
+.nf
+\fB$ vrw completions zsh > ~/.zsh/completions/_vrw\fR
+.fi
+.RE
+
+Install fish completions:
+.RS
+.PP
+.nf
+\fB$ vrw completions fish > ~/.config/fish/completions/vrw.fish\fR
+.fi
+.RE
+
+Persist bash completions across sessions by adding to \fB~/.bashrc\fR:
+.RS
+.PP
+.nf
+\fB$ echo 'source /etc/bash_completion.d/vrw' >> ~/.bashrc\fR
+.fi
+.RE
+
+.SH SEE ALSO
+.BR vrw (1),
+.BR bash (1),
+.BR zsh (1),
+.BR fish (1)

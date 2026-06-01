@@ -1,0 +1,64 @@
+.\" Title: vrw-cert-list
+.\" Author: vrw contributors
+.\" Manual section: 1
+.\" Process this file with
+.\"   groff -man -Tascii vrw-cert-list.1
+
+.TH VRW\-CERT\-LIST 1 "2025" "vrw" "User Commands"
+
+.SH NAME
+vrw\-cert\-list \- list all certificates in the certificate pool
+
+.SH SYNOPSIS
+.B vrw
+\fBcert list\fR
+
+.SH DESCRIPTION
+List all certificates configured in the vrw certificate pool. The output reads from the configuration file (global \fB~/.config/vrw/config.yaml\fR or local \fB./vrw.yaml\fR) and displays each certificate's name, file paths, and the first 16 characters of its derived bearer token.
+
+The certificate pool provides per-command access control. Each certificate has a derived bearer token (SHA-256 of the certificate PEM), and commands can be bound to a specific certificate. When a certificate-bound command receives an API request, it checks that the request's bearer token matches the certificate's derived token.
+
+This subcommand is synchronous and does not require a running vrw instance. It only reads the configuration file to display registered certificate entries.
+
+.SH EXAMPLES
+
+.PP
+List all certificates:
+.RS
+.PP
+.nf
+\fB$ vrw cert list\fR
+NAME                     CERT FILE                                         TOKEN (prefix)
+my-app                   /home/user/.config/vrw/certs/my-app/cert.pem   a3f8c1e2b7d94001
+ci-pipeline              /home/user/.config/vrw/certs/ci-pipeline/cert.pem 7c1e9d4a8f2...
+staging                  /home/user/.config/vrw/certs/staging/cert.pem  d4e5f6a7b8c90123
+.fi
+.RE
+
+.PP
+Empty pool:
+.RS
+.PP
+.nf
+\fB$ vrw cert list\fR
+No certificates in pool.
+.fi
+.RE
+
+.SH EXIT STATUS
+
+.TP
+.B 0
+Successful listing (including empty pool).
+
+.TP
+.B 1
+Error (configuration file read error, etc.).
+
+.SH SEE ALSO
+
+.BR vrw\-cert (1),
+.BR vrw\-cert\-generate (1),
+.BR vrw\-cert\-show (1),
+.BR vrw\-cert\-remove (1),
+.BR vrw (1)

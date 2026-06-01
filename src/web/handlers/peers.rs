@@ -1,8 +1,8 @@
-#![cfg(feature = "vrunner")]
+#![cfg(feature = "vrw")]
 #![allow(dead_code, unused_imports)]
 //! Peer instance registration and discovery.
 //!
-//! Allows vrunner instances to register with each other so the web UI
+//! Allows vrw instances to register with each other so the web UI
 //! can display commands from multiple servers. When the primary server
 //! exits, the browser can fail over to a registered peer.
 //!
@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::web::state::AppState;
 
-/// Information about a registered peer vrunner instance.
+/// Information about a registered peer vrw instance.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PeerInfo {
     /// The base URL of the peer's web server (e.g. "http://localhost:9091").
@@ -27,7 +27,7 @@ pub struct PeerInfo {
     pub label: String,
     /// Auth token for the peer's API (empty if auth is disabled on the peer).
     pub token: String,
-    /// PID of the peer vrunner process.
+    /// PID of the peer vrw process.
     pub pid: u32,
     /// When this peer was registered.
     #[serde(with = "chrono::serde::ts_seconds_option")]
@@ -54,7 +54,7 @@ pub async fn list_peers(State(state): State<AppState>) -> Json<serde_json::Value
 
 /// Register a new peer instance.
 ///
-/// Called by a vrunner server (or manually via curl) to announce itself
+/// Called by a vrw server (or manually via curl) to announce itself
 /// to this server. The peer info is stored in memory and broadcast to
 /// all connected WebSocket clients.
 pub async fn register_peer(
@@ -71,7 +71,7 @@ pub async fn register_peer(
 
     let label = body
         .label
-        .unwrap_or_else(|| format!("vrunner:{}", std::process::id()));
+        .unwrap_or_else(|| format!("vrw:{}", std::process::id()));
 
     let peer = PeerInfo {
         url: body.url.clone(),

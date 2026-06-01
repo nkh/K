@@ -2,6 +2,8 @@
 
 Learn how to create named configuration profiles for different environments and switch between them seamlessly using the `--profile` flag.
 
+> **Both vrc and vrw** support profiles with the same syntax. vrc reads from `~/.config/vrc/config.yaml` (or `./vrc.yaml`); vrw reads from `~/.config/vrw/config.yaml` (or `./vrw.yaml`). Replace `vrc` with `vrw` in CLI examples below. vrw profiles may additionally include HTTP/TLS/web keys (`port`, `tls`, `web`, `cert`, `key`, `remote`).
+
 ## Why Profiles?
 
 Profiles let you maintain separate configurations for development, staging, and production environments without duplicating your entire config file. Each profile can define its own commands, ports, TLS settings, environment variables, and hooks.
@@ -11,7 +13,7 @@ Profiles let you maintain separate configurations for development, staging, and 
 Define profiles under the `profiles` key in your YAML configuration file:
 
 ```yaml
-# ~/.config/vrl/config.yaml
+# ~/.config/vrc/config.yaml
 profiles:
   dev:
     port: 8080
@@ -65,13 +67,15 @@ Pass the `--profile` flag to activate a named profile:
 
 ```bash
 # Start with the dev profile
-vrl --profile dev
+vrc --profile dev
+# With vrw:
+vrw --profile dev
 
 # Start with the staging profile
-vrl --profile staging
+vrc --profile staging
 
 # Start with the production profile
-vrl --profile production
+vrc --profile production
 ```
 
 The profile's settings are applied as defaults. Any commands defined in the profile are spawned automatically at startup.
@@ -82,13 +86,15 @@ You can override individual profile settings on the command line. CLI flags alwa
 
 ```bash
 # Use staging profile but change the port
-vrl --profile staging --port 7070
+vrc --profile staging --port 7070
+# With vrw:
+vrw --profile staging --port 7070
 
-# Use dev profile but enable TLS
-vrl --profile dev --tls --cert ./local-cert.pem --key ./local-key.pem
+# Use dev profile but enable TLS (vrw only)
+vrw --profile dev --tls --cert ./local-cert.pem --key ./local-key.pem
 
 # Use production profile but run in the foreground (override daemon mode)
-vrl --profile production --no-daemon
+vrc --profile production --no-daemon
 ```
 
 Precedence order (highest to lowest):
@@ -106,14 +112,14 @@ Each profile can define its own event hooks:
 profiles:
   dev:
     hooks:
-      on_spawn: "echo '[$VRUNNER_CMD_NAME] started in dev mode'"
-      on_exit: "echo '[$VRUNNER_CMD_NAME] exited with code $VRUNNER_EXIT_CODE'"
+      on_spawn: "echo '[$VRW_CMD_NAME] started in dev mode'"
+      on_exit: "echo '[$VRW_CMD_NAME] exited with code $VRW_EXIT_CODE'"
 
   production:
     hooks:
-      on_spawn: "/opt/scripts/notify-slack.sh '#ops' '$VRUNNER_CMD_NAME started'"
-      on_exit: "/opt/scripts/notify-slack.sh '#ops' '$VRUNNER_CMD_NAME exited (code $VRUNNER_EXIT_CODE)'"
-      on_error: "/opt/scripts/page-oncall.sh 'Error in $VRUNNER_CMD_NAME'"
+      on_spawn: "/opt/scripts/notify-slack.sh '#ops' '$VRW_CMD_NAME started'"
+      on_exit: "/opt/scripts/notify-slack.sh '#ops' '$VRW_CMD_NAME exited (code $VRW_EXIT_CODE)'"
+      on_error: "/opt/scripts/page-oncall.sh 'Error in $VRW_CMD_NAME'"
 ```
 
 See [`hooks.md`](hooks.md) for full hook documentation.
@@ -123,7 +129,7 @@ See [`hooks.md`](hooks.md) for full hook documentation.
 Use `--config` to point to a specific config file while still selecting a profile:
 
 ```bash
-vrl --config /path/to/team-config.yaml --profile staging
+vrc --config /path/to/team-config.yaml --profile staging
 ```
 
 This is useful in team environments where a shared config file defines multiple profiles for different team members or environments.
@@ -133,7 +139,7 @@ This is useful in team environments where a shared config file defines multiple 
 A team config file checked into version control:
 
 ```yaml
-# team-vrl.yaml
+# team-vrc.yaml
 profiles:
   alice-dev:
     port: 8081
@@ -164,7 +170,7 @@ profiles:
 Each team member runs:
 
 ```bash
-vrl --config ./team-vrl.yaml --profile alice-dev
+vrc --config ./team-vrc.yaml --profile alice-dev
 ```
 
 For the full configuration reference, see [`../configuration.md`](../configuration.md).

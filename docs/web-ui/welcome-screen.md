@@ -7,7 +7,7 @@ When no commands are running and no command is selected, the web UI displays a w
 ## Elements
 
 ### Heading
-Displays the **vrunner** title.
+Displays the **vrw** title.
 
 ### Description
 A brief instruction: "Spawn a command to get started. Your terminal output will appear here."

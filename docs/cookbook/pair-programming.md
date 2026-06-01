@@ -1,6 +1,6 @@
 # Pair Programming Setup
 
-This recipe shows how to use vrunner's web interface for pair programming, allowing two or more developers to share a terminal session through a browser.
+This recipe shows how to use vrw's web interface for pair programming, allowing two or more developers to share a terminal session through a browser.
 
 ## Scenario
 
@@ -8,17 +8,17 @@ Two developers want to collaborate on the same code. One is running a local deve
 
 ## Setup
 
-### 1. One developer starts the shared vrunner instance
+### 1. One developer starts the shared vrw instance
 
 ```bash
-# Developer 1: Start vrunner with a shared coding session
-vrunner --port 8080 --display-all --tabs -- vim pair-project.rs
+# Developer 1: Start vrw with a shared coding session
+vrw --port 8080 --display-all --tabs -- vim pair-project.rs
 ```
 
 Or start it as a daemon for long-running sessions:
 
 ```bash
-vrunner --port 8080 --daemon
+vrw --port 8080 --daemon
 ```
 
 ### 2. Start a shared command via the API
@@ -43,12 +43,12 @@ Both developers see the same terminal output in real time. Keystrokes sent by ei
 
 ```bash
 # On the shared server
-vrunner --remote --tls --port 443 --daemon
+vrw --remote --tls --port 443 --daemon
 
 # Share the token and certificate
-TOKEN=$(cat ~/.config/vrunner/token)
+TOKEN=$(cat ~/.config/vrw/token)
 echo "Token: $TOKEN"
-echo "Certificate at: ~/.config/vrunner/cert.pem"
+echo "Certificate at: ~/.config/vrw/cert.pem"
 ```
 
 Remote developers connect to `https://shared-server:443/admin` and provide the bearer token when prompted.
@@ -72,8 +72,8 @@ curl -s -X POST http://localhost:9090/api/commands \
 Use certificates to restrict access per session:
 
 ```bash
-vrunner cert generate frontend-pair
-vrunner cert generate backend-pair
+vrw cert generate frontend-pair
+vrw cert generate backend-pair
 
 # Frontend pair uses their certificate token
 # Backend pair uses their certificate token

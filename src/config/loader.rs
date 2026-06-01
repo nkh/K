@@ -5,17 +5,17 @@ use std::path::Path;
 use super::merge::merge_configs;
 use super::schema::Config;
 
-/// Config directory name: "vrl" for vrl binary, "vrunner" for vrunner binary.
-#[cfg(feature = "vrunner")]
-const APP_NAME: &str = "vrunner";
-#[cfg(not(feature = "vrunner"))]
-const APP_NAME: &str = "vrl";
+/// Config directory name: "vrc" for vrc binary, "vrw" for vrw binary.
+#[cfg(feature = "vrw")]
+const APP_NAME: &str = "vrw";
+#[cfg(not(feature = "vrw"))]
+const APP_NAME: &str = "vrc";
 
-/// Local config file name: "vrl.yaml" / "vrunner.yaml".
-#[cfg(feature = "vrunner")]
-const LOCAL_CONFIG: &str = "vrunner";
-#[cfg(not(feature = "vrunner"))]
-const LOCAL_CONFIG: &str = "vrl";
+/// Local config file name: "vrc.yaml" / "vrw.yaml".
+#[cfg(feature = "vrw")]
+const LOCAL_CONFIG: &str = "vrw";
+#[cfg(not(feature = "vrw"))]
+const LOCAL_CONFIG: &str = "vrc";
 
 /// Try to detect the format of a config file from its extension.
 fn detect_format(path: &Path) -> Option<FileFormat> {

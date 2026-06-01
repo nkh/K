@@ -1,5 +1,5 @@
-# vrunner — Minimal Configuration
-# Place as ~/.config/vrunner/config.yaml or ./vrunner.yaml
+# vrw — Minimal Configuration
+# Place as ~/.config/vrw/config.yaml or ./vrw.yaml
 
 # Server settings
 server:

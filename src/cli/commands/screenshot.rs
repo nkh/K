@@ -1,4 +1,4 @@
-#![cfg(feature = "vrunner")]
+#![cfg(feature = "vrw")]
 #![allow(dead_code, unused_imports)]
 use anyhow::Result;
 
@@ -9,12 +9,12 @@ use crate::cli::commands::common::{
 use crate::cli::commands::list::fetch_cmd_dimensions;
 use crate::instance::registry::InstanceRegistry;
 
-/// Handle the `vrunner screenshot [TARGET]` subcommand.
+/// Handle the `vrw screenshot [TARGET]` subcommand.
 ///
 /// Fetches the VTTY buffer of the specified (or sole) running command,
 /// renders it as a PNG image using a TrueType font, and writes it to
 /// the output file.  If no output path is given, generates one from
-/// the pattern `vrunner_YYYYMMDD_HHMMSS_rows_cols_command_args.png`.
+/// the pattern `vrw_YYYYMMDD_HHMMSS_rows_cols_command_args.png`.
 ///
 /// The full output path is printed to stdout after the screenshot is
 /// saved, so the user can easily locate the file.
@@ -95,8 +95,8 @@ pub async fn handle_screenshot_command(
                         cmd_part
                     };
                     match dims_part.as_str() {
-                        "" => format!("vrunner_{}_{}.png", ts, cmd_truncated),
-                        dims => format!("vrunner_{}_{}_{}.png", ts, dims, cmd_truncated),
+                        "" => format!("vrw_{}_{}.png", ts, cmd_truncated),
+                        dims => format!("vrw_{}_{}_{}.png", ts, dims, cmd_truncated),
                     }
                 }
             };
@@ -122,7 +122,7 @@ pub async fn handle_screenshot_command(
                 match all_commands.iter().find(|(_, _, p, _, _)| *p == pid) {
                     Some(entry) => entry.clone(),
                     None => anyhow::bail!(
-                        "No command found with PID {}. Use `vrunner list` to see running commands.",
+                        "No command found with PID {}. Use `vrw list` to see running commands.",
                         pid
                     ),
                 }
@@ -133,7 +133,7 @@ pub async fn handle_screenshot_command(
                     .collect();
                 match matches.len() {
                     0 => anyhow::bail!(
-                        "No command found matching '{}'. Use `vrunner list` to see running commands.",
+                        "No command found matching '{}'. Use `vrw list` to see running commands.",
                         t
                     ),
                     1 => matches[0].clone(),
@@ -149,7 +149,7 @@ pub async fn handle_screenshot_command(
             }
         }
         None => match all_commands.len() {
-            0 => anyhow::bail!("No running commands. Use `vrunner list` to see commands."),
+            0 => anyhow::bail!("No running commands. Use `vrw list` to see commands."),
             1 => all_commands.into_iter().next().unwrap(),
             _ => {
                 let list: Vec<_> = all_commands
@@ -194,7 +194,7 @@ pub async fn handle_screenshot_command(
     let bytes = resp.bytes().await?;
 
     // Auto-generate filename if not specified.
-    // Format: vrunner_YYYYMMDD_HHMMSS_rows_cols_command_args.png
+    // Format: vrw_YYYYMMDD_HHMMSS_rows_cols_command_args.png
     // Spaces in command/args are replaced with underscores.
     let output_path = match output {
         Some(p) => p.to_string(),
@@ -229,8 +229,8 @@ pub async fn handle_screenshot_command(
             };
 
             match dims_part.as_str() {
-                "" => format!("vrunner_{}_{}.png", ts, cmd_truncated),
-                dims => format!("vrunner_{}_{}_{}.png", ts, dims, cmd_truncated),
+                "" => format!("vrw_{}_{}.png", ts, cmd_truncated),
+                dims => format!("vrw_{}_{}_{}.png", ts, dims, cmd_truncated),
             }
         }
     };

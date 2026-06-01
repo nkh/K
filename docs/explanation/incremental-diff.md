@@ -1,11 +1,11 @@
 # Incremental Diff Streaming
 
-This document explains how vrunner achieves bandwidth-efficient terminal streaming
+This document explains how vrw achieves bandwidth-efficient terminal streaming
 by transmitting only the cells that have changed since the last update, rather than
 re-sending the entire terminal buffer on every frame. It covers the problem that
 motivates this optimization, the server-side diff computation, the three-phase
 wire protocol, the data structures involved, the client-side rendering strategy, and
-measured performance characteristics. Read this if you want to understand how vrunner
+measured performance characteristics. Read this if you want to understand how vrw
 keeps terminal streaming responsive over slow or metered connections, or if you are
 implementing a custom client.
 
@@ -55,7 +55,7 @@ interval balances two competing concerns:
   into a single diff but make interactive input feel sluggish.
 
 200ms was chosen as the sweet spot for most terminal workloads. It is configurable
-via the `VRUNNER_DIFF_INTERVAL` environment variable.
+via the `VRW_DIFF_INTERVAL` environment variable.
 
 ### Cell-Level Comparison
 
@@ -244,7 +244,7 @@ snapshot is sent to the client (triggering Phase 3).
 
 ## Client Implementation Strategy
 
-vrunner ships with a default admin interface that uses `xterm.js` for rendering.
+vrw ships with a default admin interface that uses `xterm.js` for rendering.
 However, the protocol is designed to support two rendering strategies:
 
 ### Strategy A: Direct DOM Updates (Recommended)
@@ -397,4 +397,4 @@ negligible for N < 1000 on modern hardware.
 ---
 
 *This document is part of the [Diátaxis](https://diataxis.fr/) documentation framework
-for vrunner. See the [explanation index](./) for related topics.*
+for vrw. See the [explanation index](./) for related topics.*

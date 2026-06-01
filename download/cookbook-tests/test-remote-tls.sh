@@ -4,15 +4,15 @@
 # Tests the "Remote Access via TLS" cookbook example.
 # Validates: TLS startup, HTTPS API, WSS WebSocket, auth token.
 #
-# Note: Uses self-signed certs. Tests HTTPS and WSS against local vrunner.
+# Note: Uses self-signed certs. Tests HTTPS and WSS against local vrw.
 #       Skips real remote / reverse-proxy scenarios (those need infrastructure).
 #
 # Usage: ./docs/cookbook/scripts/test-remote-tls.sh
-#   or:  VRUNNER_BIN=./target/debug/vrunner ./docs/cookbook/scripts/test-remote-tls.sh
+#   or:  VRW_BIN=./target/debug/vrw ./docs/cookbook/scripts/test-remote-tls.sh
 
 set -euo pipefail
 
-VRUNNER_BIN="${VRUNNER_BIN:-vrunner}"
+VRW_BIN="${VRW_BIN:-vrw}"
 PORT=$((19101 + RANDOM % 100))
 BASE_URL="https://127.0.0.1:${PORT}"
 PASS=0
@@ -25,10 +25,10 @@ section() { echo ""; echo "=== $1 ==="; }
 cleanup() {
     echo ""
     echo "--- Cleanup ---"
-    if [ -n "${VRUNNER_PID:-}" ] && kill -0 "$VRUNNER_PID" 2>/dev/null; then
-        echo "Stopping vrunner (pid $VRUNNER_PID)..."
-        kill "$VRUNNER_PID" 2>/dev/null || true
-        wait "$VRUNNER_PID" 2>/dev/null || true
+    if [ -n "${VRW_PID:-}" ] && kill -0 "$VRW_PID" 2>/dev/null; then
+        echo "Stopping vrw (pid $VRW_PID)..."
+        kill "$VRW_PID" 2>/dev/null || true
+        wait "$VRW_PID" 2>/dev/null || true
     fi
     echo "Results: ${PASS} passed, ${FAIL} failed"
     [ "$FAIL" -eq 0 ] || exit 1
@@ -38,15 +38,15 @@ trap cleanup EXIT
 echo "=== Cookbook Test: Remote Access via TLS ==="
 echo "Port: $PORT"
 
-# ── Start vrunner with TLS ──
-section "Start vrunner with --tls --remote"
+# ── Start vrw with TLS ──
+section "Start vrw with --tls --remote"
 
-CERT_DIR="${HOME}/.config/vrunner"
+CERT_DIR="${HOME}/.config/vrw"
 # Clean any old cert to force regeneration
 rm -f "${CERT_DIR}/cert.pem" "${CERT_DIR}/key.pem" 2>/dev/null || true
 
-$VRUNNER_BIN --tls --remote --port "$PORT" -- sleep infinity &
-VRUNNER_PID=$!
+$VRW_BIN --tls --remote --port "$PORT" -- sleep infinity &
+VRW_PID=$!
 
 # Wait for server (may take a bit longer for cert generation)
 echo "Waiting for TLS server..."

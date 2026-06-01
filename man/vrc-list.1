@@ -1,0 +1,63 @@
+.\" Title: vrc-list
+.\" Author: vrc contributors
+.\" Manual section: 1
+.\"
+.TH VRL\-LIST 1 "2025" "vrc" "User Commands"
+
+.SH NAME
+vrc list \- list running vrc instances and their commands
+
+.SH SYNOPSIS
+.B vrc
+\fBlist\fR [\fB\-\-target\fR \fIPID\fR] [\fB\-\-interactive\fR]
+
+.SH DESCRIPTION
+Lists all running vrc instances. For each instance, connects to its UDS control socket to retrieve the live command list from memory, including commands added dynamically via \fBvrc spawn\-in\fR.
+
+The output shows each instance with its PID, daemon/display status, and uptime, followed by a list of commands with their PIDs, names, and running status.
+
+When \fB\-\-target\fR is specified, only the specified instance is shown.
+
+.SH OPTIONS
+
+.TP
+.BR \-\-target " " \fIPID\fR
+Only show the instance with the given PID.
+
+.TP
+.BR \-\-interactive
+Present a numbered list of running instances and let the user select
+which ones to show by typing space-separated numbers (e.g. "1 3 5").
+Requires a terminal (stdin must be a TTY).
+
+.SH OUTPUT
+
+Instance header line: INSTANCE PID: N DAEMON: yes/no DISPLAY: yes/no UP: duration
+
+Per command: PID (indented) command_name STATUS: running|frozen|exited duration
+
+.SH EXAMPLES
+
+List all instances:
+.RS
+.PP
+.nf
+\fB$ vrc list\fR
+INSTANCE  PID: 12345  DAEMON: no  DISPLAY: yes  UP: 3m 15s
+  5678     htop                          STATUS: running  3m 15s
+.fi
+.RE
+
+List a specific instance:
+.RS
+.PP
+.nf
+\fB$ vrc list \-\-target 12345\fR
+.fi
+.RE
+
+.SH SEE ALSO
+.BR vrc (1),
+.BR vrc\-stop (1),
+.BR vrc\-spawn\-in (1),
+.BR vrc\-keys (1)

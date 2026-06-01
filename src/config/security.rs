@@ -1,11 +1,11 @@
-#![cfg(feature = "vrunner")]
+#![cfg(feature = "vrw")]
 #![allow(dead_code, unused_imports)]
 use serde::{Deserialize, Serialize};
 
 /// Cross-Origin Resource Sharing (CORS) configuration.
 ///
 /// Controls which origins are allowed to make cross-origin requests to the
-/// vrunner API and admin interface.
+/// vrw API and admin interface.
 ///
 /// # Example (YAML)
 ///
@@ -48,7 +48,7 @@ pub struct SecurityConfig {
     pub require_auth: bool,
     /// Path to a file containing the bearer token. If the file does not exist
     /// when auth is required, a random 256-bit token is generated and saved.
-    /// Default: ~/.config/vrunner/token
+    /// Default: ~/.config/vrw/token
     pub token_file: String,
     /// CORS (Cross-Origin Resource Sharing) configuration.
     /// Controls which origins may make cross-origin requests.
@@ -63,7 +63,7 @@ impl Default for SecurityConfig {
             require_auth: false,
             token_file: dirs::config_dir()
                 .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-                .join("vrunner")
+                .join("vrw")
                 .join("token")
                 .to_string_lossy()
                 .to_string(),
@@ -73,21 +73,21 @@ impl Default for SecurityConfig {
 }
 
 /// TLS/HTTPS settings.
-/// When enabled without explicit cert/key paths, vrunner auto-generates
-/// self-signed certificates stored in ~/.config/vrunner/.
+/// When enabled without explicit cert/key paths, vrw auto-generates
+/// self-signed certificates stored in ~/.config/vrw/.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct TlsConfig {
     /// Enable TLS (HTTPS). Default: false.
-    /// When enabled, vrunner generates self-signed certificates on first run
+    /// When enabled, vrw generates self-signed certificates on first run
     /// (or uses existing ones). The certificate and key are stored in
-    /// ~/.config/vrunner/.
+    /// ~/.config/vrw/.
     #[serde(default)]
     pub enabled: bool,
     /// Path to the PEM-encoded certificate file.
-    /// If not set, defaults to ~/.config/vrunner/cert.pem.
+    /// If not set, defaults to ~/.config/vrw/cert.pem.
     pub cert_file: Option<String>,
     /// Path to the PEM-encoded private key file.
-    /// If not set, defaults to ~/.config/vrunner/key.pem.
+    /// If not set, defaults to ~/.config/vrw/key.pem.
     pub key_file: Option<String>,
 }
 
@@ -99,7 +99,7 @@ pub struct TlsConfig {
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct CertificatesConfig {
     /// Directory where auto-generated certificates are stored.
-    /// Default: ~/.config/vrunner/certs/
+    /// Default: ~/.config/vrw/certs/
     #[serde(default)]
     pub directory: Option<String>,
     /// Named certificate definitions.

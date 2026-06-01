@@ -1,7 +1,7 @@
-//! Shared startup helpers used by both `vrl` and `vrunner` binary entry points.
+//! Shared startup helpers used by both `vrc` and `vrw` binary entry points.
 //!
-//! These functions were previously copy-pasted verbatim in `src/bin/vrl.rs` and
-//! `src/bin/vrunner.rs`.  Extracting them here eliminates the duplication and
+//! These functions were previously copy-pasted verbatim in `src/bin/vrc.rs` and
+//! `src/bin/vrw.rs`.  Extracting them here eliminates the duplication and
 //! ensures any future changes are made in exactly one place.
 
 use std::sync::Arc;

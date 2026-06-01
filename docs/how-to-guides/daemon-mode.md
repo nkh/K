@@ -1,28 +1,34 @@
 # Daemon Mode
 
-Learn how to run vrl as a background daemon, keep it running after you log out, and manage daemon instances from the command line.
+Learn how to run vrc or vrw as a background daemon, keep it running after you log out, and manage daemon instances from the command line.
+
+> **Both vrc and vrw** support `--daemon` mode with identical behavior. The examples below use `vrc`; replace with `vrw` for the HTTP server variant. vrw adds `--web --port 8080` support to expose the web dashboard alongside the daemon.
 
 ## How Daemon Mode Works
 
-When you pass the `--daemon` flag, vrl performs a traditional Unix double-fork to detach from the controlling terminal:
+When you pass the `--daemon` flag, vrc performs a traditional Unix double-fork to detach from the controlling terminal:
 
 1. **First fork** — The parent process exits immediately, returning control to the shell.
 2. **Second fork** — The intermediate process forks again and exits, ensuring the daemon is reparented to init/systemd.
 3. **Sid creation** — The daemon creates a new session and process group.
-4. **Stdio redirection** — stdout and stderr are redirected to log files (default: `/tmp/vrl.out`, `/tmp/vrl.err`).
+4. **Stdio redirection** — stdout and stderr are redirected to log files (default: `/tmp/vrc.out`, `/tmp/vrc.err`).
 
 The daemon runs independently of your terminal session.
 
 ## Basic Usage
 
 ```bash
-vrl --daemon
+vrc --daemon
+# With vrw (adds web dashboard on port 8080):
+vrw --daemon --web --port 8080
 ```
 
 ## Spawning Commands at Daemon Start
 
 ```bash
-vrl --daemon -- htop
+vrc --daemon -- htop
+# With vrw:
+vrw --daemon --web --port 8080 -- htop
 ```
 
 ## Custom Output Files
@@ -30,17 +36,19 @@ vrl --daemon -- htop
 Redirect daemon logs to a specific location:
 
 ```bash
-vrl --daemon --stdout-file /var/log/vrl/instance.log
+vrc --daemon --stdout-file /var/log/vrc/instance.log
+# With vrw:
+vrw --daemon --stdout-file /var/log/vrw/instance.log
 ```
 
 With a configuration file:
 
 ```yaml
-# ~/.config/vrl/config.yaml
+# ~/.config/vrc/config.yaml  (for vrw: ~/.config/vrw/config.yaml)
 daemon:
   enabled: true
-  stdout_file: /var/log/vrl/stdout
-  stderr_file: /var/log/vrl/stderr
+  stdout_file: /var/log/vrc/stdout
+  stderr_file: /var/log/vrc/stderr
 ```
 
 ## Managing Daemons
@@ -48,13 +56,13 @@ daemon:
 ### List Running Daemons
 
 ```bash
-vrl list
+vrc list
 ```
 
 ### Stop a Daemon
 
 ```bash
-vrl stop <PID>
+vrc stop <PID>
 ```
 
 ### Spawn into a Running Daemon
@@ -62,7 +70,7 @@ vrl stop <PID>
 Add commands to an already-running daemon instance:
 
 ```bash
-vrl spawn-in <PID> -- npm run build
+vrc spawn-in <PID> -- npm run build
 ```
 
 ### Checking Daemon Health
@@ -70,22 +78,22 @@ vrl spawn-in <PID> -- npm run build
 Read the daemon's own log:
 
 ```bash
-tail -f /tmp/vrl.err
+tail -f /tmp/vrc.err
 ```
 
 ## Systemd Integration
 
-For production environments, you can wrap vrl in a systemd service:
+For production environments, you can wrap vrc in a systemd service:
 
 ```ini
-# /etc/systemd/system/vrl.service
+# /etc/systemd/system/vrc.service
 [Unit]
-Description=vrl Terminal Manager
+Description=vrc Terminal Manager
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/vrl --command "npm start" --name "app"
+ExecStart=/usr/local/bin/vrc --command "npm start" --name "app"
 Restart=on-failure
 RestartSec=5
 
@@ -96,9 +104,9 @@ WantedBy=multi-user.target
 Enable and start:
 
 ```bash
-sudo systemctl enable vrl
-sudo systemctl start vrl
-sudo systemctl status vrl
+sudo systemctl enable vrc
+sudo systemctl start vrc
+sudo systemctl status vrc
 ```
 
 ## Practical Examples
@@ -106,15 +114,19 @@ sudo systemctl status vrl
 ### Development background service:
 
 ```bash
-vrl --daemon --log /tmp/vrl-dev.log -- htop
+vrc --daemon --log /tmp/vrc-dev.log -- htop
+# With vrw:
+vrw --daemon --web --port 8080 --log /tmp/vrw-dev.log -- htop
 ```
 
 ### CI pipeline headless mode:
 
 ```bash
-vrl --daemon --log /tmp/vrl-ci.log -- npm run test
+vrc --daemon --log /tmp/vrc-ci.log -- npm run test
+# With vrw:
+vrw --daemon --log /tmp/vrw-ci.log -- npm run test
 # ... wait for completion ...
-vrl stop
+vrc stop  # or: vrw stop
 ```
 
 For advanced configuration, see [`configuration-profiles.md`](configuration-profiles.md).

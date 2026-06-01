@@ -1,19 +1,21 @@
 # Interactive Display (TUI)
 
-Learn how to use vrl's built-in terminal user interface (TUI) for local monitoring and interaction with spawned commands directly in your terminal.
+Learn how to use the built-in terminal user interface (TUI) for local monitoring and interaction with spawned commands directly in your terminal.
+
+> **Both vrc and vrw** support `--display`, `--display-all`, and `--tabs` flags. The examples below use `vrc` but apply equally to `vrw` — just replace `vrc` with `vrw` in any command. vrw also provides a [web dashboard](web-dashboard.md) for browser-based monitoring.
 
 ## Enabling the Display
 
-Use the `--display` flag to open the interactive TUI when vrl starts:
+Use the `--display` flag to open the interactive TUI when vrc starts:
 
 ```bash
-vrl --display -- htop
+vrc --display -- htop
 ```
 
 By default, `--display` shows only the first spawned command's terminal. Use `--display-all` to show all commands as split panes:
 
 ```bash
-vrl --display-all \
+vrc --display-all \
   -- htop \
   -- tail -f /var/log/syslog
 ```
@@ -21,11 +23,13 @@ vrl --display-all \
 Use `--tabs` to show commands as tabbed views within a single pane:
 
 ```bash
-vrl --tabs \
+vrc --tabs \
   -- htop \
   -- tail -f /var/log/syslog \
   -- npm run dev
 ```
+
+> **With vrw:** `vrw --tabs -- htop -- tail -f /var/log/syslog -- npm run dev` — works identically. You can also open `http://localhost:8080/admin` for a browser-based view.
 
 ## Layout Modes
 
@@ -48,7 +52,7 @@ vrl --tabs \
 | `Ctrl+/` | Toggle sidebar visibility |
 | `Enter` | Confirm in search bar |
 | `Escape` | Close search bar / exit context menu |
-| `Ctrl+Q` | Quit vrl TUI |
+| `Ctrl+Q` | Quit vrc TUI |
 | `F1` | Show help panel |
 | `F12` | Open spawn prompt |
 | `Up` / `Down` | Scroll terminal buffer |

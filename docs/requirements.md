@@ -1,8 +1,8 @@
-# vrunner Requirements Document
+# vrw Requirements Document
 
 ## 1. Overview
 
-**vrunner** is a Rust-based virtual terminal runner and process orchestrator. It executes commands inside virtual TTYs (VTTYs), exposes their output via a web interface, and allows remote control through HTTP APIs. By default, it produces no local terminal output, operating silently until explicitly configured otherwise.
+**vrw** is a Rust-based virtual terminal runner and process orchestrator. It executes commands inside virtual TTYs (VTTYs), exposes their output via a web interface, and allows remote control through HTTP APIs. By default, it produces no local terminal output, operating silently until explicitly configured otherwise.
 
 ## 2. Functional Requirements
 
@@ -10,21 +10,21 @@
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FR-01 | The binary must be named `vrunner`. | Must |
+| FR-01 | The binary must be named `vrw`. | Must |
 | FR-02 | Accept a command name and its arguments as CLI arguments and execute it. | Must |
-| FR-03 | If no command is provided at startup, `vrunner` must idle and wait for commands exclusively through the web interface. | Must |
+| FR-03 | If no command is provided at startup, `vrw` must idle and wait for commands exclusively through the web interface. | Must |
 | FR-04 | Each executed command must be provided with a virtual TTY (VTTY) for terminal-aware programs. | Must |
 | FR-05 | The VTTY must forward stdout and stderr from the child process. | Must |
 | FR-06 | The VTTY must accept stdin (keyboard input) forwarded from the web API or local terminal. | Must |
-| FR-07 | **By default, `vrunner` must not write anything to the local terminal screen.** All output is internal or served via the web API. | Must |
+| FR-07 | **By default, `vrw` must not write anything to the local terminal screen.** All output is internal or served via the web API. | Must |
 | FR-08 | The default silent behavior may be overridden via the configuration file or CLI flags. | Must |
 
 ### 2.2 CLI Argument Separation
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FR-09 | The CLI must use `--` as a separator between `vrunner` options and the command to run with its own options. | Must |
-| FR-10 | Example: `vrunner --port 9090 --display -- python -m http.server 8000`. Here `--port` and `--display` belong to `vrunner`; `python -m http.server 8000` is the child command. | Must |
+| FR-09 | The CLI must use `--` as a separator between `vrw` options and the command to run with its own options. | Must |
+| FR-10 | Example: `vrw --port 9090 --display -- python -m http.server 8000`. Here `--port` and `--display` belong to `vrw`; `python -m http.server 8000` is the child command. | Must |
 
 ### 2.3 Local VTTY Display
 
@@ -48,9 +48,9 @@
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FR-19 | A CLI flag `--daemon` must detach `vrunner` from the controlling terminal and run it as a background process. | Must |
-| FR-20 | In daemon mode, `vrunner` must have no local display, no stdin interaction, and no terminal attachment. | Must |
-| FR-21 | Daemon mode must redirect stdout and stderr to configurable log files (default: `/tmp/vrunner.out` and `/tmp/vrunner.err`). | Should |
+| FR-19 | A CLI flag `--daemon` must detach `vrw` from the controlling terminal and run it as a background process. | Must |
+| FR-20 | In daemon mode, `vrw` must have no local display, no stdin interaction, and no terminal attachment. | Must |
+| FR-21 | Daemon mode must redirect stdout and stderr to configurable log files (default: `/tmp/vrw.out` and `/tmp/vrw.err`). | Should |
 | FR-22 | Daemon mode is only required on Unix-like systems; on Windows it may print an error. | Should |
 | FR-23 | Daemonization must occur before the tokio runtime starts to avoid conflicts with async signal handling. | Should |
 
@@ -58,8 +58,8 @@
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FR-24 | Multiple `vrunner` instances must be able to run in parallel on the same machine, each bound to a different port. | Must |
-| FR-25 | Each instance must register itself in a shared instance registry (e.g., pidfiles in `~/.local/share/vrunner/instances/`). | Must |
+| FR-24 | Multiple `vrw` instances must be able to run in parallel on the same machine, each bound to a different port. | Must |
+| FR-25 | Each instance must register itself in a shared instance registry (e.g., pidfiles in `~/.local/share/vrw/instances/`). | Must |
 | FR-26 | The registry must store: PID, port, bind address, start time, daemon status, display status, and the running command. | Must |
 | FR-27 | Stale pidfiles (process no longer alive) must be automatically cleaned up on `list`. | Should |
 
@@ -67,7 +67,7 @@
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FR-28 | The CLI subcommand `vrunner list` must display all running `vrunner` instances. | Must |
+| FR-28 | The CLI subcommand `vrw list` must display all running `vrw` instances. | Must |
 | FR-29 | The output must include: PID, port, bind address, daemon flag, display flag, and the command being run (or "(idle)"). | Must |
 | FR-30 | The listing must work regardless of whether the instances were started normally or as daemons. | Must |
 
@@ -75,7 +75,7 @@
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FR-31 | The CLI subcommand `vrunner stop <PID>` must send a graceful shutdown request to the specified instance. | Must |
+| FR-31 | The CLI subcommand `vrw stop <PID>` must send a graceful shutdown request to the specified instance. | Must |
 | FR-32 | The shutdown command must use the instance's PID to identify it (read from the registry). | Must |
 | FR-33 | The shutdown mechanism should first attempt an HTTP POST to `/api/shutdown`; if that fails, the CLI may warn the user to use `kill <PID>`. | Should |
 
@@ -83,8 +83,8 @@
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FR-34 | `vrunner` must be able to provide additional file descriptors (handles) to the running command beyond stdin/stdout/stderr. | Should |
-| FR-35 | Additional handles may be routed to the VTTY or to dedicated log files managed by `vrunner`. | Should |
+| FR-34 | `vrw` must be able to provide additional file descriptors (handles) to the running command beyond stdin/stdout/stderr. | Should |
+| FR-35 | Additional handles may be routed to the VTTY or to dedicated log files managed by `vrw`. | Should |
 
 ### 2.10 VTTY Configuration
 
@@ -92,7 +92,7 @@
 |----|-------------|----------|
 | FR-36 | VTTY parameters must be read from a configuration file (YAML). | Must |
 | FR-37 | Configurable VTTY properties: rows, columns, term type, scrollback, color support, mouse forwarding. | Must |
-| FR-38 | Support both global (`~/.config/vrunner/config.yaml`) and local (`./vrunner.yaml`) config files. | Should |
+| FR-38 | Support both global (`~/.config/vrw/config.yaml`) and local (`./vrw.yaml`) config files. | Should |
 | FR-39 | Local config overrides global config values. | Should |
 | FR-40 | Every configuration entry must have a corresponding CLI flag for override. | Must |
 
@@ -100,7 +100,7 @@
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FR-41 | `vrunner` must start an embedded HTTP server on a configurable address/port (default: `127.0.0.1:8080`). | Must |
+| FR-41 | `vrw` must start an embedded HTTP server on a configurable address/port (default: `127.0.0.1:8080`). | Must |
 | FR-42 | The server must accept both GET and POST requests. | Must |
 | FR-43 | All JSON responses must include a standard envelope: `{ "status": "ok|error", "data": ..., "error": "..." }`. | Should |
 | FR-44 | Mandatory endpoints: list commands, start command, send keys, kill command, get VTTY, get partial VTTY, shutdown instance. | Must |
@@ -138,13 +138,13 @@
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FR-59 | vrunner must support a pool of named certificates for per-command access control. | Must |
-| FR-60 | Certificates can be generated via CLI (`vrunner cert generate <name>`) or configured in the config file. | Must |
+| FR-59 | vrw must support a pool of named certificates for per-command access control. | Must |
+| FR-60 | Certificates can be generated via CLI (`vrw cert generate <name>`) or configured in the config file. | Must |
 | FR-61 | Each certificate in the pool must have a derived bearer token (SHA-256 of the certificate PEM). | Must |
 | FR-62 | When starting a command, a certificate name can be specified to bind the command to that certificate. | Must |
 | FR-63 | Only clients presenting the bound certificate's derived token can interact with the command's endpoints. | Must |
 | FR-64 | Unbound commands are accessible to any authenticated client (or unauthenticated on localhost). | Must |
-| FR-65 | Different vrunner instances can have completely different certificate pools. | Must |
+| FR-65 | Different vrw instances can have completely different certificate pools. | Must |
 | FR-66 | The certificate pool must be configurable via YAML config file. | Should |
 
 ### 2.16 WebSocket Incremental Diff Protocol
@@ -161,25 +161,25 @@
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FR-72 | vrunner must support storing named snapshots of a command's VTTY buffer via `POST /api/commands/{id}/snapshot`. | Must |
+| FR-72 | vrw must support storing named snapshots of a command's VTTY buffer via `POST /api/commands/{id}/snapshot`. | Must |
 | FR-73 | Each snapshot must include metadata: name, command name, command arguments, PID, timestamp, and wall-clock runtime. | Must |
-| FR-74 | vrunner must support listing all snapshots for a command via `GET /api/commands/{id}/snapshots`. | Must |
-| FR-75 | vrunner must support computing a cell-level diff between the current buffer and a stored snapshot via `POST /api/commands/{id}/diff`. | Must |
-| FR-76 | vrunner must support deleting snapshots via `DELETE /api/commands/{id}/snapshots/:name`. | Must |
+| FR-74 | vrw must support listing all snapshots for a command via `GET /api/commands/{id}/snapshots`. | Must |
+| FR-75 | vrw must support computing a cell-level diff between the current buffer and a stored snapshot via `POST /api/commands/{id}/diff`. | Must |
+| FR-76 | vrw must support deleting snapshots via `DELETE /api/commands/{id}/snapshots/:name`. | Must |
 | FR-77 | All snapshots for a command must be automatically cleaned up when the command is killed. | Should |
 
 ### 2.18 Kill by PID
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FR-78 | vrunner must support killing individual commands by their OS process ID via `POST /api/commands/kill-pid/:pid`. | Must |
-| FR-79 | The `vrunner stop <pid>` CLI command must first attempt to kill a command with that PID on any running instance before falling back to instance shutdown. | Should |
+| FR-78 | vrw must support killing individual commands by their OS process ID via `POST /api/commands/kill-pid/:pid`. | Must |
+| FR-79 | The `vrw stop <pid>` CLI command must first attempt to kill a command with that PID on any running instance before falling back to instance shutdown. | Should |
 
 ### 2.19 Enhanced Instance Listing
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FR-80 | `vrunner list` must contact each running instance via HTTP to retrieve its active commands. | Should |
+| FR-80 | `vrw list` must contact each running instance via HTTP to retrieve its active commands. | Should |
 | FR-81 | The list output must include command name, arguments, PID, and certificate binding for each command on each instance. | Should |
 | FR-82 | Unreachable instances must be clearly indicated in the list output. | Should |
 
@@ -207,18 +207,18 @@
 
 ## 4. Out of Scope
 
-- Persistent sessions across `vrunner` restarts.
+- Persistent sessions across `vrw` restarts.
 - Clustering or multi-node process distribution.
 - Public CA-signed certificates in the certificate pool (use `--cert-file`/`--key-file` for the instance TLS cert, or a reverse proxy for public CA certs).
 - Client certificate authentication (bearer token auth is used instead).
 
 ## 5. Glossary
 
-- **VTTY**: Virtual TTY. A pseudo-terminal pair managed by `vrunner`.
+- **VTTY**: Virtual TTY. A pseudo-terminal pair managed by `vrw`.
 - **Handle**: An additional file descriptor passed to a child process.
 - **Command ID**: A unique identifier (UUID) assigned to each running command instance.
-- **Instance**: A single running `vrunner` process with its own web server and registry entry.
+- **Instance**: A single running `vrw` process with its own web server and registry entry.
 - **Bearer Token**: A secret string used in the `Authorization` header to authenticate API requests.
-- **Self-Signed Certificate**: An X.509 certificate signed by vrunner itself (not by a public CA), distributed to authorized clients out of band.
+- **Self-Signed Certificate**: An X.509 certificate signed by vrw itself (not by a public CA), distributed to authorized clients out of band.
 - **Incremental Diff Protocol**: A bandwidth optimization for the VTTY WebSocket that transmits only changed cells rather than the full terminal buffer on each update.
 - **Snapshot**: A named, point-in-time capture of a command's VTTY buffer contents, stored in memory with metadata for later comparison via diffs.

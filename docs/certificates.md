@@ -1,6 +1,6 @@
 # Certificate Management Guide
 
-vrunner supports a **certificate pool** — a set of named certificates that can be used for per-command access control. This guide explains how to generate, configure, and use certificates to isolate running applications within a vrunner instance.
+vrw supports a **certificate pool** — a set of named certificates that can be used for per-command access control. This guide explains how to generate, configure, and use certificates to isolate running applications within a vrw instance.
 
 ---
 
@@ -21,11 +21,11 @@ vrunner supports a **certificate pool** — a set of named certificates that can
 
 ## Overview
 
-vrunner's certificate system provides **per-command isolation** within a single instance. Each certificate in the pool can be bound to a running command, ensuring that only clients presenting the correct certificate (or its derived bearer token) can interact with that command's endpoints (VTTY, keys, kill).
+vrw's certificate system provides **per-command isolation** within a single instance. Each certificate in the pool can be bound to a running command, ensuring that only clients presenting the correct certificate (or its derived bearer token) can interact with that command's endpoints (VTTY, keys, kill).
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  vrunner instance (port 8080)                               │
+│  vrw instance (port 8080)                               │
 │                                                              │
 │  Certificate Pool:                                           │
 │  ┌──────────────────┐  ┌──────────────────┐                  │
@@ -59,7 +59,7 @@ vrunner's certificate system provides **per-command isolation** within a single 
 
 | Concept | Purpose | Scope |
 |---------|---------|-------|
-| **Instance certificate** (`tls.cert_file` / `tls.key_file`) | TLS termination for the HTTPS server | The entire vrunner server |
+| **Instance certificate** (`tls.cert_file` / `tls.key_file`) | TLS termination for the HTTPS server | The entire vrw server |
 | **Pool certificates** (`certificates.entries[]`) | Per-command access control | Individual running commands |
 
 The instance certificate is used by the server to encrypt connections. Pool certificates are used to control *who* can interact with *which* commands. Both are independent and serve different purposes.
@@ -72,7 +72,7 @@ Each certificate in the pool has a **derived bearer token** — the SHA-256 hash
 Certificate PEM → SHA-256 → hex encode → 64-char bearer token
 ```
 
-You never need to compute this manually. vrunner computes and displays it when you generate or list certificates.
+You never need to compute this manually. vrw computes and displays it when you generate or list certificates.
 
 ### Access Control Flow
 
@@ -93,40 +93,40 @@ You never need to compute this manually. vrunner computes and displays it when y
 
 ```bash
 # Generate a new certificate named "webapp-frontend"
-vrunner cert generate webapp-frontend
+vrw cert generate webapp-frontend
 ```
 
 Output:
 ```
 Certificate 'webapp-frontend' generated:
-  Certificate: ~/.config/vrunner/certs/webapp-frontend/cert.pem
-  Key:         ~/.config/vrunner/certs/webapp-frontend/key.pem
+  Certificate: ~/.config/vrw/certs/webapp-frontend/cert.pem
+  Key:         ~/.config/vrw/certs/webapp-frontend/key.pem
   Token:       a3f8c1e2b7d9400123456789abcdef01...
 ```
 
 ### List All Certificates
 
 ```bash
-vrunner cert list
+vrw cert list
 ```
 
 Output:
 ```
 NAME              CERT FILE                                        TOKEN (prefix)
-webapp-frontend   ~/.config/vrunner/certs/webapp-frontend/cert.pem   a3f8c1e2b7d9...
-ci-pipeline       ~/.config/vrunner/certs/ci-pipeline/cert.pem       7c1e9d4a8f2...
+webapp-frontend   ~/.config/vrw/certs/webapp-frontend/cert.pem   a3f8c1e2b7d9...
+ci-pipeline       ~/.config/vrw/certs/ci-pipeline/cert.pem       7c1e9d4a8f2...
 ```
 
 ### Show Certificate Details
 
 ```bash
-vrunner cert show webapp-frontend
+vrw cert show webapp-frontend
 ```
 
 ### Remove a Certificate
 
 ```bash
-vrunner cert remove webapp-frontend
+vrw cert remove webapp-frontend
 ```
 
 Note: This removes the certificate from the pool registry but does not delete the PEM files.
@@ -137,11 +137,11 @@ Note: This removes the certificate from the pool registry but does not delete th
 
 ### Via Configuration File
 
-Add a `certificates` section to your `vrunner.yaml`:
+Add a `certificates` section to your `vrw.yaml`:
 
 ```yaml
 certificates:
-  directory: "~/.config/vrunner/certs"
+  directory: "~/.config/vrw/certs"
 
   entries:
     - name: "webapp-frontend"
@@ -157,15 +157,15 @@ certificates:
       key_file: "staging-app/key.pem"
 ```
 
-- `directory`: Base directory for resolving relative cert/key paths. Default: `~/.config/vrunner/certs/`.
-- `entries`: List of named certificates. If the cert and key files don't exist, vrunner auto-generates them.
+- `directory`: Base directory for resolving relative cert/key paths. Default: `~/.config/vrw/certs/`.
+- `entries`: List of named certificates. If the cert and key files don't exist, vrw auto-generates them.
 
 ### Via CLI Flags
 
 Use the `--certificate` flag with the format `NAME:CERT_FILE:KEY_FILE`:
 
 ```bash
-vrunner --certificate "webapp-frontend:./certs/frontend/cert.pem:./certs/frontend/key.pem" \
+vrw --certificate "webapp-frontend:./certs/frontend/cert.pem:./certs/frontend/key.pem" \
        --certificate "ci-pipeline:/etc/ssl/certs/ci.pem:/etc/ssl/private/ci.key" \
        -- some-command
 ```
@@ -175,8 +175,8 @@ vrunner --certificate "webapp-frontend:./certs/frontend/cert.pem:./certs/fronten
 | Priority | Source | Path |
 |----------|--------|------|
 | Highest | CLI flags | `--certificate` arguments |
-| High | Local config | `./vrunner.yaml` |
-| Medium | Global config | `~/.config/vrunner/config.yaml` |
+| High | Local config | `./vrw.yaml` |
+| Medium | Global config | `~/.config/vrw/config.yaml` |
 | Lowest | Built-in defaults | No certificates |
 
 ---
@@ -234,7 +234,7 @@ curl -X POST http://localhost:8080/api/commands \
 ### 1. Generate or Find Your Token
 
 ```bash
-vrunner cert show webapp-frontend
+vrw cert show webapp-frontend
 ```
 
 The output includes the full 64-character token.
@@ -262,7 +262,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 ### 3. Use with curl and TLS
 
 ```bash
-curl --cacert ~/.config/vrunner/cert.pem \
+curl --cacert ~/.config/vrw/cert.pem \
      -H "Authorization: Bearer $CERT_TOKEN" \
      https://localhost:8080/api/commands
 ```
@@ -271,12 +271,12 @@ curl --cacert ~/.config/vrunner/cert.pem \
 
 ## Per-Instance Certificates
 
-Different vrunner instances can use completely different certificates. Each instance has its own config, its own certificate pool, and its own TLS server certificate.
+Different vrw instances can use completely different certificates. Each instance has its own config, its own certificate pool, and its own TLS server certificate.
 
 ### Instance A (port 8080) — Development
 
 ```yaml
-# /home/user/.config/vrunner/config.yaml
+# /home/user/.config/vrw/config.yaml
 tls:
   enabled: true
 
@@ -288,13 +288,13 @@ certificates:
 ```
 
 ```bash
-vrunner --port 8080 -- htop
+vrw --port 8080 -- htop
 ```
 
 ### Instance B (port 9090) — Staging
 
 ```yaml
-# ./vrunner.yaml (project directory)
+# ./vrw.yaml (project directory)
 tls:
   enabled: true
   cert_file: "/etc/ssl/staging/cert.pem"
@@ -308,7 +308,7 @@ certificates:
 ```
 
 ```bash
-vrunner --port 9090 --config ./vrunner.yaml -- npm run start
+vrw --port 9090 --config ./vrw.yaml -- npm run start
 ```
 
 Each instance is independent — the "dev-frontend" certificate from Instance A cannot be used to access commands in Instance B.
@@ -322,7 +322,7 @@ Each instance is independent — the "dev-frontend" certificate from Instance A 
 A server runs three web applications, each managed by a different team. Each team gets their own certificate.
 
 ```yaml
-# vrunner.yaml
+# vrw.yaml
 server:
   bind: "0.0.0.0"
   port: 8080
@@ -350,7 +350,7 @@ Each team starts their application with their certificate:
 
 ```bash
 # Team Alpha starts their app
-vrunner cert generate team-alpha
+vrw cert generate team-alpha
 
 curl -X POST https://server:8080/api/commands \
   -H "Content-Type: application/json" \
@@ -368,17 +368,17 @@ Team Alpha can only see and control their own app. They cannot access Team Beta'
 
 ### Example 2: CI/CD Pipeline Isolation
 
-A CI server uses vrunner to run build jobs. Each job is isolated by certificate.
+A CI server uses vrw to run build jobs. Each job is isolated by certificate.
 
 ```bash
 # Generate cert for the CI pipeline
-vrunner cert generate ci-pipeline
+vrw cert generate ci-pipeline
 
-# Start the vrunner server
-vrunner --remote --tls -- daemon
+# Start the vrw server
+vrw --remote --tls -- daemon
 
 # CI script starts a build job
-TOKEN=$(vrunner cert show ci-pipeline | grep Token | awk '{print $2}')
+TOKEN=$(vrw cert show ci-pipeline | grep Token | awk '{print $2}')
 
 JOB_ID=$(curl -s -X POST https://localhost:8080/api/commands \
   -H "Content-Type: application/json" \
@@ -397,11 +397,11 @@ Even on localhost (no instance auth), you can still use certificates for logical
 
 ```bash
 # Start server (no auth required for localhost)
-vrunner
+vrw
 
 # Generate certs for different projects
-vrunner cert generate project-a
-vrunner cert generate project-b
+vrw cert generate project-a
+vrw cert generate project-b
 
 # Start project A's server, bound to its cert
 curl -X POST http://localhost:8080/api/commands \
@@ -441,7 +441,7 @@ curl -X POST http://localhost:8080/api/commands \
 Define certificates directly on the command line without a config file:
 
 ```bash
-vrunner \
+vrw \
   --tls \
   --certificate "frontend:./certs/frontend/cert.pem:./certs/frontend/key.pem" \
   --certificate "backend:./certs/backend/cert.pem:./certs/backend/key.pem" \
@@ -465,9 +465,9 @@ vrunner \
 
 ### Trust Model
 
-1. **Certificate generation is local** — vrunner generates certificates on the server machine. They are not issued by a public CA.
+1. **Certificate generation is local** — vrw generates certificates on the server machine. They are not issued by a public CA.
 2. **Tokens are derived, not random** — The bearer token is a deterministic hash of the certificate content. This means the same certificate always produces the same token.
-3. **Certificates are identity documents** — They represent "who you are" in the vrunner access control model. Holding a certificate's token proves you are the intended recipient for commands bound to that certificate.
+3. **Certificates are identity documents** — They represent "who you are" in the vrw access control model. Holding a certificate's token proves you are the intended recipient for commands bound to that certificate.
 4. **No client certificate verification on the server** — The server does not require mTLS. Instead, the certificate's derived bearer token is used for authentication via the standard `Authorization` header. This simplifies client implementation while maintaining the same security properties.
 
 ### Distributing Certificates to Clients
@@ -494,8 +494,8 @@ List all certificates in the pool.
   "data": [
     {
       "name": "webapp-frontend",
-      "cert_file": "/home/user/.config/vrunner/certs/webapp-frontend/cert.pem",
-      "key_file": "/home/user/.config/vrunner/certs/webapp-frontend/key.pem",
+      "cert_file": "/home/user/.config/vrw/certs/webapp-frontend/cert.pem",
+      "key_file": "/home/user/.config/vrw/certs/webapp-frontend/key.pem",
       "token_preview": "a3f8c1e2b7d94001"
     }
   ],
@@ -559,7 +559,7 @@ List all running commands, including their certificate bindings.
 
 | Command | Description |
 |---------|-------------|
-| `vrunner cert generate <name>` | Generate a new named certificate |
-| `vrunner cert list` | List all certificates in the pool |
-| `vrunner cert show <name>` | Show full details including token |
-| `vrunner cert remove <name>` | Remove a certificate from the pool |
+| `vrw cert generate <name>` | Generate a new named certificate |
+| `vrw cert list` | List all certificates in the pool |
+| `vrw cert show <name>` | Show full details including token |
+| `vrw cert remove <name>` | Remove a certificate from the pool |

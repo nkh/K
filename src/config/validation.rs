@@ -30,8 +30,8 @@ pub struct ValidationIssue {
 pub fn validate_config(config: &Config) -> Vec<ValidationIssue> {
     let mut issues = Vec::new();
 
-    // ── server settings (vrunner only) ──────────────────────────
-    #[cfg(feature = "vrunner")]
+    // ── server settings (vrw only) ──────────────────────────
+    #[cfg(feature = "vrw")]
     {
         if config.server.port == 0 {
             issues.push(ValidationIssue {

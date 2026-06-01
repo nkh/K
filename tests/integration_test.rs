@@ -1,7 +1,7 @@
-//! Integration test suite for vrl/vrunner.
+//! Integration test suite for vrc/vrw.
 //!
-//! Tests that use vrunner-specific Config fields (server, security, tls)
-//! are gated behind `#[cfg(feature = "vrunner")]`.
+//! Tests that use vrw-specific Config fields (server, security, tls)
+//! are gated behind `#[cfg(feature = "vrw")]`.
 //! Tests that only use shared modules (vtty, process manager basics) work
 //! with both features.
 
@@ -9,14 +9,14 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
 
-#[cfg(feature = "vrunner")]
-use vrl_core::config::schema::{
+#[cfg(feature = "vrw")]
+use vrc_core::config::schema::{
     CommandLogConfig, Config, DaemonConfig, DisplayConfig, SecurityConfig, ServerConfig, TlsConfig,
     VttyConfig,
 };
-use vrl_core::process::manager::CommandManager;
+use vrc_core::process::manager::CommandManager;
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 fn test_config() -> Config {
     Config {
         server: ServerConfig {
@@ -48,8 +48,8 @@ fn test_config() -> Config {
         },
         daemon: DaemonConfig {
             enabled: false,
-            stdout_file: "/tmp/vrl-test.out".to_string(),
-            stderr_file: "/tmp/vrl-test.err".to_string(),
+            stdout_file: "/tmp/vrc-test.out".to_string(),
+            stderr_file: "/tmp/vrc-test.err".to_string(),
         },
         handles: vec![],
         interactive: Default::default(),
@@ -62,7 +62,7 @@ fn test_config() -> Config {
     }
 }
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 #[tokio::test]
 async fn test_spawn_and_list() {
     let cfg = test_config();
@@ -90,7 +90,7 @@ async fn test_spawn_and_list() {
     let _ = manager.kill(&id, None).await;
 }
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 #[tokio::test]
 async fn test_vtty_contents() {
     let cfg = test_config();
@@ -121,7 +121,7 @@ async fn test_vtty_contents() {
     let _ = manager.kill(&id, None).await;
 }
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 #[tokio::test]
 async fn test_send_keys() {
     let cfg = test_config();
@@ -159,7 +159,7 @@ async fn test_send_keys() {
 
 #[test]
 fn test_key_encoding() {
-    use vrl_core::process::manager::encode_keys;
+    use vrc_core::process::manager::encode_keys;
 
     assert_eq!(encode_keys("hello"), b"hello");
     assert_eq!(encode_keys("<C-c>"), vec![0x03]);
@@ -178,7 +178,7 @@ fn test_key_encoding() {
 /// the manager non-empty. This validates the core logic used by the web UI
 /// restart button and `wait_for_child` — if the old command is killed
 /// but a replacement exists, the server must NOT shut down.
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 #[tokio::test]
 async fn test_restart_keeps_manager_nonempty() {
     let cfg = test_config();
@@ -240,7 +240,7 @@ async fn test_restart_keeps_manager_nonempty() {
 
 /// Test that restarting the LAST command still works — the replacement
 /// is spawned before the old is killed, so the manager is never empty.
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 #[tokio::test]
 async fn test_restart_single_command() {
     let cfg = test_config();

@@ -1,6 +1,6 @@
 # Bottom Bar
 
-The bottom bar displays status information about the selected command and the connection to the vrunner server. It is hidden by default and can be toggled via the **Status** button in the top bar.
+The bottom bar displays status information about the selected command and the connection to the vrw server. It is hidden by default and can be toggled via the **Status** button in the top bar.
 
 ![Bottom bar](screenshots/10-bottombar.png)
 
@@ -33,4 +33,4 @@ When in **Poll** mode, this field sets the polling interval in milliseconds (50â
 Shows the round-trip time (latency) of the WebSocket connection and reconnect count. Hover over it for a tooltip with detailed connection statistics.
 
 ### Connection Status (`Connected`)
-Shows the current connection state to the vrunner server. Displays **Connected** (green), **Reconnecting...** (yellow), or **Disconnected** (red).
+Shows the current connection state to the vrw server. Displays **Connected** (green), **Reconnecting...** (yellow), or **Disconnected** (red).

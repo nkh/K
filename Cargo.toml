@@ -1,5 +1,5 @@
 [package]
-name = "vrl"
+name = "vrc"
 version = "0.1.0"
 edition = "2021"
 authors = ["nkh"]
@@ -8,23 +8,23 @@ license = "GPL-3.0-or-later OR Artistic-2.0"
 repository = "https://github.com/nkh/K"
 
 [lib]
-name = "vrl_core"
+name = "vrc_core"
 path = "src/lib.rs"
 
 [[bin]]
-name = "vrl"
-path = "src/bin/vrl.rs"
-required-features = ["vrl"]
+name = "vrc"
+path = "src/bin/vrc.rs"
+required-features = ["vrc"]
 
 [[bin]]
-name = "vrunner"
-path = "src/bin/vrunner.rs"
-required-features = ["vrunner"]
+name = "vrw"
+path = "src/bin/vrw.rs"
+required-features = ["vrw"]
 
 [features]
 default = []
-vrl = []
-vrunner = [
+vrc = []
+vrw = [
     "dep:axum",
     "dep:axum-server",
     "dep:tower",
@@ -68,7 +68,7 @@ unicode-width = "0.2.2"
 regex = "1"
 atty = "0.2"
 
-# vrunner-only dependencies (gated behind feature flag)
+# vrw-only dependencies (gated behind feature flag)
 axum = { version = "0.7", features = ["macros", "ws"], optional = true }
 axum-server = { version = "0.7", features = ["tls-rustls"], optional = true }
 tower = { version = "0.4", optional = true }

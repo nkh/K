@@ -2,26 +2,28 @@
 
 Run multiple long-running services and monitor them from a single dashboard.
 
+> **vrc also supports running multiple commands.** Use `vrc spawn-in` to add commands to a running instance, and `--display-all --tabs` for local terminal monitoring. However, for remote access, TLS, and team-based access control, use vrw.
+
 ## Scenario
 
 You are running a production server with Nginx, a Node.js API, and a Redis instance. You want to monitor all of them from a single web dashboard, with the ability to pause, restart, and inspect logs.
 
 ## Setup
 
-### 1. Start vrunner with TLS
+### 1. Start vrw with TLS
 
 ```bash
-vrunner --remote --tls --daemon --log --log-file /var/log/vrunner.log
+vrw --remote --tls --daemon --log --log-file /var/log/vrw.log
 ```
 
 ### 2. Spawn services
 
 ```bash
 # Nginx (forwards to local services)
-vrunner spawn -- nginx -g daemon off -c /etc/nginx/nginx.conf
+vrw spawn -- nginx -g daemon off -c /etc/nginx/nginx.conf
 
 # Node.js API
-vrunner spawn -- node /var/www/api/server.js
+vrw spawn -- node /var/www/api/server.js
 
 # Redis (with retain to inspect crash output)
 curl -X POST http://localhost:9090/api/commands \
@@ -32,15 +34,15 @@ curl -X POST http://localhost:9090/api/commands \
 ### 3. Open the dashboard
 
 ```bash
-TOKEN=$(cat ~/.config/vrunner/token)
+TOKEN=$(cat ~/.config/vrw/token)
 echo "Dashboard: https://$(hostname):9090/admin"
 echo "Token: $TOKEN"
 ```
 
 Distribute the certificate and token to authorized operators:
 ```bash
-scp ~/.config/vrunner/cert.pem user@monitoring-workstation:/path/to/cert.pem
-echo "$TOKEN" | ssh user@monitoring-workstation 'cat > ~/.config/vrunner/remote-token'
+scp ~/.config/vrw/cert.pem user@monitoring-workstation:/path/to/cert.pem
+echo "$TOKEN" | ssh user@monitoring-workstation 'cat > ~/.config/vrw/remote-token'
 ```
 
 ### 4. View from remote workstation

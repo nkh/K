@@ -10,7 +10,7 @@ The top bar contains global controls that affect the entire web UI. It is divide
 Collapses or expands the sidebar. The sidebar state persists across page reloads. When collapsed, the sidebar width becomes zero and the terminal area expands to fill the space.
 
 ### + Panel
-Opens a dialog to add a new instance panel. Each panel connects to a different vrunner instance, allowing you to monitor commands from multiple servers simultaneously.
+Opens a dialog to add a new instance panel. Each panel connects to a different vrw instance, allowing you to monitor commands from multiple servers simultaneously.
 
 ### Search Output (`🔍`)
 Opens the global search overlay, which searches across all command output buffers. See [Global Search](./global-search.md) for details.
@@ -43,13 +43,13 @@ Selects the color theme for the entire UI. **Auto** follows the operating system
 Toggles audible notifications. When enabled, a bell sound plays when a command exits or produces a bell character (`\a`). The active state is indicated by a yellow highlight on the button.
 
 ### Logs
-Toggles the log viewer, which shows vrunner's internal event log. See [Log Viewer](./log-viewer.md) for details.
+Toggles the log viewer, which shows vrw's internal event log. See [Log Viewer](./log-viewer.md) for details.
 
 ### Status
 Toggles the bottom status bar, which shows cursor position, terminal dimensions, connection status, and update mode settings.
 
 ### Token Field
-Enter a bearer token for API authentication. Click **Set** to save the token to `localStorage`. This token is sent with every API request in the `Authorization` header. Required when vrunner is started with `--auth` or `--remote`.
+Enter a bearer token for API authentication. Click **Set** to save the token to `localStorage`. This token is sent with every API request in the `Authorization` header. Required when vrw is started with `--auth` or `--remote`.
 
 ### Docs
 Opens the built-in documentation view within the web UI.

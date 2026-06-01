@@ -505,7 +505,7 @@ mod tests {
 
     #[test]
     fn test_log_sink_basic() {
-        let dir = std::env::temp_dir().join("vrunner_test_log_sink_basic");
+        let dir = std::env::temp_dir().join("vrw_test_log_sink_basic");
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("test.log");
         let path_str = path.to_string_lossy().to_string();
@@ -528,7 +528,7 @@ mod tests {
 
     #[test]
     fn test_log_sink_multiple_writes() {
-        let dir = std::env::temp_dir().join("vrunner_test_log_sink_multi");
+        let dir = std::env::temp_dir().join("vrw_test_log_sink_multi");
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("multi.log");
         let path_str = path.to_string_lossy().to_string();

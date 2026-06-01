@@ -1,7 +1,7 @@
 # Event Hooks
 
-vrl supports event hooks — shell commands that run automatically when
-specific lifecycle events occur. Hooks are configured in `vrl.yaml`.
+vrc supports event hooks — shell commands that run automatically when
+specific lifecycle events occur. Hooks are configured in `vrc.yaml`.
 
 ## Available Events
 
@@ -16,9 +16,9 @@ specific lifecycle events occur. Hooks are configured in `vrl.yaml`.
 
 ```yaml
 hooks:
-  on_spawn: "notify-send 'vrl' 'Started {name}'"
+  on_spawn: "notify-send 'vrc' 'Started {name}'"
   on_exit: "echo '{name} exited successfully'"
-  on_error: "notify-send 'vrl' '{name} failed (exit {exit_code})'"
+  on_error: "notify-send 'vrc' '{name} failed (exit {exit_code})'"
   on_kill: "echo 'Killed {name}'"
 ```
 

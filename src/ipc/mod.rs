@@ -1,8 +1,8 @@
 //! Inter-Process Communication via Unix Domain Sockets.
 //!
 //! Replaces the HTTP/WebSocket server for CLI-to-instance communication.
-//! A running vrl instance listens on a UDS control socket at
-//! `~/.local/share/vrl/control-{pid}.sock`.  Other `vrl` CLI
+//! A running vrc instance listens on a UDS control socket at
+//! `~/.local/share/vrc/control-{pid}.sock`.  Other `vrc` CLI
 //! invocations connect to this socket to send commands (keys, spawn,
 //! kill, freeze, thaw, cat, resize, shutdown, etc.).
 
@@ -16,6 +16,6 @@ use std::path::PathBuf;
 pub fn socket_path_for_pid(pid: u32) -> PathBuf {
     dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("/tmp"))
-        .join("vrl")
+        .join("vrc")
         .join(format!("control-{}.sock", pid))
 }

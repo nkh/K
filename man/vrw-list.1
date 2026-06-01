@@ -1,0 +1,89 @@
+.\" Title: vrw-list
+.\" Author: vrw contributors
+.\" Manual section: 1
+.\" Process this file with
+.\"   groff -man -Tascii vrw-list.1
+
+.TH VRW\-LIST 1 "2025" "vrw" "User Commands"
+
+.SH NAME
+vrw\-list \- list running vrw instances and their commands
+
+.SH SYNOPSIS
+.B vrw
+\fBlist\fR [\fB\-\-interactive\fR]
+
+.SH DESCRIPTION
+List all running vrw instances on the system and display the commands running inside each one. Each vrw instance registers itself in a shared registry when it starts, allowing discovery from the CLI. This subcommand queries that registry, then connects to each instance over HTTP to retrieve its command list.
+
+The output uses a two-level indented hierarchy. Instance headers show PID, port, bind address, daemon status, and display status. Under each instance, individual commands are listed with their OS PID, name (truncated to 40 characters), and certificate binding.
+
+When \fB\-\-target PID\fR is given on the parent command, only the specified instance is shown. Instances that are registered but unreachable (e.g., network issue or stale registry entry) display an \fB[ERROR]\fR line instead of their command list. Instances with no running commands show \fB(no commands)\fR.
+
+.SH OPTIONS
+
+.TP
+.BR "\-\-target " \fIPID\fR
+Only list the vrw instance with the given PID. Useful when multiple instances are running and you want to inspect a specific one. This is a global option specified before the subcommand: \fBvrw \-\-target 12345 list\fR.
+
+.TP
+.BR \-\-interactive
+Present a numbered list of running instances and let the user select
+which ones to show by typing space-separated numbers (e.g. "1 3 5").
+Requires a terminal (stdin must be a TTY).
+
+.SH EXAMPLES
+
+.PP
+List all instances and their commands:
+.RS
+.PP
+.nf
+\fB$ vrw list\fR
+INSTANCE  PID: 12345  PORT: 9090  BIND: 127.0.0.1  DAEMON: no  DISPLAY: yes
+  5678       htop                                   CERT: -
+  5679       vim notes.txt                          CERT: my-app
+
+INSTANCE  PID: 12346  PORT: 8080  BIND: 127.0.0.1  DAEMON: yes  DISPLAY: no
+  (no commands)
+.fi
+.RE
+
+.PP
+List a specific instance:
+.RS
+.PP
+.nf
+\fB$ vrw \-\-target 12345 list\fR
+INSTANCE  PID: 12345  PORT: 9090  BIND: 127.0.0.1  DAEMON: no  DISPLAY: yes
+  5678       htop                                   CERT: -
+.fi
+.RE
+
+.PP
+No instances running:
+.RS
+.PP
+.nf
+\fB$ vrw list\fR
+No running vrw instances.
+.fi
+.RE
+
+.SH EXIT STATUS
+
+.TP
+.B 0
+Successful listing (including empty results).
+
+.TP
+.B 1
+Error (no registry access, invalid \fB\-\-target\fR PID, etc.).
+
+.SH SEE ALSO
+
+.BR vrw (1),
+.BR vrw\-list\-vrw (1),
+.BR vrw\-list\-commands (1),
+.BR vrw\-stop (1),
+.BR vrwctrl (1)

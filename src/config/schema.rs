@@ -11,13 +11,13 @@ pub use super::profiles::ProfilesConfig;
 pub use super::templates::{TemplateConfig, TemplatesConfig};
 pub use super::vtty::VttyConfig;
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 pub use super::security::{
     CertificateEntryConfig, CertificatesConfig, CorsConfig, SecurityConfig, TlsConfig,
 };
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 pub use super::server::ServerConfig;
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 pub use super::web::{RateLimitConfig, WebConfig};
 
 /// Top-level configuration.
@@ -25,20 +25,20 @@ pub use super::web::{RateLimitConfig, WebConfig};
 /// All fields have sensible defaults, so a config file is entirely optional.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct Config {
-    /// HTTP server bind address and port (vrunner only).
-    #[cfg(feature = "vrunner")]
+    /// HTTP server bind address and port (vrw only).
+    #[cfg(feature = "vrw")]
     #[serde(default)]
     pub server: ServerConfig,
-    /// Authentication settings (vrunner only).
-    #[cfg(feature = "vrunner")]
+    /// Authentication settings (vrw only).
+    #[cfg(feature = "vrw")]
     #[serde(default)]
     pub security: SecurityConfig,
-    /// TLS/HTTPS certificate settings (vrunner only).
-    #[cfg(feature = "vrunner")]
+    /// TLS/HTTPS certificate settings (vrw only).
+    #[cfg(feature = "vrw")]
     #[serde(default)]
     pub tls: TlsConfig,
-    /// Per-command client certificate pool (vrunner only).
-    #[cfg(feature = "vrunner")]
+    /// Per-command client certificate pool (vrw only).
+    #[cfg(feature = "vrw")]
     #[serde(default)]
     pub certificates: CertificatesConfig,
     /// Virtual terminal (VTTY) dimensions and behavior.
@@ -68,8 +68,8 @@ pub struct Config {
     /// Environment variables applied to all spawned commands by default.
     #[serde(default)]
     pub environment: EnvironmentConfig,
-    /// Web admin panel and VTTY streaming configuration (vrunner only).
-    #[cfg(feature = "vrunner")]
+    /// Web admin panel and VTTY streaming configuration (vrw only).
+    #[cfg(feature = "vrw")]
     #[serde(default)]
     pub web: WebConfig,
     /// Pre-defined command templates.
@@ -83,16 +83,16 @@ pub struct Config {
 /// A partial configuration used in profiles.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct PartialConfig {
-    #[cfg(feature = "vrunner")]
+    #[cfg(feature = "vrw")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub server: Option<ServerConfig>,
-    #[cfg(feature = "vrunner")]
+    #[cfg(feature = "vrw")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub security: Option<SecurityConfig>,
-    #[cfg(feature = "vrunner")]
+    #[cfg(feature = "vrw")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tls: Option<TlsConfig>,
-    #[cfg(feature = "vrunner")]
+    #[cfg(feature = "vrw")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub certificates: Option<CertificatesConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -109,7 +109,7 @@ pub struct PartialConfig {
     pub default_exit: Option<DefaultExitConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub environment: Option<EnvironmentConfig>,
-    #[cfg(feature = "vrunner")]
+    #[cfg(feature = "vrw")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub web: Option<WebConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

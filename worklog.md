@@ -72,3 +72,34 @@ Stage Summary:
 - List command now surfaces UDS errors instead of silently falling back to PID file
 - PID files simplified: no longer store initial command (always query via UDS)
 - 23 source files updated, 18 docs updated, 3 manpages created
+---
+Task ID: 4
+Agent: main
+Task: Rename vrunner→vrw and vrl→vrc across entire codebase, fix doc parity
+
+Work Log:
+- Renamed binary files: src/bin/vrl.rs → src/bin/vrc.rs, src/bin/vrunner.rs → src/bin/vrw.rs
+- Renamed man pages: 11 vrl-*.1 → vrc-*.1, 20 vrunner-*.1 → vrw-*.1 (including vrw-list-vrw.1)
+- Renamed example configs: vrunner.*.yaml → vrw.*.yaml, vrunner.toml → vrw.toml
+- Renamed run_vrunner.sh → run_vrw.sh
+- Renamed tests/vtty/vrunner_output/ → tests/vtty/vrw_output/
+- Updated Cargo.toml: package name vrc, lib name vrc_core, bin names vrc/vrw, features vrc/vrw
+- Replaced vrl_core → vrc_core in all 15 files (binaries, tests, docs)
+- Replaced vrunner → vrw in ~100 files (src, tests, static, docs, man, examples)
+- Replaced VRUNNER → VRW env vars in ~40 files
+- Replaced vrl → vrc in ~80 files (src, tests, docs, man, examples)
+- Fixed ListVrunner enum → ListVrw in args.rs and dispatch.rs
+- Fixed doc parity: updated 18 docs/how-to guides and cookbook entries that only covered one binary
+  - tutorials/getting-started.md: added vrw alternatives for all lessons
+  - how-to-guides: added vrc↔vrw cross-references, config path notes, CLI equivalents
+  - cookbook: added vrc alternatives alongside vrw-only examples
+  - reference/keybindings.md: updated to show shared keybindings for both binaries
+  - explanation/lifecycle-policy.md: clarified applies to both binaries
+  - Fixed hooks.md env var confusion ($VRC_* vs $VRW_*)
+- Build: cargo build --release --features 'vrc,vrw' — SUCCESS
+- Tests: 121 comprehensive + 67 regression + 1 debug = 189 tests ALL PASS
+
+Stage Summary:
+- Complete rename: vrl→vrc, vrunner→vrw, vrl_core→vrc_core across ~200 files
+- All documentation updated with binary parity (both vrc and vrw covered)
+- All 189 tests pass, release build succeeds

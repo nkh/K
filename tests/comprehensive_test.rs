@@ -1,4 +1,4 @@
-//! Comprehensive test suite for vrunner.
+//! Comprehensive test suite for vrw.
 //!
 //! Tests are organized by module:
 //!   - VTTY buffer, cell, color, renderer, emulator, parser, sink, rate_limiter
@@ -16,7 +16,7 @@
 
 #[test]
 fn buffer_new_default_cells() {
-    let b = vrl_core::vtty::buffer::Buffer::new(10, 5, 100);
+    let b = vrc_core::vtty::buffer::Buffer::new(10, 5, 100);
     for row in &b.rows {
         for cell in row {
             assert_eq!(cell.ch, ' ');
@@ -26,8 +26,8 @@ fn buffer_new_default_cells() {
 
 #[test]
 fn buffer_set_and_get_cell() {
-    use vrl_core::vtty::cell::Cell;
-    let mut b = vrl_core::vtty::buffer::Buffer::new(10, 5, 100);
+    use vrc_core::vtty::cell::Cell;
+    let mut b = vrc_core::vtty::buffer::Buffer::new(10, 5, 100);
     b.set(0, 0, Cell::new('H'));
     assert_eq!(b.get(0, 0).unwrap().ch, 'H');
     assert_eq!(b.get(1, 1).unwrap().ch, ' ');
@@ -35,8 +35,8 @@ fn buffer_set_and_get_cell() {
 
 #[test]
 fn buffer_set_out_of_bounds_ignored() {
-    use vrl_core::vtty::cell::Cell;
-    let mut b = vrl_core::vtty::buffer::Buffer::new(10, 5, 100);
+    use vrc_core::vtty::cell::Cell;
+    let mut b = vrc_core::vtty::buffer::Buffer::new(10, 5, 100);
     let gen = b.generation();
     b.set(999, 999, Cell::new('X'));
     assert_eq!(b.generation(), gen); // no mutation
@@ -44,8 +44,8 @@ fn buffer_set_out_of_bounds_ignored() {
 
 #[test]
 fn buffer_resize_shrink() {
-    use vrl_core::vtty::cell::Cell;
-    let mut b = vrl_core::vtty::buffer::Buffer::new(10, 5, 100);
+    use vrc_core::vtty::cell::Cell;
+    let mut b = vrc_core::vtty::buffer::Buffer::new(10, 5, 100);
     b.set(0, 9, Cell::new('X'));
     b.resize(5, 3);
     assert_eq!(b.width, 5);
@@ -55,8 +55,8 @@ fn buffer_resize_shrink() {
 
 #[test]
 fn buffer_resize_grow() {
-    use vrl_core::vtty::cell::Cell;
-    let mut b = vrl_core::vtty::buffer::Buffer::new(5, 3, 100);
+    use vrc_core::vtty::cell::Cell;
+    let mut b = vrc_core::vtty::buffer::Buffer::new(5, 3, 100);
     b.set(0, 0, Cell::new('A'));
     b.resize(20, 10);
     assert_eq!(b.width, 20);
@@ -67,7 +67,7 @@ fn buffer_resize_grow() {
 
 #[test]
 fn buffer_scroll_down() {
-    let mut b = vrl_core::vtty::buffer::Buffer::new(10, 3, 100);
+    let mut b = vrc_core::vtty::buffer::Buffer::new(10, 3, 100);
     b.rows[2][0].ch = 'Z';
     b.scroll_down();
     // scroll_down removes bottom row, inserts blank at top
@@ -77,7 +77,7 @@ fn buffer_scroll_down() {
 
 #[test]
 fn buffer_scroll_region_down() {
-    let mut b = vrl_core::vtty::buffer::Buffer::new(10, 5, 100);
+    let mut b = vrc_core::vtty::buffer::Buffer::new(10, 5, 100);
     for i in 0..5 {
         b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap();
     }
@@ -91,7 +91,7 @@ fn buffer_scroll_region_down() {
 
 #[test]
 fn buffer_scroll_region_up_preserves_scrollback() {
-    let mut b = vrl_core::vtty::buffer::Buffer::new(10, 5, 100);
+    let mut b = vrc_core::vtty::buffer::Buffer::new(10, 5, 100);
     for i in 0..5 {
         b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap();
     }
@@ -104,8 +104,8 @@ fn buffer_scroll_region_up_preserves_scrollback() {
 
 #[test]
 fn buffer_insert_cells_shifts_right() {
-    use vrl_core::vtty::cell::Cell;
-    let mut b = vrl_core::vtty::buffer::Buffer::new(10, 1, 100);
+    use vrc_core::vtty::cell::Cell;
+    let mut b = vrc_core::vtty::buffer::Buffer::new(10, 1, 100);
     b.set(0, 0, Cell::new('A'));
     b.set(0, 1, Cell::new('B'));
     b.set(0, 2, Cell::new('C'));
@@ -119,8 +119,8 @@ fn buffer_insert_cells_shifts_right() {
 
 #[test]
 fn buffer_delete_cells_shifts_left() {
-    use vrl_core::vtty::cell::Cell;
-    let mut b = vrl_core::vtty::buffer::Buffer::new(10, 1, 100);
+    use vrc_core::vtty::cell::Cell;
+    let mut b = vrc_core::vtty::buffer::Buffer::new(10, 1, 100);
     b.set(0, 0, Cell::new('A'));
     b.set(0, 1, Cell::new('B'));
     b.set(0, 2, Cell::new('C'));
@@ -133,8 +133,8 @@ fn buffer_delete_cells_shifts_left() {
 
 #[test]
 fn buffer_diff_identical_buffers() {
-    let a = vrl_core::vtty::buffer::Buffer::new(10, 5, 100);
-    let b = vrl_core::vtty::buffer::Buffer::new(10, 5, 100);
+    let a = vrc_core::vtty::buffer::Buffer::new(10, 5, 100);
+    let b = vrc_core::vtty::buffer::Buffer::new(10, 5, 100);
     let diff = a.diff(&b);
     assert_eq!(diff.changed_count, 0);
     assert!(diff.cells.is_empty());
@@ -142,17 +142,17 @@ fn buffer_diff_identical_buffers() {
 
 #[test]
 fn buffer_diff_dimension_mismatch() {
-    let a = vrl_core::vtty::buffer::Buffer::new(10, 5, 100);
-    let b = vrl_core::vtty::buffer::Buffer::new(20, 10, 100);
+    let a = vrc_core::vtty::buffer::Buffer::new(10, 5, 100);
+    let b = vrc_core::vtty::buffer::Buffer::new(20, 10, 100);
     let diff = a.diff(&b);
     assert_eq!(diff.changed_count, 10 * 5); // all cells
 }
 
 #[test]
 fn buffer_diff_single_cell_change() {
-    use vrl_core::vtty::cell::Cell;
-    let mut a = vrl_core::vtty::buffer::Buffer::new(10, 5, 100);
-    let b = vrl_core::vtty::buffer::Buffer::new(10, 5, 100);
+    use vrc_core::vtty::cell::Cell;
+    let mut a = vrc_core::vtty::buffer::Buffer::new(10, 5, 100);
+    let b = vrc_core::vtty::buffer::Buffer::new(10, 5, 100);
     a.set(2, 3, Cell::new('X'));
     let diff = a.diff(&b);
     assert_eq!(diff.changed_count, 1);
@@ -163,7 +163,7 @@ fn buffer_diff_single_cell_change() {
 
 #[test]
 fn buffer_scrollback_max_limit() {
-    let mut b = vrl_core::vtty::buffer::Buffer::new(10, 3, 2); // max 2 scrollback
+    let mut b = vrc_core::vtty::buffer::Buffer::new(10, 3, 2); // max 2 scrollback
     b.rows[0][0].ch = '1';
     b.rows[1][0].ch = '2';
     b.rows[2][0].ch = '3';
@@ -176,7 +176,7 @@ fn buffer_scrollback_max_limit() {
 
 #[test]
 fn buffer_get_line_across_scrollback() {
-    let mut b = vrl_core::vtty::buffer::Buffer::new(10, 2, 100);
+    let mut b = vrc_core::vtty::buffer::Buffer::new(10, 2, 100);
     b.rows[0][0].ch = 'S';
     b.rows[1][0].ch = 'V';
     b.scroll_up();
@@ -193,7 +193,7 @@ fn buffer_get_line_across_scrollback() {
 
 #[test]
 fn cell_default_is_space() {
-    let c = vrl_core::vtty::cell::Cell::default();
+    let c = vrc_core::vtty::cell::Cell::default();
     assert_eq!(c.ch, ' ');
     assert_eq!(c.width, 1);
     assert!(!c.bold);
@@ -202,14 +202,14 @@ fn cell_default_is_space() {
 
 #[test]
 fn cell_new_with_char() {
-    let c = vrl_core::vtty::cell::Cell::new('X');
+    let c = vrc_core::vtty::cell::Cell::new('X');
     assert_eq!(c.ch, 'X');
     assert_eq!(c.width, 1);
 }
 
 #[test]
 fn cell_clear_resets_to_default() {
-    use vrl_core::vtty::cell::Cell;
+    use vrc_core::vtty::cell::Cell;
     let mut c = Cell::new('Z');
     c.bold = true;
     c.italic = true;
@@ -224,7 +224,7 @@ fn cell_clear_resets_to_default() {
 
 #[test]
 fn cell_wide_continuation() {
-    use vrl_core::vtty::cell::Cell;
+    use vrc_core::vtty::cell::Cell;
     let mut c = Cell::new(' ');
     c.width = 0; // continuation cell
     assert!(c.is_wide_continuation());
@@ -234,7 +234,7 @@ fn cell_wide_continuation() {
 
 #[test]
 fn cell_equality() {
-    use vrl_core::vtty::cell::Cell;
+    use vrc_core::vtty::cell::Cell;
     let a = Cell::new('X');
     let b = Cell::new('X');
     assert_eq!(a, b);
@@ -249,34 +249,34 @@ fn cell_equality() {
 
 #[test]
 fn color_256_standard_indices() {
-    let c = vrl_core::vtty::color::color_256_to_rgb(1); // red (ANSI color 1)
+    let c = vrc_core::vtty::color::color_256_to_rgb(1); // red (ANSI color 1)
     assert_eq!(c, [170, 0, 0]); // actual ANSI 16-color red
 }
 
 #[test]
 fn color_256_grayscale_ramp() {
-    let first = vrl_core::vtty::color::color_256_to_rgb(232);
-    let last = vrl_core::vtty::color::color_256_to_rgb(255);
+    let first = vrc_core::vtty::color::color_256_to_rgb(232);
+    let last = vrc_core::vtty::color::color_256_to_rgb(255);
     assert!(first[0] < last[0]); // grayscale ramp increases
 }
 
 #[test]
 fn color_palette_new_has_256_entries() {
-    let p = vrl_core::vtty::color::ColorPalette::new();
+    let p = vrc_core::vtty::color::ColorPalette::new();
     assert_eq!(p.resolve(0).len(), 3);
     assert_eq!(p.resolve(255).len(), 3);
 }
 
 #[test]
 fn color_palette_set_and_resolve() {
-    let mut p = vrl_core::vtty::color::ColorPalette::new();
+    let mut p = vrc_core::vtty::color::ColorPalette::new();
     p.set(10, [100, 200, 50]);
     assert_eq!(p.resolve(10), [100, 200, 50]);
 }
 
 #[test]
 fn color_palette_reset_restores_defaults() {
-    let mut p = vrl_core::vtty::color::ColorPalette::new();
+    let mut p = vrc_core::vtty::color::ColorPalette::new();
     let default_5 = p.resolve(5);
     p.set(5, [255, 255, 255]);
     assert_eq!(p.resolve(5), [255, 255, 255]);
@@ -288,8 +288,8 @@ fn color_palette_reset_restores_defaults() {
 // 4. VTTY Emulator Tests
 // ─────────────────────────────────────────────────────────────────────
 
-fn make_emulator(rows: u16, cols: u16) -> vrl_core::vtty::emulator::VttyEmulator {
-    vrl_core::vtty::emulator::VttyEmulator::new(rows, cols, 1000)
+fn make_emulator(rows: u16, cols: u16) -> vrc_core::vtty::emulator::VttyEmulator {
+    vrc_core::vtty::emulator::VttyEmulator::new(rows, cols, 1000)
 }
 
 #[test]
@@ -611,12 +611,12 @@ fn emulator_decscusr_cursor_style() {
     emu.feed(b"\x1b[3 q"); // blinking underline
     assert_eq!(
         emu.cursor_style(),
-        vrl_core::vtty::emulator::CursorStyle::Underline(true)
+        vrc_core::vtty::emulator::CursorStyle::Underline(true)
     );
     emu.feed(b"\x1b[6 q"); // steady bar
     assert_eq!(
         emu.cursor_style(),
-        vrl_core::vtty::emulator::CursorStyle::Bar(false)
+        vrc_core::vtty::emulator::CursorStyle::Bar(false)
     );
 }
 
@@ -713,10 +713,10 @@ fn emulator_buffer_generation_changes_on_write() {
 // 5. Config Tests
 // ─────────────────────────────────────────────────────────────────────
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 #[test]
 fn config_default_values() {
-    let cfg = vrl_core::config::schema::Config::default();
+    let cfg = vrc_core::config::schema::Config::default();
     assert_eq!(cfg.server.port, 9090);
     assert!(!cfg.security.require_auth);
     assert!(!cfg.tls.enabled);
@@ -724,16 +724,16 @@ fn config_default_values() {
     assert_eq!(cfg.vtty.cols, 80);
 }
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 #[test]
 fn config_deserialize_minimal_json() {
     let json = r#"{ "server": { "bind": "127.0.0.1", "port": 8080 } }"#;
-    let cfg: vrl_core::config::schema::Config = serde_json::from_str(json).unwrap();
+    let cfg: vrc_core::config::schema::Config = serde_json::from_str(json).unwrap();
     assert_eq!(cfg.server.port, 8080);
     assert_eq!(cfg.vtty.rows, 24); // default preserved
 }
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 #[test]
 fn config_deserialize_full_json() {
     let json = r#"{
@@ -742,7 +742,7 @@ fn config_deserialize_full_json() {
     "vtty": { "rows": 50, "cols": 120, "term": "xterm-256color", "scrollback": 10000, "truecolor": true, "mouse": false, "screenshot_font_size": 14.0 },
     "display": { "enabled": true, "refresh_ms": 50, "display_all": false }
 }"#;
-    let cfg: vrl_core::config::schema::Config = serde_json::from_str(json).unwrap();
+    let cfg: vrc_core::config::schema::Config = serde_json::from_str(json).unwrap();
     assert_eq!(cfg.server.bind, "0.0.0.0");
     assert_eq!(cfg.server.port, 3000);
     assert!(cfg.security.require_auth);
@@ -752,69 +752,69 @@ fn config_deserialize_full_json() {
     assert_eq!(cfg.display.refresh_ms, 50);
 }
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 #[test]
 fn config_serialize_roundtrip() {
-    let cfg = vrl_core::config::schema::Config::default();
+    let cfg = vrc_core::config::schema::Config::default();
     let json = serde_json::to_string(&cfg).unwrap();
-    let cfg2: vrl_core::config::schema::Config = serde_json::from_str(&json).unwrap();
+    let cfg2: vrc_core::config::schema::Config = serde_json::from_str(&json).unwrap();
     assert_eq!(cfg.server.port, cfg2.server.port);
     assert_eq!(cfg.vtty.rows, cfg2.vtty.rows);
 }
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 #[test]
 fn config_merge_local_overrides_global() {
-    let mut global = vrl_core::config::schema::Config::default();
+    let mut global = vrc_core::config::schema::Config::default();
     global.server.port = 9090;
-    let mut local = vrl_core::config::schema::Config::default();
+    let mut local = vrc_core::config::schema::Config::default();
     local.server.port = 8080;
-    let merged = vrl_core::config::merge::merge_configs(global, local);
+    let merged = vrc_core::config::merge::merge_configs(global, local);
     assert_eq!(merged.server.port, 8080);
 }
 
 #[test]
 fn config_merge_handles_keeps_global_when_local_empty() {
-    use vrl_core::config::schema::HandleConfig;
-    let mut global = vrl_core::config::schema::Config::default();
+    use vrc_core::config::schema::HandleConfig;
+    let mut global = vrc_core::config::schema::Config::default();
     global.handles.push(HandleConfig {
         name: "h1".into(),
         sink: "null".into(),
         path: None,
     });
-    let local = vrl_core::config::schema::Config::default();
-    let merged = vrl_core::config::merge::merge_configs(global, local);
+    let local = vrc_core::config::schema::Config::default();
+    let merged = vrc_core::config::merge::merge_configs(global, local);
     assert_eq!(merged.handles.len(), 1);
     assert_eq!(merged.handles[0].name, "h1");
 }
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 #[test]
 fn config_apply_profile_overrides_base() {
-    use vrl_core::config::schema::PartialConfig;
-    let mut base = vrl_core::config::schema::Config::default();
+    use vrc_core::config::schema::PartialConfig;
+    let mut base = vrc_core::config::schema::Config::default();
     base.server.port = 9090;
     let mut profile = PartialConfig::default();
-    let mut server = vrl_core::config::schema::ServerConfig::default();
+    let mut server = vrc_core::config::schema::ServerConfig::default();
     server.port = 3000;
     profile.server = Some(server);
-    let result = vrl_core::config::merge::apply_profile(base, &profile);
+    let result = vrc_core::config::merge::apply_profile(base, &profile);
     assert_eq!(result.server.port, 3000);
 }
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 #[test]
 fn config_apply_profile_none_keeps_base() {
-    let base = vrl_core::config::schema::Config::default();
-    let profile = vrl_core::config::schema::PartialConfig::default();
-    let result = vrl_core::config::merge::apply_profile(base, &profile);
+    let base = vrc_core::config::schema::Config::default();
+    let profile = vrc_core::config::schema::PartialConfig::default();
+    let result = vrc_core::config::merge::apply_profile(base, &profile);
     assert_eq!(result.server.port, 9090);
 }
 
 #[test]
 fn config_environment_variables() {
     use std::collections::HashMap;
-    let env = vrl_core::config::schema::EnvironmentConfig {
+    let env = vrc_core::config::schema::EnvironmentConfig {
         variables: HashMap::from([
             ("KEY1".into(), "val1".into()),
             ("KEY2".into(), "val2".into()),
@@ -823,10 +823,10 @@ fn config_environment_variables() {
     assert_eq!(env.variables.get("KEY1").unwrap(), "val1");
 }
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 #[test]
 fn config_partial_config_all_none() {
-    let pc = vrl_core::config::schema::PartialConfig::default();
+    let pc = vrc_core::config::schema::PartialConfig::default();
     assert!(pc.server.is_none());
     assert!(pc.vtty.is_none());
     assert!(pc.hooks.is_none());
@@ -838,11 +838,11 @@ fn config_partial_config_all_none() {
 
 #[test]
 fn validation_default_config_no_errors() {
-    let cfg = vrl_core::config::schema::Config::default();
-    let issues = vrl_core::config::validation::validate_config(&cfg);
+    let cfg = vrc_core::config::schema::Config::default();
+    let issues = vrc_core::config::validation::validate_config(&cfg);
     let errors: Vec<_> = issues
         .iter()
-        .filter(|i| i.level == vrl_core::config::validation::ValidationLevel::Error)
+        .filter(|i| i.level == vrc_core::config::validation::ValidationLevel::Error)
         .collect();
     assert!(
         errors.is_empty(),
@@ -851,65 +851,65 @@ fn validation_default_config_no_errors() {
     );
 }
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 #[test]
 fn validation_port_zero_is_error() {
-    let mut cfg = vrl_core::config::schema::Config::default();
+    let mut cfg = vrc_core::config::schema::Config::default();
     cfg.server.port = 0;
-    let issues = vrl_core::config::validation::validate_config(&cfg);
+    let issues = vrc_core::config::validation::validate_config(&cfg);
     let port_errs: Vec<_> = issues
         .iter()
         .filter(|i| {
             i.field == "server.port"
-                && i.level == vrl_core::config::validation::ValidationLevel::Error
+                && i.level == vrc_core::config::validation::ValidationLevel::Error
         })
         .collect();
     assert_eq!(port_errs.len(), 1);
 }
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 #[test]
 fn validation_bind_empty_is_error() {
-    let mut cfg = vrl_core::config::schema::Config::default();
+    let mut cfg = vrc_core::config::schema::Config::default();
     cfg.server.bind = String::new();
-    let issues = vrl_core::config::validation::validate_config(&cfg);
+    let issues = vrc_core::config::validation::validate_config(&cfg);
     assert!(issues.iter().any(|i| i.field == "server.bind"
-        && i.level == vrl_core::config::validation::ValidationLevel::Error));
+        && i.level == vrc_core::config::validation::ValidationLevel::Error));
 }
 
 #[test]
 fn validation_vtty_zero_rows_is_error() {
-    let mut cfg = vrl_core::config::schema::Config::default();
+    let mut cfg = vrc_core::config::schema::Config::default();
     cfg.vtty.rows = 0;
-    let issues = vrl_core::config::validation::validate_config(&cfg);
+    let issues = vrc_core::config::validation::validate_config(&cfg);
     assert!(issues.iter().any(|i| i.field == "vtty.rows"));
 }
 
 #[test]
 fn validation_vtty_zero_cols_is_error() {
-    let mut cfg = vrl_core::config::schema::Config::default();
+    let mut cfg = vrc_core::config::schema::Config::default();
     cfg.vtty.cols = 0;
-    let issues = vrl_core::config::validation::validate_config(&cfg);
+    let issues = vrc_core::config::validation::validate_config(&cfg);
     assert!(issues.iter().any(|i| i.field == "vtty.cols"));
 }
 
 #[test]
 fn validation_refresh_ms_too_low() {
-    let mut cfg = vrl_core::config::schema::Config::default();
+    let mut cfg = vrc_core::config::schema::Config::default();
     cfg.display.refresh_ms = 5;
-    let issues = vrl_core::config::validation::validate_config(&cfg);
+    let issues = vrc_core::config::validation::validate_config(&cfg);
     assert!(issues.iter().any(|i| i.field == "display.refresh_ms"));
 }
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 #[test]
 fn validation_multiple_issues() {
-    let mut cfg = vrl_core::config::schema::Config::default();
+    let mut cfg = vrc_core::config::schema::Config::default();
     cfg.server.port = 0;
     cfg.server.bind = String::new();
     cfg.vtty.rows = 0;
     cfg.vtty.cols = 0;
-    let issues = vrl_core::config::validation::validate_config(&cfg);
+    let issues = vrc_core::config::validation::validate_config(&cfg);
     assert!(issues.len() >= 4);
 }
 
@@ -919,7 +919,7 @@ fn validation_multiple_issues() {
 
 #[test]
 fn error_command_not_found_display() {
-    let err = vrl_core::process::error::ProcessError::CommandNotFound("xyz".into());
+    let err = vrc_core::process::error::ProcessError::CommandNotFound("xyz".into());
     let msg = format!("{}", err);
     assert!(msg.contains("xyz"));
     assert!(msg.contains("not found"));
@@ -927,7 +927,7 @@ fn error_command_not_found_display() {
 
 #[test]
 fn error_spawn_failed_display() {
-    let err = vrl_core::process::error::ProcessError::SpawnFailed { cmd: "bash".into() };
+    let err = vrc_core::process::error::ProcessError::SpawnFailed { cmd: "bash".into() };
     let msg = format!("{}", err);
     assert!(msg.contains("bash"));
     assert!(msg.contains("spawn"));
@@ -936,35 +936,35 @@ fn error_spawn_failed_display() {
 #[test]
 fn error_from_io_error() {
     let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "no file");
-    let err: vrl_core::process::error::ProcessError = io_err.into();
-    assert!(matches!(err, vrl_core::process::error::ProcessError::Io(_)));
+    let err: vrc_core::process::error::ProcessError = io_err.into();
+    assert!(matches!(err, vrc_core::process::error::ProcessError::Io(_)));
 }
 
 #[test]
 fn error_io_has_source() {
     let io_err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied");
-    let err = vrl_core::process::error::ProcessError::Io(io_err);
+    let err = vrc_core::process::error::ProcessError::Io(io_err);
     assert!(std::error::Error::source(&err).is_some());
 }
 
 #[test]
 fn error_non_io_no_source() {
-    let err = vrl_core::process::error::ProcessError::ChannelClosed("c1".into());
+    let err = vrc_core::process::error::ProcessError::ChannelClosed("c1".into());
     assert!(std::error::Error::source(&err).is_none());
 }
 
 #[test]
 fn error_is_send_sync() {
     fn assert_send_sync<T: Send + Sync>() {}
-    assert_send_sync::<vrl_core::process::error::ProcessError>();
+    assert_send_sync::<vrc_core::process::error::ProcessError>();
 }
 
 #[test]
 fn error_result_type_alias() {
-    type Result<T> = std::result::Result<T, vrl_core::process::error::ProcessError>;
+    type Result<T> = std::result::Result<T, vrc_core::process::error::ProcessError>;
     let r: Result<String> = Ok("ok".into());
     assert_eq!(r.unwrap(), "ok");
-    let r2: Result<()> = Err(vrl_core::process::error::ProcessError::PlatformNotSupported(
+    let r2: Result<()> = Err(vrc_core::process::error::ProcessError::PlatformNotSupported(
         "freeze".into(),
     ));
     assert!(r2.is_err());
@@ -972,7 +972,7 @@ fn error_result_type_alias() {
 
 #[test]
 fn error_sink_already_exists_display() {
-    let err = vrl_core::process::error::ProcessError::SinkAlreadyExists {
+    let err = vrc_core::process::error::ProcessError::SinkAlreadyExists {
         name: "out".into(),
         command_id: "cmd1".into(),
     };
@@ -982,7 +982,7 @@ fn error_sink_already_exists_display() {
 
 #[test]
 fn error_snapshot_not_found_display() {
-    let err = vrl_core::process::error::ProcessError::SnapshotNotFound {
+    let err = vrc_core::process::error::ProcessError::SnapshotNotFound {
         name: "snap".into(),
         command_id: "c1".into(),
     };
@@ -996,13 +996,13 @@ fn error_snapshot_not_found_display() {
 
 #[test]
 fn handle_registry_new_empty() {
-    let reg = vrl_core::handles::registry::HandleRegistry::new();
+    let reg = vrc_core::handles::registry::HandleRegistry::new();
     assert!(reg.list().is_empty());
 }
 
 #[test]
 fn handle_registry_default_trait() {
-    let reg = vrl_core::handles::registry::HandleRegistry::default();
+    let reg = vrc_core::handles::registry::HandleRegistry::default();
     assert!(reg.list().is_empty());
 }
 
@@ -1012,8 +1012,8 @@ fn handle_registry_default_trait() {
 
 #[tokio::test]
 async fn null_sink_write_ignores_data() {
-    use vrl_core::handles::sink::Sink;
-    let mut sink = vrl_core::handles::null_sink::NullSink;
+    use vrc_core::handles::sink::Sink;
+    let mut sink = vrc_core::handles::null_sink::NullSink;
     sink.write(b"anything").await;
     sink.flush().await;
     // If we reach here, no panic — pass
@@ -1025,13 +1025,13 @@ async fn null_sink_write_ignores_data() {
 
 #[tokio::test]
 async fn file_sink_write_and_read() {
-    use vrl_core::handles::sink::Sink;
-    let dir = std::env::temp_dir().join("vrunner_test_file_sink");
+    use vrc_core::handles::sink::Sink;
+    let dir = std::env::temp_dir().join("vrw_test_file_sink");
     let _ = std::fs::create_dir_all(&dir);
     let path = dir.join("test_output.txt");
     let _ = std::fs::remove_file(&path); // cleanup from prior run
 
-    let mut sink = vrl_core::handles::file_sink::FileSink::new(path.to_str().unwrap()).unwrap();
+    let mut sink = vrc_core::handles::file_sink::FileSink::new(path.to_str().unwrap()).unwrap();
     sink.write(b"hello ").await;
     sink.write(b"world\n").await;
     sink.flush().await;
@@ -1044,18 +1044,18 @@ async fn file_sink_write_and_read() {
 
 #[tokio::test]
 async fn file_sink_append() {
-    let dir = std::env::temp_dir().join("vrunner_test_file_append");
+    let dir = std::env::temp_dir().join("vrw_test_file_append");
     let _ = std::fs::create_dir_all(&dir);
     let path = dir.join("append.txt");
     let _ = std::fs::remove_file(&path);
 
-    use vrl_core::handles::sink::Sink;
+    use vrc_core::handles::sink::Sink;
     {
-        let mut s1 = vrl_core::handles::file_sink::FileSink::new(path.to_str().unwrap()).unwrap();
+        let mut s1 = vrc_core::handles::file_sink::FileSink::new(path.to_str().unwrap()).unwrap();
         s1.write(b"first\n").await;
     }
     {
-        let mut s2 = vrl_core::handles::file_sink::FileSink::new(path.to_str().unwrap()).unwrap();
+        let mut s2 = vrc_core::handles::file_sink::FileSink::new(path.to_str().unwrap()).unwrap();
         s2.write(b"second\n").await;
         s2.flush().await;
     }
@@ -1072,14 +1072,14 @@ async fn file_sink_append() {
 
 #[test]
 fn logger_disabled_no_output() {
-    let logger = vrl_core::logging::command_log::CommandLogger::new(false, None).unwrap();
+    let logger = vrc_core::logging::command_log::CommandLogger::new(false, None).unwrap();
     logger.log("test", "should not appear");
     assert!(logger.read_memory_buffer().is_empty());
 }
 
 #[test]
 fn logger_enabled_stores_in_memory() {
-    let logger = vrl_core::logging::command_log::CommandLogger::new(true, None).unwrap();
+    let logger = vrc_core::logging::command_log::CommandLogger::new(true, None).unwrap();
     logger.log("spawn", "cmd1 started");
     logger.log("kill", "cmd1 killed");
     let buf = logger.read_memory_buffer();
@@ -1090,7 +1090,7 @@ fn logger_enabled_stores_in_memory() {
 
 #[test]
 fn logger_memory_buffer_arc_shared() {
-    let logger = vrl_core::logging::command_log::CommandLogger::new(true, None).unwrap();
+    let logger = vrc_core::logging::command_log::CommandLogger::new(true, None).unwrap();
     let arc = logger.memory_buffer_arc();
     logger.log("test", "entry");
     let buf = arc.lock().unwrap();
@@ -1099,7 +1099,7 @@ fn logger_memory_buffer_arc_shared() {
 
 #[test]
 fn logger_subscribe_broadcasts() {
-    let logger = vrl_core::logging::command_log::CommandLogger::new(true, None).unwrap();
+    let logger = vrc_core::logging::command_log::CommandLogger::new(true, None).unwrap();
     let mut rx = logger.subscribe();
     logger.log("test", "broadcast-msg");
     let received = rx.try_recv().unwrap();
@@ -1108,7 +1108,7 @@ fn logger_subscribe_broadcasts() {
 
 #[test]
 fn logger_ring_buffer_eviction() {
-    let logger = vrl_core::logging::command_log::CommandLogger::new(true, None).unwrap();
+    let logger = vrc_core::logging::command_log::CommandLogger::new(true, None).unwrap();
     // MEMORY_BUFFER_CAPACITY is 2048 — we can't fill that in a unit test,
     // but verify the interface works with a few entries.
     for i in 0..10 {
@@ -1124,19 +1124,19 @@ fn logger_ring_buffer_eviction() {
 
 #[test]
 fn renderer_to_html_basic() {
-    use vrl_core::vtty::cell::Cell;
-    let mut buf = vrl_core::vtty::buffer::Buffer::new(10, 2, 100);
+    use vrc_core::vtty::cell::Cell;
+    let mut buf = vrc_core::vtty::buffer::Buffer::new(10, 2, 100);
     buf.set(0, 0, Cell::new('H'));
     buf.set(0, 1, Cell::new('i'));
-    let html = vrl_core::vtty::renderer::VttyRenderer::to_html(&buf);
+    let html = vrc_core::vtty::renderer::VttyRenderer::to_html(&buf);
     assert!(html.contains("H"));
     assert!(html.contains("i"));
 }
 
 #[test]
 fn renderer_to_html_empty_buffer() {
-    let buf = vrl_core::vtty::buffer::Buffer::new(10, 2, 100);
-    let html = vrl_core::vtty::renderer::VttyRenderer::to_html(&buf);
+    let buf = vrc_core::vtty::buffer::Buffer::new(10, 2, 100);
+    let html = vrc_core::vtty::renderer::VttyRenderer::to_html(&buf);
     // to_html wraps each cell in a span, no <pre> or <div> wrapper
     assert!(html.contains("<span") || html.len() > 0);
 }
@@ -1147,13 +1147,13 @@ fn renderer_to_html_empty_buffer() {
 
 #[test]
 fn rate_limiter_first_call_succeeds() {
-    let mut limiter = vrl_core::vtty::rate_limiter::RateLimiter::new(10);
+    let mut limiter = vrc_core::vtty::rate_limiter::RateLimiter::new(10);
     assert!(limiter.allow()); // first call always succeeds
 }
 
 #[test]
 fn rate_limiter_disabled_always_allows() {
-    let mut limiter = vrl_core::vtty::rate_limiter::RateLimiter::disabled();
+    let mut limiter = vrc_core::vtty::rate_limiter::RateLimiter::disabled();
     for _ in 0..100 {
         assert!(limiter.allow());
     }
@@ -1161,7 +1161,7 @@ fn rate_limiter_disabled_always_allows() {
 
 #[test]
 fn rate_limiter_max_rate_config() {
-    let limiter = vrl_core::vtty::rate_limiter::RateLimiter::new(30);
+    let limiter = vrc_core::vtty::rate_limiter::RateLimiter::new(30);
     assert_eq!(limiter.max_rate(), 30);
     assert!(!limiter.is_disabled());
 }
@@ -1170,10 +1170,10 @@ fn rate_limiter_max_rate_config() {
 // 14. Instance Info Serialization Tests
 // ─────────────────────────────────────────────────────────────────────
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 #[test]
 fn instance_info_serialization_roundtrip() {
-    let info = vrl_core::instance::info::InstanceInfo {
+    let info = vrc_core::instance::info::InstanceInfo {
         pid: 12345,
         port: 9090,
         bind: "0.0.0.0".into(),
@@ -1183,7 +1183,7 @@ fn instance_info_serialization_roundtrip() {
         command: Some("htop".into()),
     };
     let json = serde_json::to_string(&info).unwrap();
-    let info2: vrl_core::instance::info::InstanceInfo = serde_json::from_str(&json).unwrap();
+    let info2: vrc_core::instance::info::InstanceInfo = serde_json::from_str(&json).unwrap();
     assert_eq!(info.pid, info2.pid);
     assert_eq!(info.port, info2.port);
     assert_eq!(info.bind, info2.bind);
@@ -1191,17 +1191,17 @@ fn instance_info_serialization_roundtrip() {
     assert_eq!(info.command, info2.command);
 }
 
-#[cfg(not(feature = "vrunner"))]
+#[cfg(not(feature = "vrw"))]
 #[test]
-fn instance_info_serialization_roundtrip_vrl() {
-    let info = vrl_core::instance::info::InstanceInfo {
+fn instance_info_serialization_roundtrip_vrc() {
+    let info = vrc_core::instance::info::InstanceInfo {
         pid: 12345,
         start_time: chrono::Utc::now(),
         daemon: true,
         display: false,
     };
     let json = serde_json::to_string(&info).unwrap();
-    let info2: vrl_core::instance::info::InstanceInfo = serde_json::from_str(&json).unwrap();
+    let info2: vrc_core::instance::info::InstanceInfo = serde_json::from_str(&json).unwrap();
     assert_eq!(info.pid, info2.pid);
     assert_eq!(info.daemon, info2.daemon);
     assert_eq!(info.display, info2.display);
@@ -1213,28 +1213,28 @@ fn instance_info_serialization_roundtrip_vrl() {
 
 #[test]
 fn vtty_output_new_has_no_sinks() {
-    let output = vrl_core::vtty::sink::VttyOutput::new();
+    let output = vrc_core::vtty::sink::VttyOutput::new();
     assert_eq!(output.sink_count(), 0);
 }
 
 #[test]
 fn vtty_output_with_sinks() {
     use std::sync::Arc;
-    let sink = Arc::new(vrl_core::vtty::sink::InMemoryVttySink::new());
-    let output = vrl_core::vtty::sink::VttyOutput::with_sinks(vec![sink.clone()]);
+    let sink = Arc::new(vrc_core::vtty::sink::InMemoryVttySink::new());
+    let output = vrc_core::vtty::sink::VttyOutput::with_sinks(vec![sink.clone()]);
     assert_eq!(output.sink_count(), 1);
 }
 
 #[test]
 fn vtty_in_memory_sink_initially_empty() {
-    let sink = vrl_core::vtty::sink::InMemoryVttySink::new();
+    let sink = vrc_core::vtty::sink::InMemoryVttySink::new();
     assert!(sink.latest().is_none());
     assert_eq!(sink.change_count(), 0);
 }
 
 #[test]
 fn vtty_in_memory_sink_reset() {
-    let sink = vrl_core::vtty::sink::InMemoryVttySink::new();
+    let sink = vrc_core::vtty::sink::InMemoryVttySink::new();
     sink.reset();
     assert_eq!(sink.change_count(), 0);
     assert!(sink.latest().is_none());
@@ -1246,7 +1246,7 @@ fn vtty_in_memory_sink_reset() {
 
 #[test]
 fn hooks_config_default_no_hooks() {
-    let hooks = vrl_core::config::hooks::HooksConfig::default();
+    let hooks = vrc_core::config::hooks::HooksConfig::default();
     assert!(hooks.on_spawn.is_none());
     assert!(hooks.on_exit.is_none());
     assert!(hooks.on_error.is_none());
@@ -1256,7 +1256,7 @@ fn hooks_config_default_no_hooks() {
 fn hooks_config_deserialize() {
     let json =
         r#"{ "on_spawn": "echo starting", "on_exit": "echo done", "on_error": "echo failed" }"#;
-    let hooks: vrl_core::config::hooks::HooksConfig = serde_json::from_str(json).unwrap();
+    let hooks: vrc_core::config::hooks::HooksConfig = serde_json::from_str(json).unwrap();
     assert_eq!(hooks.on_spawn.as_deref(), Some("echo starting"));
     assert_eq!(hooks.on_exit.as_deref(), Some("echo done"));
     assert_eq!(hooks.on_error.as_deref(), Some("echo failed"));
@@ -1269,32 +1269,32 @@ fn hooks_config_deserialize() {
 #[test]
 fn merge_command_env_empty_overrides() {
     use std::collections::HashMap;
-    let config_env = vrl_core::config::schema::EnvironmentConfig {
+    let config_env = vrc_core::config::schema::EnvironmentConfig {
         variables: HashMap::from([("A".into(), "1".into())]),
     };
-    let merged = vrl_core::config::merge::merge_command_env(&config_env, HashMap::new());
+    let merged = vrc_core::config::merge::merge_command_env(&config_env, HashMap::new());
     assert_eq!(merged.get("A").unwrap(), "1");
 }
 
 #[test]
 fn merge_profiles_local_overrides_global() {
     use std::collections::HashMap;
-    let global = vrl_core::config::schema::ProfilesConfig {
+    let global = vrc_core::config::schema::ProfilesConfig {
         entries: HashMap::from([(
             "dev".into(),
-            vrl_core::config::schema::PartialConfig::default(),
+            vrc_core::config::schema::PartialConfig::default(),
         )]),
     };
-    let local = vrl_core::config::schema::ProfilesConfig {
+    let local = vrc_core::config::schema::ProfilesConfig {
         entries: HashMap::from([(
             "prod".into(),
-            vrl_core::config::schema::PartialConfig::default(),
+            vrc_core::config::schema::PartialConfig::default(),
         )]),
     };
     let merged = {
         let mut entries = global.entries;
         entries.extend(local.entries);
-        vrl_core::config::schema::ProfilesConfig { entries }
+        vrc_core::config::schema::ProfilesConfig { entries }
     };
     assert!(merged.entries.contains_key("dev"));
     assert!(merged.entries.contains_key("prod"));
@@ -1365,7 +1365,7 @@ fn emulator_sgr_strikethrough_invisible() {
 
 #[test]
 fn buffer_clear_screen_to() {
-    let mut b = vrl_core::vtty::buffer::Buffer::new(10, 5, 100);
+    let mut b = vrc_core::vtty::buffer::Buffer::new(10, 5, 100);
     b.rows[0][0].ch = 'A';
     b.rows[1][5].ch = 'B';
     b.rows[2][9].ch = 'C';

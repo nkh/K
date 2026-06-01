@@ -15,23 +15,23 @@ pub fn c(text: &str, color: Color, bold: bool) -> String {
     }
 }
 
-// ── vrunner-only helper functions ──
+// ── vrw-only helper functions ──
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 use std::time::Duration;
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 use anyhow::Result;
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 use crate::cli::args::Cli;
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 use crate::instance::info::InstanceInfo;
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 use crate::instance::registry::InstanceRegistry;
 
 /// Create a reqwest::Client with sensible timeouts.
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 pub fn http_client() -> reqwest::Client {
     reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(3))
@@ -40,8 +40,8 @@ pub fn http_client() -> reqwest::Client {
         .expect("Failed to build HTTP client")
 }
 
-/// Build the base URL for a vrunner instance, handling auth and TLS.
-#[cfg(feature = "vrunner")]
+/// Build the base URL for a vrw instance, handling auth and TLS.
+#[cfg(feature = "vrw")]
 pub fn instance_url(info: &InstanceInfo, _auth_token: &Option<String>) -> String {
     let scheme = if info.port == 443 { "https" } else { "http" };
     let mut url = format!("{}://{}:{}", scheme, info.bind, info.port);
@@ -51,14 +51,14 @@ pub fn instance_url(info: &InstanceInfo, _auth_token: &Option<String>) -> String
     url
 }
 
-/// Discover running vrunner instances and resolve to a single target.
-#[cfg(feature = "vrunner")]
+/// Discover running vrw instances and resolve to a single target.
+#[cfg(feature = "vrw")]
 pub fn resolve_instance(cli: &Cli, registry: &InstanceRegistry) -> Result<InstanceInfo> {
     let instances = registry.list_instances();
 
     if instances.is_empty() {
         anyhow::bail!(
-            "No running vrunner instances found. Start one first with: vrunner -- <command>"
+            "No running vrw instances found. Start one first with: vrw -- <command>"
         );
     }
 
@@ -66,7 +66,7 @@ pub fn resolve_instance(cli: &Cli, registry: &InstanceRegistry) -> Result<Instan
         match instances.iter().find(|i| i.pid == target_pid) {
             Some(info) => return Ok(info.clone()),
             None => anyhow::bail!(
-                "No vrunner instance found with PID {}. Running instances:\n{}",
+                "No vrw instance found with PID {}. Running instances:\n{}",
                 target_pid,
                 format_instance_list(&instances)
             ),
@@ -77,18 +77,18 @@ pub fn resolve_instance(cli: &Cli, registry: &InstanceRegistry) -> Result<Instan
         return Ok(instances.into_iter().next().unwrap());
     }
 
-    tracing::warn!("Multiple vrunner instances are running:");
+    tracing::warn!("Multiple vrw instances are running:");
     tracing::warn!("{}", format_instance_list(&instances));
     tracing::warn!("Enter the PID of the instance to use (or Ctrl+C to abort): ");
 
     anyhow::bail!(
-        "Multiple vrunner instances are running. Use --target PID to select one.\n\
+        "Multiple vrw instances are running. Use --target PID to select one.\n\
          Running instances:\n{}",
         format_instance_list(&instances)
     );
 }
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 pub fn format_instance_list(instances: &[InstanceInfo]) -> String {
     let mut out = String::new();
     out.push_str(&format!(
@@ -110,7 +110,7 @@ pub fn format_instance_list(instances: &[InstanceInfo]) -> String {
 }
 
 /// Build the full display string ("name arg1 arg2") from a command JSON value.
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 pub(crate) fn build_full_display_string(cmd: &serde_json::Value) -> (String, String) {
     let name = cmd
         .get("name")
@@ -133,7 +133,7 @@ pub(crate) fn build_full_display_string(cmd: &serde_json::Value) -> (String, Str
 }
 
 /// Resolve a PID to a command UUID by querying the instance's command list.
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 pub async fn resolve_pid_to_id(client: &reqwest::Client, url: &str, pid: u32) -> Result<String> {
     let resp = client.get(format!("{}/api/commands", url)).send().await?;
 
@@ -156,7 +156,7 @@ pub async fn resolve_pid_to_id(client: &reqwest::Client, url: &str, pid: u32) ->
 }
 
 /// Collect all running commands from all instances.
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 pub async fn collect_all_commands(
     client: &reqwest::Client,
     instances: &[InstanceInfo],
@@ -184,7 +184,7 @@ pub async fn collect_all_commands(
 }
 
 /// Filter instances by --target, returning all if no target specified.
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 pub fn resolve_targeted_instances(
     cli: &Cli,
     all_instances: &[InstanceInfo],
@@ -194,10 +194,10 @@ pub fn resolve_targeted_instances(
             Some(info) => Ok(vec![info.clone()]),
             None => {
                 if all_instances.is_empty() {
-                    anyhow::bail!("No running vrunner instances found.");
+                    anyhow::bail!("No running vrw instances found.");
                 }
                 anyhow::bail!(
-                    "No vrunner instance found with PID {}. Running instances:\n{}",
+                    "No vrw instance found with PID {}. Running instances:\n{}",
                     target_pid,
                     all_instances
                         .iter()
@@ -224,8 +224,8 @@ mod tests {
 }
 
 #[cfg(test)]
-#[cfg(feature = "vrunner")]
-mod vrunner_tests {
+#[cfg(feature = "vrw")]
+mod vrw_tests {
     use super::*;
 
     #[test]
@@ -255,10 +255,10 @@ mod vrunner_tests {
     }
 }
 
-// ── vrunner-only: shared target resolution ──
+// ── vrw-only: shared target resolution ──
 
 /// A resolved command target: (instance_pid, cmd_id, cmd_pid, name, full_display).
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 pub type CommandTarget = (u32, String, u32, String, String);
 
 /// Resolve a user-supplied target (PID, name, or None) to a single command.
@@ -267,7 +267,7 @@ pub type CommandTarget = (u32, String, u32, String, String);
 /// stop-command, and purge: numeric PID first, then exact name/full match, then
 /// prefix match.  When `target` is `None`, auto-selects the sole command or
 /// errors with a disambiguation list.
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 pub fn resolve_target_command(
     target: Option<&str>,
     all_commands: &[CommandTarget],
@@ -280,7 +280,7 @@ pub fn resolve_target_command(
                 match all_commands.iter().find(|(_, _, p, _, _)| *p == pid) {
                     Some(entry) => return Ok(entry.clone()),
                     None => anyhow::bail!(
-                        "No command found with PID {}. Use `vrunner list` to see running commands.",
+                        "No command found with PID {}. Use `vrw list` to see running commands.",
                         pid
                     ),
                 }
@@ -336,7 +336,7 @@ pub fn resolve_target_command(
                 return Ok(prefix_name[0].clone());
             }
             anyhow::bail!(
-                "{} matching '{}'. Use `vrunner list` to see running commands.",
+                "{} matching '{}'. Use `vrw list` to see running commands.",
                 error_prefix, t
             )
         }
@@ -362,7 +362,7 @@ pub fn resolve_target_command(
 ///
 /// Used by freeze, thaw, stop, resize, and purge to avoid repeating the
 /// same response-check boilerplate in every handler.
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 pub async fn post_command_action(
     client: &reqwest::Client,
     url: &str,

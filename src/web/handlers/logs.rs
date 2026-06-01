@@ -1,4 +1,4 @@
-#![cfg(feature = "vrunner")]
+#![cfg(feature = "vrw")]
 #![allow(dead_code, unused_imports)]
 use axum::{
     extract::{Query, State},
@@ -41,7 +41,7 @@ pub async fn get_log(
                 "offset": 0,
                 "limit": limit,
                 "search": search,
-                "message": "Command logging is not enabled. Start vrunner with --log or --log-file <path> to enable.",
+                "message": "Command logging is not enabled. Start vrw with --log or --log-file <path> to enable.",
             },
             "error": null
         }));

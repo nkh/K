@@ -1,0 +1,126 @@
+.\" Title: vrw-cert
+.\" Author: vrw contributors
+.\" Manual section: 1
+.\" Process this file with
+.\"   groff -man -Tascii vrw-cert.1
+
+.TH VRW\-CERT 1 "2025" "vrw" "User Commands"
+
+.SH NAME
+vrw\-cert \- manage named certificates for per-command access control
+
+.SH SYNOPSIS
+.B vrw
+\fBcert\fR \fBgenerate\fR \fINAME\fR
+
+.B vrw
+\fBcert\fR \fBlist\fR
+
+.B vrw
+\fBcert\fR \fBshow\fR \fINAME\fR
+
+.B vrw
+\fBcert\fR \fBremove\fR \fINAME\fR
+
+.SH DESCRIPTION
+Manage named certificates in the vrw certificate pool. The certificate pool provides per-command access control: each certificate has a derived bearer token, and commands can be bound to a specific certificate. API requests to certificate-bound commands must present the matching bearer token for authorization.
+
+Certificates are self-signed X.509 certificates generated locally and stored in \fB~/.config/vrw/certs/<name>/\fR. Each certificate has a derived bearer token computed as the SHA-256 hash of the certificate PEM content, hex-encoded as a 64-character string. The certificate pool is registered in the vrw configuration file.
+
+Unlike TLS server certificates (which encrypt the transport), certificate pool entries are for application-level authorization. They allow fine-grained access control in multi-tenant environments where different consumers need access to different commands.
+
+.SH SUBCOMMANDS
+
+.SS cert generate \fINAME\fR
+
+Generate a new self-signed X.509 certificate and add it to the certificate pool. The certificate and private key are saved to \fB~/.config/vrw/certs/<name>/\fR, and the pool entry is registered in the configuration file.
+
+See \fBvrw\-cert\-generate\fR(1) for details.
+
+.SS cert list
+
+List all certificates in the pool, showing name, certificate file path, key file path, and the first 16 characters of the derived bearer token.
+
+See \fBvrw\-cert\-list\fR(1) for details.
+
+.SS cert show \fINAME\fR
+
+Display full details of a specific certificate, including the complete 64-character bearer token. Use this token in the \fBAuthorization: Bearer\fR header when making API requests to certificate-bound commands.
+
+See \fBvrw\-cert\-show\fR(1) for details.
+
+.SS cert remove \fINAME\fR
+
+Remove a certificate from the pool registry. The PEM files on disk are \fBnot\fR deleted. The certificate can no longer be used to bind new commands.
+
+See \fBvrw\-cert\-remove\fR(1) for details.
+
+.SH EXAMPLES
+
+.PP
+Generate a certificate for a CI pipeline:
+.RS
+.PP
+.nf
+\fB$ vrw cert generate ci-pipeline\fR
+Certificate 'ci-pipeline' generated successfully.
+  Certificate: /home/user/.config/vrw/certs/ci-pipeline/cert.pem
+  Key:        /home/user/.config/vrw/certs/ci-pipeline/key.pem
+  Token:      a3f8c1e2b7d94001... (first 16 of 64 chars)
+.fi
+.RE
+
+.PP
+List all certificates:
+.RS
+.PP
+.nf
+\fB$ vrw cert list\fR
+NAME                     CERT FILE                                         TOKEN (prefix)
+my-app                   /home/user/.config/vrw/certs/my-app/cert.pem   a3f8c1e2b7d94001
+ci-pipeline              /home/user/.config/vrw/certs/ci-pipeline/cert.pem 7c1e9d4a8f2...
+.fi
+.RE
+
+.PP
+Show full token for API authentication:
+.RS
+.PP
+.nf
+\fB$ vrw cert show my-app\fR
+Certificate: my-app
+  Certificate: /home/user/.config/vrw/certs/my-app/cert.pem
+  Key:        /home/user/.config/vrw/certs/my-app/key.pem
+  Token:      a3f8c1e2b7d94001b8c3d2e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6
+  Token (16): a3f8c1e2b7d94001...
+.fi
+.RE
+
+.PP
+Remove a certificate:
+.RS
+.PP
+.nf
+\fB$ vrw cert remove old-app\fR
+Certificate 'old-app' removed from pool.
+.fi
+.RE
+
+.SH EXIT STATUS
+
+.TP
+.B 0
+Successful operation.
+
+.TP
+.B 1
+Error (certificate not found, generation failure, etc.).
+
+.SH SEE ALSO
+
+.BR vrw\-cert\-generate (1),
+.BR vrw\-cert\-list (1),
+.BR vrw\-cert\-show (1),
+.BR vrw\-cert\-remove (1),
+.BR vrw (1),
+.BR vrw\-spawn (1)

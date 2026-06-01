@@ -1,4 +1,4 @@
-#![cfg(feature = "vrunner")]
+#![cfg(feature = "vrw")]
 #![allow(dead_code, unused_imports)]
 use anyhow::Result;
 
@@ -7,8 +7,8 @@ use crate::instance::registry::InstanceRegistry;
 
 use super::common::{http_client, instance_url, resolve_instance, resolve_pid_to_id};
 
-/// Handle the `vrunner spawn` subcommand.
-/// Discovers a running vrunner instance and sends a spawn request via HTTP API.
+/// Handle the `vrw spawn` subcommand.
+/// Discovers a running vrw instance and sends a spawn request via HTTP API.
 pub async fn handle_spawn_command(
     cli: &Cli,
     cmd: &str,
@@ -70,9 +70,9 @@ pub async fn handle_spawn_command(
         .send()
         .await
         .map_err(|e| {
-            tracing::error!(url = %url, error = %e, "Failed to connect to vrunner instance");
+            tracing::error!(url = %url, error = %e, "Failed to connect to vrw instance");
             anyhow::anyhow!(
-                "Cannot connect to vrunner instance at {} — is it running? Error: {}",
+                "Cannot connect to vrw instance at {} — is it running? Error: {}",
                 url,
                 e
             )
@@ -99,7 +99,7 @@ pub async fn handle_spawn_command(
     Ok(())
 }
 
-/// Handle the `vrunner freeze` subcommand.
+/// Handle the `vrw freeze` subcommand.
 pub async fn handle_freeze_command(cli: &Cli, pid: Option<u32>, interactive: bool) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let info = resolve_instance(cli, &registry)?;
@@ -180,7 +180,7 @@ pub async fn handle_freeze_command(cli: &Cli, pid: Option<u32>, interactive: boo
     Ok(())
 }
 
-/// Handle the `vrunner thaw` subcommand.
+/// Handle the `vrw thaw` subcommand.
 pub async fn handle_thaw_command(cli: &Cli, pid: Option<u32>, interactive: bool) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let info = resolve_instance(cli, &registry)?;

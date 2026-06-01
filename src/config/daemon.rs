@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Daemon (background process) settings.
-/// When enabled, vrl forks into the background after binding.
+/// When enabled, vrc forks into the background after binding.
 /// Only available on Unix systems.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DaemonConfig {
@@ -17,8 +17,8 @@ impl Default for DaemonConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            stdout_file: "/tmp/vrl.out".to_string(),
-            stderr_file: "/tmp/vrl.err".to_string(),
+            stdout_file: "/tmp/vrc.out".to_string(),
+            stderr_file: "/tmp/vrc.err".to_string(),
         }
     }
 }

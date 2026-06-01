@@ -38,7 +38,7 @@ pub struct TemplateConfig {
 
     /// Working directory for the spawned command.
     ///
-    /// Optional — defaults to vrl's own working directory.
+    /// Optional — defaults to vrc's own working directory.
     #[serde(default)]
     pub workdir: Option<String>,
 

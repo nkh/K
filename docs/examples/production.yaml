@@ -1,4 +1,4 @@
-# vrunner — Production Configuration
+# vrw — Production Configuration
 # Secure remote access with TLS and authentication
 
 server:
@@ -8,19 +8,19 @@ server:
 # Enable authentication for all API requests
 security:
   require_auth: true
-  token_file: "~/.config/vrunner/token"
+  token_file: "~/.config/vrw/token"
 
 # TLS encryption
 tls:
   enabled: true
-  cert_file: "/etc/ssl/certs/vrunner.crt"
-  key_file: "/etc/ssl/private/vrunner.key"
+  cert_file: "/etc/ssl/certs/vrw.crt"
+  key_file: "/etc/ssl/private/vrw.key"
 
 # Daemon mode for background operation
 daemon:
   enabled: true
-  stdout_file: "/var/log/vrunner/stdout"
-  stderr_file: "/var/log/vrunner/stderr"
+  stdout_file: "/var/log/vrw/stdout"
+  stderr_file: "/var/log/vrw/stderr"
 
 # Logging
 # Note: --log and --log-file are CLI-only flags

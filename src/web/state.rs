@@ -1,4 +1,4 @@
-#![cfg(feature = "vrunner")]
+#![cfg(feature = "vrw")]
 #![allow(dead_code, unused_imports)]
 use std::sync::Arc;
 use std::time::Instant;
@@ -36,7 +36,7 @@ pub struct AppState {
     pub log_events: broadcast::Sender<String>,
     /// In-memory store of share tokens keyed by token string.
     pub share_tokens: Arc<DashMap<String, ShareToken>>,
-    /// Registered peer vrunner instances (url -> peer info).
+    /// Registered peer vrw instances (url -> peer info).
     pub peers: Arc<DashMap<String, PeerInfo>>,
     /// Broadcast sender for peer registration/unregistration events.
     /// Messages are pre-serialized JSON strings forwarded to WS clients.

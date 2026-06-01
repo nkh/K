@@ -1,19 +1,19 @@
 # Remote Access via TLS
 
-This recipe covers setting up vrunner for secure remote access over TLS, including certificate configuration and client connectivity.
+This recipe covers setting up vrw for secure remote access over TLS, including certificate configuration and client connectivity.
 
 ## Quick Setup (Self-Signed)
 
 The fastest way to enable secure remote access:
 
 ```bash
-vrunner --remote --tls -- my-command
+vrw --remote --tls -- my-command
 ```
 
 This single command:
 - Binds to `0.0.0.0` (all network interfaces)
-- Auto-generates a self-signed TLS certificate (saved to `~/.config/vrunner/`)
-- Auto-generates a 256-bit bearer token (saved to `~/.config/vrunner/token`)
+- Auto-generates a self-signed TLS certificate (saved to `~/.config/vrw/`)
+- Auto-generates a 256-bit bearer token (saved to `~/.config/vrw/token`)
 - Enables HTTPS and WSS (secure WebSocket)
 
 ## Step-by-Step Production Setup
@@ -24,30 +24,30 @@ For production, use CA-signed certificates instead of self-signed:
 
 ```bash
 # Using Let's Encrypt (requires a domain)
-certbot certonly --standalone -d vrunner.example.com
-# Certificates saved to /etc/letsencrypt/live/vrunner.example.com/
+certbot certonly --standalone -d vrw.example.com
+# Certificates saved to /etc/letsencrypt/live/vrw.example.com/
 ```
 
 Or generate your own CA-signed certificate:
 
 ```bash
 # Generate a private key and CSR
-openssl genrsa -out /etc/ssl/private/vrunner.key 4096
-openssl req -new -key /etc/ssl/private/vrunner.key -out /etc/ssl/csr/vrunner.csr
+openssl genrsa -out /etc/ssl/private/vrw.key 4096
+openssl req -new -key /etc/ssl/private/vrw.key -out /etc/ssl/csr/vrw.csr
 
 # Sign with your CA
-openssl x509 -req -in /etc/ssl/csr/vrunner.csr \
+openssl x509 -req -in /etc/ssl/csr/vrw.csr \
   -CA /path/to/ca.crt -CAkey /path/to/ca.key \
-  -CAcreateserial -out /etc/ssl/certs/vrunner.crt -days 365
+  -CAcreateserial -out /etc/ssl/certs/vrw.crt -days 365
 ```
 
-### 2. Start vrunner with TLS and custom certificates
+### 2. Start vrw with TLS and custom certificates
 
 ```bash
-vrunner --bind 0.0.0.0 --port 443 \
+vrw --bind 0.0.0.0 --port 443 \
   --tls \
-  --cert-file /etc/ssl/certs/vrunner.crt \
-  --key-file /etc/ssl/private/vrunner.key \
+  --cert-file /etc/ssl/certs/vrw.crt \
+  --key-file /etc/ssl/private/vrw.key \
   --auth \
   --daemon \
   -- my-command
@@ -62,25 +62,25 @@ server:
 
 tls:
   enabled: true
-  cert_file: "/etc/ssl/certs/vrunner.crt"
-  key_file: "/etc/ssl/private/vrunner.key"
+  cert_file: "/etc/ssl/certs/vrw.crt"
+  key_file: "/etc/ssl/private/vrw.key"
 
 security:
   require_auth: true
 
 daemon:
   enabled: true
-  stdout_file: "/var/log/vrunner/stdout"
-  stderr_file: "/var/log/vrunner/stderr"
+  stdout_file: "/var/log/vrw/stdout"
+  stderr_file: "/var/log/vrw/stderr"
 ```
 
 ```bash
-vrunner -c /etc/vrunner/production.yaml
+vrw -c /etc/vrw/production.yaml
 ```
 
 ### 3. Configure the firewall
 
-Only expose the vrunner port to trusted networks:
+Only expose the vrw port to trusted networks:
 
 ```bash
 # UFW example
@@ -98,11 +98,11 @@ sudo iptables -A INPUT -p tcp --dport 443 -j DROP
 
 ```bash
 # With CA-signed certificates
-curl https://vrunner.example.com/api/commands \
+curl https://vrw.example.com/api/commands \
   -H "Authorization: Bearer $TOKEN"
 
 # With self-signed certificates
-curl --cacert ~/.config/vrunner/cert.pem https://server:443/api/commands \
+curl --cacert ~/.config/vrw/cert.pem https://server:443/api/commands \
   -H "Authorization: Bearer $TOKEN"
 
 # Skip verification (not recommended for production)
@@ -112,12 +112,12 @@ curl -k https://server:443/api/commands \
 
 #### Web Browser
 
-Navigate to `https://vrunner.example.com/admin`. For self-signed certificates, the browser will show a security warning — accept it and proceed. The admin UI will prompt for the bearer token.
+Navigate to `https://vrw.example.com/admin`. For self-signed certificates, the browser will show a security warning — accept it and proceed. The admin UI will prompt for the bearer token.
 
 #### WebSocket (JavaScript)
 
 ```javascript
-const ws = new WebSocket('wss://vrunner.example.com/api/commands/UUID/ws?token=YOUR_TOKEN');
+const ws = new WebSocket('wss://vrw.example.com/api/commands/UUID/ws?token=YOUR_TOKEN');
 ws.onmessage = (e) => {
   const msg = JSON.parse(e.data);
   if (msg.type === 'vtty_dirty') {
@@ -136,22 +136,22 @@ Use named certificates to give different clients access to different commands:
 
 ```bash
 # Generate certificates for different teams
-vrunner cert generate frontend-team
-vrunner cert generate backend-team
-vrunner cert generate ops-team
+vrw cert generate frontend-team
+vrw cert generate backend-team
+vrw cert generate ops-team
 
 # Show the token for each team
-vrunner cert show frontend-team
-vrunner cert show backend-team
-vrunner cert show ops-team
+vrw cert show frontend-team
+vrw cert show backend-team
+vrw cert show ops-team
 ```
 
 Each team uses their own token to spawn and interact with their commands:
 
 ```bash
 # Frontend team spawns their dev server
-FRONTEND_TOKEN=$(vrunner cert show frontend-team | grep -oP 'Token:\s*\K\S+')
-curl -X POST https://vrunner.example.com/api/commands \
+FRONTEND_TOKEN=$(vrw cert show frontend-team | grep -oP 'Token:\s*\K\S+')
+curl -X POST https://vrw.example.com/api/commands \
   -H "Authorization: Bearer $FRONTEND_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"cmd": "npm", "args": ["run", "dev"], "certificate": "frontend-team"}'
@@ -166,10 +166,10 @@ For production deployments behind nginx or Caddy:
 ```nginx
 server {
     listen 443 ssl;
-    server_name vrunner.example.com;
+    server_name vrw.example.com;
 
-    ssl_certificate /etc/ssl/certs/vrunner.crt;
-    ssl_certificate_key /etc/ssl/private/vrunner.key;
+    ssl_certificate /etc/ssl/certs/vrw.crt;
+    ssl_certificate_key /etc/ssl/private/vrw.key;
 
     location / {
         proxy_pass http://127.0.0.1:9090;
@@ -186,13 +186,13 @@ server {
 ### Caddy
 
 ```
-vrunner.example.com {
+vrw.example.com {
     reverse_proxy localhost:9090
 }
 ```
 
-With Caddy, TLS is handled automatically by Caddy itself. Run vrunner without `--tls`:
+With Caddy, TLS is handled automatically by Caddy itself. Run vrw without `--tls`:
 
 ```bash
-vrunner --bind 127.0.0.1 --port 9090 --auth -- my-command
+vrw --bind 127.0.0.1 --port 9090 --auth -- my-command
 ```

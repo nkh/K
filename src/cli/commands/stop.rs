@@ -2,10 +2,10 @@ use anyhow::Result;
 
 use crate::instance::info::InstanceInfo;
 
-// ── vrl (signal-based) implementation ──
+// ── vrc (signal-based) implementation ──
 
-/// Stop a vrl instance by sending SIGTERM to its PID.
-#[cfg(not(feature = "vrunner"))]
+/// Stop a vrc instance by sending SIGTERM to its PID.
+#[cfg(not(feature = "vrw"))]
 pub fn handle_stop_command(pid: Option<u32>, instances: &[InstanceInfo]) -> Result<()> {
     let target_pid = resolve_stop_target(pid, instances);
 
@@ -19,7 +19,7 @@ pub fn handle_stop_command(pid: Option<u32>, instances: &[InstanceInfo]) -> Resu
                 target_pid, target_pid, errno
             );
         }
-        println!("Sent SIGTERM to vrl instance (PID {})", target_pid);
+        println!("Sent SIGTERM to vrc instance (PID {})", target_pid);
     }
     #[cfg(not(unix))]
     {
@@ -27,7 +27,7 @@ pub fn handle_stop_command(pid: Option<u32>, instances: &[InstanceInfo]) -> Resu
             .arg(target_pid.to_string())
             .spawn()?
             .wait()?;
-        println!("Sent kill signal to vrl instance (PID {})", target_pid);
+        println!("Sent kill signal to vrc instance (PID {})", target_pid);
     }
 
     Ok(())
@@ -38,14 +38,14 @@ pub fn handle_stop_command(pid: Option<u32>, instances: &[InstanceInfo]) -> Resu
 /// Shared core logic: when `pid` is `None`, auto-selects the sole instance or
 /// errors with a disambiguation list.  The `binary_name` and `extra_info`
 /// closure allow each binary to customise its messages.
-#[cfg(not(feature = "vrunner"))]
+#[cfg(not(feature = "vrw"))]
 pub fn resolve_stop_target(pid: Option<u32>, instances: &[InstanceInfo]) -> u32 {
-    resolve_stop_target_impl(pid, instances, "vrl", |_| String::new())
+    resolve_stop_target_impl(pid, instances, "vrc", |_| String::new())
 }
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 pub fn resolve_stop_target(pid: Option<u32>, instances: &[InstanceInfo]) -> u32 {
-    resolve_stop_target_impl(pid, instances, "vrunner", |inst| {
+    resolve_stop_target_impl(pid, instances, "vrw", |inst| {
         format!(" — port {}", inst.port)
     })
 }
@@ -81,13 +81,13 @@ fn resolve_stop_target_impl(
     }
 }
 
-// ── vrunner (HTTP-based) implementation ──
+// ── vrw (HTTP-based) implementation ──
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 use super::common::{collect_all_commands, http_client, instance_url, resolve_pid_to_id};
 
-/// Stop a specific command by PID or name on any running instance (vrunner).
-#[cfg(feature = "vrunner")]
+/// Stop a specific command by PID or name on any running instance (vrw).
+#[cfg(feature = "vrw")]
 pub async fn handle_stop_command(_cli: &crate::cli::args::Cli, target: Option<&str>, interactive: bool) -> Result<bool> {
     let registry = crate::instance::registry::InstanceRegistry::new()?;
     let instances = registry.list_instances();
@@ -150,7 +150,7 @@ pub async fn handle_stop_command(_cli: &crate::cli::args::Cli, target: Option<&s
                     for (_, _, cmd_pid, _, full) in &all_commands {
                         tracing::warn!("  PID {} — {}", cmd_pid, full);
                     }
-                    tracing::warn!("Usage: vrunner stop-command <PID or name>");
+                    tracing::warn!("Usage: vrw stop-command <PID or name>");
                     return Ok(false);
                 }
             }
@@ -182,7 +182,7 @@ pub async fn handle_stop_command(_cli: &crate::cli::args::Cli, target: Option<&s
     Ok(false)
 }
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 pub async fn stop_command_by_id(
     client: &reqwest::Client,
     url: &str,
@@ -226,7 +226,7 @@ pub async fn stop_command_by_id(
     }
 }
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 pub async fn handle_stop_command_by_pid_on_instances(
     client: &reqwest::Client,
     instances: &[InstanceInfo],

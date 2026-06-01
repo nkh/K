@@ -1,0 +1,83 @@
+.\" Title: vrc-spawn-in
+.\" Author: vrc contributors
+.\" Manual section: 1
+.\"
+.TH VRL\-SPAWN\-IN 1 "2025" "vrc" "User Commands"
+
+.SH NAME
+vrc\-spawn\-in \- spawn a new command inside a running vrc instance
+
+.SH SYNOPSIS
+.B vrc
+\fBspawn\-in\fR \fIPID\fR \fICMD\fR [\fIARGS\fR...]
+
+.SH DESCRIPTION
+Spawn a new command inside an already-running vrc instance. The new command gets its own virtual terminal (VTTY) with independent scrollback, and is added to the instance's command list visible via \fBvrc list\fR.
+
+Connects to the target instance's UDS control socket at \fB~/.local/share/vrc/control\-{pid}.sock\fR and sends the spawn request.
+
+The spawned command uses the instance's default VTTY settings (rows, cols, TERM value) unless overridden in the configuration. Environment variables from the config are passed to the new command.
+
+This is the UDS equivalent of vrw's \fBvrw spawn\fR command.
+
+.SH ARGUMENTS
+
+.TP
+.B PID
+OS process ID of the target vrc instance.
+
+.TP
+.B CMD
+The command to run (e.g., \fBhtop\fR, \fBvim\fR, \fB./my-script.sh\fR).
+
+.TP
+.B ARGS...
+Additional arguments to pass to the command.
+
+.SH EXAMPLES
+
+.PP
+Spawn htop in a running instance:
+.RS
+.PP
+.nf
+\fB$ vrc spawn\-in 12345 htop\fR
+Spawned command cmd_abc (PID 5678) in instance 12345
+.fi
+.RE
+
+.PP
+Spawn a script with arguments:
+.RS
+.PP
+.nf
+\fB$ vrc spawn\-in 12345 ./build.sh \-\-release \-\-verbose\fR
+Spawned command cmd_def (PID 5679) in instance 12345
+.fi
+.RE
+
+.PP
+Spawn vim to edit a file:
+.RS
+.PP
+.nf
+\fB$ vrc spawn\-in 12345 vim /path/to/file.rs\fR
+Spawned command cmd_ghi (PID 5680) in instance 12345
+.fi
+.RE
+
+.SH EXIT STATUS
+
+.TP
+.B 0
+Command spawned successfully.
+
+.TP
+.B 1
+Error (instance not found, spawn failed, etc.).
+
+.SH SEE ALSO
+.BR vrc (1),
+.BR vrc\-list (1),
+.BR vrc\-kill (1),
+.BR vrc\-freeze (1)

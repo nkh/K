@@ -1,10 +1,10 @@
 # Comparison with Alternatives
 
-This document compares vrunner against the most common tools that overlap with its
+This document compares vrw against the most common tools that overlap with its
 capabilities: multiplexers (tmux, screen), process monitors (mprocs), and web-based
 terminal sharing tools (gotty, wetty). It presents a feature-by-feature matrix,
-highlights architectural differences, and offers guidance on when vrunner—or one of
-its competitors—is the better choice. Read this if you are evaluating whether vrunner
+highlights architectural differences, and offers guidance on when vrw—or one of
+its competitors—is the better choice. Read this if you are evaluating whether vrw
 fits your use case or if you are migrating from an existing tool.
 
 ---
@@ -15,7 +15,7 @@ The table below covers 35 features across six tools. A **✓** means the feature
 fully supported; **~** means partial or limited support; **✗** means not supported;
 and **—** means not applicable.
 
-| # | Feature | vrunner | tmux | screen | mprocs | gotty | wetty |
+| # | Feature | vrw | tmux | screen | mprocs | gotty | wetty |
 |---|---|---:|---:|---:|---:|---:|---:|
 | 1 | Web-based terminal UI | ✓ | ✗ | ✗ | ✗ | ✓ | ✓ |
 | 2 | Native terminal UI (in-shell) | — | ✓ | ✓ | ✓ | — | — |
@@ -67,7 +67,7 @@ and **—** means not applicable.
 Beyond individual features, the tools differ fundamentally in how they are
 architected. The table below summarizes these structural distinctions:
 
-| Dimension | vrunner | tmux / screen | mprocs | gotty / wetty |
+| Dimension | vrw | tmux / screen | mprocs | gotty / wetty |
 |---|---|---|---|---|
 | **Communication** | HTTP + WebSocket | Unix socket / pipe | stdin/stdout of parent | HTTP + WebSocket |
 | **State storage** | In-process memory (DashMap) | Server process memory | In-process memory | In-process memory |
@@ -81,24 +81,24 @@ architected. The table below summarizes these structural distinctions:
 
 ---
 
-## When to Choose vrunner
+## When to Choose vrw
 
-vrunner is the right tool when **one or more** of the following conditions hold:
+vrw is the right tool when **one or more** of the following conditions hold:
 
 ### You Need a Web-Based Terminal with Zero Setup
 
 You want to share a terminal session in a browser without installing SSH, setting
-up reverse tunnels, or configuring firewalls. vrunner's self-signed TLS and
+up reverse tunnels, or configuring firewalls. vrw's self-signed TLS and
 localhost binding mean you can start a secure terminal in one command:
 
 ```bash
-vrunner run --tls --auth-token my-secret -- web-server --port 3000
+vrw run --tls --auth-token my-secret -- web-server --port 3000
 ```
 
 ### You Need a REST API Alongside the Terminal
 
 Your automation pipeline needs to start, stop, and query processes via HTTP. With
-vrunner you get a full JSON API (`POST /api/commands`, `GET /api/instances`,
+vrw you get a full JSON API (`POST /api/commands`, `GET /api/instances`,
 `DELETE /api/commands/{id}`) alongside the live terminal stream.
 
 ### You Need Fine-Grained Lifecycle Control
@@ -106,18 +106,18 @@ vrunner you get a full JSON API (`POST /api/commands`, `GET /api/instances`,
 You need per-command options like `--retain-on-exit` (keep the command entry and
 scrollback after exit), `--snapshot-on-exit` (capture a final HTML snapshot), or
 `--send-keys` (inject keystrokes programmatically). These are first-class features
-in vrunner, not workarounds.
+in vrw, not workarounds.
 
 ### You Need Secure Remote Access Without OpenSSL
 
 Your deployment environment does not have OpenSSL installed (e.g., minimal Docker
-images, air-gapped networks). vrunner uses pure-Rust `rustls` and can auto-generate
+images, air-gapped networks). vrw uses pure-Rust `rustls` and can auto-generate
 certificates via `rcgen`—no external dependencies.
 
 ### You Need to Embed Terminal Access in a Larger Application
 
 You are building a management dashboard or orchestration tool and need to embed
-terminal access. vrunner's extensible handle sink system lets you pipe terminal
+terminal access. vrw's extensible handle sink system lets you pipe terminal
 output to databases, log aggregators, or alerting systems alongside the
 WebSocket stream.
 
@@ -125,7 +125,7 @@ WebSocket stream.
 
 Your CI pipeline spawns background processes (databases, message brokers,
 development servers) that need to be monitored and occasionally interacted with.
-vrunner's daemon mode with last-command-standing lifecycle keeps the daemon alive
+vrw's daemon mode with last-command-standing lifecycle keeps the daemon alive
 only as long as needed.
 
 ---
@@ -176,14 +176,14 @@ only as long as needed.
 
 ## Summary
 
-vrunner occupies a unique niche: it is the only tool that combines **web-based
+vrw occupies a unique niche: it is the only tool that combines **web-based
 terminal streaming**, **REST API management**, **incremental diff optimization**,
 **per-command lifecycle options**, and **pure-Rust security** in a single binary.
-If your needs align with any of the "When to Choose vrunner" scenarios above,
+If your needs align with any of the "When to Choose vrw" scenarios above,
 it provides capabilities that no other single tool can match. If you only need
 terminal multiplexing in an SSH session, tmux remains the gold standard.
 
 ---
 
 *This document is part of the [Diátaxis](https://diataxis.fr/) documentation framework
-for vrunner. See the [explanation index](./) for related topics.*
+for vrw. See the [explanation index](./) for related topics.*

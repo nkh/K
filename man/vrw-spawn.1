@@ -1,0 +1,139 @@
+.\" Title: vrw-spawn
+.\" Author: vrw contributors
+.\" Manual section: 1
+.\" Process this file with
+.\"   groff -man -Tascii vrw-spawn.1
+
+.TH VRW\-SPAWN 1 "2025" "vrw" "User Commands"
+
+.SH NAME
+vrw\-spawn \- spawn a new command inside a running vrw instance
+
+.SH SYNOPSIS
+.B vrw
+\fBspawn\fR [\fIOPTIONS\fR] \fICMD\fR [\fIARGS...\fR]
+
+.SH DESCRIPTION
+Spawn a new command inside a running vrw instance. The command runs inside a virtual terminal (VTTY) with full pseudo-terminal capabilities, including ANSI colors, cursor movement, and interactive keyboard input. Once running, the command can be monitored and controlled from the CLI, the web admin dashboard, or the HTTP API.
+
+This is the CLI equivalent of \fBPOST /api/commands\fR. The subcommand discovers running vrw instances via the shared registry, selects one (or prompts with \fB\-\-target PID\fR), and sends an HTTP request to create the command. The new command runs independently of the CLI process that spawned it.
+
+If multiple vrw instances are running and no \fB\-\-target\fR is specified, an error message lists all running instances and instructs you to select one with \fB\-\-target\fR. If exactly one instance is running, it is selected automatically.
+
+.SH OPTIONS
+
+.TP
+.BR "\-\-rows " \fIN\fR
+Initial virtual terminal height in rows (default: 24, max: 200). If not specified, the instance's default VTTY row count is used.
+
+.TP
+.BR "\-\-cols " \fIN\fR
+Initial virtual terminal width in columns (default: 80, max: 500). If not specified, the instance's default VTTY column count is used.
+
+.TP
+.BR "\-\-env " \fIKEY=VALUE\fR
+Set an environment variable for the spawned command. May be specified multiple times. These variables are merged with (and override) any environment variables defined in the instance's configuration file.
+
+.TP
+.B \-\-no\-env
+Ignore environment variables from the configuration file. Only variables set via \fB\-\-env\fR flags on this command will be passed to the spawned process.
+
+.TP
+.BR "\-\-target " \fIPID\fR
+Spawn the command on a specific vrw instance identified by its process ID. If omitted, vrw selects the first available instance automatically, or reports an error if multiple instances are running.
+
+.SH ARGUMENTS
+
+.TP
+.B CMD
+The command binary to execute (e.g., \fBhtop\fR, \fBpython3\fR, \fBcargo\fR).
+
+.TP
+.B ARGS...
+Zero or more arguments passed to the command.
+
+.SH EXAMPLES
+
+.PP
+Spawn htop on the default instance:
+.RS
+.PP
+.nf
+\fB$ vrw spawn htop\fR
+Command spawned successfully on instance 12345 (PID 12345)
+  PID:       5678
+  VTTY:      http://127.0.0.1:9090/api/commands/abc123/vtty/html
+.fi
+.RE
+
+.PP
+Spawn with a custom terminal size:
+.RS
+.PP
+.nf
+\fB$ vrw spawn \-\-rows 50 \-\-cols 160 vim notes.txt\fR
+Command spawned successfully on instance 12345 (PID 12345)
+  PID:       5679
+  VTTY:      http://127.0.0.1:9090/api/commands/def456/vtty/html
+.fi
+.RE
+
+.PP
+Spawn with environment variables:
+.RS
+.PP
+.nf
+\fB$ vrw spawn \-\-env RUST_LOG=debug \-\-env MODE=test cargo test\fR
+Command spawned successfully on instance 12345 (PID 12345)
+.fi
+.RE
+
+.PP
+Spawn with a clean environment:
+.RS
+.PP
+.nf
+\fB$ vrw spawn \-\-no\-env \-\-env PATH=/usr/bin:/bin /bin/sh\fR
+Command spawned successfully on instance 12345 (PID 12345)
+.fi
+.RE
+
+.PP
+Spawn on a specific instance:
+.RS
+.PP
+.nf
+\fB$ vrw \-\-target 12346 spawn python3 \-m http.server\fR
+Command spawned successfully on instance 12346 (PID 12346)
+.fi
+.RE
+
+.PP
+Equivalent curl:
+.RS
+.PP
+.nf
+curl -s -X POST http://localhost:9090/api/commands \e
+  -H "Content-Type: application/json" \e
+  -d '{"cmd": "htop", "args": [], "rows": 50, "cols": 160}'
+.fi
+.RE
+
+.SH EXIT STATUS
+
+.TP
+.B 0
+Command spawned successfully.
+
+.TP
+.B 1
+Error (no running instances, connection refused, spawn failed, etc.).
+
+.SH SEE ALSO
+
+.BR vrw (1),
+.BR vrw\-list (1),
+.BR vrw\-stop\-command (1),
+.BR vrw\-resize (1),
+.BR vrw\-freeze (1),
+.BR vrwctrl (1)

@@ -63,7 +63,7 @@ The executable to run (e.g., `/usr/bin/htop`, `bash`, `npm`). Pressing Enter in 
 Space-separated arguments passed to the command. For complex arguments, use shell quoting: `-c "echo hello; echo world"`. Pressing Enter triggers the spawn action.
 
 ### Working Directory Field
-The directory in which the command will be executed. Defaults to vrunner's working directory if left empty. The server validates that the directory exists before spawning.
+The directory in which the command will be executed. Defaults to vrw's working directory if left empty. The server validates that the directory exists before spawning.
 
 ### Rows / Cols Fields
 Set the initial terminal dimensions for the new command. Leave empty to use the server defaults (typically 24 rows × 80 cols).
@@ -75,7 +75,7 @@ Calculates the optimal terminal dimensions based on the current panel container 
 Select an optional named certificate to bind to the command. Certificate-bound commands require the matching certificate for API access. See the Certificates tab for managing certificates.
 
 ### Target Instance Dropdown
-When multiple vrunner instances are connected, this dropdown lets you choose which instance will run the new command.
+When multiple vrw instances are connected, this dropdown lets you choose which instance will run the new command.
 
 ### Spawn Command Button
 Submits the form and creates the new command. The button uses the primary style (green background) to indicate it's a creation action.
@@ -102,4 +102,4 @@ Each template card has a **Use** button (spawns the command) and a **Delete** bu
 Certificates enable per-command access control. Each certificate is a named token that can be bound to commands at spawn time. API requests must present the matching certificate to interact with certificate-bound commands.
 
 ### Certificate List
-Shows all configured certificates with their names. Certificates can also be managed via the CLI (`vrunner cert` subcommand).
+Shows all configured certificates with their names. Certificates can also be managed via the CLI (`vrw cert` subcommand).

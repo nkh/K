@@ -1,4 +1,4 @@
-# vrl / vrunner
+# vrc / vrw
 
 A virtual terminal runner and process orchestrator. Run commands in pseudo-terminals, monitor them through a local terminal display or a web dashboard, and control them via Unix Domain Socket or HTTP API — from a single statically-linked binary with under 5ms startup.
 
@@ -6,10 +6,10 @@ This repository contains two binaries built from a shared codebase, selected at 
 
 | Binary | Feature Flag | IPC Mechanism | Target Use Case |
 |--------|-------------|---------------|-----------------|
-| **vrl** | `vrl` (default) | Unix Domain Sockets | Lightweight local CLI tooling, scripts, pipelines |
-| **vrunner** | `vrunner` | HTTP + WebSocket | Remote access, web dashboard, multi-user scenarios |
+| **vrc** | `vrc` (default) | Unix Domain Sockets | Lightweight local CLI tooling, scripts, pipelines |
+| **vrw** | `vrw` | HTTP + WebSocket | Remote access, web dashboard, multi-user scenarios |
 
-Both binaries share the same VTTY emulator, process manager, configuration system, interactive display, and handle infrastructure. They differ only in how clients communicate with running instances: **vrl** uses UDS IPC for local-only communication, while **vrunner** exposes a full HTTP API with an embedded web admin UI.
+Both binaries share the same VTTY emulator, process manager, configuration system, interactive display, and handle infrastructure. They differ only in how clients communicate with running instances: **vrc** uses UDS IPC for local-only communication, while **vrw** exposes a full HTTP API with an embedded web admin UI.
 
 ## Features
 
@@ -22,11 +22,11 @@ Both binaries share the same VTTY emulator, process manager, configuration syste
 - **Advanced VTTY** — Scrollback, search, mouse support, alternate screen, 256/truecolor
 - **Process Control** — Freeze/thaw (SIGSTOP/SIGCONT), graceful shutdown with timeouts, exit handlers, per-command retain/snapshot on exit, initial keystroke injection
 
-### vrl-specific
+### vrc-specific
 
 - **UDS IPC** — All inter-instance communication uses Unix Domain Sockets with length-prefixed JSON protocol. No HTTP server, no network binding, no TLS overhead. Sockets use `0600` permissions for filesystem-based security.
 
-### vrunner-specific
+### vrw-specific
 
 - **HTTP API** — RESTful API for spawning commands, sending keystrokes, reading VTTY output, managing certificates, and streaming logs
 - **Web Admin Dashboard** — Embedded single-page application served at `/admin` with real-time VTTY viewer, command management, theme switching, search, and keyboard shortcuts
@@ -37,79 +37,79 @@ Both binaries share the same VTTY emulator, process manager, configuration syste
 
 ## Quick Start
 
-### Building vrl (default)
+### Building vrc (default)
 
 ```bash
 git clone https://github.com/nkh/K.git
 cd K
 cargo build --release
-# Binary at target/release/vrl
+# Binary at target/release/vrc
 ```
 
-### Building vrunner
+### Building vrw
 
 ```bash
 git clone https://github.com/nkh/K.git
 cd K
-cargo build --release --features vrunner
-# Binary at target/release/vrunner
+cargo build --release --features vrw
+# Binary at target/release/vrw
 ```
 
 ### Building both
 
 ```bash
-cargo build --release --features "vrl,vrunner"
-# Both binaries at target/release/vrl and target/release/vrunner
+cargo build --release --features "vrc,vrw"
+# Both binaries at target/release/vrc and target/release/vrw
 ```
 
-### Using vrl
+### Using vrc
 
 ```bash
 # Run a command
-vrl -- htop
+vrc -- htop
 
 # Run with local terminal display
-vrl --display -- htop
+vrc --display -- htop
 
 # Keep display open after command exits (monitor mode)
-vrl --display-all -- npm run dev
+vrc --display-all -- npm run dev
 
 # Send initial keystrokes and retain buffer after exit
-vrl --retain-on-exit --send-keys "ls<Enter>" -- bash
+vrc --retain-on-exit --send-keys "ls<Enter>" -- bash
 
 # Run as a background daemon
-vrl --daemon -- npm run dev
+vrc --daemon -- npm run dev
 
 # List running instances
-vrl list
+vrc list
 
 # Interactively select an instance to inspect
-vrl list --interactive
+vrc list --interactive
 
 # Freeze a command (interactive selection)
-vrl freeze --interactive
+vrc freeze --interactive
 
 # Cat a command's output (interactive selection)
-vrl cat --interactive
+vrc cat --interactive
 
 # Stop an instance
-vrl stop <pid>
+vrc stop <pid>
 ```
 
-### Using vrunner
+### Using vrw
 
 ```bash
 # Start the server (HTTP on port 9090)
-vrunner
+vrw
 
 # Start with a command at launch
-vrunner -- htop
+vrw -- htop
 
 # Open the web dashboard
 # Navigate to http://127.0.0.1:9090/admin
 
 # Spawn a command via CLI
-vrunner spawn htop
+vrw spawn htop
 
 # Spawn via API
 curl -X POST http://127.0.0.1:9090/api/commands \
@@ -117,56 +117,56 @@ curl -X POST http://127.0.0.1:9090/api/commands \
   -d '{"cmd": "htop", "args": []}'
 
 # Interactive selection for freeze/thaw/resize/cat/screenshot
-vrunner freeze --interactive
-vrunner cat --interactive
-vrunner screenshot --interactive
+vrw freeze --interactive
+vrw cat --interactive
+vrw screenshot --interactive
 
 # Enable TLS and remote access
-vrunner --remote --tls -- my-command
+vrw --remote --tls -- my-command
 ```
 
 ## Installation
 
-### From Source (vrl)
+### From Source (vrc)
 
 ```bash
 git clone https://github.com/nkh/K.git
 cd K
-cargo build --release --features vrl
-# Binary at target/release/vrl
+cargo build --release --features vrc
+# Binary at target/release/vrc
 ```
 
-### From Source (vrunner)
+### From Source (vrw)
 
 ```bash
 git clone https://github.com/nkh/K.git
 cd K
-cargo build --release --features vrunner
-# Binary at target/release/vrunner
+cargo build --release --features vrw
+# Binary at target/release/vrw
 ```
 
-### System-Wide Install (vrl)
+### System-Wide Install (vrc)
 
 ```bash
-cargo install --path . --features vrl
+cargo install --path . --features vrc
 ```
 
-### System-Wide Install (vrunner)
+### System-Wide Install (vrw)
 
 ```bash
-cargo install --path . --features vrunner
+cargo install --path . --features vrw
 ```
 
 ### Man Pages
 
 ```bash
-# vrl
-cp man/vrl.1 /usr/local/share/man/man1/
-man vrl
+# vrc
+cp man/vrc.1 /usr/local/share/man/man1/
+man vrc
 
-# vrunner
-cp man/vrunner.1 /usr/local/share/man/man1/
-man vrunner
+# vrw
+cp man/vrw.1 /usr/local/share/man/man1/
+man vrw
 ```
 
 ## Documentation
@@ -187,18 +187,18 @@ Documentation is organized using the [Diataxis framework](https://diataxis.fr/) 
 | [FAQ](docs/faq.md) | Frequently asked questions |
 | [User Manual](MANUAL.md) | Comprehensive all-in-one reference (includes [Display Modes](MANUAL.md#210-display-modes)) |
 | [docs/examples/](docs/examples/) | Complete example configuration files |
-| [man/vrl.1](man/vrl.1) | vrl Unix manpage |
-| [man/vrunner.1](man/vrunner.1) | vrunner Unix manpage |
+| [man/vrc.1](man/vrc.1) | vrc Unix manpage |
+| [man/vrw.1](man/vrw.1) | vrw Unix manpage |
 
 ## Architecture
 
-Both binaries are built from the `vrl_core` library crate. The `vrl` feature is the default and compiles only the UDS IPC path. The `vrunner` feature additionally pulls in the HTTP stack (Axium, reqwest, rustls, rust-embed) and the embedded web admin UI.
+Both binaries are built from the `vrc_core` library crate. The `vrc` feature is the default and compiles only the UDS IPC path. The `vrw` feature additionally pulls in the HTTP stack (Axium, reqwest, rustls, rust-embed) and the embedded web admin UI.
 
 Shared modules (available to both binaries): `cli/`, `config/`, `daemon/`, `handles/`, `hooks/`, `instance/`, `interactive/`, `ipc/`, `logging/`, `process/`, `vtty/`.
 
-vrl-specific: `ipc/` (UDS server/client).
+vrc-specific: `ipc/` (UDS server/client).
 
-vrunner-specific: `web/` (HTTP server, REST handlers, WebSocket, TLS, auth, static assets).
+vrw-specific: `web/` (HTTP server, REST handlers, WebSocket, TLS, auth, static assets).
 
 For the full architecture overview, see [docs/explanation/architecture.md](docs/explanation/architecture.md).
 

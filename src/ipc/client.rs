@@ -1,6 +1,6 @@
 //! UDS control socket client.
 //!
-//! Connects to a running vrl instance's control socket, sends a
+//! Connects to a running vrc instance's control socket, sends a
 //! [`ControlCommand`], and returns the [`ControlResponse`].
 
 use std::path::Path;
@@ -12,7 +12,7 @@ use tokio::net::UnixStream;
 use super::protocol::{decode_frame, encode_frame, ControlCommand, ControlResponse};
 use crate::ipc::socket_path_for_pid;
 
-/// Connect to a running vrl instance's control socket and send a command.
+/// Connect to a running vrc instance's control socket and send a command.
 ///
 /// Returns the response, or an error if the connection fails.
 pub async fn send_command(pid: u32, cmd: ControlCommand) -> anyhow::Result<ControlResponse> {
@@ -28,7 +28,7 @@ pub async fn send_command_to_path(
     // Verify socket exists
     if !socket_path.exists() {
         anyhow::bail!(
-            "No control socket at {} — is vrl instance running?",
+            "No control socket at {} — is vrc instance running?",
             socket_path.display()
         );
     }

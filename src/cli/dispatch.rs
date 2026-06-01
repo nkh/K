@@ -71,10 +71,10 @@ Fields with errors: {}",
     Ok(cfg)
 }
 
-// ── vrl dispatch ──
+// ── vrc dispatch ──
 
-/// Synchronous pre-runtime phase (vrl).
-#[cfg(not(feature = "vrunner"))]
+/// Synchronous pre-runtime phase (vrc).
+#[cfg(not(feature = "vrw"))]
 pub fn pre_runtime() -> Result<Option<Cli>> {
     let cli = Cli::parse_with_version();
 
@@ -90,7 +90,7 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
             // Interactive mode: let user select which instance(s) to stop
             if *interactive && pid.is_none() {
                 if instances.is_empty() {
-                    eprintln!("No vrl instances running.");
+                    eprintln!("No vrc instances running.");
                     std::process::exit(1);
                 }
                 let items: Vec<_> = instances.iter().map(|i| {
@@ -142,8 +142,8 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
     Ok(Some(cli))
 }
 
-/// Check if the parsed CLI represents an IPC subcommand (vrl).
-#[cfg(not(feature = "vrunner"))]
+/// Check if the parsed CLI represents an IPC subcommand (vrc).
+#[cfg(not(feature = "vrw"))]
 pub fn is_ipc_command(cli: &Cli) -> bool {
     matches!(
         cli.command,
@@ -158,8 +158,8 @@ pub fn is_ipc_command(cli: &Cli) -> bool {
     )
 }
 
-/// Dispatch an IPC subcommand (vrl).
-#[cfg(not(feature = "vrunner"))]
+/// Dispatch an IPC subcommand (vrc).
+#[cfg(not(feature = "vrw"))]
 pub async fn run_ipc_command(cli: Cli) -> Result<()> {
     use crate::cli::commands::verify_instance;
 
@@ -233,10 +233,10 @@ pub async fn run_ipc_command(cli: Cli) -> Result<()> {
     }
 }
 
-// ── vrunner dispatch ──
+// ── vrw dispatch ──
 
-/// Synchronous pre-runtime phase (vrunner).
-#[cfg(feature = "vrunner")]
+/// Synchronous pre-runtime phase (vrw).
+#[cfg(feature = "vrw")]
 pub fn pre_runtime() -> Result<Option<Cli>> {
     let cli = Cli::parse_with_version();
 
@@ -250,7 +250,7 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
             subcommands::handle_cert_command(action)?;
             return Ok(None);
         }
-        Some(Commands::ListVrunner) => {}
+        Some(Commands::ListVrw) => {}
         Some(Commands::ListCommands) => {}
         Some(Commands::StopCommand { target: _, interactive: _ }) => {}
         Some(Commands::Purge { target: _ }) => {}
@@ -276,8 +276,8 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
     Ok(Some(cli))
 }
 
-/// Dispatch async subcommands (vrunner). Returns true if handled.
-#[cfg(feature = "vrunner")]
+/// Dispatch async subcommands (vrw). Returns true if handled.
+#[cfg(feature = "vrw")]
 pub async fn handle_subcommands(cli: &Cli) -> Result<bool> {
     match &cli.command {
         Some(Commands::List { .. }) => {
@@ -291,7 +291,7 @@ pub async fn handle_subcommands(cli: &Cli) -> Result<bool> {
             // Interactive mode: let user select which instance(s) to stop
             if *interactive && pid.is_none() {
                 if instances.is_empty() {
-                    tracing::error!("No vrunner instances running.");
+                    tracing::error!("No vrw instances running.");
                     std::process::exit(1);
                 }
                 let items: Vec<_> = instances.iter().map(|i| {
@@ -334,8 +334,8 @@ pub async fn handle_subcommands(cli: &Cli) -> Result<bool> {
             subcommands::handle_thaw_command_http(cli, *pid, *interactive).await?;
             Ok(true)
         }
-        Some(Commands::ListVrunner) => {
-            subcommands::handle_list_vrunner_command(cli).await?;
+        Some(Commands::ListVrw) => {
+            subcommands::handle_list_vrw_command(cli).await?;
             Ok(true)
         }
         Some(Commands::ListCommands) => {
@@ -347,10 +347,10 @@ pub async fn handle_subcommands(cli: &Cli) -> Result<bool> {
             if !stopped {
                 match target {
                     Some(t) => tracing::error!(
-                        "No matching command found for '{}'. Use `vrunner list` to see running commands.", t
+                        "No matching command found for '{}'. Use `vrw list` to see running commands.", t
                     ),
                     None => tracing::error!(
-                        "No command to stop. Use `vrunner list` to see running commands."
+                        "No command to stop. Use `vrw list` to see running commands."
                     ),
                 }
                 std::process::exit(1);

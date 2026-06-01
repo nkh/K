@@ -1,6 +1,6 @@
-# vrl User Guide
+# vrc User Guide
 
-A practical guide to using vrl for common tasks. This document covers the web administrative interface, CLI controller, and direct HTTP API access via curl and other tools.
+A practical guide to using vrc for common tasks. This document covers the web administrative interface, CLI controller, and direct HTTP API access via curl and other tools.
 
 ---
 
@@ -55,17 +55,17 @@ A practical guide to using vrl for common tasks. This document covers the web ad
 
 ## Concepts Overview
 
-vrl is a process manager that runs commands inside virtual TTYs (VTTYs) and exposes them through a web API. Rather than wrapping processes directly, vrl creates pseudo-terminals, giving child processes full terminal capabilities including ANSI colors, cursor movement, and interactive keyboard input.
+vrc is a process manager that runs commands inside virtual TTYs (VTTYs) and exposes them through a web API. Rather than wrapping processes directly, vrc creates pseudo-terminals, giving child processes full terminal capabilities including ANSI colors, cursor movement, and interactive keyboard input.
 
-The key architectural concept is the separation between **starting a command** and **interacting with it**. A command can be started from the CLI, the web UI, or the API. Once running, it can be monitored and controlled from any of those interfaces interchangeably. This makes vrl suitable for scenarios where a command needs to be started from one place (like a CI script) and monitored from another (like a web dashboard).
+The key architectural concept is the separation between **starting a command** and **interacting with it**. A command can be started from the CLI, the web UI, or the API. Once running, it can be monitored and controlled from any of those interfaces interchangeably. This makes vrc suitable for scenarios where a command needs to be started from one place (like a CI script) and monitored from another (like a web dashboard).
 
-vrl supports three controllers plus a real-time streaming layer:
+vrc supports three controllers plus a real-time streaming layer:
 - **CLI** — direct command-line invocation for starting, listing, and stopping instances
 - **Web Admin** — a browser-based dashboard at `/` or `/admin` for managing commands visually. Supports direct command-name URLs like `/htop` to jump straight to a command's terminal.
 - **HTTP API** — a RESTful API for programmatic access from scripts, curl, or custom clients
 - **WebSocket API** — real-time bidirectional streaming for terminal output and log entries, eliminating the need for polling
 
-All controllers communicate with the same vrl instance. The CLI subcommands (`list`, `stop`, `cert`) connect to running instances over HTTP to perform management operations. WebSocket connections upgrade from HTTP and provide push-based updates for lower latency.
+All controllers communicate with the same vrc instance. The CLI subcommands (`list`, `stop`, `cert`) connect to running instances over HTTP to perform management operations. WebSocket connections upgrade from HTTP and provide push-based updates for lower latency.
 
 ---
 
@@ -76,10 +76,10 @@ All controllers communicate with the same vrl instance. The CLI subcommands (`li
 Build from source using Cargo:
 
 ```bash
-git clone https://github.com/yourusername/vrl.git
-cd vrl
+git clone https://github.com/yourusername/vrc.git
+cd vrc
 cargo build --release
-# Binary is at target/release/vrl
+# Binary is at target/release/vrc
 ```
 
 Or install system-wide:
@@ -90,10 +90,10 @@ cargo install --path .
 
 ### First Run
 
-Start vrl in its simplest form — idle mode on localhost with no command:
+Start vrc in its simplest form — idle mode on localhost with no command:
 
 ```bash
-vrl
+vrc
 ```
 
 This starts an HTTP server on `http://127.0.0.1:9090`. No commands are running yet; the instance is ready to receive API requests or web UI connections. You can verify it is working by listing commands:
@@ -116,20 +116,20 @@ Response:
 Run a command immediately and start the web server alongside it:
 
 ```bash
-vrl -- htop
+vrc -- htop
 ```
 
-vrl spawns `htop` inside a virtual TTY, starts the HTTP server, and waits. You can open the web admin at `http://127.0.0.1:8080/admin` to see htop's terminal output, or use curl to interact with it programmatically.
+vrc spawns `htop` inside a virtual TTY, starts the HTTP server, and waits. You can open the web admin at `http://127.0.0.1:8080/admin` to see htop's terminal output, or use curl to interact with it programmatically.
 
 ### Getting Help
 
-vrl includes built-in help via clap:
+vrc includes built-in help via clap:
 
 ```bash
-vrl --help
-vrl -h
-vrl cert --help
-vrl cert generate --help
+vrc --help
+vrc -h
+vrc cert --help
+vrc cert generate --help
 ```
 
 These display all available options, subcommands, and their descriptions. The help text is the authoritative reference for CLI flags.
@@ -140,26 +140,26 @@ These display all available options, subcommands, and their descriptions. The he
 
 ### Running a Command on Startup
 
-Use the `--` separator to pass a command to vrl at launch. Everything after `--` is treated as the child command and its arguments:
+Use the `--` separator to pass a command to vrc at launch. Everything after `--` is treated as the child command and its arguments:
 
 ```bash
 # Run a development server
-vrl --port 3000 -- npm run dev
+vrc --port 3000 -- npm run dev
 
 # Run a Python HTTP server with 80-column terminal
-vrl --vtty-cols 80 -- python -m http.server 8000
+vrc --vtty-cols 80 -- python -m http.server 8000
 
 # Run with local terminal display visible
-vrl --display -- vim notes.txt
+vrc --display -- vim notes.txt
 
 # Run in the background as a daemon
-vrl --daemon -- my-long-running-script.sh
+vrc --daemon -- my-long-running-script.sh
 
 # Run with per-command exit options
-vrl --retain-on-exit --snapshot-on-exit /tmp/build.log -- cargo build
+vrc --retain-on-exit --snapshot-on-exit /tmp/build.log -- cargo build
 
 # Send initial keystrokes to the command
-vrl --send-keys "ls<Enter>" -- bash
+vrc --send-keys "ls<Enter>" -- bash
 ```
 
 The command runs inside a virtual TTY with full terminal capabilities. Programs like `vim`, `htop`, `ncurses` applications, and anything that reads from `/dev/tty` will work correctly.
@@ -225,45 +225,45 @@ curl -s -X POST http://127.0.0.1:8080/api/commands \
   -d '{"cmd": "bash", "args": ["-c", "for i in 1 2 3 4 5; do echo $i; sleep 1; done"]}'
 
 # Run with a custom TERM
-vrl --term xterm-256color --display -- tmux
+vrc --term xterm-256color --display -- tmux
 ```
 
 ### Spawning Commands via the CLI
 
 The CLI can spawn commands in three ways:
 
-1. **At startup** with `--`: `vrl -- htop`
-2. **Dynamically** via `vrl spawn` to send commands to a running instance
+1. **At startup** with `--`: `vrc -- htop`
+2. **Dynamically** via `vrc spawn` to send commands to a running instance
 3. **Via API** (curl, web UI, programmatic clients)
 
-#### `vrl spawn` — Dynamic CLI Spawning
+#### `vrc spawn` — Dynamic CLI Spawning
 
-The `spawn` subcommand discovers running vrl instances and sends a spawn request to one of them:
+The `spawn` subcommand discovers running vrc instances and sends a spawn request to one of them:
 
 ```bash
 # If exactly one instance is running, it is used automatically
-vrl spawn htop
+vrc spawn htop
 
 # With arguments
-vrl spawn python -m http.server 8000
+vrc spawn python -m http.server 8000
 
 # With environment variables
-vrl spawn --env RUST_LOG=debug --env DATABASE_URL=postgres://localhost/mydb -- cargo run
+vrc spawn --env RUST_LOG=debug --env DATABASE_URL=postgres://localhost/mydb -- cargo run
 
 # Ignore config environment variables (--no-env)
-vrl spawn --no-env --env PATH=/usr/bin -- ./my-script.sh
+vrc spawn --no-env --env PATH=/usr/bin -- ./my-script.sh
 
 # Target a specific instance by PID
-vrl spawn --target 12345 -- npm run dev
+vrc spawn --target 12345 -- npm run dev
 
 # With exit handlers
-vrl spawn --on-exit "notify-send Done" --on-error "notify-send Failed" -- ./build.sh
+vrc spawn --on-exit "notify-send Done" --on-error "notify-send Failed" -- ./build.sh
 
 # With a custom terminal size
-vrl spawn --rows 50 --cols 160 -- vim notes.txt
+vrc spawn --rows 50 --cols 160 -- vim notes.txt
 ```
 
-When multiple vrl instances are running and no `--target` is specified, vrl prints a list of all instances and asks you to use `--target PID` to select one.
+When multiple vrc instances are running and no `--target` is specified, vrc prints a list of all instances and asks you to use `--target PID` to select one.
 
 ---
 
@@ -274,10 +274,10 @@ When multiple vrl instances are running and no `--target` is specified, vrl prin
 Enable real-time terminal output on your local console with `--display`:
 
 ```bash
-vrl --display -- htop
+vrc --display -- htop
 ```
 
-This mirrors the VTTY contents to stdout at the refresh interval specified by `--refresh-ms` (default: 100ms). The display shows the raw ANSI output from the child process, including colors and cursor positioning. Press `Ctrl+C` in the terminal where vrl is running to stop the instance.
+This mirrors the VTTY contents to stdout at the refresh interval specified by `--refresh-ms` (default: 100ms). The display shows the raw ANSI output from the child process, including colors and cursor positioning. Press `Ctrl+C` in the terminal where vrc is running to stop the instance.
 
 ### Web Admin VTTY Viewer
 
@@ -433,7 +433,7 @@ This is useful for implementing scrollback in a web viewer or for scripts that o
 
 ### WebSocket Real-Time Streaming
 
-vrl provides two WebSocket endpoints that push updates in real time, eliminating the need for REST polling. WebSocket connections are upgraded from standard HTTP requests and use JSON text frames for all messages.
+vrc provides two WebSocket endpoints that push updates in real time, eliminating the need for REST polling. WebSocket connections are upgraded from standard HTTP requests and use JSON text frames for all messages.
 
 #### VTTY WebSocket — `ws://host:port/api/commands/{id}/ws`
 
@@ -505,7 +505,7 @@ ws.onmessage = (event) => {
 };
 ```
 
-**WebSocket with TLS:** When vrl is running with `--tls`, use `wss://` instead of `ws://`:
+**WebSocket with TLS:** When vrc is running with `--tls`, use `wss://` instead of `ws://`:
 ```javascript
 const ws = new WebSocket('wss://127.0.0.1:8080/api/commands/.../ws');
 ```
@@ -643,10 +643,10 @@ curl -s -X POST "http://127.0.0.1:8080/api/commands/$ID/keys" \
 #### Via CLI
 
 ```bash
-vrl list
+vrc list
 ```
 
-This queries all running vrl instances and contacts each one via HTTP to retrieve its active commands. The output shows each instance's PID, port, bind address, daemon/display status, and all running commands with their arguments and certificate bindings. If an instance is unreachable, it is marked accordingly.
+This queries all running vrc instances and contacts each one via HTTP to retrieve its active commands. The output shows each instance's PID, port, bind address, daemon/display status, and all running commands with their arguments and certificate bindings. If an instance is unreachable, it is marked accordingly.
 
 #### Via curl
 
@@ -687,19 +687,19 @@ The admin dashboard at `/admin` automatically lists all running commands. Each e
 
 ### Freezing and Thawing Commands
 
-vrl can freeze (suspend) and thaw (resume) running commands using POSIX signals (SIGSTOP/SIGCONT). A frozen command is paused — it consumes no CPU but remains in memory and can be resumed at any time. The admin web interface includes a Pause/Run button that toggles between freeze and thaw for the currently selected command.
+vrc can freeze (suspend) and thaw (resume) running commands using POSIX signals (SIGSTOP/SIGCONT). A frozen command is paused — it consumes no CPU but remains in memory and can be resumed at any time. The admin web interface includes a Pause/Run button that toggles between freeze and thaw for the currently selected command.
 
 #### Via CLI
 
 ```bash
 # Freeze a command (pause it)
-vrl freeze 550e8400-e29b-41d4-a716-446655440000
+vrc freeze 550e8400-e29b-41d4-a716-446655440000
 
 # Thaw a command (resume it)
-vrl thaw 550e8400-e29b-41d4-a716-446655440000
+vrc thaw 550e8400-e29b-41d4-a716-446655440000
 
-# Use --target to select which vrl instance
-vrl --target 12345 freeze 550e8400-e29b-41d4-a716-446655440000
+# Use --target to select which vrc instance
+vrc --target 12345 freeze 550e8400-e29b-41d4-a716-446655440000
 ```
 
 #### Via curl
@@ -738,25 +738,25 @@ Click the kill button next to a command in the admin dashboard.
 #### Via the CLI (stop entire instance)
 
 ```bash
-# Stop a vrl instance by its PID
-vrl stop 12345
+# Stop a vrc instance by its PID
+vrc stop 12345
 ```
 
-Note: `vrl stop <pid>` first attempts to find and kill a command with that OS PID on any running instance. If no matching command is found, it falls back to shutting down the entire vrl instance.
+Note: `vrc stop <pid>` first attempts to find and kill a command with that OS PID on any running instance. If no matching command is found, it falls back to shutting down the entire vrc instance.
 
 ### Kill by PID
 
-You can kill individual commands by their OS process ID without stopping the entire vrl instance. This is useful when you know the PID of a specific child process and want to terminate it without affecting other running commands.
+You can kill individual commands by their OS process ID without stopping the entire vrc instance. This is useful when you know the PID of a specific child process and want to terminate it without affecting other running commands.
 
 ```bash
 # Kill a command by its OS PID
 curl -X POST http://127.0.0.1:8080/api/commands/kill-pid/12345
 
 # From the CLI (queries all instances)
-vrl stop 12345
+vrc stop 12345
 ```
 
-The CLI `vrl stop` command now tries the kill-by-PID API first across all running instances. If a command with that PID is found, only that command is killed. If no command matches, it falls back to the traditional instance shutdown behavior.
+The CLI `vrc stop` command now tries the kill-by-PID API first across all running instances. If a command with that PID is found, only that command is killed. If no command matches, it falls back to the traditional instance shutdown behavior.
 
 ### Resizing the Terminal
 
@@ -764,20 +764,20 @@ You can resize a running command's virtual terminal from the CLI, the API, or th
 
 #### Via CLI
 
-Use the `vrl resize` subcommand. The target can be a PID (numeric) or a command name:
+Use the `vrc resize` subcommand. The target can be a PID (numeric) or a command name:
 
 ```bash
 # Resize by command PID
-vrl resize 12345 --rows 40 --cols 120
+vrc resize 12345 --rows 40 --cols 120
 
 # Resize by command name
-vrl resize htop --rows 50 --cols 160
+vrc resize htop --rows 50 --cols 160
 
 # Use your current terminal's size (omit --rows/--cols)
-vrl resize htop
+vrc resize htop
 ```
 
-When `--rows` and `--cols` are omitted (or set to 0), vrl auto-detects your terminal's current size. The command queries all running vrl instances to find the matching command. If multiple commands match the name, use the PID to disambiguate.
+When `--rows` and `--cols` are omitted (or set to 0), vrc auto-detects your terminal's current size. The command queries all running vrc instances to find the matching command. If multiple commands match the name, use the PID to disambiguate.
 
 #### Via curl (API)
 
@@ -800,12 +800,12 @@ ws.send(JSON.stringify({ type: 'resize', rows: 40, cols: 120 }));
 
 #### Spawning with a Custom Size
 
-You can also set a per-command terminal size at spawn time, independent of the server's default VTTY dimensions. This is useful when different commands need different terminal sizes on the same vrl instance.
+You can also set a per-command terminal size at spawn time, independent of the server's default VTTY dimensions. This is useful when different commands need different terminal sizes on the same vrc instance.
 
 **Via CLI:**
 ```bash
 # Spawn vim with a wide terminal
-vrl spawn --rows 30 --cols 160 vim file.txt
+vrc spawn --rows 30 --cols 160 vim file.txt
 ```
 
 **Via API:**
@@ -815,13 +815,13 @@ curl -X POST http://127.0.0.1:8080/api/commands \
   -d '{"cmd": "vim", "args": ["file.txt"], "rows": 30, "cols": 160}'
 ```
 
-When `rows` and `cols` are omitted from the spawn request, the server's configured default VTTY size is used. You can still resize the command later via `vrl resize` or the resize API endpoint.
+When `rows` and `cols` are omitted from the spawn request, the server's configured default VTTY size is used. You can still resize the command later via `vrc resize` or the resize API endpoint.
 
 ---
 
 ## 8. Snapshot and Diff
 
-vrl can store named snapshots of a command's VTTY buffer and later compute cell-level diffs against the current buffer. This is useful for automated testing (compare expected vs actual terminal output), debugging (capture a baseline and see what changed), and auditing (save terminal state at key points in a workflow). Snapshots are stored in memory and are automatically cleaned up when the command is killed or the instance shuts down.
+vrc can store named snapshots of a command's VTTY buffer and later compute cell-level diffs against the current buffer. This is useful for automated testing (compare expected vs actual terminal output), debugging (capture a baseline and see what changed), and auditing (save terminal state at key points in a workflow). Snapshots are stored in memory and are automatically cleaned up when the command is killed or the instance shuts down.
 
 ### Storing Snapshots
 
@@ -944,7 +944,7 @@ Response:
 
 ## 9. Exit Handlers and Timeouts
 
-vrl can automatically run external commands when a child process exits, and enforce graceful shutdown timeouts before force-killing stubborn processes.
+vrc can automatically run external commands when a child process exits, and enforce graceful shutdown timeouts before force-killing stubborn processes.
 
 ### Per-Command Exit Handlers via API
 
@@ -983,7 +983,7 @@ curl -s -X POST http://127.0.0.1:8080/api/commands \
   }'
 ```
 
-The exit handler command string is split on whitespace into a binary name and arguments. It runs as a detached (fire-and-forget) process — vrl does not wait for it to complete. Exit handlers are useful for sending notifications, cleaning up temporary files, triggering rollbacks, or alerting monitoring systems.
+The exit handler command string is split on whitespace into a binary name and arguments. It runs as a detached (fire-and-forget) process — vrc does not wait for it to complete. Exit handlers are useful for sending notifications, cleaning up temporary files, triggering rollbacks, or alerting monitoring systems.
 
 ### Default Exit Handlers via Config and CLI
 
@@ -991,7 +991,7 @@ You can set default exit handlers that apply to all commands unless overridden p
 
 **Via CLI flags:**
 ```bash
-vrl --on-exit "notify-send Done" --on-error "notify-send Error" --exit-timeout 20 -- cargo test
+vrc --on-exit "notify-send Done" --on-error "notify-send Error" --exit-timeout 20 -- cargo test
 ```
 
 **Via config file:**
@@ -1018,13 +1018,13 @@ In addition to exit handlers, several options control what happens when a specif
 **Examples:**
 ```bash
 # Retain the buffer and save a snapshot after tests finish
-vrl --retain-on-exit --snapshot-on-exit /tmp/test-output.txt -- cargo test
+vrc --retain-on-exit --snapshot-on-exit /tmp/test-output.txt -- cargo test
 
 # Send initial commands to a shell and save output when done
-vrl --send-keys "ls -la<Enter>whoami<Enter>" --snapshot-on-exit /tmp/shell.txt -- bash
+vrc --send-keys "ls -la<Enter>whoami<Enter>" --snapshot-on-exit /tmp/shell.txt -- bash
 
 # Capture htop's final screen and exit when htop quits
-vrl --snapshot-on-exit /tmp/htop.txt --display -- htop
+vrc --snapshot-on-exit /tmp/htop.txt --display -- htop
 ```
 
 **Via API:**
@@ -1039,14 +1039,14 @@ curl -s -X POST http://127.0.0.1:9090/api/commands \
   }'
 ```
 
-When `--retain-on-exit` is set, the command stays in the manager after exiting (visible in the tab bar with an `[EXITED]` status). This prevents vrl from exiting even in `--display-all` mode — it waits until all retained commands are purged. When `--snapshot-on-exit` is set, the VTTY buffer (including scrollback) is saved to the specified file as plain text before the command is removed.
+When `--retain-on-exit` is set, the command stays in the manager after exiting (visible in the tab bar with an `[EXITED]` status). This prevents vrc from exiting even in `--display-all` mode — it waits until all retained commands are purged. When `--snapshot-on-exit` is set, the VTTY buffer (including scrollback) is saved to the specified file as plain text before the command is removed.
 
 ### Graceful Shutdown with Timeout
 
-When you kill a command via the API (`POST /api/commands/{id}/kill`), vrl performs a graceful shutdown sequence:
+When you kill a command via the API (`POST /api/commands/{id}/kill`), vrc performs a graceful shutdown sequence:
 
 1. **SIGINT (Ctrl+C)** is sent to the child process, giving it a chance to exit cleanly.
-2. vrl waits up to `exit_timeout` seconds (default: 10) for the process to terminate.
+2. vrc waits up to `exit_timeout` seconds (default: 10) for the process to terminate.
 3. If the process has not exited within the timeout, **SIGKILL** is sent to force-terminate it.
 
 This two-phase approach prevents data corruption in processes that need to write state files, close database connections, or flush buffers before exiting. The timeout is configurable per-command or globally via `default_exit.exit.timeout_secs`.
@@ -1057,17 +1057,17 @@ This two-phase approach prevents data corruption in processes that need to write
 
 ### Command Log
 
-vrl can log all API commands it receives. Enable logging at startup:
+vrc can log all API commands it receives. Enable logging at startup:
 
 ```bash
 # Log to terminal
-vrl --log -- my-command
+vrc --log -- my-command
 
 # Log to file
-vrl --log-file /var/log/vrl.log -- my-command
+vrc --log-file /var/log/vrc.log -- my-command
 
 # Log to both terminal and file
-vrl --log --log-file /var/log/vrl.log -- my-command
+vrc --log --log-file /var/log/vrc.log -- my-command
 ```
 
 ### Reading Logs via the API
@@ -1113,7 +1113,7 @@ The `search` parameter filters lines case-insensitively. The response includes `
 ```yaml
 command_log:
   enabled: true
-  file: "/var/log/vrl.log"
+  file: "/var/log/vrc.log"
 ```
 
 ### PTY Raw Log Replay
@@ -1131,7 +1131,7 @@ Interactive controls: Space (next line), d (next 10), f (auto-play), p (peek), /
 
 ## Environment Variables
 
-vrl provides three layers of environment variable configuration for spawned commands. Each layer can override the previous one, giving fine-grained control over the environment each command sees.
+vrc provides three layers of environment variable configuration for spawned commands. Each layer can override the previous one, giving fine-grained control over the environment each command sees.
 
 ### Layer 1: Config File (Global Defaults)
 
@@ -1153,10 +1153,10 @@ Pass environment variables when spawning a command — these override config def
 
 **Via CLI --env flags:**
 ```bash
-vrl spawn --env RUST_LOG=debug --env DATABASE_URL=postgres://prod/db -- cargo run
+vrc spawn --env RUST_LOG=debug --env DATABASE_URL=postgres://prod/db -- cargo run
 
 # At startup
-vrl --env RUST_LOG=debug -- ./my-app
+vrc --env RUST_LOG=debug -- ./my-app
 ```
 
 **Via API "env" field:**
@@ -1175,11 +1175,11 @@ curl -s -X POST http://127.0.0.1:8080/api/commands \
 
 ### Layer 3: --no-env Flag
 
-The `--no-env` flag tells vrl to ignore all environment variables from the config file. Only variables set via `--env` CLI flags or the API `env` field will be passed to the command.
+The `--no-env` flag tells vrc to ignore all environment variables from the config file. Only variables set via `--env` CLI flags or the API `env` field will be passed to the command.
 
 ```bash
 # Config has RUST_LOG=info, but we want a clean environment
-vrl spawn --no-env --env PATH=/usr/bin -- ./my-script.sh
+vrc spawn --no-env --env PATH=/usr/bin -- ./my-script.sh
 
 # Via API
 curl -s -X POST http://127.0.0.1:8080/api/commands \
@@ -1208,7 +1208,7 @@ Profiles let you define named sets of configuration values in your config file. 
 ### Defining Profiles
 
 ```yaml
-# vrl.yaml
+# vrc.yaml
 profiles:
   development:
     vtty:
@@ -1242,7 +1242,7 @@ profiles:
       scrollback: 1000
     command_log:
       enabled: true
-      file: "/tmp/vrl-ci.log"
+      file: "/tmp/vrc-ci.log"
 ```
 
 ### Using Profiles
@@ -1250,13 +1250,13 @@ profiles:
 **Via CLI:**
 ```bash
 # Use the "development" profile
-vrl --profile development -- cargo run
+vrc --profile development -- cargo run
 
 # Use "production" profile with TLS
-vrl --profile production --tls -- ./my-server
+vrc --profile production --tls -- ./my-server
 
 # Use a profile and override specific values with CLI flags
-vrl --profile production --port 8443 -- ./my-server
+vrc --profile production --port 8443 -- ./my-server
 ```
 
 **Via API (spawn request):**
@@ -1279,7 +1279,7 @@ For example, with the `production` profile above:
 - `vtty.rows` stays at `24` (not in the profile, so base config/default is used)
 - `environment.variables.RUST_LOG` becomes `warn` (from profile)
 
-If a profile name is specified that does not exist, vrl exits with an error listing all available profile names.
+If a profile name is specified that does not exist, vrc exits with an error listing all available profile names.
 
 ### Real-Time Log Streaming via WebSocket
 
@@ -1289,19 +1289,19 @@ For push-based log streaming instead of polling, connect to the log WebSocket en
 
 ## Certificate-Based Access Control
 
-Certificates provide per-command access isolation within a vrl instance. Each certificate in the pool can be bound to running commands, ensuring only clients with the correct bearer token can interact with those commands.
+Certificates provide per-command access isolation within a vrc instance. Each certificate in the pool can be bound to running commands, ensuring only clients with the correct bearer token can interact with those commands.
 
 ### Generating a Certificate
 
 ```bash
-vrl cert generate my-application
+vrc cert generate my-application
 ```
 
 ### Listing Certificates
 
 ```bash
 # Via CLI
-vrl cert list
+vrc cert list
 
 # Via API
 curl http://127.0.0.1:8080/api/certificates
@@ -1311,10 +1311,10 @@ curl http://127.0.0.1:8080/api/certificates
 
 ```bash
 # Show certificate details including the full bearer token
-vrl cert show my-application
+vrc cert show my-application
 
 # Use the token in API requests
-TOKEN=$(vrl cert show my-application | grep -oP 'Token:\s*\K\S+')
+TOKEN=$(vrc cert show my-application | grep -oP 'Token:\s*\K\S+')
 curl -H "Authorization: Bearer $TOKEN" \
   http://127.0.0.1:8080/api/commands/$ID/vtty
 ```
@@ -1325,12 +1325,12 @@ For the complete certificate management guide with advanced examples, see [docs/
 
 ## Remote Access and TLS
 
-By default, vrl binds to `127.0.0.1` (localhost only) and uses plain HTTP. For remote access, you need both network binding and security.
+By default, vrc binds to `127.0.0.1` (localhost only) and uses plain HTTP. For remote access, you need both network binding and security.
 
 ### Quick Remote Setup
 
 ```bash
-vrl --remote --tls -- my-command
+vrc --remote --tls -- my-command
 ```
 
 This single flag does the following:
@@ -1342,17 +1342,17 @@ This single flag does the following:
 
 1. **Start the server:**
    ```bash
-   vrl --bind 0.0.0.0 --port 8080 --auth --tls -- some-command
+   vrc --bind 0.0.0.0 --port 8080 --auth --tls -- some-command
    ```
 
 2. **Get the authentication token:**
    ```bash
-   cat ~/.config/vrl/token
+   cat ~/.config/vrc/token
    ```
 
 3. **Get the server certificate** (for TLS verification):
    ```bash
-   cat ~/.config/vrl/cert.pem
+   cat ~/.config/vrc/cert.pem
    ```
 
 4. **Connect from a remote machine:**
@@ -1413,9 +1413,9 @@ curl -s -X POST --cacert $CERT \
 Replace the auto-generated self-signed certificates with your own (e.g., from Let's Encrypt or an internal CA):
 
 ```bash
-vrl --tls \
-  --cert-file /etc/ssl/certs/vrl.crt \
-  --key-file /etc/ssl/private/vrl.key \
+vrc --tls \
+  --cert-file /etc/ssl/certs/vrc.crt \
+  --key-file /etc/ssl/private/vrc.key \
   --remote -- my-command
 ```
 
@@ -1431,40 +1431,40 @@ security:
 
 tls:
   enabled: true
-  cert_file: "/etc/ssl/certs/vrl.crt"
-  key_file: "/etc/ssl/private/vrl.key"
+  cert_file: "/etc/ssl/certs/vrc.crt"
+  key_file: "/etc/ssl/private/vrc.key"
 ```
 
 ---
 
 ## Daemon Mode
 
-Run vrl as a background process that detaches from your terminal:
+Run vrc as a background process that detaches from your terminal:
 
 ```bash
 # Basic daemon mode
-vrl --daemon -- my-command
+vrc --daemon -- my-command
 
 # Daemon with TLS for remote access
-vrl --daemon --remote --tls -- my-command
+vrc --daemon --remote --tls -- my-command
 
 # Daemon with custom output files
-vrl --daemon \
-  --stdout-file /var/log/vrl/stdout \
-  --stderr-file /var/log/vrl/stderr \
+vrc --daemon \
+  --stdout-file /var/log/vrc/stdout \
+  --stderr-file /var/log/vrc/stderr \
   -- my-command
 ```
 
-In daemon mode, vrl performs a double-fork to detach from the controlling terminal. The process becomes a session leader, stdin is closed, and stdout/stderr are redirected to files (default: `/tmp/vrl.out` and `/tmp/vrl.err`). The `--display` option is automatically disabled since there is no terminal to display on.
+In daemon mode, vrc performs a double-fork to detach from the controlling terminal. The process becomes a session leader, stdin is closed, and stdout/stderr are redirected to files (default: `/tmp/vrc.out` and `/tmp/vrc.err`). The `--display` option is automatically disabled since there is no terminal to display on.
 
 To manage a daemon instance:
 
 ```bash
 # Find the instance
-vrl list
+vrc list
 
 # Stop the instance
-vrl stop <pid>
+vrc stop <pid>
 
 # Or send API commands (the HTTP server is still running)
 curl http://127.0.0.1:8080/api/commands
@@ -1478,13 +1478,13 @@ The interactive display mode provides a terminal-based UI for monitoring and con
 
 ```bash
 # View a single command's output
-vrl --display -- htop
+vrc --display -- htop
 
 # Stay active after the command exits, switching to other commands
-vrl --display-all -- htop
+vrc --display-all -- htop
 
 # Show a tab bar listing all running commands
-vrl --tabs --display-all -- htop
+vrc --tabs --display-all -- htop
 ```
 
 ### Tab Bar
@@ -1541,11 +1541,11 @@ For the complete configuration reference including all keybinding fields and the
 
 ### Command Log Overlay
 
-Press `Ctrl+L` (or your configured `toggle_log` key) to toggle a semi-transparent log overlay on top of the VTTY display. This shows the most recent vrl command log entries (spawns, kills, send_keys events, etc.) without leaving the terminal display. Press `Ctrl+L` again to dismiss the overlay.
+Press `Ctrl+L` (or your configured `toggle_log` key) to toggle a semi-transparent log overlay on top of the VTTY display. This shows the most recent vrc command log entries (spawns, kills, send_keys events, etc.) without leaving the terminal display. Press `Ctrl+L` again to dismiss the overlay.
 
 ### Spawning Commands from the Display
 
-Press `F12` (or your configured `spawn_command` key) to open an inline spawn prompt. The display temporarily exits raw mode so you get normal line editing. Type the command and press Enter to spawn it on the current vrl instance. Press `Ctrl+C` to cancel without spawning. After the command is spawned (or cancelled), the display returns to raw mode automatically.
+Press `F12` (or your configured `spawn_command` key) to open an inline spawn prompt. The display temporarily exits raw mode so you get normal line editing. Type the command and press Enter to spawn it on the current vrc instance. Press `Ctrl+C` to cancel without spawning. After the command is spawned (or cancelled), the display returns to raw mode automatically.
 
 ### Help Overlay
 
@@ -1555,19 +1555,19 @@ Press `Ctrl+H` (or your configured `show_help` key) to display a full-screen hel
 
 ## Multi-Instance Management
 
-Multiple vrl instances can run simultaneously on different ports. This is useful for managing separate environments (development, staging, production) or for running different sets of commands independently.
+Multiple vrc instances can run simultaneously on different ports. This is useful for managing separate environments (development, staging, production) or for running different sets of commands independently.
 
 ### Starting Multiple Instances
 
 ```bash
 # Instance 1: Development server on port 8080
-vrl --port 8080 -- daemon
+vrc --port 8080 -- daemon
 
 # Instance 2: Staging server on port 9090 with TLS
-vrl --port 9090 --tls -- daemon
+vrc --port 9090 --tls -- daemon
 
 # Instance 3: Production server on port 443 with custom certs
-vrl --port 443 --tls \
+vrc --port 443 --tls \
   --cert-file /etc/ssl/prod/cert.pem \
   --key-file /etc/ssl/prod/key.pem \
   --remote -- daemon
@@ -1576,10 +1576,10 @@ vrl --port 443 --tls \
 ### Listing All Instances
 
 ```bash
-vrl list
+vrc list
 ```
 
-The enhanced `vrl list` command contacts each running instance via HTTP to retrieve its active commands. The output shows instance metadata alongside all running commands with their arguments and certificate bindings:
+The enhanced `vrc list` command contacts each running instance via HTTP to retrieve its active commands. The output shows instance metadata alongside all running commands with their arguments and certificate bindings:
 
 ```
 PID        PORT     BIND                 DAEMON     DISPLAY    COMMAND
@@ -1594,10 +1594,10 @@ If an instance is unreachable, the output indicates the connection error instead
 
 ```bash
 # Kill a specific command by its OS PID (queries all instances first)
-vrl stop 12345
+vrc stop 12345
 
 # If no command with that PID is found, stops the entire instance
-vrl stop 12346
+vrc stop 12346
 ```
 
 ### Using Different Configs Per Instance
@@ -1606,47 +1606,47 @@ Each instance can load a different configuration file:
 
 ```bash
 # Dev instance
-vrl -c ./configs/dev.yaml --port 8080 -- daemon
+vrc -c ./configs/dev.yaml --port 8080 -- daemon
 
 # Staging instance
-vrl -c ./configs/staging.yaml --port 9090 -- daemon
+vrc -c ./configs/staging.yaml --port 9090 -- daemon
 
 # Production instance
-vrl -c /etc/vrl/production.yaml --port 443 -- daemon
+vrc -c /etc/vrc/production.yaml --port 443 -- daemon
 ```
 
 ### Additional Management Subcommands
 
-#### `list-vrl` — Compact Instance Listing
+#### `list-vrc` — Compact Instance Listing
 
-List all running vrl instances in a compact, machine-friendly format:
+List all running vrc instances in a compact, machine-friendly format:
 
 ```bash
-vrl list-vrl
+vrc list-vrc
 ```
 
-Output includes each instance's PID, port, bind address, and daemon status. Use this when you need a quick overview without the full command details shown by `vrl list`.
+Output includes each instance's PID, port, bind address, and daemon status. Use this when you need a quick overview without the full command details shown by `vrc list`.
 
 #### `list-commands` — List Commands Across Instances
 
-List all running commands on all vrl instances:
+List all running commands on all vrc instances:
 
 ```bash
-vrl list-commands
+vrc list-commands
 ```
 
 This contacts every running instance and displays its active commands, arguments, PIDs, and statuses in a consolidated table.
 
 #### `stop-command` — Stop a Specific Command
 
-Stop a specific command by its OS PID without stopping the entire vrl instance:
+Stop a specific command by its OS PID without stopping the entire vrc instance:
 
 ```bash
 # Stop a command with PID 12345
-vrl stop-command 12345
+vrc stop-command 12345
 
 # With --target to select a specific instance
-vrl --target 54321 stop-command 12345
+vrc --target 54321 stop-command 12345
 ```
 
 This is equivalent to calling `POST /api/commands/kill-pid/:pid` on the target instance.
@@ -1655,7 +1655,7 @@ This is equivalent to calling `POST /api/commands/kill-pid/:pid` on the target i
 
 ## Configuration File Reference
 
-vrl supports three configuration file formats: YAML, TOML, and JSON. The format is detected automatically from the file extension (`.yaml`/`.yml`, `.toml`, `.json`). Configuration is loaded from multiple locations in order of increasing precedence:
+vrc supports three configuration file formats: YAML, TOML, and JSON. The format is detected automatically from the file extension (`.yaml`/`.yml`, `.toml`, `.json`). Configuration is loaded from multiple locations in order of increasing precedence:
 
 ```
 Built-in defaults → Global config → Local config → Explicit config file → CLI flags
@@ -1663,21 +1663,21 @@ Built-in defaults → Global config → Local config → Explicit config file �
 
 | Location | Path |
 |----------|------|
-| Global config | `~/.config/vrl/config.yaml` (or `.toml`) |
-| Local config | `./vrl.yaml` (or `.toml`) in the current directory |
+| Global config | `~/.config/vrc/config.yaml` (or `.toml`) |
+| Local config | `./vrc.yaml` (or `.toml`) in the current directory |
 | Explicit | Any path specified with `-c <FILE>` |
 
 ### YAML Example
 
 ```yaml
-# vrl.yaml
+# vrc.yaml
 server:
   bind: "127.0.0.1"
   port: 8080
 
 security:
   require_auth: false
-  token_file: "~/.config/vrl/token"
+  token_file: "~/.config/vrc/token"
 
 tls:
   enabled: false
@@ -1700,8 +1700,8 @@ command_log:
 
 daemon:
   enabled: false
-  stdout_file: "/tmp/vrl.out"
-  stderr_file: "/tmp/vrl.err"
+  stdout_file: "/tmp/vrc.out"
+  stderr_file: "/tmp/vrc.err"
 
 handles: []
 ```
@@ -1709,14 +1709,14 @@ handles: []
 ### TOML Example
 
 ```toml
-# vrl.toml
+# vrc.toml
 [server]
 bind = "127.0.0.1"
 port = 8080
 
 [security]
 require_auth = false
-token_file = "~/.config/vrl/token"
+token_file = "~/.config/vrc/token"
 
 [tls]
 enabled = false
@@ -1738,8 +1738,8 @@ enabled = false
 
 [daemon]
 enabled = false
-stdout_file = "/tmp/vrl.out"
-stderr_file = "/tmp/vrl.err"
+stdout_file = "/tmp/vrc.out"
+stderr_file = "/tmp/vrc.err"
 ```
 
 ### JSON Example
@@ -1752,7 +1752,7 @@ stderr_file = "/tmp/vrl.err"
   },
   "security": {
     "require_auth": false,
-    "token_file": "~/.config/vrl/token"
+    "token_file": "~/.config/vrc/token"
   },
   "tls": {
     "enabled": false
@@ -1774,8 +1774,8 @@ stderr_file = "/tmp/vrl.err"
   },
   "daemon": {
     "enabled": false,
-    "stdout_file": "/tmp/vrl.out",
-    "stderr_file": "/tmp/vrl.err"
+    "stdout_file": "/tmp/vrc.out",
+    "stderr_file": "/tmp/vrc.err"
   }
 }
 ```
@@ -1788,11 +1788,11 @@ For the complete configuration reference with all keys, defaults, and CLI mappin
 
 ### Development Server Orchestration
 
-Run multiple development servers in a single vrl instance, each in its own VTTY, accessible from the web:
+Run multiple development servers in a single vrc instance, each in its own VTTY, accessible from the web:
 
 ```bash
-# Start vrl in idle mode with display disabled
-vrl --daemon --log --log-file /tmp/vrl.log
+# Start vrc in idle mode with display disabled
+vrc --daemon --log --log-file /tmp/vrc.log
 
 # Spawn frontend dev server
 curl -s -X POST http://127.0.0.1:8080/api/commands \
@@ -1818,14 +1818,14 @@ curl http://127.0.0.1:8080/api/commands
 
 ### CI/CD Pipeline Runner
 
-Use vrl to run CI jobs with full terminal access for debugging failed builds:
+Use vrc to run CI jobs with full terminal access for debugging failed builds:
 
 ```bash
-# Start a secure vrl instance on the CI server
-vrl --remote --tls --port 8080 --daemon --log-file /var/log/vrl-ci.log
+# Start a secure vrc instance on the CI server
+vrc --remote --tls --port 8080 --daemon --log-file /var/log/vrc-ci.log
 
 # CI pipeline script spawns a build job
-TOKEN=$(cat ~/.config/vrl/token)
+TOKEN=$(cat ~/.config/vrc/token)
 
 JOB_ID=$(curl -s -X POST https://localhost:8080/api/commands \
   -H "Content-Type: application/json" \
@@ -1853,10 +1853,10 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 Manage services on a remote machine through a web interface:
 
 ```bash
-# On the remote server — start vrl with TLS and auth
-vrl --remote --tls --port 443 --daemon
+# On the remote server — start vrc with TLS and auth
+vrc --remote --tls --port 443 --daemon
 
-# Distribute ~/.config/vrl/token and ~/.config/vrl/cert.pem to admins
+# Distribute ~/.config/vrc/token and ~/.config/vrc/cert.pem to admins
 
 # From your local machine — run interactive commands on the remote server
 TOKEN="your-token"
@@ -1893,8 +1893,8 @@ curl -s --cacert $CERT -H "Authorization: Bearer $TOKEN" \
 Share a terminal session between multiple developers via the web interface:
 
 ```bash
-# Developer 1 starts vrl with a shared session
-vrl --port 8080 --daemon
+# Developer 1 starts vrc with a shared session
+vrc --port 8080 --daemon
 
 # Developer 1 starts vim in a shared VTTY
 SHARED_ID=$(curl -s -X POST http://localhost:8080/api/commands \
@@ -1923,15 +1923,15 @@ curl -s -X POST http://localhost:8080/api/commands/$SHARED_ID/keys \
 Run tasks that need to outlast your SSH session without screen or tmux:
 
 ```bash
-# Start a long data processing job via vrl
-vrl --port 8080 --daemon
+# Start a long data processing job via vrc
+vrc --port 8080 --daemon
 
 JOB_ID=$(curl -s -X POST http://localhost:8080/api/commands \
   -H "Content-Type: application/json" \
   -d '{"cmd": "python", "args": ["process_large_dataset.py", "--input", "data.csv"]}' \
   | jq -r '.data.id')
 
-# Disconnect from SSH — the job keeps running because vrl is a daemon
+# Disconnect from SSH — the job keeps running because vrc is a daemon
 
 # Reconnect later and check progress
 curl -s "http://localhost:8080/api/commands/$JOB_ID/vtty/partial?offset=0&limit=20" \
@@ -1942,7 +1942,7 @@ curl -s "http://localhost:8080/api/commands/$JOB_ID/vtty/partial?offset=0&limit=
 
 ## Troubleshooting
 
-### vrl won't start
+### vrc won't start
 
 Check that the port is not already in use:
 
@@ -1952,7 +1952,7 @@ lsof -i :8080
 ss -tlnp | grep 8080
 
 # Use a different port
-vrl --port 9090
+vrc --port 9090
 ```
 
 ### Connection refused
@@ -1961,10 +1961,10 @@ Ensure the server is running and you are using the correct address:
 
 ```bash
 # Verify the instance is running
-vrl list
+vrc list
 
 # Check the bind address — 127.0.0.1 only accepts localhost connections
-vrl --bind 0.0.0.0  # to accept remote connections
+vrc --bind 0.0.0.0  # to accept remote connections
 ```
 
 ### TLS certificate errors
@@ -1973,7 +1973,7 @@ When using self-signed certificates, clients must trust the certificate explicit
 
 ```bash
 # With curl, use --cacert
-curl --cacert ~/.config/vrl/cert.pem https://localhost:8080/api/commands
+curl --cacert ~/.config/vrc/cert.pem https://localhost:8080/api/commands
 
 # To bypass certificate verification (not recommended for production)
 curl -k https://localhost:8080/api/commands
@@ -1985,23 +1985,23 @@ When auth is enabled, all API requests must include the bearer token:
 
 ```bash
 # Get the token
-cat ~/.config/vrl/token
+cat ~/.config/vrc/token
 
 # Use it in requests
-TOKEN=$(cat ~/.config/vrl/token)
+TOKEN=$(cat ~/.config/vrc/token)
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/commands
 ```
 
 ### Command exits immediately
 
-Some commands require a TTY to function. vrl provides a pseudo-terminal, but the command's environment may need adjustment:
+Some commands require a TTY to function. vrc provides a pseudo-terminal, but the command's environment may need adjustment:
 
 ```bash
 # Verify TERM is set correctly
-vrl --term xterm-256color -- my-command
+vrc --term xterm-256color -- my-command
 
 # Check if the command expects specific environment variables
-vrl -- cmd="env TERM=xterm-256color my-command"
+vrc -- cmd="env TERM=xterm-256color my-command"
 ```
 
 ### VTTY output appears empty
@@ -2021,13 +2021,13 @@ curl "http://localhost:8080/api/commands/$ID/vtty/partial?offset=0&limit=100"
 
 ### Log file not found via API
 
-The log endpoint checks several common paths. If your log file is in a custom location, ensure the path matches what was passed to `--log-file` or configured in `command_log.file`. The API attempts to read from `/tmp/vrl.log`, `./vrl.log`, and `./vrl-commands.log` by default.
+The log endpoint checks several common paths. If your log file is in a custom location, ensure the path matches what was passed to `--log-file` or configured in `command_log.file`. The API attempts to read from `/tmp/vrc.log`, `./vrc.log`, and `./vrc-commands.log` by default.
 
 ---
 
 ## Connection Types Supported
 
-vrl supports **HTTP, HTTPS (TLS), WebSocket (ws://), and secure WebSocket (wss://)** connections. The WebSocket endpoints upgrade from HTTP and provide real-time bidirectional communication for terminal output and log streaming. The following connection modes are available:
+vrc supports **HTTP, HTTPS (TLS), WebSocket (ws://), and secure WebSocket (wss://)** connections. The WebSocket endpoints upgrade from HTTP and provide real-time bidirectional communication for terminal output and log streaming. The following connection modes are available:
 
 | Mode | CLI Flag | Description |
 |------|----------|-------------|

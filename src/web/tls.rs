@@ -1,4 +1,4 @@
-#![cfg(feature = "vrunner")]
+#![cfg(feature = "vrw")]
 #![allow(dead_code, unused_imports)]
 use anyhow::{Context, Result};
 use std::path::PathBuf;
@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 /// Manages TLS certificate generation and loading.
 ///
-/// On first use (or when certificates don't exist), vrunner generates a
+/// On first use (or when certificates don't exist), vrw generates a
 /// self-signed certificate using `rcgen`. The certificate and key are saved
 /// as PEM files in the configured directory. Authorized clients must be
 /// given the certificate to establish trust.
@@ -17,7 +17,7 @@ impl TlsManager {
     pub fn default_paths() -> (PathBuf, PathBuf) {
         let dir = dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("/tmp"))
-            .join("vrunner");
+            .join("vrw");
         (dir.join("cert.pem"), dir.join("key.pem"))
     }
 
@@ -128,10 +128,10 @@ impl TlsManager {
         params.distinguished_name = rcgen::DistinguishedName::new();
         params
             .distinguished_name
-            .push(rcgen::DnType::CommonName, "vrunner");
+            .push(rcgen::DnType::CommonName, "vrw");
         params
             .distinguished_name
-            .push(rcgen::DnType::OrganizationName, "vrunner");
+            .push(rcgen::DnType::OrganizationName, "vrw");
 
         // Set key usage
         params.key_usages = vec![

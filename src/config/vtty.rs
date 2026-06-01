@@ -17,11 +17,11 @@ pub struct VttyConfig {
     pub truecolor: bool,
     /// Enable mouse event forwarding.
     pub mouse: bool,
-    /// Default font size for PNG screenshots (vrunner only).
-    #[cfg(feature = "vrunner")]
+    /// Default font size for PNG screenshots (vrw only).
+    #[cfg(feature = "vrw")]
     pub screenshot_font_size: f32,
-    /// Default font file path for PNG screenshots (vrunner only).
-    #[cfg(feature = "vrunner")]
+    /// Default font file path for PNG screenshots (vrw only).
+    #[cfg(feature = "vrw")]
     pub screenshot_font_name: Option<String>,
 }
 
@@ -34,9 +34,9 @@ impl Default for VttyConfig {
             scrollback: 5000,
             truecolor: true,
             mouse: false,
-            #[cfg(feature = "vrunner")]
+            #[cfg(feature = "vrw")]
             screenshot_font_size: 14.0,
-            #[cfg(feature = "vrunner")]
+            #[cfg(feature = "vrw")]
             screenshot_font_name: None,
         }
     }

@@ -1,0 +1,94 @@
+.\" Title: vrc-cat
+.\" Author: vrc contributors
+.\" Manual section: 1
+.\"
+.TH VRL\-CAT 1 "2025" "vrc" "User Commands"
+
+.SH NAME
+vrc\-cat \- show VTTY text output of a command in a running instance
+
+.SH SYNOPSIS
+.B vrc
+\fBcat\fR \fIPID\fR [\fB\-c\fR \fICOMMAND\fR] [\fB\-\-interactive\fR]
+
+.SH DESCRIPTION
+Prints the virtual terminal (VTTY) buffer of a command running inside a vrc instance. The output is plain text with ANSI escape sequences stripped, suitable for piping to \fBgrep\fR(1), \fBless\fR(1), or redirecting to a file.
+
+Connects to the target instance's UDS control socket at \fB~/.local/share/vrc/control\-{pid}.sock\fR and retrieves the VTTY snapshot.
+
+.SH ARGUMENTS
+
+.TP
+.B PID
+OS process ID of the target vrc instance (the vrc process itself, not the child command).
+
+.SH OPTIONS
+
+.TP
+.BR \-c ", " \-\-command " " \fICOMMAND\fR
+ID of the target command within the instance (omit for the first/only command).
+
+.TP
+.BR \-\-interactive
+Present a numbered list of all commands in the instance and allow the user to select one or more by number (space-separated). Overrides \-c.
+
+.TP
+.BR \-h ", " \-\-help
+Print help information and exit.
+
+.SH EXAMPLES
+
+.PP
+Print the VTTY of the only command in an instance:
+.RS
+.PP
+.nf
+\fB$ vrc cat 12345\fR
+.fi
+.RE
+
+.PP
+Print a specific command by ID:
+.RS
+.PP
+.nf
+\fB$ vrc cat 12345 \-c cmd_abc\fR
+.fi
+.RE
+
+.PP
+Interactively select commands to print:
+.RS
+.PP
+.nf
+\fB$ vrc cat 12345 \-\-interactive\fR
+  1) htop (PID 5678)
+  2) vim notes.txt (PID 5679)
+Select [space-separated numbers]: 1 2
+.fi
+.RE
+
+.PP
+Pipe output to grep:
+.RS
+.PP
+.nf
+\fB$ vrc cat 12345 | grep "ERROR"\fR
+.fi
+.RE
+
+.SH EXIT STATUS
+
+.TP
+.B 0
+Success.
+
+.TP
+.B 1
+Error (instance not found, connection failed, command not found, etc.).
+
+.SH SEE ALSO
+.BR vrc (1),
+.BR vrc\-list (1),
+.BR vrc\-keys (1),
+.BR vrc\-spawn\-in (1)

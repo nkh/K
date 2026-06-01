@@ -1,6 +1,6 @@
 //! CLI subcommand handlers for inter-instance IPC.
 //!
-//! These commands connect to a running vrl instance via its UDS control
+//! These commands connect to a running vrc instance via its UDS control
 //! socket and send commands (keys, cat, spawn, freeze, thaw, resize, etc.).
 
 use anyhow::Result;
@@ -38,7 +38,7 @@ pub(crate) async fn resolve_command_id(pid: u32, command: Option<&str>) -> Resul
     }
 }
 
-/// Handle `vrl keys <pid> <keys>`.
+/// Handle `vrc keys <pid> <keys>`.
 pub async fn handle_keys_command(pid: u32, command: Option<&str>, keys: &str) -> Result<()> {
     let id = resolve_command_id(pid, command).await?;
     let response = send_command(pid, ControlCommand::SendKeys {
@@ -55,7 +55,7 @@ pub async fn handle_keys_command(pid: u32, command: Option<&str>, keys: &str) ->
     Ok(())
 }
 
-/// Handle `vrl cat <pid>`.
+/// Handle `vrc cat <pid>`.
 pub async fn handle_cat_command(pid: u32, command: Option<&str>) -> Result<()> {
     let id = resolve_command_id(pid, command).await?;
     let response = send_command(pid, ControlCommand::Cat { id }).await?;
@@ -70,7 +70,7 @@ pub async fn handle_cat_command(pid: u32, command: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-/// Handle `vrl spawn-in <pid> -- cmd args...`.
+/// Handle `vrc spawn-in <pid> -- cmd args...`.
 pub async fn handle_spawn_in_command(pid: u32, cmd: &str, args: &[String]) -> Result<()> {
     let response = send_command(
         pid,
@@ -94,7 +94,7 @@ pub async fn handle_spawn_in_command(pid: u32, cmd: &str, args: &[String]) -> Re
     Ok(())
 }
 
-/// Handle `vrl freeze <pid>`.
+/// Handle `vrc freeze <pid>`.
 pub async fn handle_freeze_command(pid: u32, command: Option<&str>) -> Result<()> {
     let id = resolve_command_id(pid, command).await?;
     let response = send_command(pid, ControlCommand::Freeze { id }).await?;
@@ -107,7 +107,7 @@ pub async fn handle_freeze_command(pid: u32, command: Option<&str>) -> Result<()
     Ok(())
 }
 
-/// Handle `vrl thaw <pid>`.
+/// Handle `vrc thaw <pid>`.
 pub async fn handle_thaw_command(pid: u32, command: Option<&str>) -> Result<()> {
     let id = resolve_command_id(pid, command).await?;
     let response = send_command(pid, ControlCommand::Thaw { id }).await?;
@@ -120,7 +120,7 @@ pub async fn handle_thaw_command(pid: u32, command: Option<&str>) -> Result<()> 
     Ok(())
 }
 
-/// Handle `vrl resize <pid> --rows N --cols M`.
+/// Handle `vrc resize <pid> --rows N --cols M`.
 pub async fn handle_resize_command(
     pid: u32,
     command: Option<&str>,
@@ -138,7 +138,7 @@ pub async fn handle_resize_command(
     Ok(())
 }
 
-/// Handle `vrl kill <pid>` — kill a command in a running instance.
+/// Handle `vrc kill <pid>` — kill a command in a running instance.
 pub async fn handle_kill_command(pid: u32, command: Option<&str>) -> Result<()> {
     let id = resolve_command_id(pid, command).await?;
     let response = send_command(pid, ControlCommand::Kill { id: id.clone() }).await?;
@@ -151,7 +151,7 @@ pub async fn handle_kill_command(pid: u32, command: Option<&str>) -> Result<()> 
     Ok(())
 }
 
-/// Verify a target PID is a live vrl instance.
+/// Verify a target PID is a live vrc instance.
 /// Returns an error if not.
 pub fn verify_instance(pid: u32) -> Result<()> {
     let registry = InstanceRegistry::new()?;
@@ -159,10 +159,10 @@ pub fn verify_instance(pid: u32) -> Result<()> {
     if !instances.iter().any(|i| i.pid == pid) {
         let available: Vec<String> = instances.iter().map(|i| i.pid.to_string()).collect();
         if available.is_empty() {
-            anyhow::bail!("No running vrl instances found.");
+            anyhow::bail!("No running vrc instances found.");
         } else {
             anyhow::bail!(
-                "No vrl instance with PID {}. Running instances: {}",
+                "No vrc instance with PID {}. Running instances: {}",
                 pid,
                 available.join(", ")
             );

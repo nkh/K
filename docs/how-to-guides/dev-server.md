@@ -1,6 +1,8 @@
 # Dev Server Dashboard
 
-Learn how to use a single vrunner instance to monitor all your local development services — frontend, backend, database, and more — from one browser dashboard.
+Learn how to use a single vrw instance to monitor all your local development services — frontend, backend, database, and more — from one browser dashboard.
+
+> **For local-only development without HTTP**, `vrc` with `--display -- cargo run` provides a similar terminal-based monitoring experience. Use vrw when you want the web dashboard or remote access.
 
 ## The Problem
 
@@ -11,14 +13,14 @@ During local development, you typically run multiple services in separate termin
 - A database shell or migration runner
 - Background workers or watchers
 
-Keeping track of all these processes is tedious. vrunner lets you run and monitor them all from one place.
+Keeping track of all these processes is tedious. vrw lets you run and monitor them all from one place.
 
 ## Configuration
 
-Create a dev profile in your vrunner config:
+Create a dev profile in your vrw config:
 
 ```yaml
-# ~/.config/vrunner/config.yaml
+# ~/.config/vrw/config.yaml
 profiles:
   dev:
     port: 8080
@@ -53,10 +55,10 @@ profiles:
 ## Starting the Dashboard
 
 ```bash
-vrunner --profile dev
+vrw --profile dev
 ```
 
-vrunner spawns all four commands and starts the web UI on port 8080. Open `http://localhost:8080/admin` to see every service in the sidebar.
+vrw spawns all four commands and starts the web UI on port 8080. Open `http://localhost:8080/admin` to see every service in the sidebar.
 
 ## Monitoring Services
 
@@ -97,10 +99,10 @@ The service is killed and re-spawned with the same command, CWD, and environment
 
 ## Adding Services On the Fly
 
-Add a new service without restarting vrunner:
+Add a new service without restarting vrw:
 
 ```bash
-vrunner spawn --command "redis-server" --name "redis" --port 8080
+vrw spawn --command "redis-server" --name "redis" --port 8080
 ```
 
 The new service appears immediately in the dashboard.
@@ -133,7 +135,7 @@ curl -X POST "http://localhost:8080/api/commands/$CMD_ID/input" \
 Spawn a one-off migration command:
 
 ```bash
-vrunner spawn --command "alembic upgrade head" --name "migrate" \
+vrw spawn --command "alembic upgrade head" --name "migrate" \
   --cwd /home/user/project/backend --port 8080
 ```
 
@@ -141,7 +143,7 @@ Watch the migration output in the dashboard. When it finishes, the terminal show
 
 ### Debugging a Flaky Test
 
-1. Run your test in a terminal: `vrunner spawn --command "npm run test:flaky" --name "flaky-test"`
+1. Run your test in a terminal: `vrw spawn --command "npm run test:flaky" --name "flaky-test"`
 2. Watch the output in real time.
 3. When the test fails, use Ctrl+F to search for "FAIL" or "error".
 4. Use **Export Output** to save the terminal contents for analysis.
@@ -151,6 +153,6 @@ Watch the migration output in the dashboard. When it finishes, the terminal show
 - **Pin your dashboard tab** — Keep the admin page in a dedicated browser tab that stays open.
 - **Use command-name URLs** — Bookmark `http://localhost:8080/admin/frontend` for direct access.
 - **Enable browser notifications** — Get alerted immediately when a service crashes.
-- **Combine with a process manager** — Use vrunner for interactive monitoring alongside systemd or pm2 for auto-restart.
+- **Combine with a process manager** — Use vrw for interactive monitoring alongside systemd or pm2 for auto-restart.
 
 For advanced multi-service production monitoring, see [`multi-service.md`](multi-service.md). For the dashboard feature guide, see [`web-dashboard.md`](web-dashboard.md).

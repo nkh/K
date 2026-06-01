@@ -10,5 +10,5 @@ pub mod logging;
 pub mod process;
 pub mod vtty;
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 pub mod web;

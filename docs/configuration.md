@@ -1,4 +1,4 @@
-# vrl Configuration Reference
+# vrc Configuration Reference
 
 Complete reference for all configuration entries, CLI flags, and their relationships.
 
@@ -28,12 +28,12 @@ Complete reference for all configuration entries, CLI flags, and their relations
 
 ## Configuration File Locations
 
-vrl loads configuration from multiple YAML sources. All locations are optional — if no config file exists, built-in defaults are used.
+vrc loads configuration from multiple YAML sources. All locations are optional — if no config file exists, built-in defaults are used.
 
 | Location | Scope | Path |
 |----------|-------|------|
-| Global | System-wide defaults | `~/.config/vrl/config.yaml` |
-| Local | Project-specific overrides | `./vrl.yaml` (current working directory) |
+| Global | System-wide defaults | `~/.config/vrc/config.yaml` |
+| Local | Project-specific overrides | `./vrc.yaml` (current working directory) |
 | Explicit | User-specified file | Any path via `-c <FILE>` or `--config <FILE>` |
 
 ## Precedence Order
@@ -111,7 +111,7 @@ command_log:
 
 ### `hooks`
 
-Global lifecycle event hooks. When a hook is set, vrl executes the specified shell command when the corresponding event occurs.
+Global lifecycle event hooks. When a hook is set, vrc executes the specified shell command when the corresponding event occurs.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
@@ -133,8 +133,8 @@ Global lifecycle event hooks. When a hook is set, vrl executes the specified she
 
 ```yaml
 hooks:
-  on_spawn: "echo 'Started {name} (pid={pid})' >> /var/log/vrl.log"
-  on_error: "notify-send 'vrl' '{name} exited with code {exit_code}'"
+  on_spawn: "echo 'Started {name} (pid={pid})' >> /var/log/vrc.log"
+  on_error: "notify-send 'vrc' '{name} exited with code {exit_code}'"
 ```
 
 ### `daemon`
@@ -144,15 +144,15 @@ Controls Unix daemon (background process) behavior.
 | Key | Type | Default | CLI Flag | Description |
 |-----|------|---------|----------|-------------|
 | `enabled` | `bool` | `false` | `--daemon` | Run as a background daemon. |
-| `stdout_file` | `string` | `"/tmp/vrl.out"` | `--stdout-file <FILE>` | Redirect stdout to file. |
-| `stderr_file` | `string` | `"/tmp/vrl.err"` | `--stderr-file <FILE>` | Redirect stderr to file. |
+| `stdout_file` | `string` | `"/tmp/vrc.out"` | `--stdout-file <FILE>` | Redirect stdout to file. |
+| `stderr_file` | `string` | `"/tmp/vrc.err"` | `--stderr-file <FILE>` | Redirect stderr to file. |
 
 **Example:**
 ```yaml
 daemon:
   enabled: false
-  stdout_file: "/tmp/vrl.out"
-  stderr_file: "/tmp/vrl.err"
+  stdout_file: "/tmp/vrc.out"
+  stderr_file: "/tmp/vrc.err"
 ```
 
 ### `interactive`
@@ -293,7 +293,7 @@ profiles:
 ## CLI Flag Reference
 
 ```
-vrl [OPTIONS] [-- <COMMAND> [ARGS...]]
+vrc [OPTIONS] [-- <COMMAND> [ARGS...]]
 ```
 
 ### General Options
@@ -365,8 +365,8 @@ vrl [OPTIONS] [-- <COMMAND> [ARGS...]]
 
 | Command | Argument | Description |
 |---------|----------|-------------|
-| `list` | `--target <PID>` | List all running vrl instances and their commands |
-| `stop` | `[PID]` | Gracefully shut down a vrl instance |
+| `list` | `--target <PID>` | List all running vrc instances and their commands |
+| `stop` | `[PID]` | Gracefully shut down a vrc instance |
 | `spawn-in` | `<pid> -- <cmd> [args...]` | Spawn a command in a running instance |
 | `keys` | `<pid> <keys>` | Send keystrokes to a command |
 | `cat` | `[pid] [--color-always]` | Print VTTY buffer |
@@ -406,10 +406,10 @@ vrl [OPTIONS] [-- <COMMAND> [ARGS...]]
 
 ## Full Example
 
-A complete `vrl.yaml`:
+A complete `vrc.yaml`:
 
 ```yaml
-# vrl configuration — all entries with their defaults shown
+# vrc configuration — all entries with their defaults shown
 
 vtty:
   rows: 24
@@ -430,8 +430,8 @@ command_log:
 
 daemon:
   enabled: false
-  stdout_file: "/tmp/vrl.out"
-  stderr_file: "/tmp/vrl.err"
+  stdout_file: "/tmp/vrc.out"
+  stderr_file: "/tmp/vrc.err"
 
 # Additional output sinks for spawned commands
 handles: []

@@ -3,7 +3,7 @@ use serde_json;
 use std::fs;
 use std::path::PathBuf;
 
-#[cfg(feature = "vrunner")]
+#[cfg(feature = "vrw")]
 use sysinfo::{ProcessExt, SystemExt};
 
 use super::info::InstanceInfo;
@@ -13,17 +13,17 @@ pub struct InstanceRegistry {
     dir: PathBuf,
 }
 
-// Data directory name: "vrl" for vrl, "vrunner" for vrunner.
-#[cfg(feature = "vrunner")]
-const DATA_DIR: &str = "vrunner";
-#[cfg(not(feature = "vrunner"))]
-const DATA_DIR: &str = "vrl";
+// Data directory name: "vrc" for vrc, "vrw" for vrw.
+#[cfg(feature = "vrw")]
+const DATA_DIR: &str = "vrw";
+#[cfg(not(feature = "vrw"))]
+const DATA_DIR: &str = "vrc";
 
 // Process name for liveness check
-#[cfg(feature = "vrunner")]
-const PROCESS_NAME: &str = "vrunner";
-#[cfg(not(feature = "vrunner"))]
-const PROCESS_NAME: &str = "vrl";
+#[cfg(feature = "vrw")]
+const PROCESS_NAME: &str = "vrw";
+#[cfg(not(feature = "vrw"))]
+const PROCESS_NAME: &str = "vrc";
 
 impl InstanceRegistry {
     /// Create a new registry using the system data directory.
@@ -45,7 +45,7 @@ impl InstanceRegistry {
     pub fn register_current(&self, cfg: &Config) -> Result<()> {
         let pid = std::process::id();
 
-        #[cfg(feature = "vrunner")]
+        #[cfg(feature = "vrw")]
         let info = InstanceInfo {
             pid,
             port: cfg.server.port,
@@ -56,7 +56,7 @@ impl InstanceRegistry {
             command: None,
         };
 
-        #[cfg(not(feature = "vrunner"))]
+        #[cfg(not(feature = "vrw"))]
         let info = InstanceInfo {
             pid,
             start_time: chrono::Utc::now(),
@@ -79,14 +79,14 @@ impl InstanceRegistry {
     }
 
     /// List running instances.
-    /// Uses sysinfo on vrunner, /proc on vrl.
+    /// Uses sysinfo on vrw, /proc on vrc.
     pub fn list_instances(&self) -> Vec<InstanceInfo> {
         let pid_entries = self.scan_pid_files();
-        #[cfg(feature = "vrunner")]
+        #[cfg(feature = "vrw")]
         {
             self.filter_alive_sysinfo(pid_entries)
         }
-        #[cfg(not(feature = "vrunner"))]
+        #[cfg(not(feature = "vrw"))]
         {
             self.filter_alive_proc(pid_entries)
         }
@@ -114,8 +114,8 @@ impl InstanceRegistry {
         entries
     }
 
-    /// Filter PID entries to only those whose process is alive (vrl: /proc or kill(0)).
-    #[cfg(not(feature = "vrunner"))]
+    /// Filter PID entries to only those whose process is alive (vrc: /proc or kill(0)).
+    #[cfg(not(feature = "vrw"))]
     fn filter_alive_proc(&self, entries: Vec<(u32, String)>) -> Vec<InstanceInfo> {
         let mut instances = Vec::new();
         for (pid, content) in entries {
@@ -131,8 +131,8 @@ impl InstanceRegistry {
         instances
     }
 
-    /// Filter PID entries to only those whose process is alive (vrunner: sysinfo).
-    #[cfg(feature = "vrunner")]
+    /// Filter PID entries to only those whose process is alive (vrw: sysinfo).
+    #[cfg(feature = "vrw")]
     fn filter_alive_sysinfo(&self, entries: Vec<(u32, String)>) -> Vec<InstanceInfo> {
         let mut system = sysinfo::System::new();
         system.refresh_all();
@@ -166,7 +166,7 @@ impl InstanceRegistry {
     }
 
     /// Check if a PID is alive and belongs to our process.
-    #[cfg(not(feature = "vrunner"))]
+    #[cfg(not(feature = "vrw"))]
     fn is_pid_alive(pid: u32) -> bool {
         #[cfg(target_os = "linux")]
         {
@@ -188,12 +188,12 @@ impl InstanceRegistry {
         }
     }
 
-    /// Print instance list (vrunner only, used by registry directly).
-    #[cfg(feature = "vrunner")]
+    /// Print instance list (vrw only, used by registry directly).
+    #[cfg(feature = "vrw")]
     pub fn print_list(&self) {
         let instances = self.list_instances();
         if instances.is_empty() {
-            println!("No running vrunner instances.");
+            println!("No running vrw instances.");
             return;
         }
         println!(
@@ -213,8 +213,8 @@ impl InstanceRegistry {
         }
     }
 
-    /// Stop an instance via HTTP (vrunner only).
-    #[cfg(feature = "vrunner")]
+    /// Stop an instance via HTTP (vrw only).
+    #[cfg(feature = "vrw")]
     pub async fn stop_instance(&self, pid: u32) -> Result<()> {
         let instances = self.list_instances();
         let target = instances.iter().find(|i| i.pid == pid);
@@ -244,7 +244,7 @@ impl InstanceRegistry {
                 }
             }
             None => {
-                println!("No running vrunner instance found with PID {}.", pid);
+                println!("No running vrw instance found with PID {}.", pid);
             }
         }
         Ok(())

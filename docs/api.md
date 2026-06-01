@@ -1,6 +1,6 @@
-# vrunner HTTP API Reference
+# vrw HTTP API Reference
 
-Complete reference for the vrunner REST API and WebSocket endpoints.
+Complete reference for the vrw REST API and WebSocket endpoints.
 
 ## Base URL
 
@@ -872,7 +872,7 @@ Forward a mouse event to a command's PTY. Used by the web UI to send mouse click
 
 ## CORS Configuration
 
-CORS (Cross-Origin Resource Sharing) controls which origins may make cross-origin requests to the vrunner API. This is configured through the `security.cors` section in the configuration file.
+CORS (Cross-Origin Resource Sharing) controls which origins may make cross-origin requests to the vrw API. This is configured through the `security.cors` section in the configuration file.
 
 ### Configuration
 
