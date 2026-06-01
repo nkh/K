@@ -1304,6 +1304,8 @@ function selectCommand(instUrl, cmdId, name) {
     // Clear the terminal display immediately so the old command's output
     // doesn't linger while the new VTTY content is being fetched.
     // Only the active command should write to the terminal display.
+    // Disconnect WS first to prevent stale messages from overwriting the cleared terminal.
+    disconnectVttyWs();
     _clearTerminalForSwitch();
 
     state.selectedInstUrl = instUrl;
@@ -1692,6 +1694,9 @@ function connectVttyWs(instUrl, cmdId) {
                 // This can happen if the WS was connected to command A and the user
                 // switched to command B before the WS closed.
                 if (msg.cmd_id && msg.cmd_id !== state.selectedCmdId) return;
+                // Also guard on nested data.id — the server sends
+                // {type:"vtty_full", data:{id:"...",...}} not top-level cmd_id.
+                if (msg.data && msg.data.id && msg.data.id !== state.selectedCmdId) return;
                 if (msg.type === 'vtty_full' && msg.data) {
                     // Initial full snapshot — buffer or apply
                     if (state.bufferView === 'current') {
@@ -2548,6 +2553,9 @@ async function spawnCommand() {
             const newId = json.data && json.data.id ? json.data.id : null;
             if (newId) {
                 state.selectedInstUrl = instUrl;
+                // Disconnect the old WS FIRST to prevent stale vtty_full
+                // messages from the previous command overwriting the cleared terminal.
+                disconnectVttyWs();
                 _clearTerminalForSwitch();
                 state._pendingSelectId = newId;
             }

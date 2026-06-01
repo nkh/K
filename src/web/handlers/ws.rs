@@ -76,7 +76,7 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
     let (mut ws_tx, mut ws_rx) = socket.split();
 
     // Send the welcome message.
-    let welcome = json!({"type": "connected", "id": &id}).to_string();
+    let welcome = json!({"type": "connected", "id": &id, "cmd_id": &id}).to_string();
     if ws_tx.send(Message::Text(welcome)).await.is_err() {
         tracing::warn!(?id, "ws_vtty: failed to send welcome message");
         return;
@@ -101,6 +101,7 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
         };
         let full_msg = json!({
             "type": "vtty_full",
+            "cmd_id": &id,
             "data": {
                 "id": &id,
                 "html": html,
