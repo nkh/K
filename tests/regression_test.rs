@@ -483,10 +483,11 @@ async fn regression_spawn_after_kill() {
     manager.kill(&id1, None).await.unwrap();
     sleep(Duration::from_millis(100)).await;
 
+    // Use sleep so the command stays alive long enough to appear in list
     let id2 = manager
         .spawn(
-            "echo".into(),
-            vec!["second".into()],
+            "sleep".into(),
+            vec!["60".into()],
             None,
             None,
             HashMap::new(),
