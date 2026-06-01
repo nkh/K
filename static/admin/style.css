@@ -107,11 +107,15 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 /* VTTY */
 .vtty-container { flex: 1; overflow: auto; background: var(--vtty-bg, #000); position: relative; cursor: text; }
 .vtty-container pre { margin: 0; padding: 0; font-family: var(--font-mono); font-size: inherit; line-height: 1.2; min-width: 100%; min-height: 100%; user-select: none; background: var(--vtty-bg, #000); }
-/* VTTY cell class — uses default inline display (no inline-block).
-   The monospace font on <pre> ensures uniform character width without
-   per-element BFC (block formatting context) creation, which is the
-   dominant layout cost for terminals with thousands of cells. */
-.vtty-container pre .c { }
+/* VTTY cell classes — force each cell span to occupy exactly the terminal's
+   assigned column width regardless of the browser's font metrics.  This
+   prevents ambiguous-width characters (e.g. ▽ ◆ ★) from breaking column
+   alignment when the font renders them wider than 1ch.  The width is set
+   via inline style (N*W ch where N=run length, W=cell width) so the CSS
+   only needs to provide inline-block behavior. */
+.vtty-container pre .c.w0 { display: inline; }
+.vtty-container pre .c.w1 { display: inline-block; vertical-align: top; overflow: hidden; }
+.vtty-container pre .c.w2 { display: inline-block; vertical-align: top; overflow: hidden; }
 .vtty-container.selectable pre { user-select: text; }
 
 /* Per-panel theme: overrides the terminal background when a panel-specific

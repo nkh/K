@@ -2039,8 +2039,10 @@ function _cellStyle(diff) {
         [fg, bg] = [bg, fg];
     }
 
-    // Hex color format: #RRGGBB (matches server-side hex_color())
-    let style = 'color:#' + _hex(fg[0]) + _hex(fg[1]) + _hex(fg[2]) + ';background:#' + _hex(bg[0]) + _hex(bg[1]) + _hex(bg[2]);
+    // Width in ch units: matches server-side run_len * cell_ch.
+    // For single-cell updates (diff patching), run_len is always 1.
+    const cellW = diff.width || 1;
+    let style = 'width:' + (cellW > 0 ? cellW + 'ch' : '0') + ';color:#' + _hex(fg[0]) + _hex(fg[1]) + _hex(fg[2]) + ';background:#' + _hex(bg[0]) + _hex(bg[1]) + _hex(bg[2]);
 
     if (diff.bold) style += ';font-weight:bold';
     if (diff.italic) style += ';font-style:italic';
@@ -2084,9 +2086,9 @@ function _htmlEscapeChar(ch) {
 /// gets its own individual <span> element.  Updates the cell grid entries
 /// for all affected positions (before, target, and after the split).
 ///
-/// Before: <span class="c" style="...">ABCDE</span>
+/// Before: <span class="c w1" style="width:5ch;color:...">ABCDE</span>
 ///                         ^--- target at idx=2 (cell 'C')
-/// After:  <span class="c" style="orig">AB</span><span class="c" style="new">C'</span><span class="c" style="orig">DE</span>
+/// After:  <span class="c w1" style="width:2ch;color:...">AB</span><span class="c w1" style="width:1ch;color:new">C'</span><span class="c w1" style="width:2ch;color:...">DE</span>
 function _splitAndUpdateCell(cg, row, col, diff) {
     const entry = cg.grid[row][col];
     if (!entry || entry.len <= 1) return;
@@ -2095,19 +2097,32 @@ function _splitAndUpdateCell(cg, row, col, diff) {
     const idx = entry.idx;
     const text = span.textContent;
     const origStyle = span.getAttribute('style') || '';
+    const origClass = span.getAttribute('class') || 'c';
+    // Determine cell width from class: w0→0, w1→1, w2→2
+    const cellCh = origClass.includes('w2') ? 2 : origClass.includes('w0') ? 0 : 1;
     // Use Array.from for code point-aware splitting
     const chars = Array.from(text);
 
     // Characters before the target
     const before = chars.slice(0, idx).join('');
+    const beforeLen = before.length; // code point count
     // Characters after the target
     const after = chars.slice(idx + 1).join('');
+    const afterLen = after.length;
+
+    // Helper: rebuild style with correct width for a given character count
+    function _rebuildStyle(orig, charCount) {
+        // Remove leading width:Nch or width:0 from origStyle
+        const stripped = orig.replace(/^width:[^;]*;?/, '');
+        const w = charCount * cellCh;
+        return 'width:' + (w > 0 ? w + 'ch' : '0') + ';' + stripped;
+    }
 
     // Create "after" span if there are trailing characters
     if (after.length > 0) {
         const afterSpan = document.createElement('span');
-        afterSpan.className = 'c';
-        afterSpan.setAttribute('style', origStyle);
+        afterSpan.className = origClass;
+        afterSpan.setAttribute('style', _rebuildStyle(origStyle, afterLen));
         afterSpan.textContent = after;
         span.parentNode.insertBefore(afterSpan, span.nextSibling);
         // Update grid entries for characters after the target
@@ -2124,8 +2139,8 @@ function _splitAndUpdateCell(cg, row, col, diff) {
     // Create "before" span if there are leading characters
     if (before.length > 0) {
         const beforeSpan = document.createElement('span');
-        beforeSpan.className = 'c';
-        beforeSpan.setAttribute('style', origStyle);
+        beforeSpan.className = origClass;
+        beforeSpan.setAttribute('style', _rebuildStyle(origStyle, beforeLen));
         beforeSpan.textContent = before;
         span.parentNode.insertBefore(beforeSpan, span);
         // Update grid entries for characters before the target
@@ -2139,11 +2154,11 @@ function _splitAndUpdateCell(cg, row, col, diff) {
     }
 
     // Update the target cell in place
-    // width=0 → wide-char continuation (zero-width space).
-    // width=1 with space → normal empty cell (actual space).
     const ch = diff.width === 0 ? '\u200b' : (diff.ch === '\u0000' ? ' ' : diff.ch);
     span.textContent = _htmlEscapeChar(ch);
     span.setAttribute('style', _cellStyle(diff));
+    const wCls = diff.width === 0 ? 'c w0' : diff.width === 2 ? 'c w2' : 'c w1';
+    span.className = wCls;
 
     // Update grid entry for the target cell
     entry.len = 1;
@@ -2211,6 +2226,9 @@ function applyVttyDiff(data) {
                     const ch = c.width === 0 ? '\u200b' : (c.ch === '\u0000' ? ' ' : c.ch);
                     entry.span.textContent = _htmlEscapeChar(ch);
                     entry.span.setAttribute('style', _cellStyle(c));
+                    // Update width class to match new cell width
+                    const wCls = c.width === 0 ? 'c w0' : c.width === 2 ? 'c w2' : 'c w1';
+                    entry.span.className = wCls;
                 } else {
                     // Slow path: split the merged span at the target position.
                     _splitAndUpdateCell(cg, c.row, c.col, c);

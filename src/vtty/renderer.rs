@@ -99,15 +99,11 @@ impl VttyRenderer {
     /// Returns the inner content only (no outer `<pre>` wrapper).
     pub fn to_html(buffer: &Buffer) -> String {
         let total_cells = buffer.rows.len() * buffer.width;
-        // RLE estimate: assume average run of 5 cells, each producing ~35 chars.
-        // Fallback: if RLE doesn't help, the output is similar to old size.
         let mut html = String::with_capacity(total_cells * 20);
         let mut run_text: String = String::with_capacity(32);
 
         let width = buffer.width;
         for row in &buffer.rows {
-            // Cap at buffer.width to prevent rendering extra cells if a row
-            // somehow has more cells than expected (e.g., race during resize).
             let row_len = row.len().min(width);
             if row_len == 0 {
                 html.push('\n');
@@ -116,7 +112,6 @@ impl VttyRenderer {
             let mut i = 0;
             while i < row_len {
                 let cell = &row[i];
-                // Start a new run with this cell's style
                 let fg = if cell.reverse { cell.bg } else { cell.fg };
                 let bg = if cell.reverse { cell.fg } else { cell.bg };
                 let fg_hex = hex_color(fg);
@@ -126,12 +121,11 @@ impl VttyRenderer {
                 let underline = cell.underline;
                 let strikethrough = cell.strikethrough;
                 let blink = cell.blink;
+                let run_width = cell.width;
 
-                // Accumulate characters that share this exact style.
-                // Width-0 cells (wide-char continuations) use U+200B so they
-                // contribute zero visual columns; regular empty cells use a
-                // plain space so they occupy exactly 1ch in the monospace font
-                // and preserve column alignment.
+                // Accumulate characters that share this exact style AND width.
+                // Width-0 cells (wide-char continuations) use U+200B;
+                // regular empty cells use a plain space.
                 run_text.clear();
                 let ch = if cell.width == 0 { '\u{200b}' } else if cell.is_empty() { ' ' } else { cell.ch };
                 run_text.push(ch);
@@ -140,9 +134,12 @@ impl VttyRenderer {
                     let next = &row[j];
                     let nfg = if next.reverse { next.bg } else { next.fg };
                     let nbg = if next.reverse { next.fg } else { next.bg };
+                    // Also break on width change so each span has a uniform
+                    // width class (w0/w1/w2) for correct column sizing.
                     if nfg != fg || nbg != bg || next.bold != bold
                         || next.italic != italic || next.underline != underline
                         || next.strikethrough != strikethrough || next.blink != blink
+                        || next.width != run_width
                     {
                         break;
                     }
@@ -151,8 +148,38 @@ impl VttyRenderer {
                     j += 1;
                 }
 
+                // Width class: w0=continuation (zero-width), w1=normal, w2=wide.
+                // The inline width (N*W ch) ensures characters respect the
+                // terminal's column assignment regardless of the browser's
+                // font metrics for ambiguous-width characters.
+                let run_len = j - i;
+                let (wclass, cell_ch) = match run_width {
+                    0 => ("c w0", 0),
+                    2 => ("c w2", 2),
+                    _ => ("c w1", 1),
+                };
+
                 // Build style string
-                html.push_str("<span class=\"c\" style=\"color:");
+                html.push_str("<span class=\"");
+                html.push_str(wclass);
+                html.push_str("\" style=\"width:");
+                // Write width in ch units: run_len * cell_ch
+                let total_ch = run_len * cell_ch;
+                if total_ch > 0 {
+                    let mut buf = [0u8; 8];
+                    let mut pos = buf.len();
+                    let mut n = total_ch;
+                    while n > 0 {
+                        pos -= 1;
+                        buf[pos] = b'0' + (n % 10) as u8;
+                        n /= 10;
+                    }
+                    html.push_str(std::str::from_utf8(&buf[pos..]).unwrap());
+                    html.push_str("ch");
+                } else {
+                    html.push('0');
+                }
+                html.push_str(";color:");
                 html.push_str(std::str::from_utf8(&fg_hex).unwrap());
                 html.push_str(";background:");
                 html.push_str(std::str::from_utf8(&bg_hex).unwrap());
@@ -173,7 +200,6 @@ impl VttyRenderer {
                     html.push_str(";animation:blink 1s step-end infinite");
                 }
                 html.push_str("\">");
-                // Push run text with HTML escaping
                 for ch in run_text.chars() {
                     match ch {
                         '&' => html.push_str("&amp;"),
@@ -235,11 +261,9 @@ impl VttyRenderer {
                 let strikethrough = cell.strikethrough;
                 let blink = cell.blink;
 
+                let run_width = cell.width;
+
                 run_text.clear();
-                // Width-0 cells (wide-char continuations) use U+200B so they
-                // contribute zero visual columns; regular empty cells use a
-                // plain space so they occupy exactly 1ch in the monospace font
-                // and preserve column alignment.
                 let ch = if cell.width == 0 { '\u{200b}' } else if cell.is_empty() { ' ' } else { cell.ch };
                 run_text.push(ch);
                 let mut j = i + 1;
@@ -250,6 +274,7 @@ impl VttyRenderer {
                     if nfg != fg || nbg != bg || next.bold != bold
                         || next.italic != italic || next.underline != underline
                         || next.strikethrough != strikethrough || next.blink != blink
+                        || next.width != run_width
                     {
                         break;
                     }
@@ -258,7 +283,32 @@ impl VttyRenderer {
                     j += 1;
                 }
 
-                html.push_str("<span class=\"c\" style=\"color:");
+                let run_len = j - i;
+                let (wclass, cell_ch) = match run_width {
+                    0 => ("c w0", 0),
+                    2 => ("c w2", 2),
+                    _ => ("c w1", 1),
+                };
+
+                html.push_str("<span class=\"");
+                html.push_str(wclass);
+                html.push_str("\" style=\"width:");
+                let total_ch = run_len * cell_ch;
+                if total_ch > 0 {
+                    let mut buf = [0u8; 8];
+                    let mut pos = buf.len();
+                    let mut n = total_ch;
+                    while n > 0 {
+                        pos -= 1;
+                        buf[pos] = b'0' + (n % 10) as u8;
+                        n /= 10;
+                    }
+                    html.push_str(std::str::from_utf8(&buf[pos..]).unwrap());
+                    html.push_str("ch");
+                } else {
+                    html.push('0');
+                }
+                html.push_str(";color:");
                 html.push_str(std::str::from_utf8(&fg_hex).unwrap());
                 html.push_str(";background:");
                 html.push_str(std::str::from_utf8(&bg_hex).unwrap());
@@ -448,10 +498,13 @@ mod tests {
         buf.rows[0][0].ch = 'X';
         buf.rows[0][0].fg = [0, 255, 0];
         let html = VttyRenderer::to_html(&buf);
-        // Uses hex color format (#00ff00) and CSS class "c"
+        // Uses hex color format (#00ff00) and CSS class "c" with width class
         assert!(html.contains("#00ff00"), "expected hex color for green fg");
-        assert!(html.contains("class=\"c\""), "expected CSS class 'c'");
+        assert!(html.contains("class=\"c "), "expected CSS class 'c' with width class");
         assert!(html.contains("X"));
+        // Should contain width in ch units in inline style
+        assert!(html.contains("width:"), "expected width in inline style");
+        assert!(html.contains("w1"), "expected w1 width class");
         // Should NOT contain old rgb() format or inline-block
         assert!(!html.contains("rgb("), "should not use rgb() format");
         assert!(!html.contains("inline-block"), "should not use inline-block");
@@ -533,7 +586,7 @@ mod tests {
         buf.rows[0][3].fg = [100, 100, 100]; // grey — same as A
         let html = VttyRenderer::to_html(&buf);
         // Should have at least 4 spans: A(span1), 你(span2), cont(span3), B(merged with A or new)
-        let span_count = html.matches("<span class=\"c\"").count();
+        let span_count = html.matches("<span class=\"c ").count();
         assert!(span_count >= 3, "wide char with different continuation style should produce separate spans, got {}", span_count);
         // Both 你 and the zero-width space should be present
         assert!(html.contains('你'));
@@ -578,7 +631,8 @@ mod tests {
         buf.rows[0][4].ch = 'B';
         buf.rows[0][4].fg = [200, 200, 200];
         let html = VttyRenderer::to_html(&buf);
-        // All same style, so should merge into a single span
+        // All same style, but width changes cause span breaks.
+        // Expect: w1(A), w2(你), w0(zwsp), w1( B) = 4 spans
         assert!(html.contains('A'));
         assert!(html.contains('你'));
         assert!(html.contains('\u{200b}')); // continuation
@@ -586,6 +640,10 @@ mod tests {
         // Verify exactly one zero-width space (one wide char continuation)
         let zwsp_count = html.matches('\u{200b}').count();
         assert_eq!(zwsp_count, 1, "should have exactly 1 ZWSP for 1 wide char");
+        // Verify width classes present
+        assert!(html.contains("w1"), "should have w1 class for normal cells");
+        assert!(html.contains("w2"), "should have w2 class for wide cells");
+        assert!(html.contains("w0"), "should have w0 class for continuation cells");
     }
 
     #[test]
@@ -1148,7 +1206,7 @@ mod tests {
         buf.rows[0][2].fg = [0, 255, 0];
         let html = VttyRenderer::to_html(&buf);
         // Three different styles → three separate spans
-        let span_count = html.matches("<span class=\"c\"").count();
+        let span_count = html.matches("<span class=\"c ").count();
         assert_eq!(span_count, 3, "3 different-colored ▽ should produce 3 spans");
     }
 }
