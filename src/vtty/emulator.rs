@@ -1021,6 +1021,10 @@ impl VttyEmulator {
         let mut last_bold = false;
         let mut last_italic = false;
         let mut last_underline = false;
+        let mut last_blink = false;
+        let mut last_reverse = false;
+        let mut last_invisible = false;
+        let mut last_strikethrough = false;
 
         for row in &buf.rows {
             for cell in row {
@@ -1053,6 +1057,38 @@ impl VttyEmulator {
                         codes.push("24".to_string());
                     }
                     last_underline = cell.underline;
+                }
+                if cell.blink != last_blink {
+                    if cell.blink {
+                        codes.push("5".to_string());
+                    } else {
+                        codes.push("25".to_string());
+                    }
+                    last_blink = cell.blink;
+                }
+                if cell.reverse != last_reverse {
+                    if cell.reverse {
+                        codes.push("7".to_string());
+                    } else {
+                        codes.push("27".to_string());
+                    }
+                    last_reverse = cell.reverse;
+                }
+                if cell.invisible != last_invisible {
+                    if cell.invisible {
+                        codes.push("8".to_string());
+                    } else {
+                        codes.push("28".to_string());
+                    }
+                    last_invisible = cell.invisible;
+                }
+                if cell.strikethrough != last_strikethrough {
+                    if cell.strikethrough {
+                        codes.push("9".to_string());
+                    } else {
+                        codes.push("29".to_string());
+                    }
+                    last_strikethrough = cell.strikethrough;
                 }
                 if Some(cell.fg) != last_fg {
                     codes.push(format!("38;2;{};{};{}", cell.fg[0], cell.fg[1], cell.fg[2]));
@@ -1314,6 +1350,55 @@ mod tests {
         let ansi = emu.contents_ansi();
         assert!(ansi.contains("38;2;170;0;0"));
         assert!(ansi.contains("Red"));
+    }
+
+    #[test]
+    fn test_contents_ansi_blink() {
+        let mut emu = VttyEmulator::new(3, 20, 100);
+        emu.feed_str("\x1b[5mBlink\x1b[0m");
+        let ansi = emu.contents_ansi();
+        // SGR 5 may be batched with other codes (e.g. "5;38;2;204;204;204")
+        assert!(ansi.contains("5;") || ansi.contains("\x1b[5m"),
+            "should contain SGR 5 (blink on), got: {:?}", ansi);
+        assert!(ansi.contains("25;") || ansi.contains("\x1b[25m"),
+            "should contain SGR 25 (blink off), got: {:?}", ansi);
+        assert!(ansi.contains("Blink"));
+    }
+
+    #[test]
+    fn test_contents_ansi_reverse() {
+        let mut emu = VttyEmulator::new(3, 20, 100);
+        emu.feed_str("\x1b[7mReversed\x1b[0m");
+        let ansi = emu.contents_ansi();
+        assert!(ansi.contains("7;") || ansi.contains("\x1b[7m"),
+            "should contain SGR 7 (reverse on), got: {:?}", ansi);
+        assert!(ansi.contains("27;") || ansi.contains("\x1b[27m"),
+            "should contain SGR 27 (reverse off), got: {:?}", ansi);
+        assert!(ansi.contains("Reversed"));
+    }
+
+    #[test]
+    fn test_contents_ansi_invisible() {
+        let mut emu = VttyEmulator::new(3, 20, 100);
+        emu.feed_str("\x1b[8mHidden\x1b[0m");
+        let ansi = emu.contents_ansi();
+        assert!(ansi.contains("8;") || ansi.contains("\x1b[8m"),
+            "should contain SGR 8 (invisible on), got: {:?}", ansi);
+        assert!(ansi.contains("28;") || ansi.contains("\x1b[28m"),
+            "should contain SGR 28 (invisible off), got: {:?}", ansi);
+        assert!(ansi.contains("Hidden"));
+    }
+
+    #[test]
+    fn test_contents_ansi_strikethrough() {
+        let mut emu = VttyEmulator::new(3, 20, 100);
+        emu.feed_str("\x1b[9mStrike\x1b[0m");
+        let ansi = emu.contents_ansi();
+        assert!(ansi.contains("9;") || ansi.contains("\x1b[9m"),
+            "should contain SGR 9 (strikethrough on), got: {:?}", ansi);
+        assert!(ansi.contains("29;") || ansi.contains("\x1b[29m"),
+            "should contain SGR 29 (strikethrough off), got: {:?}", ansi);
+        assert!(ansi.contains("Strike"));
     }
 
     #[test]
