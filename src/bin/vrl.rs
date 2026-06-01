@@ -73,6 +73,8 @@ fn main() -> Result<()> {
         None => return Ok(()),
     };
 
+    // IPC subcommands are only available in standalone vrl mode (no vrunner).
+    #[cfg(not(feature = "vrunner"))]
     if dispatch::is_ipc_command(&cli) {
         tokio::runtime::Builder::new_current_thread()
             .enable_all()

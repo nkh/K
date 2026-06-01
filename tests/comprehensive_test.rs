@@ -739,7 +739,7 @@ fn config_deserialize_full_json() {
     let json = r#"{
     "server": { "bind": "0.0.0.0", "port": 3000 },
     "security": { "require_auth": true, "token_file": "custom_token" },
-    "vtty": { "rows": 50, "cols": 120, "term": "xterm-256color", "scrollback": 10000, "truecolor": true, "mouse": false },
+    "vtty": { "rows": 50, "cols": 120, "term": "xterm-256color", "scrollback": 10000, "truecolor": true, "mouse": false, "screenshot_font_size": 14.0 },
     "display": { "enabled": true, "refresh_ms": 50, "display_all": false }
 }"#;
     let cfg: vrl_core::config::schema::Config = serde_json::from_str(json).unwrap();

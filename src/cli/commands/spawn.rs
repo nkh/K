@@ -110,7 +110,7 @@ pub async fn handle_freeze_command(cli: &Cli, pid: Option<u32>, interactive: boo
         // Fetch all commands and present interactive selection
         let all_commands = super::common::collect_all_commands(
             &client,
-            &[info.clone()],
+            std::slice::from_ref(&info),
         )
         .await;
         let items: Vec<_> = all_commands
@@ -143,7 +143,7 @@ pub async fn handle_freeze_command(cli: &Cli, pid: Option<u32>, interactive: boo
     let pid = match pid {
         Some(p) => p,
         None => {
-            let all_commands = super::common::collect_all_commands(&client, &[info.clone()]).await;
+            let all_commands = super::common::collect_all_commands(&client, std::slice::from_ref(&info)).await;
             if all_commands.len() == 1 {
                 all_commands[0].2
             } else {
@@ -190,7 +190,7 @@ pub async fn handle_thaw_command(cli: &Cli, pid: Option<u32>, interactive: bool)
     if interactive {
         let all_commands = super::common::collect_all_commands(
             &client,
-            &[info.clone()],
+            std::slice::from_ref(&info),
         )
         .await;
         let items: Vec<_> = all_commands
@@ -223,7 +223,7 @@ pub async fn handle_thaw_command(cli: &Cli, pid: Option<u32>, interactive: bool)
     let pid = match pid {
         Some(p) => p,
         None => {
-            let all_commands = super::common::collect_all_commands(&client, &[info.clone()]).await;
+            let all_commands = super::common::collect_all_commands(&client, std::slice::from_ref(&info)).await;
             if all_commands.len() == 1 {
                 all_commands[0].2
             } else {

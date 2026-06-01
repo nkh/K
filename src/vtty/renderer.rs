@@ -949,8 +949,8 @@ mod tests {
         b_buf.rows[0][2].width = 0;
         b_buf.rows[0][3].ch = '€';
         let diff = b_buf.diff(&a);
-        // All 5 cells changed (from default to new content)
-        assert_eq!(diff.changed_count, 5);
+        // 4 cells changed (indices 0-3); cell 4 is untouched and matches default.
+        assert_eq!(diff.changed_count, 4);
         // Verify the specific characters are in the diff
         let has_triangle = diff.cells.iter().any(|c| c.ch == '\u{25bd}');
         assert!(has_triangle, "▽ must be in diff");

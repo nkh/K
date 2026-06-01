@@ -79,7 +79,7 @@ pub async fn handle_screenshot_command(
                 Some(p) => p.to_string(),
                 None => {
                     let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
-                    let dims_part = match fetch_cmd_dimensions(&client, &url, &cmd_id).await {
+                    let dims_part = match fetch_cmd_dimensions(&client, &url, cmd_id).await {
                         Some((rows, cols)) => format!("{}_{}", rows, cols),
                         None => String::new(),
                     };

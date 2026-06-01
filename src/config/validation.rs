@@ -30,6 +30,22 @@ pub struct ValidationIssue {
 pub fn validate_config(config: &Config) -> Vec<ValidationIssue> {
     let mut issues = Vec::new();
 
+    // ── server settings ──────────────────────────────────────────
+    if config.server.port == 0 {
+        issues.push(ValidationIssue {
+            field: "server.port".into(),
+            level: ValidationLevel::Error,
+            message: "Server port must not be 0".into(),
+        });
+    }
+    if config.server.bind.is_empty() {
+        issues.push(ValidationIssue {
+            field: "server.bind".into(),
+            level: ValidationLevel::Error,
+            message: "Server bind address must not be empty".into(),
+        });
+    }
+
     // ── vtty dimensions ──────────────────────────────────────────
     if config.vtty.rows == 0 {
         issues.push(ValidationIssue {
