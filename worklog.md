@@ -103,3 +103,32 @@ Stage Summary:
 - Complete rename: vrl→vrc, vrunner→vrw, vrl_core→vrc_core across ~200 files
 - All documentation updated with binary parity (both vrc and vrw covered)
 - All 189 tests pass, release build succeeds
+---
+Task ID: 5
+Agent: main
+Task: Create senior-engineer-standards skill file for the repo
+
+Work Log:
+- Cloned repo from origin/speedup
+- Reviewed existing skills directory structure and coding-agent skill format
+- Created skills/senior-engineer-standards/SKILL.md with 14 sections covering:
+  - Core philosophy (never guess, always verify)
+  - Pre-work requirements (read before write, never change unrequested code)
+  - Analysis methodology (trace protocol, forbidden speculative diagnosis)
+  - Testing standards (every fix gets a test, feature gates, test stability)
+  - Build and verification protocol (4-step mandatory sequence)
+  - Commit discipline (commit only what was asked, accurate messages)
+  - Documentation standards (update docs, worklog, specific TODOs)
+  - Communication standards (report facts not speculation, ban "should work")
+  - Regression prevention (every known bug gets a test, revert protocol)
+  - Web UI specific rules (full stack tracing, network contract, JS state, browser verification)
+  - IPC and protocol rules (enum changes propagate, serialization testing)
+  - Failure response protocol (stop, assess, revert, understand, document, re-implement)
+  - Failure registry (FR-001 through FR-010, cataloging every known failure)
+  - Quick reference checklists for before/after every change
+- Includes specific violations from project history that motivated each rule
+
+Stage Summary:
+- Created /skills/senior-engineer-standards/SKILL.md — comprehensive engineering discipline document
+- File is designed to be living: add new FR-NNN entries whenever failures occur
+- All 10 documented failure registry entries reference specific past incidents and the rules they spawned

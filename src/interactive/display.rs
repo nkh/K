@@ -1193,8 +1193,9 @@ pub(crate) async fn handle_spawn_command(manager: &Arc<CommandManager>) -> Spawn
 ///   daemon mode to keep the display alive.
 ///
 /// It renders the VTTY buffer to the local terminal using crossterm,
-/// forwards all keystrokes to the active child command, and handles
-/// SIGWINCH by resizing both the PTY master and the VTTY buffer.
+/// forwards all keystrokes to the active child command, and re-renders
+/// on SIGWINCH (adapting the display to the new terminal size without
+/// changing the fixed VTTY buffer dimensions).
 ///
 /// Exit detection: when a direct child was spawned, the loop monitors two
 /// signals:
@@ -1215,6 +1216,7 @@ pub async fn run_display_loop(
     keybindings: &crate::config::schema::KeybindingsConfig,
     log_entries: &Arc<std::sync::Mutex<Vec<String>>>,
     show_tabs: bool,
+    handle_sigwinch: bool,
 ) -> bool {
     // Architecture: tokio select! event loop with 4 async branches:
     //   1. Exit notification (watch channel) → transition or break
@@ -1367,7 +1369,9 @@ pub async fn run_display_loop(
     // The handler simply wakes the select! loop — the actual display
     // re-renders on its next tick, detecting the new terminal size
     // automatically.  We do NOT resize VTTY buffers or PTYs on WINCH;
-    // those dimensions are fixed at spawn time (CLI args or web UI).
+    // those dimensions are fixed at spawn time (CLI args or web UI)
+    // and must only be changed programmatically (resize API, web UI
+    // resize button, or vrc resize command).
     //
     // SIGWINCH handling is optional — if signal() fails we bridge through
     // an mpsc channel that never fires so the select! branch is simply
@@ -1683,15 +1687,30 @@ pub async fn run_display_loop(
             }
 
             // ── SIGWINCH — terminal resize ──
-            // The display rendering (render_vtty) already detects the
-            // terminal size on each tick via detect_terminal_size(), so
-            // the alternate screen content reflows automatically.
-            // We do NOT resize the VTTY buffer or PTY here — those
-            // dimensions are set once at spawn time (CLI args or web
-            // UI) and should not change when the user resizes their
-            // terminal emulator.
+            // By default, VTTY dimensions are fixed at spawn time and
+            // SIGWINCH only causes the display to re-render at the new
+            // terminal size.  With --handle-sigwinch, SIGWINCH also resizes
+            // all VTTY buffers and PTYs to match the terminal size.
             _ = winch_rx.recv() => {
-                tracing::debug!("SIGWINCH: display will adapt on next render tick");
+                if handle_sigwinch {
+                    if let Some((rows, cols)) = detect_terminal_size() {
+                        let effective_rows = if show_tabs { rows.saturating_sub(1) } else { rows };
+                        tracing::debug!(rows, cols, effective_rows, show_tabs, "SIGWINCH: resizing all VTTYs");
+                        for entry in manager.list() {
+                            let id = &entry.0;
+                            if let Some(handle) = manager.get(id) {
+                                if let Err(e) = handle.resize_pty(effective_rows, cols).await {
+                                    tracing::warn!(
+                                        id = %id, effective_rows, cols, error = %e,
+                                        "Failed to resize command on WINCH"
+                                    );
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    tracing::debug!("SIGWINCH: display will adapt on next render tick");
+                }
             }
 
             // ── Keystroke forwarding with keybinding support ──

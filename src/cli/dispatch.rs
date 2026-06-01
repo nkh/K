@@ -18,6 +18,22 @@ use crate::config::merge::apply_profile;
 use crate::config::schema::Config;
 use crate::config::validation::{validate_config, ValidationLevel};
 
+/// Get the actual binary name at runtime (e.g., from argv[0]).
+/// This allows completion scripts to use the correct name even if
+/// the binary has been renamed, and works correctly when building
+/// with `--features vrc,vrw` where the compile-time BINARY_NAME
+/// is always "vrw".
+fn runtime_binary_name() -> String {
+    std::env::args()
+        .next()
+        .and_then(|arg| {
+            std::path::Path::new(&arg)
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+        })
+        .unwrap_or_else(|| BINARY_NAME.to_string())
+}
+
 /// Load, profile-merge, and CLI-override the configuration.
 pub fn resolve_config(cli: &Cli) -> Result<Config> {
     let mut cfg = load_config(cli.config.as_deref())?;
@@ -123,7 +139,8 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
         }
         Some(Commands::Completions { shell }) => {
             let mut cmd = <Cli as CommandFactory>::command();
-            clap_complete::generate(*shell, &mut cmd, BINARY_NAME, &mut stdout());
+            let name = runtime_binary_name();
+            clap_complete::generate(*shell, &mut cmd, &name, &mut stdout());
             return Ok(None);
         }
         // IPC commands — handled by the caller after tokio runtime is available
@@ -268,7 +285,8 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
         Some(Commands::Screenshot { .. }) => {}
         Some(Commands::Completions { shell }) => {
             let mut cmd = <Cli as CommandFactory>::command();
-            clap_complete::generate(*shell, &mut cmd, BINARY_NAME, &mut stdout());
+            let name = runtime_binary_name();
+            clap_complete::generate(*shell, &mut cmd, &name, &mut stdout());
             return Ok(None);
         }
         None => {}

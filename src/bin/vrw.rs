@@ -133,6 +133,7 @@ async fn async_main(cli: Cli) -> Result<()> {
 
     let mut cfg = dispatch::resolve_config(&cli)?;
     startup::apply_detected_terminal_size(&cli, &mut cfg);
+    let handle_sigwinch = cli.handle_sigwinch;
 
     let registry = InstanceRegistry::new()?;
     registry.register_current(&cfg)?;
@@ -236,6 +237,7 @@ async fn async_main(cli: Cli) -> Result<()> {
             &cfg.interactive.keybindings,
             &log_entries,
             cfg.interactive.tabs,
+            handle_sigwinch,
         )
         .await;
     } else if let Some(ref id) = spawned_id {

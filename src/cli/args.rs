@@ -198,6 +198,13 @@ pub struct Cli {
     #[arg(short = 'w', long, value_name = "DIR")]
     pub working_directory: Option<String>,
 
+    /// Resize the VTTY when the terminal where vrc/vrw is running is resized.
+    /// By default VTTY dimensions are fixed at spawn time and only change
+    /// via the programmatic resize API. With this flag, SIGWINCH events
+    /// resize all VTTY buffers and PTYs to match the terminal size.
+    #[arg(long)]
+    pub handle_sigwinch: bool,
+
     /// Subcommand
     #[command(subcommand)]
     pub command: Option<Commands>,

@@ -183,7 +183,17 @@
 | FR-81 | The list output must include command name, arguments, PID, and certificate binding for each command on each instance. | Should |
 | FR-82 | Unreachable instances must be clearly indicated in the list output. | Should |
 
-### 2.20 Admin Interface Enhancements
+### 2.20 VTTY Size Semantics
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-87 | When vrc/vrw is started with a command, the VTTY size is determined by the current terminal dimensions unless `--vtty-rows` and/or `--vtty-cols` are explicitly passed. | Must |
+| FR-88 | After the initial VTTY size is set at spawn time, it must **never** change in response to the terminal where vrc/vrw is running being resized (SIGWINCH is ignored by default). | Must |
+| FR-89 | The VTTY size can only be changed programmatically via: the resize API endpoint, the web UI resize button, the `vrc resize` CLI command, or the WebSocket resize message. | Must |
+| FR-90 | The `--handle-sigwinch` CLI flag must opt into SIGWINCH-driven VTTY resizing. When set, resizing the terminal where vrc/vrw is running resizes all VTTY buffers and PTYs to match the new terminal size. | Must |
+| FR-91 | Shell completions must use the actual runtime binary name (from argv[0]) so that completions work correctly even if the binary has been renamed. | Must |
+
+### 2.21 Admin Interface Enhancements
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
