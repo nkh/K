@@ -232,14 +232,14 @@ Print the VTTY buffer of a running command to stdout.
 
 ```bash
 vrc cat
-vrc cat --color-always
+vrc cat --plain
 vrc cat 12345
-vrc cat --color-always htop
+vrc cat htop
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--color-always` | `false` | Preserve ANSI color escape sequences in the output. |
+| `--plain` | `false` | Strip ANSI color escape sequences; output plain text instead. |
 
 ---
 

@@ -63,9 +63,11 @@ pub enum ControlCommand {
         cols: u16,
     },
 
-    /// Get VTTY text output (plain text) for a command.
+    /// Get VTTY output for a command (ANSI by default, plain if `plain` is true).
     Cat {
         id: String,
+        #[serde(default)]
+        plain: bool,
     },
 
     /// Store a named snapshot of a command's VTTY buffer.

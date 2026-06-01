@@ -369,7 +369,7 @@ vrc [OPTIONS] [-- <COMMAND> [ARGS...]]
 | `stop` | `[PID]` | Gracefully shut down a vrc instance |
 | `spawn-in` | `<pid> -- <cmd> [args...]` | Spawn a command in a running instance |
 | `keys` | `<pid> <keys>` | Send keystrokes to a command |
-| `cat` | `[pid] [--color-always]` | Print VTTY buffer |
+| `cat` | `[pid] [--plain]` | Print VTTY buffer |
 | `freeze` | `<pid>` | Freeze a command (SIGSTOP) |
 | `thaw` | `<pid>` | Thaw a command (SIGCONT) |
 | `resize` | `<target> --rows N --cols M` | Resize a command's VTTY |

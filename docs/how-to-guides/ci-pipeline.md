@@ -202,7 +202,7 @@ vrc --daemon --log /tmp/vrc-ci.log -- npm run test
 vrc list
 
 # Capture output after completion
-vrc cat --color-always > /tmp/test-output.txt
+vrc cat > /tmp/test-output.txt
 
 # Stop
 vrc stop
@@ -219,7 +219,7 @@ vrc --daemon --stdout-file /tmp/vrc-ci-out.log --stderr-file /tmp/vrc-ci-err.log
 while vrc list | grep -q running; do sleep 5; done
 
 # Retrieve logs
-vrc cat --color-always > test-results.txt
+vrc cat > test-results.txt
 vrc stop
 ```
 

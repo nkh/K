@@ -2,19 +2,19 @@
 .\" Author: vrc contributors
 .\" Manual section: 1
 .\"
-.TH VRL\-CAT 1 "2025" "vrc" "User Commands"
+.TH VRC-CAT 1 "2025" "vrc" "User Commands"
 
 .SH NAME
-vrc\-cat \- show VTTY text output of a command in a running instance
+vrc cat \- show VTTY output of a command in a running instance
 
 .SH SYNOPSIS
 .B vrc
-\fBcat\fR \fIPID\fR [\fB\-c\fR \fICOMMAND\fR] [\fB\-\-interactive\fR]
+\fBcat\fR \fIPID\fR [\fB\-c\fR \fICOMMAND\fR] [\fB\-\-plain\fR] [\fB\-\-interactive\fR]
 
 .SH DESCRIPTION
-Prints the virtual terminal (VTTY) buffer of a command running inside a vrc instance. The output is plain text with ANSI escape sequences stripped, suitable for piping to \fBgrep\fR(1), \fBless\fR(1), or redirecting to a file.
+Prints the virtual terminal (VTTY) buffer of a command running inside a vrc instance. By default, the output includes ANSI escape sequences preserving colors, bold, underline, strikethrough, and other formatting exactly as the child process displayed it.
 
-Connects to the target instance's UDS control socket at \fB~/.local/share/vrc/control\-{pid}.sock\fR and retrieves the VTTY snapshot.
+Connects to the target instance's UDS control socket at \fB~/.local/share/vrc/control-{pid}.sock\fR and retrieves the VTTY snapshot.
 
 .SH ARGUMENTS
 
@@ -27,6 +27,10 @@ OS process ID of the target vrc instance (the vrc process itself, not the child 
 .TP
 .BR \-c ", " \-\-command " " \fICOMMAND\fR
 ID of the target command within the instance (omit for the first/only command).
+
+.TP
+.BR \-\-plain
+Output plain text without ANSI colors or formatting. Strips all escape sequences.
 
 .TP
 .BR \-\-interactive
@@ -44,6 +48,15 @@ Print the VTTY of the only command in an instance:
 .PP
 .nf
 \fB$ vrc cat 12345\fR
+.fi
+.RE
+
+.PP
+Print plain text (no colors):
+.RS
+.PP
+.nf
+\fB$ vrc cat --plain 12345\fR
 .fi
 .RE
 
@@ -69,11 +82,20 @@ Select [space-separated numbers]: 1 2
 .RE
 
 .PP
-Pipe output to grep:
+Pipe plain output to grep:
 .RS
 .PP
 .nf
-\fB$ vrc cat 12345 | grep "ERROR"\fR
+\fB$ vrc cat --plain 12345 | grep "ERROR"\fR
+.fi
+.RE
+
+.PP
+Pipe colored output to less:
+.RS
+.PP
+.nf
+\fB$ vrc cat 12345 | less \-R\fR
 .fi
 .RE
 
@@ -89,6 +111,6 @@ Error (instance not found, connection failed, command not found, etc.).
 
 .SH SEE ALSO
 .BR vrc (1),
-.BR vrc\-list (1),
-.BR vrc\-keys (1),
-.BR vrc\-spawn\-in (1)
+.BR vrc-list (1),
+.BR vrc-keys (1),
+.BR vrc-spawn-in (1)

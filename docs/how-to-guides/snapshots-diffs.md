@@ -2,7 +2,7 @@
 
 Learn how to capture terminal state at specific moments, list saved snapshots, compute differences between them, and use them for automated testing and debugging.
 
-> **This guide covers the vrw HTTP API for snapshots and diffs.** This feature requires vrw (the HTTP server + web dashboard binary). For local-only terminal capture in vrc, use `vrc cat --color-always > output.txt` to save VTTY output manually.
+> **This guide covers the vrw HTTP API for snapshots and diffs.** This feature requires vrw (the HTTP server + web dashboard binary). For local-only terminal capture in vrc, use `vrc cat > output.txt` to save VTTY output manually (ANSI colors are included by default).
 
 ## What Are Snapshots?
 

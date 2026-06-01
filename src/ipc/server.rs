@@ -267,9 +267,13 @@ async fn dispatch_command(manager: &Arc<CommandManager>, cmd: ControlCommand) ->
             }
         }
 
-        ControlCommand::Cat { id } => {
+        ControlCommand::Cat { id, plain } => {
             if let Some(handle) = manager.get(&id) {
-                let text = handle.vtty_plain().await;
+                let text = if plain {
+                    handle.vtty_plain().await
+                } else {
+                    handle.vtty_ansi().await
+                };
                 ControlResponse::Ok {
                     data: serde_json::json!({ "text": text }),
                 }

@@ -132,7 +132,7 @@ vrc --daemon --stdout-file /tmp/vrc-ci-out.log --stderr-file /tmp/vrc-ci-err.log
 while vrc list 2>/dev/null | grep -q "running"; do sleep 5; done
 
 # Capture output
-vrc cat --color-always > test-results.txt
+vrc cat > test-results.txt
 
 # Check exit status
 vrc list | grep -o "exit_code=[0-9]*" | tail -1

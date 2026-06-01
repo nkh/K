@@ -239,7 +239,7 @@ pub enum Commands {
         keys: String,
     },
 
-    /// Show VTTY text output of a command in a running instance
+    /// Show VTTY output of a command in a running instance
     #[cfg(not(feature = "vrw"))]
     Cat {
         /// PID of the target vrc instance
@@ -247,6 +247,9 @@ pub enum Commands {
         /// ID of the target command (omit for first command)
         #[arg(short = 'c', long)]
         command: Option<String>,
+        /// Output plain text without ANSI colors/formatting
+        #[arg(long)]
+        plain: bool,
         /// Interactively select commands from a numbered list
         #[arg(long)]
         interactive: bool,
@@ -408,14 +411,14 @@ pub enum Commands {
         interactive: bool,
     },
 
-    /// Print the VTTY buffer of a running command as text
+    /// Print the VTTY buffer of a running command
     #[cfg(feature = "vrw")]
     Cat {
         /// PID or name of the command whose buffer to print
         target: Option<String>,
-        /// Preserve ANSI color escape sequences in the output
+        /// Output plain text without ANSI colors/formatting
         #[arg(long)]
-        color_always: bool,
+        plain: bool,
         /// Interactively select commands from a numbered list
         #[arg(long)]
         interactive: bool,

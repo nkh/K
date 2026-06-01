@@ -11,10 +11,10 @@ vrw cat \- print the VTTY buffer of a running command
 
 .SH SYNOPSIS
 .B vrw cat
-[\fITARGET\fR] [\fB\-\-color-always\fR] [\fB\-\-interactive\fR]
+[\fITARGET\fR] [\fB\-\-plain\fR] [\fB\-\-interactive\fR]
 
 .SH DESCRIPTION
-Prints the virtual terminal (VTTY) buffer of a running command to stdout. By default, the output is plain text with all ANSI escape sequences stripped, making it safe for piping into \fBgrep\fR(1), \fBawk\fR(1), \fBless\fR(1), or redirecting to a file.
+Prints the virtual terminal (VTTY) buffer of a running command to stdout. By default, the output includes ANSI escape sequences so colors, bold, underline, strikethrough, and other formatting is preserved exactly as the child process displayed it.
 
 When no target is specified and exactly one command is running, that command is selected automatically. If multiple commands are running, a target must be specified either by PID (numeric) or by command name.
 
@@ -23,8 +23,8 @@ The output includes both the visible screen content and the scrollback history.
 .SH OPTIONS
 
 .TP
-.BR \-\-color-always
-Preserve ANSI color escape sequences in the output. When set, the buffer is rendered with its original colors, bold, underline, and other formatting exactly as the child process displayed it. Without this flag, all ANSI sequences are stripped and only plain text is printed. Useful for piping into \fBless \-R\fR or saving colored output.
+.BR \-\-plain
+Output plain text without any ANSI escape sequences or formatting. Strips all colors, bold, underline, and other attributes, producing clean text suitable for piping into \fBgrep\fR(1), \fBawk\fR(1), \fBless\fR(1), or redirecting to a file.
 
 .TP
 .BR \-h ", " \-\-help
@@ -50,16 +50,16 @@ If no \fITARGET\fR is provided and exactly one command is running, it is selecte
 
 .SH EXAMPLES
 
-Print plain text output of the only running command:
+Print colored output of the only running command:
 .RS
 .PP
 \fB$ vrw cat\fR
 .RE
 
-Print with ANSI colors preserved:
+Print plain text output (no colors):
 .RS
 .PP
-\fB$ vrw cat \-\-color-always\fR
+\fB$ vrw cat --plain\fR
 .RE
 
 Target a specific command by PID:
@@ -68,28 +68,28 @@ Target a specific command by PID:
 \fB$ vrw cat 12345\fR
 .RE
 
-Target by name with colors:
+Target by name (colored by default):
 .RS
 .PP
-\fB$ vrw cat \-\-color-always htop\fR
+\fB$ vrw cat htop\fR
 .RE
 
-Save output to a file:
+Save plain output to a file:
 .RS
 .PP
-\fB$ vrw cat my-server > output.log\fR
+\fB$ vrw cat --plain my-server > output.log\fR
 .RE
 
-Search for a pattern in running command output:
+Search for a pattern in plain command output:
 .RS
 .PP
-\fB$ vrw cat db-console | grep "ERROR"\fR
+\fB$ vrw cat --plain db-console | grep "ERROR"\fR
 .RE
 
 View colored output in a pager:
 .RS
 .PP
-\fB$ vrw cat \-\-color-always vim-session | less \-R\fR
+\fB$ vrw cat vim-session | less -R\fR
 .RE
 
 .SH SEE ALSO

@@ -59,7 +59,7 @@ vrw \- virtual terminal runner and process orchestrator with web control plane
 \fBconfig-check\fR
 
 .B vrw
-\fBcat\fR [\fITARGET\fR] [\fB\-\-color-always\fR] [\fB\-\-interactive\fR]
+\fBcat\fR [\fITARGET\fR] [\fB\-\-plain\fR] [\fB\-\-interactive\fR]
 
 .B vrw
 \fBscreenshot\fR [\fITARGET\fR] [\fIOPTIONS\fR] [\fB\-\-interactive\fR]
@@ -441,20 +441,20 @@ vrw stop-command [\fITARGET\fR]
 .RE
 
 .SS cat
-Print the VTTY buffer of a running command to stdout. By default the output is plain text with all ANSI formatting stripped. Use \fB\-\-color-always\fR to preserve ANSI color escape sequences. When no target is given and exactly one command is running, that command is used automatically.
+Print the VTTY buffer of a running command to stdout. By default the output includes ANSI color escape sequences preserving colors, bold, underline, strikethrough and other formatting. Use \fB\-\-plain\fR to strip all formatting and output plain text. When no target is given and exactly one command is running, that command is used automatically.
 
 .RS
 .PP
 .B Usage:
 .RS
-vrw cat [\fITARGET\fR] [\fB\-\-color-always\fR]
+vrw cat [\fITARGET\fR] [\fB\-\-plain\fR]
 .RE
 .PP
 .B Options:
 .RS
 .TP
-.B \-\-color-always
-Preserve ANSI color escape sequences in the output.
+.B \-\-plain
+Output plain text without ANSI colors or formatting.
 .RE
 .RE
 

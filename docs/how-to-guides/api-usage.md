@@ -62,8 +62,8 @@ vrc cat
 # Target a specific command by PID
 vrc cat 12345
 
-# With ANSI colors preserved
-vrc cat --color-always htop
+# Strip ANSI colors (plain text output)
+vrc cat --plain htop
 ```
 
 ## Spawning Commands
@@ -118,7 +118,7 @@ vrc spawn-in $PID -- npm test
 sleep 10
 
 # Capture output
-vrc cat $PID --color-always > /tmp/build-output.txt
+vrc cat $PID > /tmp/build-output.txt
 echo "Output retrieved."
 ```
 

@@ -9,10 +9,9 @@ use crate::instance::registry::InstanceRegistry;
 /// Handle the `vrw cat [TARGET]` subcommand.
 ///
 /// Fetches the VTTY buffer of the specified (or sole) running command
-/// and prints it to stdout.  When `color_always` is true the output
-/// includes ANSI escape sequences so the terminal renders colours;
-/// otherwise plain text (no formatting) is printed.
-pub async fn handle_cat_command(cli: &Cli, target: Option<&str>, color_always: bool, interactive: bool) -> Result<()> {
+/// and prints it to stdout with ANSI colors/formatting by default.
+/// When `plain` is true, outputs plain text without any formatting.
+pub async fn handle_cat_command(cli: &Cli, target: Option<&str>, plain: bool, interactive: bool) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let all_instances = registry.list_instances();
     let instances = resolve_targeted_instances(cli, &all_instances)?;
@@ -33,7 +32,7 @@ pub async fn handle_cat_command(cli: &Cli, target: Option<&str>, color_always: b
             &items, "Select commands to cat [space-separated numbers]",
         )?;
         for item in &selected {
-            cat_by_id(&client, &instances, &all_commands, &item.id, color_always).await?;
+            cat_by_id(&client, &instances, &all_commands, &item.id, plain).await?;
         }
         return Ok(());
     }
@@ -74,7 +73,7 @@ pub async fn handle_cat_command(cli: &Cli, target: Option<&str>, color_always: b
             0 => anyhow::bail!("No running commands. Use `vrw list` to see commands."),
             1 => {
                 let cmd_id = all_commands[0].1.clone();
-                return cat_by_id(&client, &instances, &all_commands, &cmd_id, color_always).await;
+                return cat_by_id(&client, &instances, &all_commands, &cmd_id, plain).await;
             }
             _ => {
                 let list: Vec<_> = all_commands
@@ -89,7 +88,7 @@ pub async fn handle_cat_command(cli: &Cli, target: Option<&str>, color_always: b
         },
     };
 
-    cat_by_id(&client, &instances, &all_commands, &cmd_id, color_always).await
+    cat_by_id(&client, &instances, &all_commands, &cmd_id, plain).await
 }
 
 /// Cat a single command by its ID.
@@ -98,7 +97,7 @@ async fn cat_by_id(
     instances: &[crate::instance::info::InstanceInfo],
     all_commands: &[(u32, String, u32, String, String)],
     cmd_id: &str,
-    color_always: bool,
+    plain: bool,
 ) -> Result<()> {
     let (instance_pid, _, _, _, _) = all_commands
         .iter()
@@ -112,19 +111,7 @@ async fn cat_by_id(
 
     let url = instance_url(info, &None);
 
-    if color_always {
-        let resp = client
-            .get(format!("{}/api/commands/{}/vtty", url, cmd_id))
-            .send()
-            .await?;
-        let json: serde_json::Value = resp.json().await?;
-        if json["status"] != "ok" {
-            let err = json["error"].as_str().unwrap_or("unknown error");
-            anyhow::bail!("Failed to fetch VTTY buffer: {}", err);
-        }
-        let content = json["data"]["content"].as_str().unwrap_or("");
-        print!("{}", content);
-    } else {
+    if plain {
         let resp = client
             .get(format!("{}/api/commands/{}/vtty/text", url, cmd_id))
             .send()
@@ -136,6 +123,18 @@ async fn cat_by_id(
         }
         let text = json["data"]["text"].as_str().unwrap_or("");
         print!("{}", text);
+    } else {
+        let resp = client
+            .get(format!("{}/api/commands/{}/vtty", url, cmd_id))
+            .send()
+            .await?;
+        let json: serde_json::Value = resp.json().await?;
+        if json["status"] != "ok" {
+            let err = json["error"].as_str().unwrap_or("unknown error");
+            anyhow::bail!("Failed to fetch VTTY buffer: {}", err);
+        }
+        let content = json["data"]["content"].as_str().unwrap_or("");
+        print!("{}", content);
     }
 
     Ok(())
