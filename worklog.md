@@ -155,3 +155,40 @@ Stage Summary:
 - vrc bash completions now work correctly in dual-feature build
 - All documentation updated to reflect: -i short form, kill/stop-command aliases, --no-log, --handle-sigwinch, --all, --display simplification, implicit spawn
 - 5 new tests cover: -i parsing, --handle-sigwinch parsing, --no-log behavior, implicit spawn arg capture
+---
+Task ID: 2
+Agent: main
+Task: Refactor logging format, add --color-always, add decision table to docs
+
+Work Log:
+- Rewrote src/logging/command_log.rs with structured log format
+  - Terminal format: HH:MM:SS.cc  vrw   a1b2c3d4  htop                 spawn: details...
+  - File format: tab-separated (timestamp\tbinary\tid\tcmd\tevent: details)
+  - ID truncated to 8 chars in terminal output
+  - Command name padded to 20 chars, binary name padded to 4 chars
+  - Timestamp uses local time with hundredths of second precision
+- Added color support via --color-always flag
+  - ANSI color codes: timestamp=dim, binary=cyan, id=yellow, cmd=green, event=bold blue
+  - Colors only applied to terminal output; file output is always plain
+- Added binary_name and color_always fields to Config (serde skip, runtime-only)
+- Updated CommandLogger::new() to accept binary_name and color_always parameters
+- Updated CommandManager::new() to pass config.binary_name and config.color_always
+- Added --color-always top-level CLI flag in args.rs
+- Updated apply_overrides() to set binary_name and color_always from CLI
+- Fixed config/merge.rs: both merge_configs() and apply_profile() propagate new fields
+- Updated all test configs in integration_test.rs, regression_test.rs, comprehensive_test.rs
+- Updated docs/reference/cli.md:
+  - Added --color-always to flag table
+  - Added Log Format section with field descriptions for terminal and file
+  - Added terminal and file output examples
+  - Added Logging Decision Table covering all mode/flag combinations
+  - Updated --no-log description to clarify it suppresses everything
+- Build: cargo build --release --features "vrc,vrw" — SUCCESS, no warnings
+- Tests: ALL 580 tests pass (383 lib + 121 comprehensive + 68 regression + 6 integration + 2 doctests)
+- Pushed as commit 1f5a5a4 to origin/speedup
+
+Stage Summary:
+- Log format restructured: aligned columns, truncated ID, padded fields, local timestamps
+- --color-always flag enables ANSI colors in terminal log output
+- Tab-separated file output for easy parsing
+- Comprehensive decision table added to documentation

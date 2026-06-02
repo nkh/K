@@ -7,7 +7,7 @@ use super::schema::{Config, PartialConfig};
 pub fn merge_configs(global: Config, local: Config) -> Config {
     Config {
         binary_name: local.binary_name,
-        color_always: local.color_always,
+        color_terminal_log: local.color_terminal_log,
         vtty: local.vtty,
         display: local.display,
         command_log: local.command_log,
@@ -65,7 +65,7 @@ fn merge_profiles(
 pub fn apply_profile(base: Config, profile: &PartialConfig) -> Config {
     Config {
         binary_name: base.binary_name,
-        color_always: base.color_always,
+        color_terminal_log: base.color_terminal_log,
         vtty: profile.vtty.clone().unwrap_or(base.vtty),
         display: profile.display.clone().unwrap_or(base.display),
         command_log: profile.command_log.clone().unwrap_or(base.command_log),

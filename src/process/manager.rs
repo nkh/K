@@ -58,7 +58,7 @@ impl CommandManager {
                 config.command_log.enabled,
                 config.command_log.file.as_deref(),
                 &config.binary_name,
-                config.color_always,
+                config.color_terminal_log,
             )
             .expect("Failed to initialize command logger"),
         );

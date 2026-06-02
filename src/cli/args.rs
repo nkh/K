@@ -216,8 +216,8 @@ pub struct Cli {
     pub quiet: bool,
 
     /// Use ANSI color codes in terminal log output
-    #[arg(long)]
-    pub color_always: bool,
+    #[arg(short = 'F', long)]
+    pub color_terminal_log: bool,
 
     /// Subcommand
     #[command(subcommand)]
@@ -572,7 +572,7 @@ impl Cli {
     pub fn apply_overrides(&self, cfg: &mut Config) -> anyhow::Result<()> {
         // Runtime fields (not from config file)
         cfg.binary_name = BINARY_NAME.to_string();
-        cfg.color_always = self.color_always;
+        cfg.color_terminal_log = self.color_terminal_log;
 
         // Server (vrw only)
         #[cfg(feature = "vrw")]

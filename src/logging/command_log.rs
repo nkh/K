@@ -5,7 +5,6 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
 
 const MEMORY_BUFFER_CAPACITY: usize = 2048;
-const BINARY_NAME_WIDTH: usize = 4; // "vrw " / "vrc "
 const ID_WIDTH: usize = 8;
 const CMD_WIDTH: usize = 20;
 
@@ -23,18 +22,16 @@ pub struct CommandLogger {
     /// Broadcast channel for streaming log entries to WebSocket subscribers
     /// and the non-display terminal event loop.
     log_tx: broadcast::Sender<String>,
-    /// The binary name (e.g. "vrw" or "vrc") included in every log line.
-    binary_name: String,
     /// When true, ANSI color escape codes are included in terminal output.
-    color_always: bool,
+    color_terminal_log: bool,
 }
 
 impl CommandLogger {
     pub fn new(
         enabled: bool,
         file_path: Option<&str>,
-        binary_name: &str,
-        color_always: bool,
+        _binary_name: &str,
+        color_terminal_log: bool,
     ) -> anyhow::Result<Self> {
         let file = match file_path {
             Some(path) => {
@@ -49,8 +46,7 @@ impl CommandLogger {
             file,
             memory_buffer: Arc::new(Mutex::new(Vec::with_capacity(MEMORY_BUFFER_CAPACITY))),
             log_tx,
-            binary_name: binary_name.to_string(),
-            color_always,
+            color_terminal_log,
         })
     }
 
@@ -122,52 +118,119 @@ impl CommandLogger {
     }
 
     /// ANSI color codes for terminal output.
-    /// Only used when `color_always` is true.
-    const COLOR_RESET: &'static str = "\x1b[0m";
-    const COLOR_TIMESTAMP: &'static str = "\x1b[2m";  // dim
-    const COLOR_BINARY: &'static str = "\x1b[36m";   // cyan
-    const COLOR_ID: &'static str = "\x1b[33m";       // yellow
-    const COLOR_CMD: &'static str = "\x1b[32m";      // green
-    const COLOR_EVENT: &'static str = "\x1b[1;34m";   // bold blue
+    /// Only used when `color_terminal_log` is true.
+    const CLR_RESET: &'static str = "\x1b[0m";
+    const CLR_TIMESTAMP: &'static str = "\x1b[90m";     // dark grey
+    const CLR_ID: &'static str = "\x1b[32m";           // green
+    const CLR_CMD: &'static str = "\x1b[1;37m";        // bright white
+    const CLR_EVENT: &'static str = "\x1b[1;37m";      // bright white (event type)
+    // Detail field colors
+    const CLR_ARG: &'static str = "\x1b[1;37m";        // bright white
+    const CLR_CERT: &'static str = "\x1b[34m";         // blue
+    const CLR_ENV: &'static str = "\x1b[32m";          // green
+    const CLR_SIZE: &'static str = "\x1b[1;33m";       // bright yellow
+    const CLR_DIR: &'static str = "\x1b[34m";          // blue
+    const CLR_DETAIL_DEFAULT: &'static str = "\x1b[90m"; // dark grey (for other fields)
+
+    /// Color a single detail token based on its key prefix.
+    /// Returns (colored_token, is_id_or_cmd).
+    fn color_detail_token(token: &str) -> (String, bool) {
+        if let Some(_) = token.strip_prefix("id=") {
+            // Skip id in details — already shown as a separate field
+            return (String::new(), true);
+        }
+        if let Some(_) = token.strip_prefix("cmd=") {
+            // Skip cmd in details — already shown as a separate field
+            return (String::new(), true);
+        }
+        if let Some(_) = token.strip_prefix("args=") {
+            return (format!("{}{}{}", Self::CLR_ARG, token, Self::CLR_RESET), false);
+        }
+        if let Some(_) = token.strip_prefix("cert=") {
+            return (format!("{}{}{}", Self::CLR_CERT, token, Self::CLR_RESET), false);
+        }
+        if let Some(_) = token.strip_prefix("env=") {
+            return (format!("{}{}{}", Self::CLR_ENV, token, Self::CLR_RESET), false);
+        }
+        if let Some(_) = token.strip_prefix("size=") {
+            return (format!("{}{}{}", Self::CLR_SIZE, token, Self::CLR_RESET), false);
+        }
+        if let Some(_) = token.strip_prefix("dir=") {
+            return (format!("{}{}{}", Self::CLR_DIR, token, Self::CLR_RESET), false);
+        }
+        // Default color for other tokens
+        return (format!("{}{}{}", Self::CLR_DETAIL_DEFAULT, token, Self::CLR_RESET), false);
+    }
+
+    /// Build a colored details string, skipping id= and cmd= tokens.
+    fn color_details(details: &str) -> String {
+        let tokens: Vec<&str> = details.split(' ').collect();
+        let mut colored = String::new();
+        let mut first = true;
+        for token in tokens {
+            let (ctoken, skip) = Self::color_detail_token(token);
+            if skip {
+                continue;
+            }
+            if ctoken.is_empty() {
+                continue;
+            }
+            if !first {
+                colored.push(' ');
+            }
+            first = false;
+            colored.push_str(&ctoken);
+        }
+        colored
+    }
+
+    /// Strip id= and cmd= tokens from a details string (for terminal output
+    /// where they're redundant).
+    fn strip_id_cmd(details: &str) -> String {
+        let tokens: Vec<&str> = details.split(' ').filter(|t| {
+            !(t.starts_with("id=") || t.starts_with("cmd=") || t.starts_with("name="))
+        }).collect();
+        tokens.join(" ")
+    }
 
     pub fn log(&self, event_type: &str, details: &str) {
         let timestamp = Self::format_timestamp();
-        let bin_padded = Self::pad_field(&self.binary_name, BINARY_NAME_WIDTH);
         let id_short = Self::extract_id(details);
         let id_padded = Self::pad_field(id_short, ID_WIDTH);
         let cmd_name = Self::extract_cmd_name(details);
         let cmd_padded = Self::pad_field(cmd_name, CMD_WIDTH);
 
         // Terminal line (space-separated fields, optional color)
-        let term_line = if self.color_always {
+        let term_line = if self.color_terminal_log {
+            let colored_details = Self::color_details(details);
             format!(
-                "{ts}{clr_ts}  {bin}{clr_bin}  {id}{clr_id}  {cmd}{clr_cmd}  {evt}{clr_evt}{details}{clr_reset}\n",
+                "{ts}{clr_ts} {id}{clr_id} {cmd}{clr_cmd} {evt}{clr_evt}: {details}{clr_reset}\n",
                 ts = timestamp,
-                clr_ts = Self::COLOR_TIMESTAMP,
-                bin = bin_padded,
-                clr_bin = Self::COLOR_BINARY,
+                clr_ts = Self::CLR_TIMESTAMP,
                 id = id_padded,
-                clr_id = Self::COLOR_ID,
+                clr_id = Self::CLR_ID,
                 cmd = cmd_padded,
-                clr_cmd = Self::COLOR_CMD,
+                clr_cmd = Self::CLR_CMD,
                 evt = event_type,
-                clr_evt = Self::COLOR_EVENT,
-                details = details,
-                clr_reset = Self::COLOR_RESET,
+                clr_evt = Self::CLR_EVENT,
+                details = colored_details,
+                clr_reset = Self::CLR_RESET,
             )
         } else {
+            // Plain: strip id and cmd from details to avoid repetition
+            let clean_details = Self::strip_id_cmd(details);
             format!(
-                "{}  {}  {}  {}  {}: {}\n",
-                timestamp, bin_padded, id_padded, cmd_padded, event_type, details
+                "{} {} {} {}: {}\n",
+                timestamp, id_padded, cmd_padded, event_type, clean_details
             )
         };
 
         let term_trimmed = term_line.trim_end().to_string();
 
-        // File line (tab-separated fields, no color)
+        // File line (tab-separated fields, no color, no padding)
         let file_line = format!(
-            "{}\t{}\t{}\t{}\t{}: {}\n",
-            timestamp, self.binary_name, id_short, cmd_name, event_type, details
+            "{}\t{}\t{}\t{}\t{}\n",
+            timestamp, id_short, cmd_name, event_type, details
         );
 
         // Always populate the in-memory ring buffer and broadcast,
@@ -189,7 +252,6 @@ impl CommandLogger {
 
         // Print to stdout if enabled and no file specified
         if self.file.is_none() {
-            // Use the colored terminal line for stdout
             print!("{}", term_line);
         }
 

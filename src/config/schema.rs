@@ -29,9 +29,9 @@ pub struct Config {
     #[serde(default, skip)]
     pub binary_name: String,
     /// Whether to use ANSI color codes in terminal log output.
-    /// Set at runtime from the `--color-always` CLI flag.
+    /// Set at runtime from the `--color-terminal-log` / `-F` CLI flag.
     #[serde(default, skip)]
-    pub color_always: bool,
+    pub color_terminal_log: bool,
 
     /// HTTP server bind address and port (vrw only).
     #[cfg(feature = "vrw")]

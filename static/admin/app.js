@@ -96,7 +96,7 @@ const state = {
 };
 
 // ─── Theme ───
-// Global theme cycles: '' (Auto/OS) → 'dark' → 'light' → 'grey' → ''.
+// Global theme cycles: '' (Auto/OS) → 'grey' → 'dark' → ''.
 // Theme is a client-side preference stored in localStorage — it takes effect
 // immediately without requiring a running server.
 function initTheme() {
@@ -109,8 +109,8 @@ function initTheme() {
 
 function toggleGlobalTheme() {
     const current = document.documentElement.getAttribute('data-theme') || '';
-    // Cycle: '' → 'dark' → 'light' → 'grey' → ''
-    const next = current === '' ? 'dark' : current === 'dark' ? 'light' : current === 'light' ? 'grey' : '';
+    // Cycle: '' → 'grey' → 'dark' → ''
+    const next = current === '' ? 'grey' : current === 'grey' ? 'dark' : '';
     if (next) {
         document.documentElement.setAttribute('data-theme', next);
         localStorage.setItem('vrw_theme', next);
@@ -129,15 +129,12 @@ function updateThemeButton() {
         const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
         btn.textContent = prefersLight ? '☾' : '☀';
         btn.title = 'Theme: Auto (click to toggle)';
-    } else if (theme === 'dark') {
-        btn.textContent = '☀';
-        btn.title = 'Theme: Dark (click to toggle)';
-    } else if (theme === 'light') {
-        btn.textContent = '☾';
-        btn.title = 'Theme: Light (click to toggle)';
     } else if (theme === 'grey') {
         btn.textContent = '◼';
         btn.title = 'Theme: Grey (click to toggle)';
+    } else if (theme === 'dark') {
+        btn.textContent = '☀';
+        btn.title = 'Theme: Dark (click to toggle)';
     }
 }
 
@@ -2945,6 +2942,8 @@ function renderPanels() {
                             <label>Cols</label>
                             <input type="number" id="resizeCols-${panel.id}" value="80" min="1" max="1000" title="Terminal columns">
                             <button class="btn btn-xs" onclick="resizeTerminalPanel('${panel.id}')">Resize</button>
+                            <button class="btn btn-xs" id="maxFitBtn-${panel.id}" onclick="toggleMaxFit('${panel.id}')" title="Resize terminal to fill the panel (toggle)">Max fit</button>
+                            <button class="btn btn-xs" id="maxFontBtn-${panel.id}" onclick="toggleMaxFont('${panel.id}')" title="Maximize font size to fit terminal in pane (toggle)">Max font</button>
                         </span>
                         <select id="bufferSelect-${panel.id}" class="select-xs" onchange="switchBufferPanel('${panel.id}', this.value)" title="Which terminal buffer to view">
                             <option value="current">Current</option>
@@ -4626,6 +4625,155 @@ function autoFitActiveTerminal() {
             body: JSON.stringify({ rows, cols }),
         }).catch(() => {});
     }
+}
+
+// ─── Max Fit Toggle ───
+// Per-panel state: stores the previous rows/cols before max-fit was applied,
+// so toggling back restores them.
+const _maxFitState = {};  // panelId → { prevRows, prevCols, active }
+
+/// Toggle "max fit" mode: resize the terminal rows/cols to the maximum that
+/// fits in the panel container at the current font size.  Toggle back to
+/// restore the previous dimensions.
+async function toggleMaxFit(panelId) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj) return;
+
+    const panelEl = document.getElementById(panelId);
+    if (!panelEl) return;
+    const vttyEl = panelEl.querySelector('.vtty-container');
+    if (!vttyEl) return;
+
+    const st = _maxFitState[panelId];
+    const btn = document.getElementById('maxFitBtn-' + panelId);
+
+    if (st && st.active) {
+        // Toggle back: restore previous dimensions
+        st.active = false;
+        if (btn) {
+            btn.textContent = 'Max fit';
+            btn.style.background = '';
+            btn.style.color = '';
+        }
+        await _resizePanelTo(panelId, st.prevRows, st.prevCols);
+    } else {
+        // Apply max fit: calculate max rows/cols from container + current font
+        const rect = vttyEl.getBoundingClientRect();
+        if (rect.width < 10 || rect.height < 10) return;
+
+        const fontSize = panelObj.fontSize || state.fontSize;
+        const charW = fontSize * 0.6;
+        const charH = fontSize * 1.2;
+        const maxCols = Math.max(20, Math.min(500, Math.floor(rect.width / charW)));
+        const maxRows = Math.max(5, Math.min(200, Math.floor(rect.height / charH)));
+
+        // Save current dimensions
+        const curRows = parseInt(document.getElementById('resizeRows-' + panelId)?.value) || 24;
+        const curCols = parseInt(document.getElementById('resizeCols-' + panelId)?.value) || 80;
+
+        _maxFitState[panelId] = { prevRows: curRows, prevCols: curCols, active: true };
+        if (btn) {
+            btn.textContent = 'Restore';
+            btn.style.background = 'var(--accent)';
+            btn.style.color = '#fff';
+        }
+        await _resizePanelTo(panelId, maxRows, maxCols);
+    }
+}
+
+// ─── Max Font Toggle ───
+// Per-panel state: stores the previous font size before max-font was applied.
+const _maxFontState = {};  // panelId → { prevFontSize, prevRows, prevCols, active }
+
+/// Toggle "max font" mode: increase the panel font size to the largest value
+/// that still allows the current terminal dimensions (rows x cols) to fit
+/// within the panel container.  Toggle back to restore the previous font size.
+async function toggleMaxFont(panelId) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj) return;
+
+    const panelEl = document.getElementById(panelId);
+    if (!panelEl) return;
+    const vttyEl = panelEl.querySelector('.vtty-container');
+    if (!vttyEl) return;
+
+    const rect = vttyEl.getBoundingClientRect();
+    if (rect.width < 10 || rect.height < 10) return;
+
+    const st = _maxFontState[panelId];
+    const btn = document.getElementById('maxFontBtn-' + panelId);
+
+    const curRows = parseInt(document.getElementById('resizeRows-' + panelId)?.value) || 24;
+    const curCols = parseInt(document.getElementById('resizeCols-' + panelId)?.value) || 80;
+
+    if (st && st.active) {
+        // Toggle back: restore previous font size and terminal dimensions
+        st.active = false;
+        if (btn) {
+            btn.textContent = 'Max font';
+            btn.style.background = '';
+            btn.style.color = '';
+        }
+        // Restore font size
+        panelObj.fontSize = st.prevFontSize;
+        localStorage.setItem('vrw_panel_font_' + panelId, panelObj.fontSize.toString());
+        if (vttyEl) vttyEl.style.fontSize = panelObj.fontSize + 'px';
+        const label = document.querySelector(`#${panelId} .panel-font-size`);
+        if (label) label.textContent = panelObj.fontSize + 'px';
+        // Restore terminal dimensions
+        await _resizePanelTo(panelId, st.prevRows, st.prevCols);
+    } else {
+        // Calculate max font size: largest font where rows*charH <= paneH and cols*charW <= paneW
+        // charW ≈ fontSize * 0.6, charH ≈ fontSize * 1.2
+        // So: fontSize * 1.2 * rows <= rect.height → fontSize <= rect.height / (1.2 * rows)
+        //     fontSize * 0.6 * cols <= rect.width  → fontSize <= rect.width / (0.6 * cols)
+        const maxFontByHeight = rect.height / (1.2 * curRows);
+        const maxFontByWidth = rect.width / (0.6 * curCols);
+        const maxFont = Math.floor(Math.min(maxFontByHeight, maxFontByWidth));
+        const newFontSize = Math.max(8, Math.min(28, maxFont));
+
+        // Save current state
+        _maxFontState[panelId] = {
+            prevFontSize: panelObj.fontSize,
+            prevRows: curRows,
+            prevCols: curCols,
+            active: true,
+        };
+        if (btn) {
+            btn.textContent = 'Restore';
+            btn.style.background = 'var(--accent)';
+            btn.style.color = '#fff';
+        }
+
+        // Apply new font size
+        panelObj.fontSize = newFontSize;
+        localStorage.setItem('vrw_panel_font_' + panelId, panelObj.fontSize.toString());
+        if (vttyEl) vttyEl.style.fontSize = panelObj.fontSize + 'px';
+        const label = document.querySelector(`#${panelId} .panel-font-size`);
+        if (label) label.textContent = panelObj.fontSize + 'px';
+    }
+}
+
+/// Helper: resize a panel's terminal to specific rows/cols via the API.
+async function _resizePanelTo(panelId, rows, cols) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj) return;
+    const cmdId = (panelObj.instUrl === state.selectedInstUrl) ? state.selectedCmdId : null;
+    if (!cmdId) return;
+
+    // Update the input fields
+    const ri = document.getElementById('resizeRows-' + panelId);
+    const ci = document.getElementById('resizeCols-' + panelId);
+    if (ri) ri.value = rows;
+    if (ci) ci.value = cols;
+
+    try {
+        await fetch(apiUrl(`/api/commands/${cmdId}/resize`, { url: panelObj.instUrl }), {
+            method: 'POST',
+            headers: authHeadersForInstance({ url: panelObj.instUrl, token: panelObj.token }),
+            body: JSON.stringify({ rows, cols }),
+        });
+    } catch (e) { /* ignore */ }
 }
 
 // ─── Keyboard Shortcuts Help ───

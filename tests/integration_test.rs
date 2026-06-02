@@ -20,7 +20,7 @@ use vrc_core::process::manager::CommandManager;
 fn test_config() -> Config {
     Config {
         binary_name: "vrw".to_string(),
-        color_always: false,
+        color_terminal_log: false,
         server: ServerConfig {
             bind: "127.0.0.1".to_string(),
             port: 0, // Let OS assign port

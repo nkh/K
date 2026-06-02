@@ -35,7 +35,7 @@ use vrc_core::process::manager::CommandManager;
 fn test_config() -> Config {
     Config {
         binary_name: "vrw".to_string(),
-        color_always: false,
+        color_terminal_log: false,
         server: ServerConfig {
             bind: "127.0.0.1".to_string(),
             port: 0,
@@ -84,7 +84,7 @@ fn test_config() -> Config {
 fn test_config() -> Config {
     Config {
         binary_name: "vrc".to_string(),
-        color_always: false,
+        color_terminal_log: false,
         vtty: vrc_core::config::schema::VttyConfig {
             rows: 10,
             cols: 40,
