@@ -1073,8 +1073,15 @@ async fn file_sink_append() {
 #[test]
 fn logger_disabled_no_output() {
     let logger = vrc_core::logging::command_log::CommandLogger::new(false, None).unwrap();
+    // Subscribe BEFORE logging so we catch the broadcast
+    let mut rx = logger.subscribe();
     logger.log("test", "should not appear");
-    assert!(logger.read_memory_buffer().is_empty());
+    // Memory buffer is always populated (for web UI and event loop),
+    // but file output is suppressed when disabled.
+    assert_eq!(logger.read_memory_buffer().len(), 1);
+    // Verify the broadcast channel also received the event
+    let entry = rx.try_recv().unwrap();
+    assert!(entry.contains("test"));
 }
 
 #[test]

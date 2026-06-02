@@ -17,7 +17,8 @@ pub struct CommandLogger {
     /// This allows the web UI log viewer and terminal overlay to show
     /// entries even when no log file is configured (e.g. --log without --log-file).
     memory_buffer: SharedLogBuffer,
-    /// Broadcast channel for streaming log entries to WebSocket subscribers.
+    /// Broadcast channel for streaming log entries to WebSocket subscribers
+    /// and the non-display terminal event loop.
     log_tx: broadcast::Sender<String>,
 }
 
@@ -63,14 +64,28 @@ impl CommandLogger {
     }
 
     pub fn log(&self, command: &str, details: &str) {
-        if !self.enabled {
-            return;
-        }
         let timestamp = Utc::now().to_rfc3339();
         let line = format!("[{}] {}: {}\n", timestamp, command, details);
         let trimmed = line.trim_end().to_string();
 
-        // Always print to stdout if enabled and no file specified
+        // Always populate the in-memory ring buffer and broadcast,
+        // regardless of whether file logging is enabled.  This ensures
+        // the non-display event loop, web UI log viewer, and --display
+        // log overlay can show events without requiring --log.
+        if let Ok(mut buf) = self.memory_buffer.lock() {
+            if buf.len() >= MEMORY_BUFFER_CAPACITY {
+                buf.remove(0);
+            }
+            buf.push(trimmed.clone());
+        }
+        let _ = self.log_tx.send(trimmed.clone());
+
+        // File writing and direct stdout printing are gated by `enabled`.
+        if !self.enabled {
+            return;
+        }
+
+        // Print to stdout if enabled and no file specified
         if self.file.is_none() {
             println!("{}", trimmed);
         }
@@ -82,17 +97,5 @@ impl CommandLogger {
                 let _ = file.flush();
             }
         }
-
-        // Store in the in-memory ring buffer
-        if let Ok(mut buf) = self.memory_buffer.lock() {
-            if buf.len() >= MEMORY_BUFFER_CAPACITY {
-                buf.remove(0);
-            }
-            buf.push(trimmed.clone());
-        }
-
-        // Broadcast log entry to WebSocket subscribers.
-        // Ignore send errors (no subscribers or channel full).
-        let _ = self.log_tx.send(trimmed);
     }
 }
