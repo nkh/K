@@ -74,6 +74,8 @@ const state = {
     // Server-configured screenshot defaults
     serverScreenshotFontSize: 12,
     serverScreenshotFontName: 'monospace',
+    // Panel layout direction: 'row' (horizontal, side-by-side) or 'column' (vertical, stacked)
+    panelLayout: localStorage.getItem('vrw_panel_layout') || 'row',
     // WebSocket for real-time log streaming
     logWs: null,
     logWsReconnectTimer: null,
@@ -1039,6 +1041,18 @@ async function loadSnapshot() {
 function _buildSidebar() {
     const filter = (document.getElementById('cmdFilter') || {}).value || '';
     const filterLower = filter.toLowerCase();
+
+    // Default sidebar sort to selected panel's instance
+    const selectedPanel = state.panels.find(p =>
+        p.id === (document.querySelector('.panel') || {}).id
+    );
+    const selectedInstUrl = selectedPanel ? selectedPanel.instUrl : state.selectedInstUrl;
+    if (!_sidebarSort || _sidebarSort === 'name') {
+        if (selectedInstUrl && state.instanceUrls.length > 1) {
+            _sidebarSort = selectedInstUrl;
+        }
+    }
+
     let fingerprint = '';
     for (const inst of state.instanceUrls) {
         fingerprint += inst.url + ':reachable=' + inst.reachable + '|';
@@ -2820,7 +2834,12 @@ function updateInstanceDropdown() {
         html += `<option value="${escHtml(inst.url)}">${escHtml(inst.label)} (${escHtml(inst.url.replace(/^https?:\/\//, ''))})</option>`;
     }
     select.innerHTML = html;
-    if (current) select.value = current;
+    // Auto-select the selected panel's instance (prefer over last selection)
+    if (state.selectedInstUrl) {
+        select.value = state.selectedInstUrl;
+    } else if (current) {
+        select.value = current;
+    }
 }
 
 // ─── Panels (Multi-view) ───
@@ -2860,6 +2879,7 @@ function confirmAddPanel() {
     const url = document.getElementById('panelUrl').value.trim();
     const label = document.getElementById('panelLabel').value.trim() || new URL(url).host;
     const token = document.getElementById('panelToken').value.trim();
+    const splitDir = document.getElementById('panelSplitDir').value;
 
     if (!url) return;
 
@@ -2874,6 +2894,17 @@ function confirmAddPanel() {
     state.instanceUrls.push(inst);
     addPanelDirect(url, label, token);
     closePanelModal();
+
+    // Apply layout direction
+    if (splitDir === 'vertical') {
+        state.panelLayout = 'column';
+    } else if (splitDir === 'horizontal') {
+        state.panelLayout = 'row';
+    }
+    // 'auto' doesn't change the layout
+    localStorage.setItem('vrw_panel_layout', state.panelLayout);
+
+    renderPanels();
     loadCommands();
     loadCertificates();
     fetchServerTemplates();
@@ -2884,6 +2915,18 @@ function removePanel(id) {
     // Remove from instanceUrls if no more panels for it
     const remainingUrls = new Set(state.panels.map(p => p.instUrl));
     state.instanceUrls = state.instanceUrls.filter(i => remainingUrls.has(i.url));
+    // If only one panel left, reset layout to row
+    if (state.panels.length <= 1) {
+        state.panelLayout = 'row';
+        localStorage.setItem('vrw_panel_layout', state.panelLayout);
+    }
+    renderPanels();
+}
+
+/// Toggle panel layout between horizontal (row) and vertical (column).
+function togglePanelLayout() {
+    state.panelLayout = state.panelLayout === 'row' ? 'column' : 'row';
+    localStorage.setItem('vrw_panel_layout', state.panelLayout);
     renderPanels();
 }
 
@@ -2891,6 +2934,9 @@ function renderPanels() {
     const container = document.getElementById('view-vtty');
     let html = '';
     const hasMultiplePanels = state.panels.length > 1;
+
+    // Apply panel layout direction
+    container.style.flexDirection = state.panelLayout;
 
     // Check if there are any commands at all for the welcome state
     let hasAnyCommands = false;
@@ -2942,8 +2988,8 @@ function renderPanels() {
                             <label>Cols</label>
                             <input type="number" id="resizeCols-${panel.id}" value="80" min="1" max="1000" title="Terminal columns">
                             <button class="btn btn-xs" onclick="resizeTerminalPanel('${panel.id}')">Resize</button>
-                            <button class="btn btn-xs" id="maxFitBtn-${panel.id}" onclick="toggleMaxFit('${panel.id}')" title="Resize terminal to fill the panel (toggle)">Max fit</button>
-                            <button class="btn btn-xs" id="maxFontBtn-${panel.id}" onclick="toggleMaxFont('${panel.id}')" title="Maximize font size to fit terminal in pane (toggle)">Max font</button>
+                            <button class="btn btn-xs" id="maxFitBtn-${panel.id}" onclick="toggleMaxFit('${panel.id}')" title="Resize terminal to fill the panel (toggle)">&#x26F6;</button>
+                            <button class="btn btn-xs" id="maxFontBtn-${panel.id}" onclick="toggleMaxFont('${panel.id}')" title="Maximize font size to fit terminal in pane (toggle)">&#x1F50D;</button>
                         </span>
                         <select id="bufferSelect-${panel.id}" class="select-xs" onchange="switchBufferPanel('${panel.id}', this.value)" title="Which terminal buffer to view">
                             <option value="current">Current</option>
@@ -2960,6 +3006,7 @@ function renderPanels() {
                             <button class="btn btn-xs" onclick="sendKeysToPanel('${panel.id}')" title="Send keys to terminal">Send</button>
                             <button class="btn btn-xs" onclick="showSpecialKeysHelp()" title="Special keys reference">&#63;</button>
                         </div>
+                        ${hasMultiplePanels ? `<button class="btn btn-xs" onclick="togglePanelLayout()" title="Toggle horizontal/vertical layout">&#x21C4;</button>` : ''}
                         ${hasMultiplePanels ? `<button class="btn btn-xs btn-danger" onclick="removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
                         <button class="btn btn-xs" onclick="copyTerminalSelection('${panel.id}')" title="Copy selected text to clipboard">Copy</button>
                         <button class="btn btn-xs" onclick="exportTerminal('${panel.id}')" title="Export terminal as text">&#x2913;</button>

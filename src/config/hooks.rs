@@ -96,9 +96,179 @@ pub struct DefaultExitConfig {
     pub exit: ExitConfig,
 }
 
+/// ANSI color code for a single log field.
+/// Stores the raw escape sequence (e.g. "\x1b[32m" for green).
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ColorField {
+    /// ANSI SGR escape sequence.  Empty string means no color (reset).
+    /// Common values:
+    ///   ""              — default/reset
+    ///   "\x1b[90m"       — dark grey
+    ///   "\x1b[32m"       — green
+    ///   "\x1b[1;37m"      — bright white
+    ///   "\x1b[34m"       — blue
+    ///   "\x1b[1;33m"      — bright yellow
+    ///   "\x1b[32m"       — dark green
+    ///   "\x1b[1;32m"      — bright green
+    ///   "\x1b[1;31m"      — bright red
+    ///   "\x1b[1;35m"      — bright magenta
+    ///   "\x1b[1;36m"      — bright cyan
+    #[serde(default)]
+    pub ansi: String,
+}
+
+impl Default for ColorField {
+    fn default() -> Self {
+        Self { ansi: String::new() }
+    }
+}
+
+/// Terminal log appearance configuration.
+/// Controls which fields are shown, their colors, padding, and the output format.
+///
+/// Example:
+/// ```yaml
+/// command_log:
+///   enabled: true
+///   terminal:
+///     format: "%timestamp% %pid% %cmd% %event% %details%"
+///     colors:
+///       timestamp: { ansi: "\x1b[90m" }
+///       pid: { ansi: "\x1b[1;37m" }
+///       cmd: { ansi: "\x1b[32m" }
+///       event: { ansi: "\x1b[32m" }
+///     pad:
+///       pid: 6
+///       cmd: 16
+///       event: 17
+/// ```
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TerminalLogConfig {
+    /// Printf-like format string controlling which fields appear in the
+    /// terminal log line and in what order.  Available placeholders:
+    ///
+    ///   %timestamp%  — wall-clock time (HH:MM:SS.cc)
+    ///   %pid%        — child process ID
+    ///   %id%         — internal command UUID (first 8 chars)
+    ///   %cmd%        — command name (binary path basename)
+    ///   %event%      — rvw event type (spawn, resize, kill, …)
+    ///   %details%    — remaining key=value pairs
+    ///
+    /// Default: "%timestamp% %pid% %cmd% %event% %details%"
+    #[serde(default = "default_terminal_format")]
+    pub format: String,
+    /// Per-field ANSI color configuration.  Each field maps to a ColorField
+    /// containing the ANSI SGR escape sequence.
+    #[serde(default)]
+    pub colors: TerminalLogColors,
+    /// Per-field padding widths.  Fields are padded (right-aligned) to this
+    /// width and truncated if longer.
+    #[serde(default)]
+    pub pad: TerminalLogPad,
+}
+
+fn default_terminal_format() -> String {
+    "%timestamp% %pid% %cmd% %event% %details%".to_string()
+}
+
+/// Per-field ANSI color settings for terminal log output.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TerminalLogColors {
+    #[serde(default = "default_clr_timestamp")]
+    pub timestamp: ColorField,
+    #[serde(default = "default_clr_pid")]
+    pub pid: ColorField,
+    #[serde(default = "default_clr_id")]
+    pub id: ColorField,
+    #[serde(default = "default_clr_cmd")]
+    pub cmd: ColorField,
+    #[serde(default = "default_clr_event")]
+    pub event: ColorField,
+    #[serde(default = "default_clr_arg")]
+    pub arg: ColorField,
+    #[serde(default = "default_clr_cert")]
+    pub cert: ColorField,
+    #[serde(default = "default_clr_env")]
+    pub env: ColorField,
+    #[serde(default = "default_clr_size")]
+    pub size: ColorField,
+    #[serde(default = "default_clr_dir")]
+    pub dir: ColorField,
+    #[serde(default = "default_clr_detail")]
+    pub detail: ColorField,
+}
+
+fn default_clr_timestamp() -> ColorField { ColorField { ansi: "\x1b[90m".to_string() } }
+fn default_clr_pid() -> ColorField { ColorField { ansi: "\x1b[1;37m".to_string() } }
+fn default_clr_id() -> ColorField { ColorField { ansi: "\x1b[32m".to_string() } }
+fn default_clr_cmd() -> ColorField { ColorField { ansi: "\x1b[32m".to_string() } }
+fn default_clr_event() -> ColorField { ColorField { ansi: "\x1b[32m".to_string() } }
+fn default_clr_arg() -> ColorField { ColorField { ansi: "\x1b[32m".to_string() } }
+fn default_clr_cert() -> ColorField { ColorField { ansi: "\x1b[34m".to_string() } }
+fn default_clr_env() -> ColorField { ColorField { ansi: "\x1b[32m".to_string() } }
+fn default_clr_size() -> ColorField { ColorField { ansi: "\x1b[1;33m".to_string() } }
+fn default_clr_dir() -> ColorField { ColorField { ansi: "\x1b[34m".to_string() } }
+fn default_clr_detail() -> ColorField { ColorField { ansi: "\x1b[90m".to_string() } }
+
+impl Default for TerminalLogColors {
+    fn default() -> Self {
+        Self {
+            timestamp: default_clr_timestamp(),
+            pid: default_clr_pid(),
+            id: default_clr_id(),
+            cmd: default_clr_cmd(),
+            event: default_clr_event(),
+            arg: default_clr_arg(),
+            cert: default_clr_cert(),
+            env: default_clr_env(),
+            size: default_clr_size(),
+            dir: default_clr_dir(),
+            detail: default_clr_detail(),
+        }
+    }
+}
+
+/// Per-field padding widths for terminal log output.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TerminalLogPad {
+    /// PID field width (default: 6)
+    #[serde(default = "default_pad_pid")]
+    pub pid: usize,
+    /// Command name field width (default: 16)
+    #[serde(default = "default_pad_cmd")]
+    pub cmd: usize,
+    /// Event type field width (default: 17, fits "thaw_keybinding")
+    #[serde(default = "default_pad_event")]
+    pub event: usize,
+}
+
+fn default_pad_pid() -> usize { 6 }
+fn default_pad_cmd() -> usize { 16 }
+fn default_pad_event() -> usize { 17 }
+
+impl Default for TerminalLogPad {
+    fn default() -> Self {
+        Self {
+            pid: default_pad_pid(),
+            cmd: default_pad_cmd(),
+            event: default_pad_event(),
+        }
+    }
+}
+
+impl Default for TerminalLogConfig {
+    fn default() -> Self {
+        Self {
+            format: default_terminal_format(),
+            colors: TerminalLogColors::default(),
+            pad: TerminalLogPad::default(),
+        }
+    }
+}
+
 /// Command logging configuration.
 /// Records API command events (spawn, kill, resize, etc.) to a log file.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CommandLogConfig {
     /// Enable logging of API commands.
     #[serde(default)]
@@ -123,6 +293,33 @@ pub struct CommandLogConfig {
     ///     pty_raw_log: "/tmp/pty-output.log"
     #[serde(default)]
     pub pty_raw_log: Option<String>,
+    /// Terminal log appearance and format configuration.
+    /// Controls which fields are shown, their colors, padding, and layout.
+    ///
+    /// Set via config:
+    ///   command_log:
+    ///     terminal:
+    ///       format: "%timestamp% %pid% %cmd% %event% %details%"
+    ///       colors:
+    ///         timestamp: { ansi: "\x1b[90m" }
+    ///         pid: { ansi: "\x1b[1;37m" }
+    ///       pad:
+    ///         pid: 6
+    ///         cmd: 16
+    ///         event: 17
+    #[serde(default)]
+    pub terminal: TerminalLogConfig,
+}
+
+impl Default for CommandLogConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            file: None,
+            pty_raw_log: None,
+            terminal: TerminalLogConfig::default(),
+        }
+    }
 }
 
 #[cfg(test)]

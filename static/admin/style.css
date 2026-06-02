@@ -95,8 +95,11 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 
 /* Panels */
 .panel-container { flex: 1; display: flex; overflow: hidden; }
-.panel { flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--border); min-width: 200px; }
+.panel { flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--border); min-width: 200px; min-height: 100px; }
 .panel:last-child { border-right: none; }
+/* Vertical (stacked) panel layout — swap border direction */
+.panel-container[style*="column"] .panel { border-right: none; border-bottom: 1px solid var(--border); }
+.panel-container[style*="column"] .panel:last-child { border-bottom: none; }
 .panel-header { display: flex; align-items: center; gap: 0.2rem; padding: 0.2rem 0.3rem; background: var(--bg-tertiary); flex-shrink: 0; overflow: hidden; white-space: nowrap; }
 .panel-header .title { font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; }
 .panel-header .cmd-info { display: flex; flex-direction: column; min-width: 0; flex-shrink: 1; gap: 0; overflow: hidden; max-width: 30%; }

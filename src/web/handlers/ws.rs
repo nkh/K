@@ -273,7 +273,7 @@ async fn handle_vtty_client_message(
                     Ok(()) => {
                         manager
                             .logger()
-                            .log("resize", &format!("id={} rows={} cols={}", id, rows, cols));
+                            .log("resize", &format!("id={} pid={} name={} rows={} cols={}", id, handle.pid, handle.name, rows, cols));
                     }
                     Err(e) => {
                         let _ = ws_tx

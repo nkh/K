@@ -59,6 +59,7 @@ impl CommandManager {
                 config.command_log.file.as_deref(),
                 &config.binary_name,
                 config.color_terminal_log,
+                config.command_log.terminal.clone(),
             )
             .expect("Failed to initialize command logger"),
         );
@@ -92,20 +93,6 @@ impl CommandManager {
         dir: Option<String>,
     ) -> Result<CommandId> {
         let id = Uuid::new_v4().to_string();
-        self.logger.log(
-            "spawn",
-            &format!(
-                "id={} cmd={} args={:?} cert={:?} env={:?} size={}x{} dir={:?}",
-                id,
-                cmd,
-                args,
-                certificate,
-                env_vars.keys().collect::<Vec<_>>(),
-                rows.unwrap_or(self.config.vtty.rows),
-                cols.unwrap_or(self.config.vtty.cols),
-                dir
-            ),
-        );
 
         // Use per-command exit config if provided, otherwise fall back to defaults
         let exit_config = exit_config.unwrap_or_else(|| self.config.default_exit.exit.clone());
@@ -115,13 +102,13 @@ impl CommandManager {
         let hooks = self.config.hooks.clone();
         let mut handle = spawner
             .spawn(
-                cmd,
-                args,
+                cmd.clone(),
+                args.clone(),
                 self.config.handles.clone(),
                 &id,
                 exit_config,
                 hooks,
-                env_vars,
+                env_vars.clone(),
                 self,
                 rows,
                 cols,
@@ -131,9 +118,27 @@ impl CommandManager {
             .await?;
 
         // Bind certificate to this command for per-command access control
-        handle.certificate = certificate;
+        handle.certificate = certificate.clone();
 
+        let pid = handle.pid;
         self.commands.insert(id.clone(), handle);
+
+        // Log spawn event AFTER the process is registered (PID is now known)
+        self.logger.log(
+            "spawn",
+            &format!(
+                "id={} pid={} cmd={} args={:?} cert={:?} env={:?} size={}x{} dir={:?}",
+                id,
+                pid,
+                cmd,
+                args,
+                certificate,
+                env_vars.keys().collect::<Vec<_>>(),
+                rows.unwrap_or(self.config.vtty.rows),
+                cols.unwrap_or(self.config.vtty.cols),
+                dir
+            ),
+        );
 
         // Spawn a background watcher that detects VTTY changes and broadcasts them
         // using the incremental diff protocol.
@@ -440,9 +445,13 @@ impl CommandManager {
     /// Freeze (suspend) a command by sending SIGSTOP.
     /// The process is paused but not terminated — it can be resumed with thaw().
     pub fn freeze(&self, id: &CommandId) -> Result<()> {
-        self.logger.log("freeze", &format!("id={}", id));
+        let (pid, name) = if let Some(handle) = self.commands.get(id) {
+            (handle.pid, handle.name.clone())
+        } else {
+            return Err(ProcessError::CommandNotFound(id.to_string()));
+        };
+        self.logger.log("freeze", &format!("id={} pid={} name={}", id, pid, name));
         if let Some(handle) = self.commands.get(id) {
-            let pid = handle.pid;
             handle
                 .frozen
                 .store(true, std::sync::atomic::Ordering::Relaxed);
@@ -470,9 +479,13 @@ impl CommandManager {
 
     /// Thaw (resume) a frozen command by sending SIGCONT.
     pub fn thaw(&self, id: &CommandId) -> Result<()> {
-        self.logger.log("thaw", &format!("id={}", id));
+        let (pid, name) = if let Some(handle) = self.commands.get(id) {
+            (handle.pid, handle.name.clone())
+        } else {
+            return Err(ProcessError::CommandNotFound(id.to_string()));
+        };
+        self.logger.log("thaw", &format!("id={} pid={} name={}", id, pid, name));
         if let Some(handle) = self.commands.get(id) {
-            let pid = handle.pid;
             handle
                 .frozen
                 .store(false, std::sync::atomic::Ordering::Relaxed);
@@ -505,7 +518,12 @@ impl CommandManager {
     /// process to exit, which previously prevented the server from
     /// shutting down gracefully.
     pub async fn kill(&self, id: &CommandId, _signal: Option<String>) -> Result<()> {
-        self.logger.log("kill", &format!("id={}", id));
+        let (pid, name) = if let Some(handle) = self.commands.get(id) {
+            (handle.pid, handle.name.clone())
+        } else {
+            return Err(ProcessError::CommandNotFound(id.to_string()));
+        };
+        self.logger.log("kill", &format!("id={} pid={} name={}", id, pid, name));
         if let Some((_, handle)) = self.commands.remove(id) {
             // Clean up associated state
             self.last_generation.remove(id);
@@ -582,7 +600,12 @@ impl CommandManager {
     /// This permanently discards the VTTY buffer and all associated state.
     /// Use this to clean up commands that were kept alive via retain_on_exit.
     pub fn purge(&self, id: &CommandId) -> Result<()> {
-        self.logger.log("purge", &format!("id={}", id));
+        let (pid, name) = if let Some(handle) = self.commands.get(id) {
+            (handle.pid, handle.name.clone())
+        } else {
+            return Err(ProcessError::CommandNotFound(id.to_string()));
+        };
+        self.logger.log("purge", &format!("id={} pid={} name={}", id, pid, name));
         if self.commands.remove(id).is_some() {
             self.last_generation.remove(id);
             self.snapshots.retain(|k, _| k.0 != *id);
@@ -617,7 +640,7 @@ impl CommandManager {
             },
         );
         self.logger
-            .log("snapshot", &format!("id={} name={}", id, name));
+            .log("snapshot", &format!("id={} pid={} name={}", id, entry.pid, name));
         Ok(meta)
     }
 
@@ -670,10 +693,15 @@ impl CommandManager {
 
     /// Delete a stored snapshot.
     pub fn delete_snapshot(&self, id: &CommandId, name: &str) -> Result<()> {
+        let (pid, _cmd_name) = if let Some(handle) = self.commands.get(id) {
+            (handle.pid, handle.name.clone())
+        } else {
+            return Err(ProcessError::CommandNotFound(id.to_string()));
+        };
         let key = (id.clone(), name.to_string());
         if self.snapshots.remove(&key).is_some() {
             self.logger
-                .log("snapshot_delete", &format!("id={} name={}", id, name));
+                .log("snapshot_delete", &format!("id={} pid={} name={}", id, pid, name));
             Ok(())
         } else {
             Err(ProcessError::SnapshotNotFound {
@@ -748,8 +776,13 @@ impl CommandManager {
     }
 
     pub async fn send_keys(&self, id: &CommandId, keys: &str) -> Result<()> {
+        let (pid, name) = if let Some(handle) = self.commands.get(id) {
+            (handle.pid, handle.name.clone())
+        } else {
+            return Err(ProcessError::CommandNotFound(id.to_string()));
+        };
         self.logger
-            .log("send_keys", &format!("id={} keys={}", id, keys));
+            .log("send_keys", &format!("id={} pid={} name={} keys={}", id, pid, name, keys));
         if let Some(handle) = self.commands.get(id) {
             let bytes = encode_keys(keys);
             handle.send_bytes(bytes).await?;

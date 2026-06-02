@@ -211,6 +211,14 @@
             <label>Auth Token (optional)</label>
             <input type="text" id="panelToken" placeholder="Bearer token for this instance">
         </div>
+        <div class="field">
+            <label>Split direction</label>
+            <select id="panelSplitDir">
+                <option value="auto">Auto (stack based on panel count)</option>
+                <option value="horizontal">Horizontal (side by side)</option>
+                <option value="vertical">Vertical (stacked)</option>
+            </select>
+        </div>
         <div class="actions">
             <button class="btn" onclick="closePanelModal()">Cancel</button>
             <button class="btn btn-primary" onclick="confirmAddPanel()">Add Panel</button>

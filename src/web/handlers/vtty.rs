@@ -199,7 +199,7 @@ pub async fn resize_vtty(
                     state
                         .manager
                         .logger()
-                        .log("resize", &format!("id={} rows={} cols={}", id, rows, cols));
+                        .log("resize", &format!("id={} pid={} name={} rows={} cols={}", id, handle.pid, handle.name, rows, cols));
                     Json(serde_json::json!({
                         "status": "ok",
                         "data": { "id": id, "rows": rows, "cols": cols },

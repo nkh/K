@@ -4,9 +4,10 @@ use std::io::Write;
 use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
 
+use crate::config::hooks::TerminalLogConfig;
+
 const MEMORY_BUFFER_CAPACITY: usize = 2048;
-const ID_WIDTH: usize = 8;
-const CMD_WIDTH: usize = 20;
+const RESET: &str = "\x1b[0m";
 
 /// Shared in-memory log buffer type used by both the web UI handler
 /// and the terminal display loop.
@@ -16,14 +17,14 @@ pub struct CommandLogger {
     enabled: bool,
     file: Option<Mutex<std::fs::File>>,
     /// In-memory ring buffer of recent log entries.
-    /// This allows the web UI log viewer and terminal overlay to show
-    /// entries even when no log file is configured (e.g. --log without --log-file).
     memory_buffer: SharedLogBuffer,
     /// Broadcast channel for streaming log entries to WebSocket subscribers
     /// and the non-display terminal event loop.
     log_tx: broadcast::Sender<String>,
     /// When true, ANSI color escape codes are included in terminal output.
     color_terminal_log: bool,
+    /// Terminal log appearance config (format, colors, padding).
+    terminal_cfg: TerminalLogConfig,
 }
 
 impl CommandLogger {
@@ -32,6 +33,7 @@ impl CommandLogger {
         file_path: Option<&str>,
         _binary_name: &str,
         color_terminal_log: bool,
+        terminal_cfg: TerminalLogConfig,
     ) -> anyhow::Result<Self> {
         let file = match file_path {
             Some(path) => {
@@ -47,6 +49,7 @@ impl CommandLogger {
             memory_buffer: Arc::new(Mutex::new(Vec::with_capacity(MEMORY_BUFFER_CAPACITY))),
             log_tx,
             color_terminal_log,
+            terminal_cfg,
         })
     }
 
@@ -61,39 +64,23 @@ impl CommandLogger {
     }
 
     /// Get a shared reference to the in-memory log buffer.
-    /// Used by the terminal display loop for the log overlay.
     pub fn memory_buffer_arc(&self) -> SharedLogBuffer {
         Arc::clone(&self.memory_buffer)
     }
 
     /// Read all entries from the in-memory ring buffer.
-    /// Returns entries in chronological order (oldest first).
     pub fn read_memory_buffer(&self) -> Vec<String> {
         let buf = self.memory_buffer.lock().unwrap_or_else(|e| e.into_inner());
         buf.iter().cloned().collect()
     }
 
-    /// Extract the command id from a details string.
-    /// Looks for `id=<value>` where value is the first UUID-like token.
-    fn extract_id(details: &str) -> &str {
-        for part in details.split(' ') {
-            if let Some(id) = part.strip_prefix("id=") {
-                // Take only up to 8 chars, or until a comma/non-hex
-                let end = id.len().min(ID_WIDTH);
-                return &id[..end];
-            }
-        }
-        ""
-    }
+    // ── Field extractors ──
 
-    /// Extract the command name from a details string.
-    /// Looks for `cmd=<value>` or `name=<value>`.
-    fn extract_cmd_name(details: &str) -> &str {
+    /// Extract a key=value field from a space-separated details string.
+    fn extract_field<'a>(details: &'a str, key: &str) -> &'a str {
+        let prefix = format!("{}=", key);
         for part in details.split(' ') {
-            if let Some(val) = part.strip_prefix("cmd=") {
-                return val;
-            }
-            if let Some(val) = part.strip_prefix("name=") {
+            if let Some(val) = part.strip_prefix(&prefix) {
                 return val;
             }
         }
@@ -108,135 +95,219 @@ impl CommandLogger {
         format!("{}.{:02}", time_part, hundredths)
     }
 
-    /// Pad a string to a fixed width, truncating if longer.
-    fn pad_field(s: &str, width: usize) -> String {
+    /// Pad a string to a fixed width (right-aligned), truncating if longer.
+    fn pad_right(s: &str, width: usize) -> String {
         if s.len() >= width {
             s[..width].to_string()
         } else {
-            format!("{:width$}", s, width = width)
+            format!("{:>width$}", s, width = width)
         }
     }
 
-    /// ANSI color codes for terminal output.
-    /// Only used when `color_terminal_log` is true.
-    const CLR_RESET: &'static str = "\x1b[0m";
-    const CLR_TIMESTAMP: &'static str = "\x1b[90m";     // dark grey
-    const CLR_ID: &'static str = "\x1b[32m";           // green
-    const CLR_CMD: &'static str = "\x1b[1;37m";        // bright white
-    const CLR_EVENT: &'static str = "\x1b[1;37m";      // bright white (event type)
-    // Detail field colors
-    const CLR_ARG: &'static str = "\x1b[1;37m";        // bright white
-    const CLR_CERT: &'static str = "\x1b[34m";         // blue
-    const CLR_ENV: &'static str = "\x1b[32m";          // green
-    const CLR_SIZE: &'static str = "\x1b[1;33m";       // bright yellow
-    const CLR_DIR: &'static str = "\x1b[34m";          // blue
-    const CLR_DETAIL_DEFAULT: &'static str = "\x1b[90m"; // dark grey (for other fields)
+    // ── Color helpers ──
 
-    /// Color a single detail token based on its key prefix.
-    /// Returns (colored_token, is_id_or_cmd).
-    fn color_detail_token(token: &str) -> (String, bool) {
-        if let Some(_) = token.strip_prefix("id=") {
-            // Skip id in details — already shown as a separate field
-            return (String::new(), true);
+    /// Get the ANSI escape sequence for a named detail field.
+    fn detail_color(&self, key: &str) -> &str {
+        let colors = &self.terminal_cfg.colors;
+        match key {
+            "args" => &colors.arg.ansi,
+            "cert" => &colors.cert.ansi,
+            "env" => &colors.env.ansi,
+            "size" => &colors.size.ansi,
+            "dir" => &colors.dir.ansi,
+            "name" => &colors.cmd.ansi,
+            "cmd" => &colors.cmd.ansi,
+            "pid" => &colors.pid.ansi,
+            "id" => &colors.id.ansi,
+            "code" => &colors.detail.ansi,
+            "retained" => &colors.detail.ansi,
+            "keys" => &colors.detail.ansi,
+            "old" => &colors.detail.ansi,
+            "new" => &colors.detail.ansi,
+            "rows" => &colors.detail.ansi,
+            "cols" => &colors.detail.ansi,
+            "error" => &colors.detail.ansi,
+            _ => &colors.detail.ansi,
         }
-        if let Some(_) = token.strip_prefix("cmd=") {
-            // Skip cmd in details — already shown as a separate field
-            return (String::new(), true);
-        }
-        if let Some(_) = token.strip_prefix("args=") {
-            return (format!("{}{}{}", Self::CLR_ARG, token, Self::CLR_RESET), false);
-        }
-        if let Some(_) = token.strip_prefix("cert=") {
-            return (format!("{}{}{}", Self::CLR_CERT, token, Self::CLR_RESET), false);
-        }
-        if let Some(_) = token.strip_prefix("env=") {
-            return (format!("{}{}{}", Self::CLR_ENV, token, Self::CLR_RESET), false);
-        }
-        if let Some(_) = token.strip_prefix("size=") {
-            return (format!("{}{}{}", Self::CLR_SIZE, token, Self::CLR_RESET), false);
-        }
-        if let Some(_) = token.strip_prefix("dir=") {
-            return (format!("{}{}{}", Self::CLR_DIR, token, Self::CLR_RESET), false);
-        }
-        // Default color for other tokens
-        return (format!("{}{}{}", Self::CLR_DETAIL_DEFAULT, token, Self::CLR_RESET), false);
     }
 
-    /// Build a colored details string, skipping id= and cmd= tokens.
-    fn color_details(details: &str) -> String {
+    /// Build a colored details string.
+    /// Skips fields that are displayed as top-level fields (id, pid, cmd, name)
+    /// when they match the format spec.  Always includes them in plain mode.
+    fn color_details(&self, details: &str, colored: bool) -> String {
         let tokens: Vec<&str> = details.split(' ').collect();
-        let mut colored = String::new();
+        let mut out = String::new();
         let mut first = true;
-        for token in tokens {
-            let (ctoken, skip) = Self::color_detail_token(token);
-            if skip {
+        for token in &tokens {
+            let (key, _val) = match token.split_once('=') {
+                Some(pair) => pair,
+                None => {
+                    // Non key=value token
+                    if !first { out.push(' '); }
+                    first = false;
+                    if colored {
+                        out.push_str(&self.terminal_cfg.colors.detail.ansi);
+                    }
+                    out.push_str(token);
+                    if colored { out.push_str(RESET); }
+                    continue;
+                }
+            };
+            // Skip fields that are rendered as top-level placeholders
+            if key == "id" || key == "pid" || key == "cmd" || key == "name" {
                 continue;
             }
-            if ctoken.is_empty() {
-                continue;
-            }
-            if !first {
-                colored.push(' ');
-            }
+            if !first { out.push(' '); }
             first = false;
-            colored.push_str(&ctoken);
+            if colored {
+                out.push_str(self.detail_color(key));
+            }
+            out.push_str(token);
+            if colored {
+                out.push_str(RESET);
+            }
         }
-        colored
+        out
     }
 
-    /// Strip id= and cmd= tokens from a details string (for terminal output
-    /// where they're redundant).
-    fn strip_id_cmd(details: &str) -> String {
-        let tokens: Vec<&str> = details.split(' ').filter(|t| {
-            !(t.starts_with("id=") || t.starts_with("cmd=") || t.starts_with("name="))
-        }).collect();
-        tokens.join(" ")
+    /// Strip id=, pid=, cmd=, name= from details (for plain mode).
+    fn strip_top_fields(details: &str) -> String {
+        details
+            .split(' ')
+            .filter(|t| {
+                !(t.starts_with("id=") || t.starts_with("pid=") || t.starts_with("cmd=") || t.starts_with("name="))
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 
+    /// Resolve a format placeholder to its rendered string.
+    fn resolve_placeholder(
+        &self,
+        placeholder: &str,
+        details: &str,
+        event_type: &str,
+        colored: bool,
+    ) -> (String, bool) {
+        let colors = &self.terminal_cfg.colors;
+        let pad = &self.terminal_cfg.pad;
+        match placeholder {
+            "timestamp" => {
+                let ts = Self::format_timestamp();
+                if colored {
+                    (format!("{}{}{}", colors.timestamp.ansi, ts, RESET), true)
+                } else {
+                    (ts, true)
+                }
+            }
+            "pid" => {
+                let pid = Self::extract_field(details, "pid");
+                let padded = Self::pad_right(pid, pad.pid);
+                if colored {
+                    (format!("{}{}{}", colors.pid.ansi, padded, RESET), true)
+                } else {
+                    (padded, true)
+                }
+            }
+            "id" => {
+                let id = Self::extract_field(details, "id");
+                // Show first 8 chars
+                let short = if id.len() > 8 { &id[..8] } else { id };
+                let padded = Self::pad_right(short, 8);
+                if colored {
+                    (format!("{}{}{}", colors.id.ansi, padded, RESET), true)
+                } else {
+                    (padded, true)
+                }
+            }
+            "cmd" => {
+                // Try cmd= first, then name=
+                let cmd = {
+                    let c = Self::extract_field(details, "cmd");
+                    if c.is_empty() { Self::extract_field(details, "name") } else { c }
+                };
+                let padded = Self::pad_right(cmd, pad.cmd);
+                if colored {
+                    (format!("{}{}{}", colors.cmd.ansi, padded, RESET), true)
+                } else {
+                    (padded, true)
+                }
+            }
+            "event" => {
+                let padded = Self::pad_right(event_type, pad.event);
+                if colored {
+                    (format!("{}{}{}", colors.event.ansi, padded, RESET), true)
+                } else {
+                    (padded, true)
+                }
+            }
+            "details" => {
+                let det = if colored {
+                    self.color_details(details, true)
+                } else {
+                    Self::strip_top_fields(details)
+                };
+                let empty = det.is_empty();
+                (det, !empty)
+            }
+            _ => (String::new(), false),
+        }
+    }
+
+    /// Build the terminal line from the format string.
+    fn build_term_line(&self, event_type: &str, details: &str) -> String {
+        let fmt = &self.terminal_cfg.format;
+        let colored = self.color_terminal_log && !fmt.is_empty();
+        let mut out = String::new();
+
+        let mut i = 0;
+        let bytes = fmt.as_bytes();
+        while i < bytes.len() {
+            if bytes[i] == b'%' {
+                // Look for closing %
+                if let Some(end) = fmt[i + 1..].find('%') {
+                    let name = &fmt[i + 1..i + 1 + end];
+                    let (rendered, shown) = self.resolve_placeholder(name, details, event_type, colored);
+                    if shown {
+                        if !out.is_empty() && !out.ends_with(' ') {
+                            out.push(' ');
+                        }
+                        out.push_str(&rendered);
+                    }
+                    i = i + 1 + end + 1;
+                    continue;
+                }
+            }
+            out.push(bytes[i] as char);
+            i += 1;
+        }
+
+        out
+    }
+
+    /// Main log function. Called for every event.
     pub fn log(&self, event_type: &str, details: &str) {
-        let timestamp = Self::format_timestamp();
-        let id_short = Self::extract_id(details);
-        let id_padded = Self::pad_field(id_short, ID_WIDTH);
-        let cmd_name = Self::extract_cmd_name(details);
-        let cmd_padded = Self::pad_field(cmd_name, CMD_WIDTH);
-
-        // Terminal line (space-separated fields, optional color)
-        let term_line = if self.color_terminal_log {
-            let colored_details = Self::color_details(details);
-            format!(
-                "{ts}{clr_ts} {id}{clr_id} {cmd}{clr_cmd} {evt}{clr_evt}: {details}{clr_reset}\n",
-                ts = timestamp,
-                clr_ts = Self::CLR_TIMESTAMP,
-                id = id_padded,
-                clr_id = Self::CLR_ID,
-                cmd = cmd_padded,
-                clr_cmd = Self::CLR_CMD,
-                evt = event_type,
-                clr_evt = Self::CLR_EVENT,
-                details = colored_details,
-                clr_reset = Self::CLR_RESET,
-            )
-        } else {
-            // Plain: strip id and cmd from details to avoid repetition
-            let clean_details = Self::strip_id_cmd(details);
-            format!(
-                "{} {} {} {}: {}\n",
-                timestamp, id_padded, cmd_padded, event_type, clean_details
-            )
-        };
-
+        // Build terminal line from format string
+        let term_line = self.build_term_line(event_type, details);
         let term_trimmed = term_line.trim_end().to_string();
 
         // File line (tab-separated fields, no color, no padding)
+        let id_short = {
+            let id = Self::extract_field(details, "id");
+            if id.len() > 8 { &id[..8] } else { id }
+        };
+        let cmd_name = {
+            let c = Self::extract_field(details, "cmd");
+            if c.is_empty() { Self::extract_field(details, "name") } else { c }
+        };
+        let pid = Self::extract_field(details, "pid");
         let file_line = format!(
-            "{}\t{}\t{}\t{}\t{}\n",
-            timestamp, id_short, cmd_name, event_type, details
+            "{}\t{}\t{}\t{}\t{}\t{}\n",
+            Self::format_timestamp(), pid, id_short, cmd_name, event_type, details
         );
 
         // Always populate the in-memory ring buffer and broadcast,
-        // regardless of whether file logging is enabled.  This ensures
-        // the non-display event loop, web UI log viewer, and --display
-        // log overlay can show events without requiring --log.
+        // regardless of whether file logging is enabled.
         if let Ok(mut buf) = self.memory_buffer.lock() {
             if buf.len() >= MEMORY_BUFFER_CAPACITY {
                 buf.remove(0);

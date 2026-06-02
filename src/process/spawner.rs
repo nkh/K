@@ -537,11 +537,11 @@ fn spawn_process_waiter(
                 run_hook(global_hook_str, &vars);
             }
 
-            let cmd_name = manager_cmds
+            let (cmd_name, cmd_pid) = manager_cmds
                 .get(&watch_id)
-                .map(|h| h.name.clone())
-                .unwrap_or_else(|| watch_id.clone());
-            logger.log("exited", &format!("id={} name={} code={:?}", watch_id, cmd_name, exit_status.code));
+                .map(|h| (h.name.clone(), h.pid))
+                .unwrap_or_else(|| (watch_id.clone(), 0));
+            logger.log("exited", &format!("id={} pid={} name={} code={:?}", watch_id, cmd_pid, cmd_name, exit_status.code));
 
             let _ = child_exit_tx.send(true);
 
@@ -621,11 +621,11 @@ fn spawn_process_waiter(
                 .unwrap_or(false);
             if retain {
                 tracing::info!(id = %watch_id, "Command retained after exit (retain_on_exit)");
-                logger.log("exit", &format!("id={} retained=true code={:?}", watch_id, exit_status.code));
+                logger.log("exit", &format!("id={} name={} retained=true code={:?}", watch_id, cmd_name, exit_status.code));
             } else {
                 manager_cmds.remove(&watch_id);
                 tracing::info!(id = %watch_id, "Command removed from manager after exit");
-                logger.log("exit", &format!("id={} retained=false code={:?}", watch_id, exit_status.code));
+                logger.log("exit", &format!("id={} name={} retained=false code={:?}", watch_id, cmd_name, exit_status.code));
             }
 
             let _ = exit_tx.send(exit_status);
