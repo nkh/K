@@ -25,12 +25,7 @@
         </div>
 
         <div class="topbar-group topbar-group-right">
-            <select id="themeSelect" class="select-xs" onchange="applyThemeSelect(this.value)" title="Theme">
-                <option value="">Auto</option>
-                <option value="dark">Dark</option>
-                <option value="light">Light</option>
-                <option value="grey">Grey</option>
-            </select>
+            <button class="btn btn-xs" id="themeToggle" onclick="toggleGlobalTheme()" title="Toggle theme (cycles: Auto → Dark → Light → Grey → Auto)"></button>
             <button class="btn btn-xs" id="soundBtn" onclick="toggleSoundNotifications()" title="Toggle sound notifications">&#128276;</button>
             <button class="btn btn-xs" id="logsBtn" onclick="toggleLogsView()" title="Toggle log viewer">Logs</button>
             <button class="btn btn-xs" id="statusBtn" onclick="toggleBottombar()" title="Toggle status bar">Status</button>

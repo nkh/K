@@ -96,34 +96,24 @@ const state = {
 };
 
 // ─── Theme ───
+// Global theme cycles: '' (Auto/OS) → 'dark' → 'light' → 'grey' → ''.
+// Theme is a client-side preference stored in localStorage — it takes effect
+// immediately without requiring a running server.
 function initTheme() {
     const saved = localStorage.getItem('vrw_theme');
     if (saved) {
         document.documentElement.setAttribute('data-theme', saved);
     }
-    // Sync the theme select dropdown
-    const select = document.getElementById('themeSelect');
-    if (select) select.value = saved || '';
-    // If no saved preference, leave data-theme unset so the CSS
-    // prefers-color-scheme media query can handle it automatically.
     updateThemeButton();
 }
 
-function toggleTheme() {
-    const current = document.documentElement.getAttribute('data-theme');
-    const next = current === 'light' ? 'dark' : 'light';
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('vrw_theme', next);
-    updateThemeButton();
-    // Sync select dropdown
-    const select = document.getElementById('themeSelect');
-    if (select) select.value = next;
-}
-
-function applyThemeSelect(value) {
-    if (value) {
-        document.documentElement.setAttribute('data-theme', value);
-        localStorage.setItem('vrw_theme', value);
+function toggleGlobalTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || '';
+    // Cycle: '' → 'dark' → 'light' → 'grey' → ''
+    const next = current === '' ? 'dark' : current === 'dark' ? 'light' : current === 'light' ? 'grey' : '';
+    if (next) {
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('vrw_theme', next);
     } else {
         document.documentElement.removeAttribute('data-theme');
         localStorage.removeItem('vrw_theme');
@@ -134,13 +124,20 @@ function applyThemeSelect(value) {
 function updateThemeButton() {
     const btn = document.getElementById('themeToggle');
     if (!btn) return;
-    const theme = document.documentElement.getAttribute('data-theme');
-    // If no explicit theme is set, detect from OS preference
+    const theme = document.documentElement.getAttribute('data-theme') || '';
     if (!theme) {
         const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
         btn.textContent = prefersLight ? '☾' : '☀';
-    } else {
-        btn.textContent = theme === 'light' ? '☾' : theme === 'grey' ? '◼' : '☀';
+        btn.title = 'Theme: Auto (click to toggle)';
+    } else if (theme === 'dark') {
+        btn.textContent = '☀';
+        btn.title = 'Theme: Dark (click to toggle)';
+    } else if (theme === 'light') {
+        btn.textContent = '☾';
+        btn.title = 'Theme: Light (click to toggle)';
+    } else if (theme === 'grey') {
+        btn.textContent = '◼';
+        btn.title = 'Theme: Grey (click to toggle)';
     }
 }
 
