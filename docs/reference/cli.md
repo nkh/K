@@ -123,13 +123,59 @@ Interactive keybindings are documented in full in
 | `--log` | `-l` | `false` | `command_log.enabled` | Enable command logging to the terminal. |
 | `--log-file <path>` | `-L` | — | `command_log.file` | Enable command logging and write output to the given file. |
 | `--log-pty-raw <path>` | — | — | `command_log.pty_raw_log` | Log raw bytes received from the child PTY to the given file before any ANSI processing. |
-| `--no-log` | — | `false` | `command_log.enabled` | Suppress activity logging entirely (spawning, stopping, resizing). Overrides `--log`. |
-| `--no-terminal-log` | — | `false` | — | Suppress terminal event output when not in `--display` mode. Events are still logged to the log file if `--log` is active. |
+| `--no-log` | — | `false` | `command_log.enabled` | Suppress activity logging entirely (no buffer, no broadcast, no file, no stdout). Overrides `--log`. |
+| `--no-terminal-log` | — | `false` | — | Suppress terminal event output when not in `--display` mode. Events are still buffered, broadcast, and logged to the log file if `--log` is active. |
 | `--quiet` | `-q` | `false` | — | Hidden alias for `--no-terminal-log`. Only suppresses terminal output, not file logging. |
+| `--color-always` | — | `false` | — | Use ANSI color codes in terminal log output. |
+
+### Log Format
+
+Each log line contains the following fields:
+
+| Field | Terminal (spaces) | File (tabs) | Description |
+|-------|-------------------|-------------|-------------|
+| Timestamp | `HH:MM:SS.cc` | `HH:MM:SS.cc` | Local time, hundredths of a second |
+| Binary | `vrw ` / `vrc ` (4 chars, padded) | `vrw` / `vrc` | Binary name |
+| ID | 8 chars (truncated UUID) | 8 chars | First 8 characters of the command UUID |
+| Command | 20 chars (padded) | command name | Command name (from `cmd=` or `name=`) |
+| Event + details | `event: details...` | `event: details...` | Event type and arguments |
+
+**Terminal output example** (space-separated, columns aligned):
+
+```
+17:25:03.12  vrw   a1b2c3d4  htop                 spawn: id=a1b2c3d4-... cmd=htop args=[] cert=None env=[] size=24x80 dir=None
+17:25:10.45  vrw   a1b2c3d4  htop                 resize: id=a1b2c3d4-... rows=40 cols=120
+17:26:05.78  vrw   a1b2c3d4  htop                 exited: id=a1b2c3d4-... name=htop code=Some(0)
+17:26:05.79  vrw   a1b2c3d4  htop                 exit: id=a1b2c3d4-... retained=false code=Some(0)
+```
+
+**File output** (tab-separated, no color, no padding):
+
+```
+17:25:03.12     vrw     a1b2c3d4        htop    spawn: id=a1b2c3d4-... cmd=htop args=[] cert=None env=[] size=24x80 dir=None
+17:26:05.78     vrw     a1b2c3d4        htop    exited: id=a1b2c3d4-... name=htop code=Some(0)
+```
+
+Use `--color-always` to enable ANSI colors in the terminal (each field gets a distinct color):
+
+```
+[dim]17:25:03.12[/dim]  [cyan]vrw [/cyan] [yellow]a1b2c3d4[/yellow]  [green]htop               [/green] [bold blue]spawn[/bold blue]: id=a1b2c3d4-... cmd=htop args=[]
+```
+
+### Logging Decision Table
+
+The following table shows what happens for each combination of command mode and logging flags:
+
+| Mode | No flags | `--log` | `--log-file` | `--no-log` | `-q` / `--no-terminal-log` | `--color-always` |
+|------|----------|---------|--------------|-------------|---------------------------|-------------------|
+| **`vrw`** (no display, no daemon) | Event loop prints to terminal from broadcast | Event loop + stdout + file | File only | Nothing buffered, broadcast, or printed | Event loop suppressed; buffer + broadcast + file still work | Colors in terminal output |
+| **`vrw --daemon`** | Buffer + broadcast only (no terminal) | Buffer + broadcast + file | File only | Nothing buffered, broadcast, or printed | N/A (no terminal in daemon mode) | N/A |
+| **`vrw --display`** | Log overlay in display (from memory buffer) | Log overlay + stdout + file | Log overlay + file | Nothing buffered, broadcast, or printed | N/A (display replaces terminal) | Colors in log overlay |
+| **`vrw --color-always`** | Colors in event loop output | Colors in event loop + stdout | Colors in event loop; file is plain | Nothing | Colors in event loop if shown | Colors in terminal output |
 
 ### Default behavior without `--display`
 
-When vrc/vrw runs **without** `--display` (the default), event log entries are automatically printed to the terminal in real time. This includes:
+When vrc/vrw runs **without** `--display` (the default), event log entries are automatically printed to the terminal in real time via the event loop (subscribes to the CommandLogger broadcast). This includes:
 
 - **spawn** — a new command was spawned
 - **exited** — a command process terminated (with exit code)
@@ -139,15 +185,6 @@ When vrc/vrw runs **without** `--display` (the default), event log entries are a
 - **freeze** / **thaw** — a command was suspended or resumed
 - **send_keys** — keystrokes were injected into a command
 - **purge** — a retained command was discarded
-
-Each line is timestamped and includes the event type and relevant details:
-
-```
-[2026-06-01T17:25:03.123456Z] spawn: id=abc123 cmd=htop args=[] cert=None env=[] size=24x80 dir=None
-[2026-06-01T17:25:10.456789Z] resize: id=abc123 rows=40 cols=120
-[2026-06-01T17:26:05.789012Z] exited: id=abc123 name=htop code=Some(0)
-[2026-06-01T17:26:05.789013Z] exit: id=abc123 retained=false code=Some(0)
-```
 
 Use `--no-terminal-log` (or `-q`) to suppress this output:
 

@@ -57,6 +57,8 @@ impl CommandManager {
             CommandLogger::new(
                 config.command_log.enabled,
                 config.command_log.file.as_deref(),
+                &config.binary_name,
+                config.color_always,
             )
             .expect("Failed to initialize command logger"),
         );

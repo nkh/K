@@ -25,6 +25,14 @@ pub use super::web::{RateLimitConfig, WebConfig};
 /// All fields have sensible defaults, so a config file is entirely optional.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct Config {
+    /// Binary name ("vrw" or "vrc") — set at runtime from CLI, not from config file.
+    #[serde(default, skip)]
+    pub binary_name: String,
+    /// Whether to use ANSI color codes in terminal log output.
+    /// Set at runtime from the `--color-always` CLI flag.
+    #[serde(default, skip)]
+    pub color_always: bool,
+
     /// HTTP server bind address and port (vrw only).
     #[cfg(feature = "vrw")]
     #[serde(default)]

@@ -6,6 +6,8 @@ use super::schema::{Config, PartialConfig};
 /// Local fields fully override global (except collections which merge when empty).
 pub fn merge_configs(global: Config, local: Config) -> Config {
     Config {
+        binary_name: local.binary_name,
+        color_always: local.color_always,
         vtty: local.vtty,
         display: local.display,
         command_log: local.command_log,
@@ -62,6 +64,8 @@ fn merge_profiles(
 /// Only fields present (Some) in the partial config override the base.
 pub fn apply_profile(base: Config, profile: &PartialConfig) -> Config {
     Config {
+        binary_name: base.binary_name,
+        color_always: base.color_always,
         vtty: profile.vtty.clone().unwrap_or(base.vtty),
         display: profile.display.clone().unwrap_or(base.display),
         command_log: profile.command_log.clone().unwrap_or(base.command_log),

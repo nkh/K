@@ -1072,7 +1072,7 @@ async fn file_sink_append() {
 
 #[test]
 fn logger_disabled_no_output() {
-    let logger = vrc_core::logging::command_log::CommandLogger::new(false, None).unwrap();
+    let logger = vrc_core::logging::command_log::CommandLogger::new(false, None, "vrc", false).unwrap();
     // Subscribe BEFORE logging so we catch the broadcast
     let mut rx = logger.subscribe();
     logger.log("test", "should not appear");
@@ -1086,7 +1086,7 @@ fn logger_disabled_no_output() {
 
 #[test]
 fn logger_enabled_stores_in_memory() {
-    let logger = vrc_core::logging::command_log::CommandLogger::new(true, None).unwrap();
+    let logger = vrc_core::logging::command_log::CommandLogger::new(true, None, "vrw", false).unwrap();
     logger.log("spawn", "cmd1 started");
     logger.log("kill", "cmd1 killed");
     let buf = logger.read_memory_buffer();
@@ -1097,7 +1097,7 @@ fn logger_enabled_stores_in_memory() {
 
 #[test]
 fn logger_memory_buffer_arc_shared() {
-    let logger = vrc_core::logging::command_log::CommandLogger::new(true, None).unwrap();
+    let logger = vrc_core::logging::command_log::CommandLogger::new(true, None, "vrc", false).unwrap();
     let arc = logger.memory_buffer_arc();
     logger.log("test", "entry");
     let buf = arc.lock().unwrap();
@@ -1106,7 +1106,7 @@ fn logger_memory_buffer_arc_shared() {
 
 #[test]
 fn logger_subscribe_broadcasts() {
-    let logger = vrc_core::logging::command_log::CommandLogger::new(true, None).unwrap();
+    let logger = vrc_core::logging::command_log::CommandLogger::new(true, None, "vrc", false).unwrap();
     let mut rx = logger.subscribe();
     logger.log("test", "broadcast-msg");
     let received = rx.try_recv().unwrap();
@@ -1115,7 +1115,7 @@ fn logger_subscribe_broadcasts() {
 
 #[test]
 fn logger_ring_buffer_eviction() {
-    let logger = vrc_core::logging::command_log::CommandLogger::new(true, None).unwrap();
+    let logger = vrc_core::logging::command_log::CommandLogger::new(true, None, "vrc", false).unwrap();
     // MEMORY_BUFFER_CAPACITY is 2048 — we can't fill that in a unit test,
     // but verify the interface works with a few entries.
     for i in 0..10 {
