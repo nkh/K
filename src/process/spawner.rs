@@ -621,11 +621,11 @@ fn spawn_process_waiter(
                 .unwrap_or(false);
             if retain {
                 tracing::info!(id = %watch_id, "Command retained after exit (retain_on_exit)");
-                logger.log("exit", &format!("id={} name={} retained=true code={:?}", watch_id, cmd_name, exit_status.code));
+                logger.log("exit", &format!("id={} pid={} name={} retained=true code={:?}", watch_id, cmd_pid, cmd_name, exit_status.code));
             } else {
                 manager_cmds.remove(&watch_id);
                 tracing::info!(id = %watch_id, "Command removed from manager after exit");
-                logger.log("exit", &format!("id={} name={} retained=false code={:?}", watch_id, cmd_name, exit_status.code));
+                logger.log("exit", &format!("id={} pid={} name={} retained=false code={:?}", watch_id, cmd_pid, cmd_name, exit_status.code));
             }
 
             let _ = exit_tx.send(exit_status);
