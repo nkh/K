@@ -439,8 +439,11 @@ vrc spawn htop
 # With arguments
 vrc spawn python -m http.server 8000
 
-# Target a specific instance
+# Target a specific instance by PID
 vrc --pid 12345 spawn npm run dev
+
+# Interactively choose which instance to spawn on (multiple instances)
+vrw spawn -i cargo run --release
 
 # With environment variables
 vrc spawn --env RUST_LOG=debug -- cargo run
@@ -450,6 +453,62 @@ vrc spawn --rows 50 --cols 160 -- vim file.txt
 ```
 
 > With **vrc**, the `spawn` subcommand communicates via UDS. With **vrw**, it communicates via HTTP to the running server.
+
+### Interactive Mode (`-i` / `--interactive`)
+
+Many vrw subcommands accept `-i` (short for `--interactive`) to present a numbered list when multiple candidates exist. Without `-i`, the command auto-selects the sole candidate or errors with ambiguity.
+
+#### Commands with Interactive Mode
+
+| Command | `-i` Selects From | What `-i` Adds |
+|---------|-----------------|---------------|
+| `list` | Running vrw instances | Lets you pick which instances to list when multiple are running |
+| `stop` | Running vrw instances | Lets you pick which instances to stop when multiple are running |
+| `spawn` | Running vrw instances | Lets you pick which instance to spawn on (shows PID and port) |
+| `freeze` | Running commands | Lets you pick which commands to freeze (SIGSTOP) |
+| `thaw` | Frozen commands | Lets you pick which commands to thaw (SIGCONT) |
+| `stop-command` | Running commands | Lets you pick which commands to stop |
+| `kill` | Running commands | Alias for stop-command with same `-i` behavior |
+| `purge` | Exited commands | Lets you pick which exited commands to purge |
+| `cat` | Running commands | Lets you pick which command's VTTY buffer to display |
+| `resize` | Running commands | Lets you pick which command to resize |
+| `screenshot` | Running commands | Lets you pick which command to screenshot |
+
+#### How Interactive Selection Works
+
+When `-i` is passed and multiple candidates exist, the command displays a numbered list and prompts for input:
+
+```
+Multiple vrw instances are running:
+  [1] PID 12345 — port 9090
+  [2] PID 12346 — port 9091
+Select instances [space-separated numbers]: 1
+```
+
+- Enter a single number to select one item
+- Enter multiple space-separated numbers to select several items (e.g., `1 3 5`)
+- Press Enter without input to cancel the operation
+
+Without `-i`, commands that have a single candidate auto-select it silently. When no candidate exists, the command exits with an error. When multiple candidates exist and `-i` is not given, the command prints the list and exits with a usage hint.
+
+#### Examples
+
+```bash
+# Spawn on a specific instance when multiple are running
+vrw spawn -i cargo build --release
+
+# Interactively select which command to view
+vrw cat -i
+
+# Purge all exited commands interactively
+vrw purge -i
+
+# Freeze a specific running command
+vrw freeze -i
+
+# Take a screenshot of a specific command
+vrw screenshot -i
+```
 
 ### Via WebSocket — vrw only
 
