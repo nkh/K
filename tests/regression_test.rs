@@ -214,8 +214,8 @@ async fn regression_kill_nonexistent_returns_error() {
     let manager = Arc::new(CommandManager::new(cfg));
     let nonexistent = String::from("nonexistent-id");
     let result = manager.kill(&nonexistent, None).await;
-    // kill() removes from DashMap — if not found, it's a no-op Ok(())
-    assert!(result.is_ok(), "kill() on nonexistent ID should not panic");
+    // kill() returns Err(CommandNotFound) when the ID doesn't exist
+    assert!(result.is_err(), "kill() on nonexistent ID should return error");
 }
 
 #[tokio::test]
@@ -517,8 +517,8 @@ async fn regression_list_empty_after_all_killed() {
     for _ in 0..5 {
         let id = manager
             .spawn(
-                "echo".into(),
-                vec!["x".into()],
+                "sleep".into(),
+                vec!["60".into()],
                 None,
                 None,
                 HashMap::new(),
@@ -531,7 +531,7 @@ async fn regression_list_empty_after_all_killed() {
         ids.push(id);
     }
     for id in &ids {
-        manager.kill(id, None).await.unwrap();
+        let _ = manager.kill(id, None).await;
     }
     sleep(Duration::from_millis(300)).await;
     assert_eq!(

@@ -10,6 +10,10 @@ let _showingWelcome = true;
 // Clicking an instance header sets it to that instance URL.
 let _sidebarSort = 'name';
 
+// Track panel count to avoid unnecessary DOM rebuilds.
+let _lastRenderedPanelCount = -1;
+let _lastRenderedPanelIds = '';
+
 const state = {
     panels: [],
     // Store instUrl and cmdId separately to avoid ':' conflicts in URLs.
@@ -2975,10 +2979,6 @@ function togglePanelLayout() {
     localStorage.setItem('vrw_panel_layout', state.panelLayout);
     renderPanels();
 }
-
-// Track panel count to avoid unnecessary DOM rebuilds.
-let _lastRenderedPanelCount = -1;
-let _lastRenderedPanelIds = '';
 
 function renderPanels() {
     const container = document.getElementById('view-vtty');
