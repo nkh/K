@@ -40,7 +40,7 @@ pub async fn handle_list_command(cli: &Cli) -> Result<()> {
         return Ok(());
     }
 
-    let instances: Vec<_> = if let Some(target_pid) = cli.target {
+    let instances: Vec<_> = if let Some(target_pid) = cli.pid {
         match all_instances.iter().find(|i| i.pid == target_pid) {
             Some(info) => vec![info.clone()],
             None => {
@@ -143,7 +143,7 @@ pub async fn handle_list_command(cli: &Cli) -> Result<()> {
     }
 
     let is_interactive = matches!(&cli.command, Some(Commands::List { interactive: true }));
-    let instances: Vec<crate::instance::info::InstanceInfo> = if is_interactive && cli.target.is_none() {
+    let instances: Vec<crate::instance::info::InstanceInfo> = if is_interactive && cli.pid.is_none() {
         let items: Vec<_> = all_instances
             .iter()
             .map(|i| crate::cli::interactive_select::SelectItem {

@@ -440,7 +440,7 @@ vrc spawn htop
 vrc spawn python -m http.server 8000
 
 # Target a specific instance
-vrc --target 12345 spawn npm run dev
+vrc --pid 12345 spawn npm run dev
 
 # With environment variables
 vrc spawn --env RUST_LOG=debug -- cargo run

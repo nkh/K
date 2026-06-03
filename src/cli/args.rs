@@ -187,8 +187,8 @@ pub struct Cli {
     pub profile: Option<String>,
 
     /// Target a specific instance by PID
-    #[arg(short = 't', long, value_name = "PID")]
-    pub target: Option<u32>,
+    #[arg(short = 't', long = "pid", value_name = "PID")]
+    pub pid: Option<u32>,
 
     /// Set the working directory for spawned commands.
     #[arg(short = 'w', long, value_name = "DIR")]

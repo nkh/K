@@ -62,7 +62,7 @@ pub fn resolve_instance(cli: &Cli, registry: &InstanceRegistry) -> Result<Instan
         );
     }
 
-    if let Some(target_pid) = cli.target {
+    if let Some(target_pid) = cli.pid {
         match instances.iter().find(|i| i.pid == target_pid) {
             Some(info) => return Ok(info.clone()),
             None => anyhow::bail!(
@@ -82,7 +82,7 @@ pub fn resolve_instance(cli: &Cli, registry: &InstanceRegistry) -> Result<Instan
     tracing::warn!("Enter the PID of the instance to use (or Ctrl+C to abort): ");
 
     anyhow::bail!(
-        "Multiple vrw instances are running. Use --target PID to select one.\n\
+        "Multiple vrw instances are running. Use --pid PID to select one.\n\
          Running instances:\n{}",
         format_instance_list(&instances)
     );
@@ -183,13 +183,13 @@ pub async fn collect_all_commands(
     all_commands
 }
 
-/// Filter instances by --target, returning all if no target specified.
+/// Filter instances by --pid, returning all if no pid specified.
 #[cfg(feature = "vrw")]
 pub fn resolve_targeted_instances(
     cli: &Cli,
     all_instances: &[InstanceInfo],
 ) -> Result<Vec<InstanceInfo>> {
-    if let Some(target_pid) = cli.target {
+    if let Some(target_pid) = cli.pid {
         match all_instances.iter().find(|i| i.pid == target_pid) {
             Some(info) => Ok(vec![info.clone()]),
             None => {
