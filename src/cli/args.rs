@@ -378,6 +378,9 @@ pub enum Commands {
         /// VTTY columns for the spawned command
         #[arg(long)]
         cols: Option<u16>,
+        /// Interactively select which vrw instance to spawn on
+        #[arg(short = 'i', long)]
+        interactive: bool,
     },
 
     /// Freeze (suspend) a running command via SIGSTOP
@@ -446,6 +449,9 @@ pub enum Commands {
     Purge {
         /// Command ID or name of the exited command to purge
         target: Option<String>,
+        /// Interactively select exited command to purge
+        #[arg(short = 'i', long)]
+        interactive: bool,
     },
 
     /// Resize the VTTY of a running command (buffer + PTY)
@@ -1154,6 +1160,56 @@ mod tests {
                 assert!(interactive);
             }
             _ => panic!("expected Stop command"),
+        }
+    }
+
+    // ── spawn / purge interactive tests ──
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn spawn_interactive_flag_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "spawn", "-i", "htop"]).unwrap();
+        match cli.command {
+            Some(Commands::Spawn { interactive, .. }) => {
+                assert!(interactive);
+            }
+            _ => panic!("expected Spawn command"),
+        }
+    }
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn spawn_without_interactive_defaults_false() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "spawn", "htop"]).unwrap();
+        match cli.command {
+            Some(Commands::Spawn { interactive, .. }) => {
+                assert!(!interactive);
+            }
+            _ => panic!("expected Spawn command"),
+        }
+    }
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn purge_interactive_flag_parses() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "purge", "-i"]).unwrap();
+        match cli.command {
+            Some(Commands::Purge { interactive, .. }) => {
+                assert!(interactive);
+            }
+            _ => panic!("expected Purge command"),
+        }
+    }
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn purge_without_interactive_defaults_false() {
+        let cli = Cli::try_parse_from([BINARY_NAME, "purge"]).unwrap();
+        match cli.command {
+            Some(Commands::Purge { interactive, .. }) => {
+                assert!(!interactive);
+            }
+            _ => panic!("expected Purge command"),
         }
     }
 

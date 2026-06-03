@@ -286,7 +286,7 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
         Some(Commands::ListCommands) => {}
         Some(Commands::StopCommand { target: _, interactive: _, all: _ }) => {}
         Some(Commands::Kill { target: _, interactive: _, all: _ }) => {}
-        Some(Commands::Purge { target: _ }) => {}
+        Some(Commands::Purge { target: _, interactive: _ }) => {}
         Some(Commands::Resize { target: _, rows: _, cols: _, interactive: _ }) => {}
         Some(Commands::ConfigCheck) => {
             subcommands::handle_config_check_command(cli.config.as_deref())?;
@@ -369,8 +369,9 @@ pub async fn handle_subcommands(cli: &Cli) -> Result<bool> {
             args,
             rows,
             cols,
+            interactive,
         }) => {
-            subcommands::handle_spawn_command(cli, cmd, args, *rows, *cols).await?;
+            subcommands::handle_spawn_command(cli, cmd, args, *rows, *cols, *interactive).await?;
             Ok(true)
         }
         Some(Commands::Freeze { pid, interactive }) => {
@@ -435,8 +436,8 @@ pub async fn handle_subcommands(cli: &Cli) -> Result<bool> {
             }
             Ok(true)
         }
-        Some(Commands::Purge { target }) => {
-            let purged = subcommands::handle_purge_command(cli, target.as_deref()).await?;
+        Some(Commands::Purge { target, interactive }) => {
+            let purged = subcommands::handle_purge_command(cli, target.as_deref(), *interactive).await?;
             if !purged {
                 match target {
                     Some(t) => tracing::error!(
@@ -499,7 +500,7 @@ pub async fn handle_subcommands(cli: &Cli) -> Result<bool> {
                         // No flags → implicit spawn into running instance
                         let cmd = &cmd_args[0];
                         let args = &cmd_args[1..];
-                        subcommands::handle_spawn_command(cli, cmd, args, None, None).await?;
+                        subcommands::handle_spawn_command(cli, cmd, args, None, None, false).await?;
                         return Ok(true);
                     }
                     // Flags present → let the caller start a new instance

@@ -2887,11 +2887,14 @@ function closePanelModal() {
 
 function confirmAddPanel() {
     const url = document.getElementById('panelUrl').value.trim();
-    const label = document.getElementById('panelLabel').value.trim() || new URL(url).host;
+    if (!url) return;
+
     const token = document.getElementById('panelToken').value.trim();
     const splitDir = document.getElementById('panelSplitDir').value;
-
-    if (!url) return;
+    let label = document.getElementById('panelLabel').value.trim();
+    if (!label) {
+        try { label = new URL(url).host; } catch (e) { label = url; }
+    }
 
     // Allow adding a panel for an already-connected instance.
     // Multiple panels can display the same server — useful for viewing
@@ -2901,22 +2904,27 @@ function confirmAddPanel() {
         const inst = { url, label, token };
         state.instanceUrls.push(inst);
     }
-    addPanelDirect(url, label, token);
-    closePanelModal();
+    try {
+        addPanelDirect(url, label, token);
+        closePanelModal();
 
-    // Apply layout direction
-    if (splitDir === 'vertical') {
-        state.panelLayout = 'column';
-    } else if (splitDir === 'horizontal') {
-        state.panelLayout = 'row';
+        // Apply layout direction
+        if (splitDir === 'vertical') {
+            state.panelLayout = 'column';
+        } else if (splitDir === 'horizontal') {
+            state.panelLayout = 'row';
+        }
+        // 'auto' doesn't change the layout
+        localStorage.setItem('vrw_panel_layout', state.panelLayout);
+
+        renderPanels();
+        loadCommands();
+        loadCertificates();
+        fetchServerTemplates();
+    } catch (e) {
+        console.error('[vrw] confirmAddPanel failed:', e);
+        closePanelModal();
     }
-    // 'auto' doesn't change the layout
-    localStorage.setItem('vrw_panel_layout', state.panelLayout);
-
-    renderPanels();
-    loadCommands();
-    loadCertificates();
-    fetchServerTemplates();
 }
 
 function removePanel(id) {

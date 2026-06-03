@@ -15,9 +15,40 @@ pub async fn handle_spawn_command(
     args: &[String],
     rows: Option<u16>,
     cols: Option<u16>,
+    interactive: bool,
 ) -> Result<()> {
     let registry = InstanceRegistry::new()?;
-    let info = resolve_instance(cli, &registry)?;
+
+    // When --interactive is set and multiple instances are running,
+    // present an interactive picker so the user can choose by PID or port.
+    let info = if interactive {
+        let instances = registry.list_instances();
+        if instances.is_empty() {
+            anyhow::bail!("No running vrw instances found.");
+        }
+        if instances.len() == 1 {
+            instances.into_iter().next().unwrap()
+        } else {
+            let items: Vec<_> = instances.iter().map(|i| {
+                crate::cli::interactive_select::SelectItem {
+                    label: format!("PID {} — port {}", i.pid, i.port),
+                    id: i.pid.to_string(),
+                }
+            }).collect();
+            let selected = crate::cli::interactive_select::select_items(
+                &items,
+                "Select instance to spawn on [space-separated numbers]",
+            )?;
+            if selected.is_empty() {
+                anyhow::bail!("No instance selected.");
+            }
+            let target_pid: u32 = selected[0].id.parse().unwrap();
+            instances.into_iter().find(|i| i.pid == target_pid)
+                .expect("selected PID must exist")
+        }
+    } else {
+        resolve_instance(cli, &registry)?
+    };
 
     let url = instance_url(&info, &None);
     let client = http_client();

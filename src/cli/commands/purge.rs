@@ -15,7 +15,7 @@ use super::common::{build_full_display_string, collect_all_commands, http_client
 /// Otherwise, matching proceeds by name (same three-round strategy as stop).
 ///
 /// Returns true if exactly one exited command was found and purged.
-pub async fn handle_purge_command(_cli: &Cli, target: Option<&str>) -> Result<bool> {
+pub async fn handle_purge_command(_cli: &Cli, target: Option<&str>, interactive: bool) -> Result<bool> {
     let registry = InstanceRegistry::new()?;
     let instances = registry.list_instances();
 
@@ -54,7 +54,8 @@ pub async fn handle_purge_command(_cli: &Cli, target: Option<&str>) -> Result<bo
         exited
     };
 
-    // No target: purge the only exited command if there is exactly one.
+    // No target: purge the only exited command if there is exactly one,
+    // or use interactive selection if -i was given.
     let target = match target {
         Some(t) => t,
         None => match all_commands.len() {
@@ -70,6 +71,31 @@ pub async fn handle_purge_command(_cli: &Cli, target: Option<&str>) -> Result<bo
                 return purge_command_by_id(&client, &url, cmd_id, full).await;
             }
             _ => {
+                if interactive {
+                    let items: Vec<_> = all_commands
+                        .iter()
+                        .map(|(_, id, _, _, full)| crate::cli::interactive_select::SelectItem {
+                            label: format!("{} — {}", &id[..8.min(id.len())], full),
+                            id: id.clone(),
+                        })
+                        .collect();
+                    let selected = crate::cli::interactive_select::select_items(
+                        &items, "Select exited commands to purge [space-separated numbers]",
+                    )?;
+                    let mut purged_any = false;
+                    for item in &selected {
+                        let cmd_id = &item.id;
+                        let entry = all_commands.iter().find(|(_, id, _, _, _)| id == cmd_id);
+                        if let Some((inst_pid, _, _, _, full)) = entry {
+                            let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
+                            let url = instance_url(info, &None);
+                            if purge_command_by_id(&client, &url, cmd_id, full).await? {
+                                purged_any = true;
+                            }
+                        }
+                    }
+                    return Ok(purged_any);
+                }
                 tracing::warn!("Multiple exited commands. Specify which one to purge:");
                 for (_, cmd_id, _, _, full) in &all_commands {
                     tracing::warn!("  {} — {}", &cmd_id[..8.min(cmd_id.len())], full);
