@@ -93,19 +93,27 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .sidebar-content { flex: 1; overflow-y: auto; padding: 0.3rem; }
 .content-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 
+/* Shared toolbar — single toolbar above all panels */
+.shared-toolbar { display: flex; align-items: center; gap: 0.2rem; padding: 0.15rem 0.3rem; background: var(--bg-secondary); flex-shrink: 0; overflow-x: auto; white-space: nowrap; border-bottom: 1px solid var(--border); }
+.shared-toolbar-row { display: flex; align-items: center; gap: 0.2rem; }
+.shared-toolbar-sep { width: 1px; height: 1rem; background: var(--border); margin: 0 0.1rem; flex-shrink: 0; }
+
 /* Panels */
 .panel-container { flex: 1; display: flex; overflow: hidden; }
 .panel { flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--border); min-width: 200px; min-height: 100px; }
 .panel:last-child { border-right: none; }
+.panel.focused { box-shadow: inset 0 2px 0 0 var(--accent); }
 /* Vertical (stacked) panel layout — swap border direction */
 .panel-container[style*="column"] .panel { border-right: none; border-bottom: 1px solid var(--border); }
 .panel-container[style*="column"] .panel:last-child { border-bottom: none; }
-.panel-header { display: flex; align-items: center; gap: 0.2rem; padding: 0.2rem 0.3rem; background: var(--bg-tertiary); flex-shrink: 0; overflow: hidden; white-space: nowrap; }
+.panel-container[style*="column"] .panel.focused { box-shadow: inset 2px 0 0 0 var(--accent); }
+.panel-header { display: flex; align-items: center; gap: 0.2rem; padding: 0.15rem 0.3rem; background: var(--bg-tertiary); flex-shrink: 0; overflow: hidden; white-space: nowrap; cursor: pointer; }
 .panel-header .title { font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; }
-.panel-header .cmd-info { display: flex; flex-direction: column; min-width: 0; flex-shrink: 1; gap: 0; overflow: hidden; max-width: 30%; }
+.panel-header .cmd-info { display: flex; flex-direction: column; min-width: 0; flex-shrink: 1; gap: 0; overflow: hidden; }
 .panel-header .cmd-fullname { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .panel-header .cmd-args { font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .panel-header .instance-url { font-size: 0.6rem; color: var(--text-muted); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
+.panel-header-label { font-size: 0.6rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; font-family: var(--font-mono); }
 
 /* VTTY */
 .vtty-container { flex: 1; overflow: auto; background: var(--vtty-bg, #000); position: relative; cursor: text; }

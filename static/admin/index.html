@@ -135,6 +135,55 @@
 
         <!-- Content area -->
         <div class="content-area" id="contentArea">
+            <!-- Shared toolbar for terminal controls (acts on the focused panel) -->
+            <div class="shared-toolbar" id="sharedToolbar" style="display:none;">
+                <div class="shared-toolbar-row shared-toolbar-main">
+                    <button class="btn btn-xs restart-btn" id="stRestartBtn" onclick="restartCommand(getActivePanelId())" title="Restart this command" style="display:none;">&#x21BB;</button>
+                    <button class="btn btn-xs" onclick="toggleResources()" title="Toggle resource info">&#x2699;</button>
+                    <span class="resource-badge" id="stResourceBadge" style="display:none;"></span>
+                    <span class="instance-url" id="stInstanceUrl" style="display:none;"></span>
+                    <span class="shared-toolbar-sep"></span>
+                    <span class="panel-font-size-ctrl">
+                        <button class="btn btn-xs" onclick="changePanelFontSize(getActivePanelId(), -1)" title="Decrease font size">A-</button>
+                        <span class="panel-font-size" id="stFontSize">10px</span>
+                        <button class="btn btn-xs" onclick="changePanelFontSize(getActivePanelId(), 1)" title="Increase font size">A+</button>
+                    </span>
+                    <span class="shared-toolbar-sep"></span>
+                    <span class="panel-resize-controls" id="stResizeControls">
+                        <label>Rows</label>
+                        <input type="number" id="stResizeRows" value="24" min="1" max="10000" title="Terminal rows">
+                        <label>Cols</label>
+                        <input type="number" id="stResizeCols" value="80" min="1" max="1000" title="Terminal columns">
+                        <button class="btn btn-xs" id="stResizeBtn" onclick="resizeTerminalPanel(getActivePanelId())">Resize</button>
+                        <button class="btn btn-xs" id="stMaxFitBtn" onclick="toggleMaxFit(getActivePanelId())" title="Resize terminal to fill the panel (toggle)">&#x26F6;</button>
+                        <button class="btn btn-xs" id="stMaxFontBtn" onclick="toggleMaxFont(getActivePanelId())" title="Maximize font size to fit terminal in pane (toggle)">&#x1F50D;</button>
+                    </span>
+                    <span class="shared-toolbar-sep"></span>
+                    <select id="stBufferSelect" class="select-xs" onchange="switchBufferPanel(getActivePanelId(), this.value)" title="Which terminal buffer to view">
+                        <option value="current">Current</option>
+                        <option value="main">Main</option>
+                        <option value="alt">Alt</option>
+                    </select>
+                    <span class="refresh-ctrl" title="Refresh throttle (ms). 0 = no throttle.">
+                        <button class="btn btn-xs" onclick="changeRefreshMs(-100)" title="Decrease throttle">-</button>
+                        <span class="refresh-val" id="stRefreshVal">off</span>
+                        <button class="btn btn-xs" onclick="changeRefreshMs(100)" title="Increase throttle">+</button>
+                    </span>
+                    <span class="shared-toolbar-sep"></span>
+                    <div class="panel-send-row" id="stSendRow">
+                        <input type="text" id="stKeyInput" placeholder="Send keys..." onkeydown="if(event.key==='Enter'){event.preventDefault();sendKeysToPanel(getActivePanelId())}">
+                        <button class="btn btn-xs" onclick="sendKeysToPanel(getActivePanelId())" title="Send keys to terminal">Send</button>
+                        <button class="btn btn-xs" onclick="showSpecialKeysHelp()" title="Special keys reference">&#63;</button>
+                    </div>
+                    <span class="shared-toolbar-sep"></span>
+                    <button class="btn btn-xs" onclick="togglePanelLayout()" id="stLayoutBtn" title="Toggle horizontal/vertical layout" style="display:none;">&#x21C4;</button>
+                    <button class="btn btn-xs" onclick="toggleSelectionMode(getActivePanelId())" id="stSelectBtn" title="Toggle text selection mode">Select</button>
+                    <button class="btn btn-xs" onclick="copyTerminalSelection(getActivePanelId())" title="Copy selected text to clipboard">Copy</button>
+                    <button class="btn btn-xs" onclick="exportTerminal(getActivePanelId())" title="Export terminal as text">&#x2913;</button>
+                    <button class="btn btn-xs" onclick="screenshotPanel(getActivePanelId())" title="Download screenshot as PNG">&#x1F4F7;</button>
+                    <button class="btn btn-xs" id="stPanelThemeBtn" onclick="togglePanelTheme(getActivePanelId())" title="Panel theme: inherit (click to toggle)">&#x25D0;</button>
+                </div>
+            </div>
             <!-- Terminal view -->
             <div id="view-vtty" class="panel-container">
                 <!-- Panels are dynamically added here -->

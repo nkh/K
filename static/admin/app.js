@@ -511,7 +511,12 @@ function changePanelFontSize(panelId, delta) {
     // Apply inline style on the VTTY container
     const vttyEl = document.getElementById('vtty-' + panelId);
     if (vttyEl) vttyEl.style.fontSize = panelObj.fontSize + 'px';
-    // Update the label in the panel header
+    // Update the shared toolbar font size label
+    const stFontSize = document.getElementById('stFontSize');
+    if (stFontSize && panelId === getActivePanelId()) {
+        stFontSize.textContent = panelObj.fontSize + 'px';
+    }
+    // Update the label in the panel header (if per-panel label still exists)
     const label = document.querySelector(`#${panelId} .panel-font-size`);
     if (label) label.textContent = panelObj.fontSize + 'px';
 }
@@ -584,6 +589,14 @@ function togglePanelTheme(panelId) {
     panelObj.theme = next;
     localStorage.setItem('vrw_panel_theme_' + panelId, next);
     applyPanelTheme(panelId, next);
+    // Update shared toolbar button if this is the active panel
+    if (panelId === getActivePanelId()) {
+        const btn = document.getElementById('stPanelThemeBtn');
+        if (btn) {
+            btn.textContent = next === 'light' ? '\u263E' : next === 'dark' ? '\u2600' : '\u25D0';
+            btn.title = next === 'light' ? 'Panel theme: light (click to toggle)' : next === 'dark' ? 'Panel theme: dark (click to toggle)' : 'Panel theme: inherit (click to toggle)';
+        }
+    }
 }
 
 function applyPanelTheme(panelId, theme) {
@@ -616,6 +629,14 @@ function toggleSelectionMode(panelId) {
         btn.classList.toggle('btn-primary', panelObj.selectionMode);
         btn.textContent = panelObj.selectionMode ? '✓ Select' : 'Select';
     }
+    // Update shared toolbar button if this is the active panel
+    if (panelId === getActivePanelId()) {
+        const stBtn = document.getElementById('stSelectBtn');
+        if (stBtn) {
+            stBtn.classList.toggle('btn-primary', panelObj.selectionMode);
+            stBtn.textContent = panelObj.selectionMode ? '✓ Select' : 'Select';
+        }
+    }
 }
 
 // ─── Sidebar ───
@@ -637,6 +658,13 @@ function toggleResources() {
     document.querySelectorAll('.resource-badge, .instance-url').forEach(el => {
         el.style.display = display;
     });
+    // Also toggle shared toolbar elements
+    const stBadge = document.getElementById('stResourceBadge');
+    if (stBadge && !state.showResources) stBadge.style.display = 'none';
+    const stUrl = document.getElementById('stInstanceUrl');
+    if (stUrl) stUrl.style.display = display;
+    // If toggling on, refresh the badge
+    if (state.showResources) updateSharedToolbar();
 }
 
 // ─── Bottom bar toggle ───
@@ -773,21 +801,24 @@ function updateSidebarBanner() {
 
 /// Show/hide a "Server unreachable" overlay on the terminal panel when
 /// the currently selected command belongs to a disconnected instance.
+/// Iterates ALL panels — each panel gets its own overlay based on its instance's reachability.
 function updateTerminalDisconnectedOverlay() {
-    const panel = document.querySelector('.panel');
-    if (!panel) return;
-    let overlay = panel.querySelector('.disconnected-overlay');
-    const inst = state.instanceUrls.find(i => i.url === state.selectedInstUrl);
-    if (inst && inst.reachable === false) {
-        if (!overlay) {
-            overlay = document.createElement('div');
-            overlay.className = 'disconnected-overlay';
-            overlay.innerHTML = '<span>&#9888; Server unreachable &mdash; output is stale</span>';
-            const vttyEl = panel.querySelector('.vtty-container');
-            if (vttyEl) vttyEl.appendChild(overlay);
+    for (const panelObj of state.panels) {
+        const panelEl = document.getElementById(panelObj.id);
+        if (!panelEl) continue;
+        let overlay = panelEl.querySelector('.disconnected-overlay');
+        const inst = state.instanceUrls.find(i => i.url === panelObj.instUrl);
+        if (inst && inst.reachable === false) {
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.className = 'disconnected-overlay';
+                overlay.innerHTML = '<span>&#9888; Server unreachable &mdash; output is stale</span>';
+                const vttyEl = panelEl.querySelector('.vtty-container');
+                if (vttyEl) vttyEl.appendChild(overlay);
+            }
+        } else {
+            if (overlay) overlay.remove();
         }
-    } else {
-        if (overlay) overlay.remove();
     }
 }
 
@@ -1369,6 +1400,9 @@ function selectCommand(instUrl, cmdId, name) {
     if (!panelObj) panelObj = state.panels[0];
     if (!panelObj) return;
 
+    // Ensure this panel is visually focused
+    focusPanel(panelObj.id);
+
     // Cache the current command's terminal DOM before switching away.
     disconnectVttyWs();
     _cacheTerminalForSwitch();
@@ -1485,6 +1519,8 @@ function updatePanelCommandInfo() {
                 exitedBanner.style.display = 'none';
             }
         }
+        // Update shared toolbar
+        updateSharedToolbar();
     } else if (nameEl) {
         nameEl.textContent = '';
         if (argsEl) argsEl.textContent = '';
@@ -1563,6 +1599,13 @@ function getSelectedPanel() {
     state.selectedInstUrl = panelObj.selectedInstUrl;
     state.selectedCmdId = panelObj.selectedCmdId;
     return document.getElementById(panelObj.id);
+}
+
+/// Return the focused panel's ID (or first panel's ID if none focused).
+function getActivePanelId() {
+    if (state._focusedPanelId) return state._focusedPanelId;
+    if (state.panels.length > 0) return state.panels[0].id;
+    return null;
 }
 
 // ─── Pause/Run Toggle ───
@@ -2790,8 +2833,9 @@ async function resizeTerminalPanel(panelId) {
     // Use the globally selected command when the panel matches the selected instance
     const cmdId = (panelObj.instUrl === state.selectedInstUrl) ? state.selectedCmdId : null;
     if (!cmdId) return;
-    const rows = parseInt(document.getElementById('resizeRows-' + panelId)?.value) || 24;
-    const cols = parseInt(document.getElementById('resizeCols-' + panelId)?.value) || 80;
+    // Try shared toolbar inputs first, fall back to per-panel inputs
+    const rows = parseInt(document.getElementById('stResizeRows')?.value || document.getElementById('resizeRows-' + panelId)?.value) || 24;
+    const cols = parseInt(document.getElementById('stResizeCols')?.value || document.getElementById('resizeCols-' + panelId)?.value) || 80;
     try {
         const res = await fetch(apiUrl(`/api/commands/${cmdId}/resize`, { url: panelObj.instUrl }), {
             method: 'POST',
@@ -2810,8 +2854,8 @@ async function resizeTerminalPanel(panelId) {
 function switchBufferPanel(panelId, view) {
     const panelObj = state.panels.find(p => p.id === panelId);
     if (!panelObj) return;
-    // Update the select element
-    const sel = document.getElementById('bufferSelect-' + panelId);
+    // Update the shared toolbar select element
+    const sel = document.getElementById('stBufferSelect') || document.getElementById('bufferSelect-' + panelId);
     if (sel) sel.value = view;
     // If this is the currently selected panel, apply the buffer switch
     if (panelObj.instUrl === state.selectedInstUrl && state.selectedCmdId) {
@@ -3032,6 +3076,9 @@ function renderPanels() {
 
     if (state.panels.length === 1 && !hasAnyCommands && !state.selectedCmdId && !state.serverReachable) {
         _showingWelcome = true;
+        // Hide shared toolbar in welcome state
+        const toolbar = document.getElementById('sharedToolbar');
+        if (toolbar) toolbar.style.display = 'none';
         // Server is unreachable — vrw is not running
         html += `
             <div class="welcome-panel">
@@ -3044,57 +3091,24 @@ function renderPanels() {
             </div>`;
     } else {
         _showingWelcome = false;
+        // Show the shared toolbar when panels are visible
+        const toolbar = document.getElementById('sharedToolbar');
+        if (toolbar) toolbar.style.display = '';
         for (const panel of state.panels) {
             const inst = state.instanceUrls.find(i => i.url === panel.instUrl);
             const resizeHandle = hasMultiplePanels ? `<div class="panel-resize-handle" data-panel="${panel.id}"></div>` : '';
             const dragHandle = hasMultiplePanels ? `<span class="drag-handle" draggable="true" ondragstart="onPanelDragStart(event,'${panel.id}')" title="Drag to reorder">&#x2840;</span>` : '';
+            const isFocused = panel.id === state._focusedPanelId;
             html += `
-                <div class="panel" id="${panel.id}" draggable="${hasMultiplePanels}" ondragover="onPanelDragOver(event)" ondrop="onPanelDrop(event,'${panel.id}')" ondragend="onPanelDragEnd(event)" ondragleave="onPanelDragLeave(event)" style="flex: 1 1 0;">
-                    <div class="panel-header" data-panel-id="${panel.id}" oncontextmenu="showPanelContextMenu(event,'${panel.id}')" tabindex="0" role="button" aria-label="Panel options for ${escHtml(inst ? inst.label : panel.instUrl)}">
+                <div class="panel${isFocused ? ' focused' : ''}" id="${panel.id}" draggable="${hasMultiplePanels}" ondragover="onPanelDragOver(event)" ondrop="onPanelDrop(event,'${panel.id}')" ondragend="onPanelDragEnd(event)" ondragleave="onPanelDragLeave(event)" style="flex: 1 1 0;">
+                    <div class="panel-header" data-panel-id="${panel.id}" oncontextmenu="showPanelContextMenu(event,'${panel.id}')" tabindex="0" role="button" aria-label="Panel: ${escHtml(inst ? inst.label : panel.instUrl)}">
                         ${dragHandle}
                         <div class="cmd-info" id="cmdInfo-${panel.id}">
                             <span class="cmd-fullname" id="cmdName-${panel.id}"></span>
                             <span class="cmd-args" id="cmdArgs-${panel.id}"></span>
                         </div>
-                        <button class="btn btn-xs restart-btn" id="restartBtn-${panel.id}" onclick="restartCommand('${panel.id}')" title="Restart this command" style="display:none;">&#x21BB;</button>
-                        <button class="btn btn-xs" onclick="toggleResources()" title="Toggle resource info">&#x2699;</button>
-                        <span class="resource-badge" id="resourceBadge-${panel.id}" style="${state.showResources ? '' : 'display:none;'}"></span>
-                        <span class="instance-url" style="${state.showResources ? '' : 'display:none;'}">${escHtml(panel.instUrl.replace(/^https?:\/\//, ''))}</span>
-                        <span class="panel-font-size-ctrl">
-                            <button class="btn btn-xs" onclick="changePanelFontSize('${panel.id}', -1)" title="Decrease font size">A-</button>
-                            <span class="panel-font-size">${panel.fontSize}px</span>
-                            <button class="btn btn-xs" onclick="changePanelFontSize('${panel.id}', 1)" title="Increase font size">A+</button>
-                        </span>
-                        <span class="panel-resize-controls" id="resizeControls-${panel.id}">
-                            <label>Rows</label>
-                            <input type="number" id="resizeRows-${panel.id}" value="24" min="1" max="10000" title="Terminal rows">
-                            <label>Cols</label>
-                            <input type="number" id="resizeCols-${panel.id}" value="80" min="1" max="1000" title="Terminal columns">
-                            <button class="btn btn-xs" onclick="resizeTerminalPanel('${panel.id}')">Resize</button>
-                            <button class="btn btn-xs" id="maxFitBtn-${panel.id}" onclick="toggleMaxFit('${panel.id}')" title="Resize terminal to fill the panel (toggle)">&#x26F6;</button>
-                            <button class="btn btn-xs" id="maxFontBtn-${panel.id}" onclick="toggleMaxFont('${panel.id}')" title="Maximize font size to fit terminal in pane (toggle)">&#x1F50D;</button>
-                        </span>
-                        <select id="bufferSelect-${panel.id}" class="select-xs" onchange="switchBufferPanel('${panel.id}', this.value)" title="Which terminal buffer to view">
-                            <option value="current">Current</option>
-                            <option value="main">Main</option>
-                            <option value="alt">Alt</option>
-                        </select>
-                        <span class="refresh-ctrl" title="Refresh throttle (ms). 0 = no throttle.">
-                            <button class="btn btn-xs" onclick="changeRefreshMs(-100)" title="Decrease throttle">-</button>
-                            <span class="refresh-val" id="refreshVal-${panel.id}">${state.refreshMs || 'off'}</span>
-                            <button class="btn btn-xs" onclick="changeRefreshMs(100)" title="Increase throttle">+</button>
-                        </span>
-                        <div class="panel-send-row">
-                            <input type="text" id="keyInput-${panel.id}" placeholder="Send keys..." onkeydown="if(event.key==='Enter'){event.preventDefault();sendKeysToPanel('${panel.id}')}">
-                            <button class="btn btn-xs" onclick="sendKeysToPanel('${panel.id}')" title="Send keys to terminal">Send</button>
-                            <button class="btn btn-xs" onclick="showSpecialKeysHelp()" title="Special keys reference">&#63;</button>
-                        </div>
-                        ${hasMultiplePanels ? `<button class="btn btn-xs" onclick="togglePanelLayout()" title="Toggle horizontal/vertical layout">&#x21C4;</button>` : ''}
-                        ${hasMultiplePanels ? `<button class="btn btn-xs btn-danger" onclick="removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
-                        <button class="btn btn-xs" onclick="copyTerminalSelection('${panel.id}')" title="Copy selected text to clipboard">Copy</button>
-                        <button class="btn btn-xs" onclick="exportTerminal('${panel.id}')" title="Export terminal as text">&#x2913;</button>
-                        <button class="btn btn-xs" onclick="screenshotPanel('${panel.id}')" title="Download screenshot as PNG">&#x1F4F7;</button>
-                        <button class="btn btn-xs" id="panelThemeBtn-${panel.id}" onclick="togglePanelTheme('${panel.id}')" title="Panel theme: inherit (click to toggle)">${panel.theme === 'light' ? '\u263E' : panel.theme === 'dark' ? '\u2600' : '\u25D0'}</button>
+                        <span class="panel-header-label" id="panelLabel-${panel.id}">${escHtml(inst ? inst.label : panel.instUrl.replace(/^https?:\/\//, ''))}</span>
+                        ${hasMultiplePanels ? `<button class="btn btn-xs btn-danger" onclick="event.stopPropagation();removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
                     </div>
                     <div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px;">
                         <div class="exited-banner" id="exitedBanner-${panel.id}" style="display:none;"></div>
@@ -3139,14 +3153,14 @@ function renderPanels() {
         const vttyEl = panelEl.querySelector('.vtty-container');
         if (vttyEl) {
             vttyEl.addEventListener('mousedown', () => {
-                state._focusedPanelId = panelId;
+                focusPanel(panelId);
             });
         }
         // Click on panel header → focus this panel
         const headerEl = panelEl.querySelector('.panel-header');
         if (headerEl) {
             headerEl.addEventListener('mousedown', () => {
-                state._focusedPanelId = panelId;
+                focusPanel(panelId);
             });
         }
     });
@@ -3167,6 +3181,8 @@ function renderPanels() {
     _lastRenderedPanelIds = currentPanelIds;
     _lastShowingWelcome = _showingWelcome;
     _updatePanelMultiUI();
+    // Sync shared toolbar with current state
+    if (!_showingWelcome) updateSharedToolbar();
 }
 
 /// Update multi-panel UI elements (drag handles, remove buttons, layout toggle)
@@ -3175,12 +3191,91 @@ function _updatePanelMultiUI() {
     const hasMultiplePanels = state.panels.length > 1;
     document.querySelectorAll('.drag-handle').forEach(el => el.style.display = hasMultiplePanels ? '' : 'none');
     document.querySelectorAll('.panel-resize-handle').forEach(el => el.style.display = hasMultiplePanels ? '' : 'none');
+    const layoutBtn = document.getElementById('stLayoutBtn');
+    if (layoutBtn) layoutBtn.style.display = hasMultiplePanels ? '' : 'none';
+}
+
+/// Focus a panel: update focused state, visual indicator, and shared toolbar.
+function focusPanel(panelId) {
+    if (state._focusedPanelId === panelId) return;
+    state._focusedPanelId = panelId;
+    // Update visual indicator
+    document.querySelectorAll('.panel').forEach(el => {
+        el.classList.toggle('focused', el.id === panelId);
+    });
+    // Sync global state from the focused panel
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (panelObj) {
+        state.selectedInstUrl = panelObj.selectedInstUrl;
+        state.selectedCmdId = panelObj.selectedCmdId;
+    }
+    // Update shared toolbar to reflect focused panel's state
+    updateSharedToolbar();
+}
+
+/// Update the shared toolbar to reflect the focused panel's state.
+/// Called when focus changes, command selection changes, or font/theme changes.
+function updateSharedToolbar() {
+    const panelId = getActivePanelId();
+    if (!panelId) return;
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj) return;
+
+    // Font size
+    const fontSizeEl = document.getElementById('stFontSize');
+    if (fontSizeEl) fontSizeEl.textContent = panelObj.fontSize + 'px';
+
+    // Theme button
+    const themeBtn = document.getElementById('stPanelThemeBtn');
+    if (themeBtn) {
+        themeBtn.textContent = panelObj.theme === 'light' ? '\u263E' : panelObj.theme === 'dark' ? '\u2600' : '\u25D0';
+        themeBtn.title = panelObj.theme === 'light' ? 'Panel theme: light (click to toggle)' : panelObj.theme === 'dark' ? 'Panel theme: dark (click to toggle)' : 'Panel theme: inherit (click to toggle)';
+    }
+
+    // Selection mode button
+    const selectBtn = document.getElementById('stSelectBtn');
+    if (selectBtn) {
+        selectBtn.classList.toggle('btn-primary', panelObj.selectionMode);
+        selectBtn.textContent = panelObj.selectionMode ? '\u2713 Select' : 'Select';
+    }
+
+    // Instance URL
+    const instUrlEl = document.getElementById('stInstanceUrl');
+    if (instUrlEl) instUrlEl.textContent = panelObj.instUrl.replace(/^https?:\/\//, '');
+
+    // Refresh throttle
+    const refreshVal = document.getElementById('stRefreshVal');
+    if (refreshVal) refreshVal.textContent = state.refreshMs || 'off';
+
+    // Buffer select
+    const bufferSel = document.getElementById('stBufferSelect');
+    if (bufferSel) bufferSel.value = state.bufferView || 'current';
+
+    // Resource badge
+    const resourceBadge = document.getElementById('stResourceBadge');
+    if (resourceBadge && panelObj.selectedCmdId) {
+        const res = state._resourceCache[panelObj.selectedCmdId];
+        if (state.showResources && res && (res.cpu_percent != null || res.memory_mb != null)) {
+            resourceBadge.style.display = '';
+            resourceBadge.textContent = (res.cpu_percent != null ? 'CPU ' + res.cpu_percent.toFixed(1) + '%' : '') +
+                (res.memory_mb != null ? ' MEM ' + res.memory_mb.toFixed(1) + 'MB' : '');
+        } else {
+            resourceBadge.style.display = 'none';
+        }
+    }
+
+    // Restart button visibility
+    const restartBtn = document.getElementById('stRestartBtn');
+    if (restartBtn) {
+        restartBtn.style.display = panelObj.selectedCmdId ? '' : 'none';
+    }
 }
 
 async function sendKeysToPanel(panelId) {
     const panel = state.panels.find(p => p.id === panelId);
     if (!panel) return;
-    const input = document.getElementById('keyInput-' + panelId);
+    // Try the shared toolbar input first, fall back to per-panel input
+    const input = document.getElementById('stKeyInput') || document.getElementById('keyInput-' + panelId);
     if (!input || !input.value || !state.selectedCmdId) return;
 
     const keysValue = input.value;
