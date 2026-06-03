@@ -13,6 +13,8 @@ let _sidebarSort = 'name';
 // Track panel count to avoid unnecessary DOM rebuilds.
 let _lastRenderedPanelCount = -1;
 let _lastRenderedPanelIds = '';
+// Track welcome-panel state to force rebuild on welcome ↔ panel transitions.
+let _lastShowingWelcome = true;
 
 const state = {
     panels: [],
@@ -2986,8 +2988,10 @@ function renderPanels() {
 
     // Fast path: if panel count and IDs haven't changed, skip the full rebuild.
     // This prevents erasing terminal content when only command selection changes.
+    // EXCEPTION: must rebuild when transitioning between welcome and panel views.
     const currentPanelIds = state.panels.map(p => p.id).join(',');
-    if (_lastRenderedPanelCount === state.panels.length && _lastRenderedPanelIds === currentPanelIds) {
+    const structuralUnchanged = _lastRenderedPanelCount === state.panels.length && _lastRenderedPanelIds === currentPanelIds;
+    if (structuralUnchanged && _lastShowingWelcome === _showingWelcome) {
         // Just update layout direction and multi-panel visibility
         container.style.flexDirection = state.panelLayout;
         _updatePanelMultiUI();
@@ -3161,6 +3165,7 @@ function renderPanels() {
 
     _lastRenderedPanelCount = state.panels.length;
     _lastRenderedPanelIds = currentPanelIds;
+    _lastShowingWelcome = _showingWelcome;
     _updatePanelMultiUI();
 }
 
