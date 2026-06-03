@@ -4922,7 +4922,7 @@ async function toggleMaxFit(panelId) {
     if (!vttyEl) return;
 
     const st = _maxFitState[panelId];
-    const btn = document.getElementById('maxFitBtn-' + panelId);
+    const btn = document.getElementById('stMaxFitBtn') || document.getElementById('maxFitBtn-' + panelId);
 
     if (st && st.active) {
         // Toggle back: restore previous dimensions
@@ -4945,8 +4945,8 @@ async function toggleMaxFit(panelId) {
         const maxRows = Math.max(5, Math.min(200, Math.floor(rect.height / charH)));
 
         // Save current dimensions
-        const curRows = parseInt(document.getElementById('resizeRows-' + panelId)?.value) || 24;
-        const curCols = parseInt(document.getElementById('resizeCols-' + panelId)?.value) || 80;
+        const curRows = parseInt(document.getElementById('stResizeRows')?.value || document.getElementById('resizeRows-' + panelId)?.value) || 24;
+        const curCols = parseInt(document.getElementById('stResizeCols')?.value || document.getElementById('resizeCols-' + panelId)?.value) || 80;
 
         _maxFitState[panelId] = { prevRows: curRows, prevCols: curCols, active: true };
         if (btn) {
@@ -4978,10 +4978,10 @@ async function toggleMaxFont(panelId) {
     if (rect.width < 10 || rect.height < 10) return;
 
     const st = _maxFontState[panelId];
-    const btn = document.getElementById('maxFontBtn-' + panelId);
+    const btn = document.getElementById('stMaxFontBtn') || document.getElementById('maxFontBtn-' + panelId);
 
-    const curRows = parseInt(document.getElementById('resizeRows-' + panelId)?.value) || 24;
-    const curCols = parseInt(document.getElementById('resizeCols-' + panelId)?.value) || 80;
+    const curRows = parseInt(document.getElementById('stResizeRows')?.value || document.getElementById('resizeRows-' + panelId)?.value) || 24;
+    const curCols = parseInt(document.getElementById('stResizeCols')?.value || document.getElementById('resizeCols-' + panelId)?.value) || 80;
 
     if (st && st.active) {
         // Toggle back: restore previous font size and terminal dimensions
@@ -4997,6 +4997,9 @@ async function toggleMaxFont(panelId) {
         if (vttyEl) vttyEl.style.fontSize = panelObj.fontSize + 'px';
         const label = document.querySelector(`#${panelId} .panel-font-size`);
         if (label) label.textContent = panelObj.fontSize + 'px';
+        // Update shared toolbar font size
+        const stFontSize = document.getElementById('stFontSize');
+        if (stFontSize) stFontSize.textContent = panelObj.fontSize + 'px';
         // Restore terminal dimensions
         await _resizePanelTo(panelId, st.prevRows, st.prevCols);
     } else {
@@ -5038,9 +5041,9 @@ async function _resizePanelTo(panelId, rows, cols) {
     const cmdId = (panelObj.instUrl === state.selectedInstUrl) ? state.selectedCmdId : null;
     if (!cmdId) return;
 
-    // Update the input fields
-    const ri = document.getElementById('resizeRows-' + panelId);
-    const ci = document.getElementById('resizeCols-' + panelId);
+    // Update the input fields (shared toolbar first, per-panel fallback)
+    const ri = document.getElementById('stResizeRows') || document.getElementById('resizeRows-' + panelId);
+    const ci = document.getElementById('stResizeCols') || document.getElementById('resizeCols-' + panelId);
     if (ri) ri.value = rows;
     if (ci) ci.value = cols;
 
