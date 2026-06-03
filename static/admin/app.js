@@ -95,6 +95,10 @@ const state = {
     soundEnabled: localStorage.getItem('vrw_sound') !== 'false',
     // Whether the primary instance is reachable (fetched from /api/info)
     serverReachable: false,
+    // ID of the panel that last received user interaction (click, key, etc.).
+    // VTTY updates (HTTP + WS diff) are routed to ALL panels, but
+    // selectCommand targets this panel unless overridden.
+    _focusedPanelId: null,
 };
 
 // ─── Theme ───
@@ -1345,17 +1349,20 @@ function updateSidebarSelection() {
 }
 
 function selectCommand(instUrl, cmdId, name) {
-    // Clear stored scrollback for the previously selected command
-    if (state.selectedCmdId) {
-        sessionStorage.removeItem('vrw_scrollback_' + state.selectedCmdId);
-    }
+    // Determine which panel to apply the selection to.
+    // If the user clicked in a specific panel, use that; otherwise use the focused panel.
+    let panelObj = state.panels.find(p => p.id === state._focusedPanelId);
+    if (!panelObj) panelObj = state.panels[0];
+    if (!panelObj) return;
 
     // Cache the current command's terminal DOM before switching away.
-    // This preserves the detached DOM subtree and cell grid so we can
-    // restore them instantly on switch-back without a full HTML fetch.
     disconnectVttyWs();
     _cacheTerminalForSwitch();
 
+    // Update per-panel selection
+    panelObj.selectedInstUrl = instUrl;
+    panelObj.selectedCmdId = cmdId;
+    // Sync global state
     state.selectedInstUrl = instUrl;
     state.selectedCmdId = cmdId;
     // Clear any buffered update — we fetch fresh data below
@@ -1526,18 +1533,21 @@ function autofitTerminalSize() {
 }
 
 function getSelectedPanel() {
-    // Find the panel STATE for the selected command's instance, then return
-    // the actual DOM element (not the plain JS object).  Previously this
-    // returned the object from state.panels, causing .querySelector() to
-    // throw TypeError since plain objects lack that method — silently
-    // preventing ALL VTTY content from ever being displayed.
     if (state.panels.length === 0) return null;
     let panelObj;
-    if (!state.selectedInstUrl) {
-        panelObj = state.panels[0];
-    } else {
-        panelObj = state.panels.find(p => p.instUrl === state.selectedInstUrl) || state.panels[0];
+    // Prefer the focused panel
+    if (state._focusedPanelId) {
+        panelObj = state.panels.find(p => p.id === state._focusedPanelId);
     }
+    if (!panelObj && state.selectedInstUrl) {
+        panelObj = state.panels.find(p => p.selectedInstUrl === state.selectedInstUrl) || null;
+    }
+    if (!panelObj) {
+        panelObj = state.panels[0];
+    }
+    // Sync global state from the focused panel's per-panel selection
+    state.selectedInstUrl = panelObj.selectedInstUrl;
+    state.selectedCmdId = panelObj.selectedCmdId;
     return document.getElementById(panelObj.id);
 }
 
@@ -2852,7 +2862,7 @@ function addPanelDirect(instUrl, label, token) {
     const savedTheme = localStorage.getItem('vrw_panel_theme_' + id);
     // Per-panel theme: 'light', 'dark', or '' (inherit global). Default is inherit.
     const theme = (savedTheme === 'light' || savedTheme === 'dark') ? savedTheme : '';
-    const panel = { id, instUrl, label, token, scrollbackOffset: 0, mouseTracking: false, mouseSgr: false, focused: false, fontSize, selectionMode, theme };
+    const panel = { id, instUrl, label, token, scrollbackOffset: 0, mouseTracking: false, mouseSgr: false, focused: false, fontSize, selectionMode, theme, selectedCmdId: null, selectedInstUrl: null };
     state.panels.push(panel);
     renderPanels();
     return panel;
@@ -2883,15 +2893,14 @@ function confirmAddPanel() {
 
     if (!url) return;
 
-    // Check if we already have this instance
-    if (state.instanceUrls.some(i => i.url === url)) {
-        alert('This instance is already connected.');
-        closePanelModal();
-        return;
+    // Allow adding a panel for an already-connected instance.
+    // Multiple panels can display the same server — useful for viewing
+    // different commands side by side from the same instance.
+    const already = state.instanceUrls.some(i => i.url === url);
+    if (!already) {
+        const inst = { url, label, token };
+        state.instanceUrls.push(inst);
     }
-
-    const inst = { url, label, token };
-    state.instanceUrls.push(inst);
     addPanelDirect(url, label, token);
     closePanelModal();
 
@@ -2930,10 +2939,43 @@ function togglePanelLayout() {
     renderPanels();
 }
 
+// Track panel count to avoid unnecessary DOM rebuilds.
+let _lastRenderedPanelCount = -1;
+let _lastRenderedPanelIds = '';
+
 function renderPanels() {
     const container = document.getElementById('view-vtty');
-    let html = '';
     const hasMultiplePanels = state.panels.length > 1;
+
+    // Fast path: if panel count and IDs haven't changed, skip the full rebuild.
+    // This prevents erasing terminal content when only command selection changes.
+    const currentPanelIds = state.panels.map(p => p.id).join(',');
+    if (_lastRenderedPanelCount === state.panels.length && _lastRenderedPanelIds === currentPanelIds) {
+        // Just update layout direction and multi-panel visibility
+        container.style.flexDirection = state.panelLayout;
+        _updatePanelMultiUI();
+        return;
+    }
+
+    // ── Cache all terminal DOM before rebuild ──
+    const cachedVtty = {};
+    for (const panel of state.panels) {
+        const el = document.getElementById(panel.id);
+        if (!el) continue;
+        const vttyEl = el.querySelector('.vtty-container');
+        const pre = vttyEl ? vttyEl.querySelector('pre') : null;
+        if (pre && pre.childNodes.length > 0 && panel.selectedCmdId) {
+            const frag = document.createDocumentFragment();
+            while (pre.firstChild) frag.appendChild(pre.firstChild);
+            cachedVtty[panel.id] = {
+                frag,
+                scrollTop: vttyEl ? vttyEl.scrollTop : 0,
+                cmdId: panel.selectedCmdId,
+            };
+        }
+    }
+
+    let html = '';
 
     // Apply panel layout direction
     container.style.flexDirection = state.panelLayout;
@@ -3032,7 +3074,43 @@ function renderPanels() {
         }
     }
     container.innerHTML = html;
-    // Attach scroll listeners for scroll-to-bottom button visibility
+
+    // ── Restore cached terminal DOM after rebuild ──
+    for (const [panelId, cached] of Object.entries(cachedVtty)) {
+        const el = document.getElementById(panelId);
+        if (!el) continue;
+        const pre = el.querySelector('pre');
+        const vttyEl = el.querySelector('.vtty-container');
+        if (pre) {
+            pre.innerHTML = '';
+            pre.appendChild(cached.frag);
+        }
+        if (vttyEl) {
+            vttyEl.scrollTop = cached.scrollTop;
+        }
+    }
+
+    // ── Attach event listeners ──
+    // Panel focus: clicking in a vtty-container or panel-header sets it as focused.
+    document.querySelectorAll('.panel').forEach(panelEl => {
+        const panelId = panelEl.id;
+        // Click on terminal area → focus this panel
+        const vttyEl = panelEl.querySelector('.vtty-container');
+        if (vttyEl) {
+            vttyEl.addEventListener('mousedown', () => {
+                state._focusedPanelId = panelId;
+            });
+        }
+        // Click on panel header → focus this panel
+        const headerEl = panelEl.querySelector('.panel-header');
+        if (headerEl) {
+            headerEl.addEventListener('mousedown', () => {
+                state._focusedPanelId = panelId;
+            });
+        }
+    });
+
+    // Scroll-to-bottom button visibility
     document.querySelectorAll('.vtty-container').forEach(vtty => {
         vtty.addEventListener('scroll', () => {
             const panelEl = vtty.closest('.panel');
@@ -3043,6 +3121,18 @@ function renderPanels() {
             btn.classList.toggle('visible', !isNearBottom);
         });
     });
+
+    _lastRenderedPanelCount = state.panels.length;
+    _lastRenderedPanelIds = currentPanelIds;
+    _updatePanelMultiUI();
+}
+
+/// Update multi-panel UI elements (drag handles, remove buttons, layout toggle)
+/// without rebuilding the entire panel DOM.
+function _updatePanelMultiUI() {
+    const hasMultiplePanels = state.panels.length > 1;
+    document.querySelectorAll('.drag-handle').forEach(el => el.style.display = hasMultiplePanels ? '' : 'none');
+    document.querySelectorAll('.panel-resize-handle').forEach(el => el.style.display = hasMultiplePanels ? '' : 'none');
 }
 
 async function sendKeysToPanel(panelId) {

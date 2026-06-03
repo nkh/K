@@ -201,15 +201,15 @@
         <h2>Add Instance Panel</h2>
         <div class="field">
             <label>Instance URL</label>
-            <input type="text" id="panelUrl" placeholder="http://localhost:9090">
+            <input type="text" id="panelUrl" placeholder="http://localhost:9090" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmAddPanel()}">
         </div>
         <div class="field">
             <label>Label (optional)</label>
-            <input type="text" id="panelLabel" placeholder="Instance 2">
+            <input type="text" id="panelLabel" placeholder="Instance 2" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmAddPanel()}">
         </div>
         <div class="field">
             <label>Auth Token (optional)</label>
-            <input type="text" id="panelToken" placeholder="Bearer token for this instance">
+            <input type="text" id="panelToken" placeholder="Bearer token for this instance" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmAddPanel()}">
         </div>
         <div class="field">
             <label>Split direction</label>

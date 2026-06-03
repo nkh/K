@@ -95,7 +95,18 @@ impl CommandLogger {
         format!("{}.{:02}", time_part, hundredths)
     }
 
-    /// Pad a string to a fixed width (right-aligned), truncating if longer.
+    /// Pad a string to a fixed width, left-aligned (spaces on right).
+    /// Truncates if longer than width.
+    fn pad_left(s: &str, width: usize) -> String {
+        if s.len() >= width {
+            s[..width].to_string()
+        } else {
+            format!("{:<width$}", s, width = width)
+        }
+    }
+
+    /// Pad a string to a fixed width, right-aligned (spaces on left).
+    /// Truncates if longer than width.
     fn pad_right(s: &str, width: usize) -> String {
         if s.len() >= width {
             s[..width].to_string()
@@ -226,7 +237,7 @@ impl CommandLogger {
                     let c = Self::extract_field(details, "cmd");
                     if c.is_empty() { Self::extract_field(details, "name") } else { c }
                 };
-                let padded = Self::pad_right(cmd, pad.cmd);
+                let padded = Self::pad_left(cmd, pad.cmd);
                 if colored {
                     (format!("{}{}{}", colors.cmd.ansi, padded, RESET), true)
                 } else {
@@ -234,7 +245,7 @@ impl CommandLogger {
                 }
             }
             "event" => {
-                let padded = Self::pad_right(event_type, pad.event);
+                let padded = Self::pad_left(event_type, pad.event);
                 if colored {
                     (format!("{}{}{}", colors.event.ansi, padded, RESET), true)
                 } else {
