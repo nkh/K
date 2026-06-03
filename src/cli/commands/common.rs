@@ -253,6 +253,73 @@ mod vrw_tests {
         assert_eq!(name, "htop");
         assert_eq!(full, "htop");
     }
+
+    #[test]
+    fn test_resolve_target_command_by_pid() {
+        let cmds: Vec<CommandTarget> = vec![
+            (100, "id-aaa".into(), 1234, "sleep".into(), "sleep 60".into()),
+            (100, "id-bbb".into(), 5678, "vim".into(), "vim file.txt".into()),
+        ];
+        // Numeric PID match
+        let result = resolve_target_command(Some("1234"), &cmds, "test").unwrap();
+        assert_eq!(result.2, 1234);
+        assert_eq!(result.1, "id-aaa");
+
+        let result = resolve_target_command(Some("5678"), &cmds, "test").unwrap();
+        assert_eq!(result.2, 5678);
+    }
+
+    #[test]
+    fn test_resolve_target_command_by_name() {
+        let cmds: Vec<CommandTarget> = vec![
+            (100, "id-aaa".into(), 1234, "sleep".into(), "sleep 60".into()),
+            (100, "id-bbb".into(), 5678, "vim".into(), "vim file.txt".into()),
+        ];
+        // Exact name match
+        let result = resolve_target_command(Some("vim"), &cmds, "test").unwrap();
+        assert_eq!(result.1, "id-bbb");
+
+        // Name prefix match
+        let result = resolve_target_command(Some("sl"), &cmds, "test").unwrap();
+        assert_eq!(result.1, "id-aaa");
+    }
+
+    #[test]
+    fn test_resolve_target_command_by_id_prefix() {
+        let cmds: Vec<CommandTarget> = vec![
+            (100, "abcdef-1234".into(), 1234, "sleep".into(), "sleep 60".into()),
+        ];
+        // ID prefix "abc" is not a PID, not a name, but matches prefix of full display "sleep 60"? No.
+        // resolve_target_command does not do ID prefix matching — it does PID, name, full, prefix-full, prefix-name.
+        // "abc" doesn't match any of those, so it should error.
+        assert!(resolve_target_command(Some("abc"), &cmds, "test").is_err());
+        // But full ID prefix "abcdef" doesn't match either — ID prefix matching is not in resolve_target_command.
+        // It's handled by callers like keep.rs that do their own ID prefix matching before calling this.
+    }
+
+    #[test]
+    fn test_resolve_target_command_none_auto_selects_single() {
+        let cmds: Vec<CommandTarget> = vec![
+            (100, "id-aaa".into(), 1234, "sleep".into(), "sleep 60".into()),
+        ];
+        let result = resolve_target_command(None, &cmds, "test").unwrap();
+        assert_eq!(result.1, "id-aaa");
+    }
+
+    #[test]
+    fn test_resolve_target_command_none_errors_on_multiple() {
+        let cmds: Vec<CommandTarget> = vec![
+            (100, "id-aaa".into(), 1234, "sleep".into(), "sleep 60".into()),
+            (100, "id-bbb".into(), 5678, "vim".into(), "vim file.txt".into()),
+        ];
+        assert!(resolve_target_command(None, &cmds, "test").is_err());
+    }
+
+    #[test]
+    fn test_resolve_target_command_none_errors_on_empty() {
+        let cmds: Vec<CommandTarget> = vec![];
+        assert!(resolve_target_command(None, &cmds, "test").is_err());
+    }
 }
 
 // ── vrw-only: shared target resolution ──

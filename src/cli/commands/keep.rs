@@ -5,7 +5,7 @@ use anyhow::Result;
 use crate::cli::args::Cli;
 use crate::instance::registry::InstanceRegistry;
 
-use super::common::{build_full_display_string, collect_all_commands, http_client, instance_url};
+use super::common::{build_full_display_string, http_client, instance_url, CommandTarget, resolve_target_command};
 
 /// Tag a running command to retain its VTTY buffer after exit.
 ///
@@ -24,153 +24,56 @@ pub async fn handle_keep_command(_cli: &Cli, target: Option<&str>, interactive: 
     let client = http_client();
 
     // Collect all *running* commands from all instances.
-    let all_commands: Vec<(u32, String, u32, String, String)> = {
-        let mut running = Vec::new();
-        for info in &instances {
-            let url = instance_url(info, &None);
-            if let Ok(resp) = client.get(format!("{}/api/commands", url)).send().await {
-                if let Ok(json) = resp.json::<serde_json::Value>().await {
-                    if let Some(cmds) = json["data"].as_array() {
-                        for cmd in cmds {
-                            let alive = cmd.get("alive").and_then(|v| v.as_bool()).unwrap_or(false);
-                            if !alive {
-                                continue;
-                            }
-                            let cmd_pid =
-                                cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-                            if let Some(id) = cmd.get("id").and_then(|v| v.as_str()) {
-                                let (name, full) = build_full_display_string(cmd);
-                                running.push((info.pid, id.to_string(), cmd_pid, name, full));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        running
+    let all_commands = collect_running_commands(&client, &instances).await;
+
+    // When target is specified, try resolve_target_command (handles PID, name, prefix).
+    // On failure, fall through to interactive picker if enabled, or return Ok(false)
+    // so the dispatch layer prints the standard error message.
+    let resolved = if target.is_some() {
+        resolve_target_command(target, &all_commands, "No running command").ok()
+    } else if all_commands.len() == 1 {
+        Some(all_commands[0].clone())
+    } else {
+        None
     };
 
-    let target = match target {
-        Some(t) => t,
-        None => match all_commands.len() {
-            0 => {
-                tracing::warn!("No running commands to keep.");
-                return Ok(false);
-            }
-            1 => {
-                let (inst_pid, ref cmd_id, _cmd_pid, _, ref full) = all_commands[0];
-                let info = instances.iter().find(|i| i.pid == inst_pid).unwrap();
+    if let Some((inst_pid, cmd_id, _cmd_pid, _, full)) = resolved {
+        let info = instances.iter().find(|i| i.pid == inst_pid).unwrap();
+        let url = instance_url(info, &None);
+        return keep_command_by_id(&client, &url, &cmd_id, &full).await;
+    }
+
+    // No match or no target — try interactive or report failure
+    if interactive {
+        let items: Vec<_> = all_commands
+            .iter()
+            .map(|(_, id, _, _, full)| crate::cli::interactive_select::SelectItem {
+                label: format!("{} — {}", &id[..8.min(id.len())], full),
+                id: id.clone(),
+            })
+            .collect();
+        if items.is_empty() {
+            tracing::warn!("No running commands to keep.");
+            return Ok(false);
+        }
+        let selected = crate::cli::interactive_select::select_items(
+            &items, "Select commands to keep [space-separated numbers]",
+        )?;
+        let mut kept_any = false;
+        for item in &selected {
+            let cmd_id = &item.id;
+            let entry = all_commands.iter().find(|(_, id, _, _, _)| id == cmd_id);
+            if let Some((inst_pid, _, _, _, full)) = entry {
+                let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
                 let url = instance_url(info, &None);
-                tracing::info!("Keeping only running command: {} (ID {})", full, cmd_id);
-                return keep_command_by_id(&client, &url, cmd_id, full).await;
-            }
-            _ => {
-                if interactive {
-                    let items: Vec<_> = all_commands
-                        .iter()
-                        .map(|(_, id, _, _, full)| crate::cli::interactive_select::SelectItem {
-                            label: format!("{} — {}", &id[..8.min(id.len())], full),
-                            id: id.clone(),
-                        })
-                        .collect();
-                    let selected = crate::cli::interactive_select::select_items(
-                        &items, "Select commands to keep [space-separated numbers]",
-                    )?;
-                    let mut kept_any = false;
-                    for item in &selected {
-                        let cmd_id = &item.id;
-                        let entry = all_commands.iter().find(|(_, id, _, _, _)| id == cmd_id);
-                        if let Some((inst_pid, _, _, _, full)) = entry {
-                            let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
-                            let url = instance_url(info, &None);
-                            if keep_command_by_id(&client, &url, cmd_id, full).await? {
-                                kept_any = true;
-                            }
-                        }
-                    }
-                    return Ok(kept_any);
+                if keep_command_by_id(&client, &url, cmd_id, full).await? {
+                    kept_any = true;
                 }
-                tracing::warn!("Multiple running commands. Specify which one to keep:");
-                for (_, cmd_id, _, _, full) in &all_commands {
-                    tracing::warn!("  {} — {}", &cmd_id[..8.min(cmd_id.len())], full);
-                }
-                tracing::warn!("Usage: vrw keep <ID or name>");
-                return Ok(false);
             }
-        },
-    };
-
-    // Fast path: if target matches a command ID prefix.
-    let id_matches: Vec<_> = all_commands
-        .iter()
-        .filter(|(_, id, _, _, _)| id.starts_with(target))
-        .collect();
-    if id_matches.len() == 1 {
-        let (inst_pid, ref cmd_id, _, _, ref full) = id_matches[0];
-        let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
-        let url = instance_url(info, &None);
-        return keep_command_by_id(&client, &url, cmd_id, full).await;
-    }
-    if id_matches.len() > 1 {
-        tracing::warn!("Multiple commands match ID prefix '{}':", target);
-        for (_, cmd_id, _, _, full) in &id_matches {
-            tracing::warn!("  {} — {}", cmd_id, full);
         }
-        return Ok(false);
+        return Ok(kept_any);
     }
 
-    // Name matching
-    let exact: Vec<_> = all_commands
-        .iter()
-        .filter(|(_, _, _, name, full)| name == target || full == target)
-        .collect();
-
-    if exact.len() == 1 {
-        let (inst_pid, ref cmd_id, _, _, _) = exact[0];
-        let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
-        let url = instance_url(info, &None);
-        return keep_command_by_id(&client, &url, cmd_id, target).await;
-    }
-    if exact.len() > 1 {
-        tracing::warn!("Multiple commands match '{}':", target);
-        for (_, cmd_id, _, _, full) in &exact {
-            tracing::warn!("  {} — {}", cmd_id, full);
-        }
-        return Ok(false);
-    }
-
-    let prefix_full: Vec<_> = all_commands
-        .iter()
-        .filter(|(_, _, _, _, full)| full.starts_with(target))
-        .collect();
-
-    if prefix_full.len() == 1 {
-        let (inst_pid, ref cmd_id, _, _, full) = prefix_full[0];
-        let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
-        let url = instance_url(info, &None);
-        return keep_command_by_id(&client, &url, cmd_id, full).await;
-    }
-
-    let prefix_name: Vec<_> = all_commands
-        .iter()
-        .filter(|(_, _, _, name, _)| name.starts_with(target))
-        .collect();
-
-    if prefix_name.len() == 1 {
-        let (inst_pid, ref cmd_id, _, _, full) = prefix_name[0];
-        let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
-        let url = instance_url(info, &None);
-        return keep_command_by_id(&client, &url, cmd_id, full).await;
-    }
-    if prefix_name.len() > 1 {
-        tracing::warn!("Multiple commands match name prefix '{}':", target);
-        for (_, cmd_id, _, _, full) in &prefix_name {
-            tracing::warn!("  {} — {}", cmd_id, full);
-        }
-        return Ok(false);
-    }
-
-    tracing::warn!("No running command matching '{}' found.", target);
     Ok(false)
 }
 
@@ -186,151 +89,116 @@ pub async fn handle_unkeep_command(_cli: &Cli, target: Option<&str>, interactive
     let client = http_client();
 
     // Collect all commands with retain_on_exit == true.
-    let all_commands: Vec<(u32, String, u32, String, String)> = {
-        let mut kept = Vec::new();
-        for info in &instances {
-            let url = instance_url(info, &None);
-            if let Ok(resp) = client.get(format!("{}/api/commands", url)).send().await {
-                if let Ok(json) = resp.json::<serde_json::Value>().await {
-                    if let Some(cmds) = json["data"].as_array() {
-                        for cmd in cmds {
-                            let retain = cmd
-                                .get("exit")
-                                .and_then(|e| e.get("retain_on_exit"))
-                                .and_then(|v| v.as_bool())
-                                .unwrap_or(false);
-                            if !retain {
-                                continue;
-                            }
-                            let cmd_pid =
-                                cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-                            if let Some(id) = cmd.get("id").and_then(|v| v.as_str()) {
-                                let (name, full) = build_full_display_string(cmd);
-                                kept.push((info.pid, id.to_string(), cmd_pid, name, full));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        kept
+    let all_commands = collect_kept_commands(&client, &instances).await;
+
+    let resolved = if target.is_some() {
+        resolve_target_command(target, &all_commands, "No kept command").ok()
+    } else if all_commands.len() == 1 {
+        Some(all_commands[0].clone())
+    } else {
+        None
     };
 
-    let target = match target {
-        Some(t) => t,
-        None => match all_commands.len() {
-            0 => {
-                tracing::warn!("No kept commands to unkeep.");
-                return Ok(false);
-            }
-            1 => {
-                let (inst_pid, ref cmd_id, _cmd_pid, _, ref full) = all_commands[0];
-                let info = instances.iter().find(|i| i.pid == inst_pid).unwrap();
+    if let Some((inst_pid, cmd_id, _cmd_pid, _, full)) = resolved {
+        let info = instances.iter().find(|i| i.pid == inst_pid).unwrap();
+        let url = instance_url(info, &None);
+        return unkeep_command_by_id(&client, &url, &cmd_id, &full).await;
+    }
+
+    // No match or no target — try interactive or report failure
+    if interactive {
+        let items: Vec<_> = all_commands
+            .iter()
+            .map(|(_, id, _, _, full)| crate::cli::interactive_select::SelectItem {
+                label: format!("{} — {}", &id[..8.min(id.len())], full),
+                id: id.clone(),
+            })
+            .collect();
+        if items.is_empty() {
+            tracing::warn!("No kept commands to unkeep.");
+            return Ok(false);
+        }
+        let selected = crate::cli::interactive_select::select_items(
+            &items, "Select commands to unkeep [space-separated numbers]",
+        )?;
+        let mut unkept_any = false;
+        for item in &selected {
+            let cmd_id = &item.id;
+            let entry = all_commands.iter().find(|(_, id, _, _, _)| id == cmd_id);
+            if let Some((inst_pid, _, _, _, full)) = entry {
+                let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
                 let url = instance_url(info, &None);
-                tracing::info!("Unkeeping only kept command: {} (ID {})", full, cmd_id);
-                return unkeep_command_by_id(&client, &url, cmd_id, full).await;
+                if unkeep_command_by_id(&client, &url, cmd_id, full).await? {
+                    unkept_any = true;
+                }
             }
-            _ => {
-                if interactive {
-                    let items: Vec<_> = all_commands
-                        .iter()
-                        .map(|(_, id, _, _, full)| crate::cli::interactive_select::SelectItem {
-                            label: format!("{} — {}", &id[..8.min(id.len())], full),
-                            id: id.clone(),
-                        })
-                        .collect();
-                    let selected = crate::cli::interactive_select::select_items(
-                        &items, "Select commands to unkeep [space-separated numbers]",
-                    )?;
-                    let mut unkept_any = false;
-                    for item in &selected {
-                        let cmd_id = &item.id;
-                        let entry = all_commands.iter().find(|(_, id, _, _, _)| id == cmd_id);
-                        if let Some((inst_pid, _, _, _, full)) = entry {
-                            let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
-                            let url = instance_url(info, &None);
-                            if unkeep_command_by_id(&client, &url, cmd_id, full).await? {
-                                unkept_any = true;
-                            }
+        }
+        return Ok(unkept_any);
+    }
+
+    Ok(false)
+}
+
+/// Collect all running (alive) commands from all instances.
+async fn collect_running_commands(
+    client: &reqwest::Client,
+    instances: &[crate::instance::info::InstanceInfo],
+) -> Vec<CommandTarget> {
+    let mut running = Vec::new();
+    for info in instances {
+        let url = instance_url(info, &None);
+        if let Ok(resp) = client.get(format!("{}/api/commands", url)).send().await {
+            if let Ok(json) = resp.json::<serde_json::Value>().await {
+                if let Some(cmds) = json["data"].as_array() {
+                    for cmd in cmds {
+                        let alive = cmd.get("alive").and_then(|v| v.as_bool()).unwrap_or(false);
+                        if !alive {
+                            continue;
+                        }
+                        let cmd_pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                        if let Some(id) = cmd.get("id").and_then(|v| v.as_str()) {
+                            let (name, full) = build_full_display_string(cmd);
+                            running.push((info.pid, id.to_string(), cmd_pid, name, full));
                         }
                     }
-                    return Ok(unkept_any);
                 }
-                tracing::warn!("Multiple kept commands. Specify which one to unkeep:");
-                for (_, cmd_id, _, _, full) in &all_commands {
-                    tracing::warn!("  {} — {}", &cmd_id[..8.min(cmd_id.len())], full);
-                }
-                tracing::warn!("Usage: vrw unkeep <ID or name>");
-                return Ok(false);
             }
-        },
-    };
-
-    // Fast path: if target matches a command ID prefix.
-    let id_matches: Vec<_> = all_commands
-        .iter()
-        .filter(|(_, id, _, _, _)| id.starts_with(target))
-        .collect();
-    if id_matches.len() == 1 {
-        let (inst_pid, ref cmd_id, _, _, ref full) = id_matches[0];
-        let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
-        let url = instance_url(info, &None);
-        return unkeep_command_by_id(&client, &url, cmd_id, full).await;
-    }
-    if id_matches.len() > 1 {
-        tracing::warn!("Multiple kept commands match ID prefix '{}':", target);
-        for (_, cmd_id, _, _, full) in &id_matches {
-            tracing::warn!("  {} — {}", cmd_id, full);
         }
-        return Ok(false);
     }
+    running
+}
 
-    // Name matching
-    let exact: Vec<_> = all_commands
-        .iter()
-        .filter(|(_, _, _, name, full)| name == target || full == target)
-        .collect();
-
-    if exact.len() == 1 {
-        let (inst_pid, ref cmd_id, _, _, _) = exact[0];
-        let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
+/// Collect all commands with retain_on_exit == true from all instances.
+async fn collect_kept_commands(
+    client: &reqwest::Client,
+    instances: &[crate::instance::info::InstanceInfo],
+) -> Vec<CommandTarget> {
+    let mut kept = Vec::new();
+    for info in instances {
         let url = instance_url(info, &None);
-        return unkeep_command_by_id(&client, &url, cmd_id, target).await;
-    }
-    if exact.len() > 1 {
-        tracing::warn!("Multiple kept commands match '{}':", target);
-        for (_, cmd_id, _, _, full) in &exact {
-            tracing::warn!("  {} — {}", cmd_id, full);
+        if let Ok(resp) = client.get(format!("{}/api/commands", url)).send().await {
+            if let Ok(json) = resp.json::<serde_json::Value>().await {
+                if let Some(cmds) = json["data"].as_array() {
+                    for cmd in cmds {
+                        let retain = cmd
+                            .get("exit")
+                            .and_then(|e| e.get("retain_on_exit"))
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+                        if !retain {
+                            continue;
+                        }
+                        let cmd_pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                        if let Some(id) = cmd.get("id").and_then(|v| v.as_str()) {
+                            let (name, full) = build_full_display_string(cmd);
+                            kept.push((info.pid, id.to_string(), cmd_pid, name, full));
+                        }
+                    }
+                }
+            }
         }
-        return Ok(false);
     }
-
-    let prefix_full: Vec<_> = all_commands
-        .iter()
-        .filter(|(_, _, _, _, full)| full.starts_with(target))
-        .collect();
-
-    if prefix_full.len() == 1 {
-        let (inst_pid, ref cmd_id, _, _, full) = prefix_full[0];
-        let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
-        let url = instance_url(info, &None);
-        return unkeep_command_by_id(&client, &url, cmd_id, full).await;
-    }
-
-    let prefix_name: Vec<_> = all_commands
-        .iter()
-        .filter(|(_, _, _, name, _)| name.starts_with(target))
-        .collect();
-
-    if prefix_name.len() == 1 {
-        let (inst_pid, ref cmd_id, _, _, full) = prefix_name[0];
-        let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
-        let url = instance_url(info, &None);
-        return unkeep_command_by_id(&client, &url, cmd_id, full).await;
-    }
-
-    tracing::warn!("No kept command matching '{}' found.", target);
-    Ok(false)
+    kept
 }
 
 async fn keep_command_by_id(

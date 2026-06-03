@@ -269,18 +269,28 @@ async fn handle_vtty_client_message(
             let rows = msg.get("rows").and_then(|v| v.as_u64()).unwrap_or(24) as u16;
             let cols = msg.get("cols").and_then(|v| v.as_u64()).unwrap_or(80) as u16;
             if let Some(handle) = manager.get(id) {
-                match handle.resize_pty(rows, cols).await {
-                    Ok(()) => {
-                        manager
-                            .logger()
-                            .log("resize", &format!("id={} pid={} name={} rows={} cols={}", id, handle.pid, handle.name, rows, cols));
-                    }
-                    Err(e) => {
-                        let _ = ws_tx
-                            .send(Message::Text(
-                                json!({"type": "error", "message": e.to_string()}).to_string(),
-                            ))
-                            .await;
+                // Reject resize for exited commands — their terminal rendering
+                // is frozen and cannot be meaningfully resized (no live PTY).
+                if !handle.is_alive() {
+                    let _ = ws_tx
+                        .send(Message::Text(
+                            json!({"type": "error", "message": "Cannot resize an exited command's terminal"}).to_string(),
+                        ))
+                        .await;
+                } else {
+                    match handle.resize_pty(rows, cols).await {
+                        Ok(()) => {
+                            manager
+                                .logger()
+                                .log("resize", &format!("id={} pid={} name={} rows={} cols={}", id, handle.pid, handle.name, rows, cols));
+                        }
+                        Err(e) => {
+                            let _ = ws_tx
+                                .send(Message::Text(
+                                    json!({"type": "error", "message": e.to_string()}).to_string(),
+                                ))
+                                .await;
+                        }
                     }
                 }
             }

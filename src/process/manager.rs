@@ -445,17 +445,14 @@ impl CommandManager {
     /// Freeze (suspend) a command by sending SIGSTOP.
     /// The process is paused but not terminated — it can be resumed with thaw().
     pub fn freeze(&self, id: &CommandId) -> Result<()> {
-        let (pid, name) = if let Some(handle) = self.commands.get(id) {
-            (handle.pid, handle.name.clone())
-        } else {
-            return Err(ProcessError::CommandNotFound(id.to_string()));
-        };
-        self.logger.log("freeze", &format!("id={} pid={} name={}", id, pid, name));
-        if let Some(handle) = self.commands.get(id) {
+        if let Some(handle) = self.commands.get_mut(id) {
+            let pid = handle.pid;
+            let name = handle.name.clone();
             handle
                 .frozen
                 .store(true, std::sync::atomic::Ordering::Relaxed);
             drop(handle);
+            self.logger.log("freeze", &format!("id={} pid={} name={}", id, pid, name));
             #[cfg(unix)]
             {
                 let ret = unsafe { libc::kill(pid as i32, libc::SIGSTOP) };
@@ -479,17 +476,14 @@ impl CommandManager {
 
     /// Thaw (resume) a frozen command by sending SIGCONT.
     pub fn thaw(&self, id: &CommandId) -> Result<()> {
-        let (pid, name) = if let Some(handle) = self.commands.get(id) {
-            (handle.pid, handle.name.clone())
-        } else {
-            return Err(ProcessError::CommandNotFound(id.to_string()));
-        };
-        self.logger.log("thaw", &format!("id={} pid={} name={}", id, pid, name));
-        if let Some(handle) = self.commands.get(id) {
+        if let Some(handle) = self.commands.get_mut(id) {
+            let pid = handle.pid;
+            let name = handle.name.clone();
             handle
                 .frozen
                 .store(false, std::sync::atomic::Ordering::Relaxed);
             drop(handle);
+            self.logger.log("thaw", &format!("id={} pid={} name={}", id, pid, name));
             #[cfg(unix)]
             {
                 let ret = unsafe { libc::kill(pid as i32, libc::SIGCONT) };
@@ -518,13 +512,74 @@ impl CommandManager {
     /// process to exit, which previously prevented the server from
     /// shutting down gracefully.
     pub async fn kill(&self, id: &CommandId, _signal: Option<String>) -> Result<()> {
+        // Check retain_on_exit before removing the command.
+        // If the command is marked as kept, we still send the kill signal
+        // but don't remove it from the map — the process waiter will handle
+        // cleanup later (and also checks retain_on_exit).
+        let retain = self.commands.get(id).map(|h| h.exit_config.retain_on_exit).unwrap_or(false);
+
         let (pid, name) = if let Some(handle) = self.commands.get(id) {
             (handle.pid, handle.name.clone())
         } else {
             return Err(ProcessError::CommandNotFound(id.to_string()));
         };
-        self.logger.log("kill", &format!("id={} pid={} name={}", id, pid, name));
-        if let Some((_, handle)) = self.commands.remove(id) {
+        self.logger.log("kill", &format!("id={} pid={} name={} retain={}", id, pid, name, retain));
+
+        if retain {
+            // Don't remove from map; just signal the process and let the
+            // process waiter handle the retained entry after exit.
+            if let Some(handle) = self.commands.get(id) {
+                let pid = handle.pid;
+                let timeout_secs = handle.exit_config.timeout_secs;
+                let watch_id = id.to_string();
+                let cmd_name = handle.name.clone();
+
+                // Run on_kill hook if configured
+                if let Some(ref on_kill) = self.config.hooks.on_kill {
+                    let mut vars = std::collections::HashMap::new();
+                    vars.insert("name", cmd_name.clone());
+                    vars.insert("id", watch_id.clone());
+                    vars.insert("pid", pid.to_string());
+                    tracing::info!(
+                        id = %watch_id,
+                        name = %cmd_name,
+                        pid = pid,
+                        "Running on_kill hook"
+                    );
+                    run_hook(on_kill, &vars);
+                }
+
+                // Send Ctrl+C (SIGINT) for graceful shutdown
+                let _ = handle.send_bytes(vec![0x03]).await;
+
+                // Spawn a background task that sends SIGKILL after the grace period
+                tokio::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(timeout_secs)).await;
+                    #[cfg(unix)]
+                    {
+                        let ret = unsafe { libc::kill(pid as i32, 0) };
+                        if ret == 0 {
+                            tracing::info!(
+                                id = %watch_id,
+                                pid = pid,
+                                timeout_secs = timeout_secs,
+                                "Grace period expired, sending SIGKILL"
+                            );
+                            unsafe {
+                                libc::kill(pid as i32, libc::SIGKILL);
+                            }
+                        }
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        let _ = std::process::Command::new("kill")
+                            .arg("-9")
+                            .arg(pid.to_string())
+                            .spawn();
+                    }
+                });
+            }
+        } else if let Some((_, handle)) = self.commands.remove(id) {
             // Clean up associated state
             self.last_generation.remove(id);
             // Remove all snapshots for this command
@@ -592,34 +647,32 @@ impl CommandManager {
     /// when the child process exits, the command is kept in the manager
     /// instead of being removed.
     pub fn keep(&self, id: &CommandId) -> Result<()> {
-        let (pid, name) = if let Some(handle) = self.commands.get(id) {
-            (handle.pid, handle.name.clone())
-        } else {
-            return Err(ProcessError::CommandNotFound(id.to_string()));
-        };
         if let Some(mut handle) = self.commands.get_mut(id) {
             handle.exit_config.retain_on_exit = true;
+            let pid = handle.pid;
+            let name = handle.name.clone();
             drop(handle);
+            self.logger.log("keep", &format!("id={} pid={} name={} retain_on_exit=true", id, pid, name));
+            Ok(())
+        } else {
+            Err(ProcessError::CommandNotFound(id.to_string()))
         }
-        self.logger.log("keep", &format!("id={} pid={} name={} retain_on_exit=true", id, pid, name));
-        Ok(())
     }
 
     /// Remove the retain tag from a command (un-keep).
     /// Sets `retain_on_exit = false` so the command will be removed from
     /// the manager when it exits.
     pub fn unkeep(&self, id: &CommandId) -> Result<()> {
-        let (pid, name) = if let Some(handle) = self.commands.get(id) {
-            (handle.pid, handle.name.clone())
-        } else {
-            return Err(ProcessError::CommandNotFound(id.to_string()));
-        };
         if let Some(mut handle) = self.commands.get_mut(id) {
             handle.exit_config.retain_on_exit = false;
+            let pid = handle.pid;
+            let name = handle.name.clone();
             drop(handle);
+            self.logger.log("unkeep", &format!("id={} pid={} name={} retain_on_exit=false", id, pid, name));
+            Ok(())
+        } else {
+            Err(ProcessError::CommandNotFound(id.to_string()))
         }
-        self.logger.log("unkeep", &format!("id={} pid={} name={} retain_on_exit=false", id, pid, name));
-        Ok(())
     }
 
     /// Kill a command by its PID.
