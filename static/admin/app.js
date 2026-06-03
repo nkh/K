@@ -1021,6 +1021,7 @@ async function loadSnapshot() {
         const shouldShowWelcome = (state.panels.length === 1 && !hasAnyCommands && !state.selectedCmdId && !state.serverReachable);
 
         if (shouldShowWelcome !== _showingWelcome) {
+            _showingWelcome = shouldShowWelcome;
             renderPanels();
         }
 
@@ -1326,6 +1327,7 @@ async function loadCommands() {
     }
     const shouldShowWelcome = (state.panels.length === 1 && !hasAnyCommands && !state.selectedCmdId && !state.serverReachable);
     if (shouldShowWelcome !== _showingWelcome) {
+        _showingWelcome = shouldShowWelcome;
         renderPanels();
     }
 
