@@ -76,10 +76,31 @@ impl VttyRenderer {
 
                 output.push(cell.ch);
             }
+            // Reset SGR and clear to end of line so that when the physical
+            // terminal is wider than the VTTY buffer, no stale content
+            // remains visible in the right margin columns.
+            if last_fg.is_some() || last_bg.is_some()
+                || last_bold || last_italic || last_underline
+                || last_reverse || last_strikethrough
+            {
+                output.push_str("\x1b[0m");
+                last_fg = None;
+                last_bg = None;
+                last_bold = false;
+                last_italic = false;
+                last_underline = false;
+                last_reverse = false;
+                last_strikethrough = false;
+            }
             output.push('\n');
+            // ESC[K — clear to end of line.  Without this, columns beyond
+            // the buffer width retain whatever the terminal previously showed.
+            output.push_str("\x1b[K");
         }
 
-        output.push_str("\x1b[0m");
+        // ESC[J — clear to end of screen.  Without this, rows below the
+        // buffer retain whatever the terminal previously showed.
+        output.push_str("\x1b[J\x1b[0m");
         output
     }
 
