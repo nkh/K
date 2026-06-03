@@ -47,6 +47,7 @@ fn test_config() -> Config {
             enabled: false,
             file: None,
             pty_raw_log: None,
+            terminal: Default::default(),
         },
         daemon: DaemonConfig {
             enabled: false,

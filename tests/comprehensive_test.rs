@@ -1072,7 +1072,7 @@ async fn file_sink_append() {
 
 #[test]
 fn logger_disabled_no_output() {
-    let logger = vrc_core::logging::command_log::CommandLogger::new(false, None, "vrc", false).unwrap();
+    let logger = vrc_core::logging::command_log::CommandLogger::new(false, None, "vrc", false, Default::default()).unwrap();
     // Subscribe BEFORE logging so we catch the broadcast
     let mut rx = logger.subscribe();
     logger.log("test", "should not appear");
@@ -1086,7 +1086,7 @@ fn logger_disabled_no_output() {
 
 #[test]
 fn logger_enabled_stores_in_memory() {
-    let logger = vrc_core::logging::command_log::CommandLogger::new(true, None, "vrw", false).unwrap();
+    let logger = vrc_core::logging::command_log::CommandLogger::new(true, None, "vrw", false, Default::default()).unwrap();
     logger.log("spawn", "cmd1 started");
     logger.log("kill", "cmd1 killed");
     let buf = logger.read_memory_buffer();
@@ -1097,7 +1097,7 @@ fn logger_enabled_stores_in_memory() {
 
 #[test]
 fn logger_memory_buffer_arc_shared() {
-    let logger = vrc_core::logging::command_log::CommandLogger::new(true, None, "vrc", false).unwrap();
+    let logger = vrc_core::logging::command_log::CommandLogger::new(true, None, "vrc", false, Default::default()).unwrap();
     let arc = logger.memory_buffer_arc();
     logger.log("test", "entry");
     let buf = arc.lock().unwrap();
@@ -1106,7 +1106,7 @@ fn logger_memory_buffer_arc_shared() {
 
 #[test]
 fn logger_subscribe_broadcasts() {
-    let logger = vrc_core::logging::command_log::CommandLogger::new(true, None, "vrc", false).unwrap();
+    let logger = vrc_core::logging::command_log::CommandLogger::new(true, None, "vrc", false, Default::default()).unwrap();
     let mut rx = logger.subscribe();
     logger.log("test", "broadcast-msg");
     let received = rx.try_recv().unwrap();
@@ -1115,7 +1115,7 @@ fn logger_subscribe_broadcasts() {
 
 #[test]
 fn logger_ring_buffer_eviction() {
-    let logger = vrc_core::logging::command_log::CommandLogger::new(true, None, "vrc", false).unwrap();
+    let logger = vrc_core::logging::command_log::CommandLogger::new(true, None, "vrc", false, Default::default()).unwrap();
     // MEMORY_BUFFER_CAPACITY is 2048 — we can't fill that in a unit test,
     // but verify the interface works with a few entries.
     for i in 0..10 {
@@ -1383,4 +1383,74 @@ fn buffer_clear_screen_to() {
     assert_eq!(b.rows[2][5].ch, ' '); // cleared (inclusive)
     assert_eq!(b.rows[2][9].ch, 'C'); // after col 5: untouched
     assert_eq!(b.rows[3][0].ch, 'D'); // below: untouched
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 19. CommandLogConfig Default Tests
+// ─────────────────────────────────────────────────────────────────────
+
+#[test]
+fn command_log_config_default_includes_terminal() {
+    let cfg = vrc_core::config::schema::CommandLogConfig::default();
+    assert!(!cfg.enabled);
+    assert!(cfg.file.is_none());
+    assert!(cfg.pty_raw_log.is_none());
+    // The `terminal` field must have sensible defaults
+    assert!(!cfg.terminal.format.is_empty(), "terminal format should have a default");
+    // Verify default format contains expected placeholders
+    assert!(cfg.terminal.format.contains("%timestamp%"));
+    assert!(cfg.terminal.format.contains("%pid%"));
+    assert!(cfg.terminal.format.contains("%cmd%"));
+    assert!(cfg.terminal.format.contains("%event%"));
+}
+
+#[test]
+fn terminal_log_config_colors_defaults() {
+    let colors = vrc_core::config::hooks::TerminalLogColors::default();
+    // Every color field should have a non-empty ANSI string (or empty for no color)
+    assert!(!colors.timestamp.ansi.is_empty());
+    assert!(!colors.pid.ansi.is_empty());
+    assert!(!colors.cmd.ansi.is_empty());
+    assert!(!colors.event.ansi.is_empty());
+}
+
+#[test]
+fn terminal_log_config_pad_defaults() {
+    let pad = vrc_core::config::hooks::TerminalLogPad::default();
+    assert!(pad.pid > 0);
+    assert!(pad.cmd > 0);
+    assert!(pad.event > 0);
+}
+
+#[test]
+fn command_log_config_serialize_roundtrip() {
+    let cfg = vrc_core::config::schema::CommandLogConfig::default();
+    let json = serde_json::to_string(&cfg).unwrap();
+    let cfg2: vrc_core::config::schema::CommandLogConfig = serde_json::from_str(&json).unwrap();
+    assert_eq!(cfg.enabled, cfg2.enabled);
+    assert_eq!(cfg.terminal.format, cfg2.terminal.format);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 20. Exit Config Default Tests
+// ─────────────────────────────────────────────────────────────────────
+
+#[test]
+fn exit_config_default_no_retain() {
+    let ec = vrc_core::config::schema::ExitConfig::default();
+    assert!(!ec.retain_on_exit);
+    assert!(ec.on_exit.is_none());
+    assert!(ec.on_error.is_none());
+    assert!(ec.snapshot_on_exit.is_none());
+    assert_eq!(ec.timeout_secs, 10);
+}
+
+#[test]
+fn exit_config_retain_flag_writable() {
+    let mut ec = vrc_core::config::schema::ExitConfig::default();
+    assert!(!ec.retain_on_exit);
+    ec.retain_on_exit = true;
+    assert!(ec.retain_on_exit);
+    ec.retain_on_exit = false;
+    assert!(!ec.retain_on_exit);
 }
