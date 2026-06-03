@@ -128,7 +128,6 @@ async fn cat_by_id(
         }
         let content = json["data"]["content"].as_str().unwrap_or("");
         print!("{}", content);
-        print!("{}", ANSI_RESET);
     } else {
         let resp = client
             .get(format!("{}/api/commands/{}/vtty/text", url, cmd_id))

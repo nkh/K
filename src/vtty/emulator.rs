@@ -1006,13 +1006,32 @@ impl VttyEmulator {
 
     pub fn contents_plain(&self) -> String {
         let buf = self.buffer.read();
-        buf.rows
-            .iter()
-            .map(|row| row.iter().filter(|c| c.width > 0).map(|c| c.ch).collect::<String>())
-            .collect::<Vec<_>>()
-            .join("\n")
+        let mut lines: Vec<String> = Vec::with_capacity(buf.scrollback.len() + buf.rows.len());
+        for row in &buf.scrollback {
+            lines.push(row.iter().filter(|c| c.width > 0).map(|c| c.ch).collect::<String>());
+        }
+        for row in &buf.rows {
+            lines.push(row.iter().filter(|c| c.width > 0).map(|c| c.ch).collect::<String>());
+        }
+        lines.join("\n")
     }
 
+    /// Render the full buffer (scrollback + visible rows) as ANSI text
+    /// with color codes, SGR attribute resets, and line/screen clearing.
+    ///
+    /// Per-row: emits ESC[K (clear to end of line) after the newline so that
+    /// when the physical terminal is wider than the VTTY buffer, stale content
+    /// does not remain visible in the right margin columns.
+    ///
+    /// Per-row: resets SGR attributes (ESC[0m) at the end of each row to
+    /// prevent background color bleed from the last cell extending into the
+    /// newline and beyond.
+    ///
+    /// End: emits ESC[J (clear to end of screen) so that when the physical
+    /// terminal is taller than the VTTY buffer, stale content does not remain
+    /// visible below the buffer.
+    ///
+    /// End: emits ESC[0m (SGR reset) as a final safety net.
     pub fn contents_ansi(&self) -> String {
         let buf = self.buffer.read();
         let mut output = String::new();
@@ -1026,7 +1045,9 @@ impl VttyEmulator {
         let mut last_invisible = false;
         let mut last_strikethrough = false;
 
-        for row in &buf.rows {
+        // Iterate scrollback first, then visible rows.
+        let all_rows = buf.scrollback.iter().chain(buf.rows.iter());
+        for row in all_rows {
             for cell in row {
                 // Skip wide-char continuation cells (width=0).
                 if cell.width == 0 {
@@ -1035,59 +1056,31 @@ impl VttyEmulator {
 
                 let mut codes = Vec::new();
                 if cell.bold != last_bold {
-                    if cell.bold {
-                        codes.push("1".to_string());
-                    } else {
-                        codes.push("22".to_string());
-                    }
+                    codes.push(if cell.bold { "1" } else { "22" }.to_string());
                     last_bold = cell.bold;
                 }
                 if cell.italic != last_italic {
-                    if cell.italic {
-                        codes.push("3".to_string());
-                    } else {
-                        codes.push("23".to_string());
-                    }
+                    codes.push(if cell.italic { "3" } else { "23" }.to_string());
                     last_italic = cell.italic;
                 }
                 if cell.underline != last_underline {
-                    if cell.underline {
-                        codes.push("4".to_string());
-                    } else {
-                        codes.push("24".to_string());
-                    }
+                    codes.push(if cell.underline { "4" } else { "24" }.to_string());
                     last_underline = cell.underline;
                 }
                 if cell.blink != last_blink {
-                    if cell.blink {
-                        codes.push("5".to_string());
-                    } else {
-                        codes.push("25".to_string());
-                    }
+                    codes.push(if cell.blink { "5" } else { "25" }.to_string());
                     last_blink = cell.blink;
                 }
                 if cell.reverse != last_reverse {
-                    if cell.reverse {
-                        codes.push("7".to_string());
-                    } else {
-                        codes.push("27".to_string());
-                    }
+                    codes.push(if cell.reverse { "7" } else { "27" }.to_string());
                     last_reverse = cell.reverse;
                 }
                 if cell.invisible != last_invisible {
-                    if cell.invisible {
-                        codes.push("8".to_string());
-                    } else {
-                        codes.push("28".to_string());
-                    }
+                    codes.push(if cell.invisible { "8" } else { "28" }.to_string());
                     last_invisible = cell.invisible;
                 }
                 if cell.strikethrough != last_strikethrough {
-                    if cell.strikethrough {
-                        codes.push("9".to_string());
-                    } else {
-                        codes.push("29".to_string());
-                    }
+                    codes.push(if cell.strikethrough { "9" } else { "29" }.to_string());
                     last_strikethrough = cell.strikethrough;
                 }
                 if Some(cell.fg) != last_fg {
@@ -1103,9 +1096,32 @@ impl VttyEmulator {
                 }
                 output.push(cell.ch);
             }
+            // Reset SGR at end of row to prevent background color bleed
+            // extending past the buffer width into the newline.
+            if last_fg.is_some() || last_bg.is_some()
+                || last_bold || last_italic || last_underline
+                || last_blink || last_reverse || last_invisible
+                || last_strikethrough
+            {
+                output.push_str("\x1b[0m");
+                last_fg = None;
+                last_bg = None;
+                last_bold = false;
+                last_italic = false;
+                last_underline = false;
+                last_blink = false;
+                last_reverse = false;
+                last_invisible = false;
+                last_strikethrough = false;
+            }
             output.push('\n');
+            // ESC[K — clear to end of line.  Without this, columns beyond
+            // the buffer width retain whatever the terminal previously showed.
+            output.push_str("\x1b[K");
         }
-        output.push_str("\x1b[0m");
+        // ESC[J — clear to end of screen.  Without this, rows below the
+        // buffer retain whatever the terminal previously showed.
+        output.push_str("\x1b[J\x1b[0m");
         output
     }
 
@@ -1399,6 +1415,81 @@ mod tests {
         assert!(ansi.contains("29;") || ansi.contains("\x1b[29m"),
             "should contain SGR 29 (strikethrough off), got: {:?}", ansi);
         assert!(ansi.contains("Strike"));
+    }
+
+    #[test]
+    fn test_contents_ansi_ends_with_clear_screen_and_reset() {
+        let mut emu = VttyEmulator::new(3, 10, 100);
+        emu.feed_str("Hello");
+        let ansi = emu.contents_ansi();
+        // Must end with ESC[J (clear to end of screen) followed by ESC[0m (SGR reset)
+        assert!(ansi.ends_with("\x1b[J\x1b[0m"),
+            "ANSI output must end with ESC[J ESC[0m, got tail: {:?}",
+            &ansi[ansi.len().saturating_sub(20)..]);
+    }
+
+    #[test]
+    fn test_contents_ansi_per_row_clear_to_eol() {
+        let mut emu = VttyEmulator::new(2, 5, 100);
+        emu.feed_str("ABCDE\nFGHIJ");
+        let ansi = emu.contents_ansi();
+        // Each row must be followed by ESC[K (clear to end of line)
+        // With 2 rows, there should be 2 ESC[K sequences
+        let eol_k_count = ansi.matches("\x1b[K").count();
+        assert_eq!(eol_k_count, 2,
+            "Expected 2 ESC[K (one per row), got {}: {:?}", eol_k_count, ansi);
+    }
+
+    #[test]
+    fn test_contents_ansi_per_row_sgr_reset() {
+        let mut emu = VttyEmulator::new(2, 10, 100);
+        emu.feed_str("\x1b[31mRed\x1b[0m\n\x1b[32mGreen\x1b[0m");
+        let ansi = emu.contents_ansi();
+        // SGR reset after each row that had color — the per-row reset prevents
+        // color bleed between rows.  We should see at least 2 resets (one per row
+        // with color) plus the final one.
+        let reset_count = ansi.matches("\x1b[0m").count();
+        assert!(reset_count >= 3,
+            "Expected at least 3 ESC[0m (per-row resets + final), got {}: {:?}", reset_count, ansi);
+    }
+
+    #[test]
+    fn test_contents_ansi_includes_scrollback() {
+        let mut emu = VttyEmulator::new(3, 10, 100);
+        // Fill all 3 rows, then 2 more — first 2 go to scrollback
+        emu.feed_str("Line1\nLine2\nLine3\nLine4\nLine5");
+        let ansi = emu.contents_ansi();
+        assert!(ansi.contains("Line1"), "scrollback line 1 must be present");
+        assert!(ansi.contains("Line2"), "scrollback line 2 must be present");
+        assert!(ansi.contains("Line3"), "visible line must be present");
+        assert!(ansi.contains("Line4"), "visible line must be present");
+        assert!(ansi.contains("Line5"), "visible line must be present");
+    }
+
+    #[test]
+    fn test_contents_plain_includes_scrollback() {
+        let mut emu = VttyEmulator::new(3, 10, 100);
+        emu.feed_str("AAA\nBBB\nCCC\nDDD\nEEE");
+        let text = emu.contents_plain();
+        assert!(text.contains("AAA"), "scrollback must be in plain text");
+        assert!(text.contains("BBB"), "scrollback must be in plain text");
+        assert!(text.contains("CCC"), "visible line must be in plain text");
+        assert!(text.contains("DDD"), "visible line must be in plain text");
+        assert!(text.contains("EEE"), "visible line must be in plain text");
+    }
+
+    #[test]
+    fn test_contents_ansi_no_trailing_color_bleed() {
+        // When the vtty is smaller than the terminal, the last cell's color
+        // must not bleed into rows below.  The ESC[J at the end ensures this.
+        let mut emu = VttyEmulator::new(2, 10, 100);
+        emu.feed_str("\x1b[41mRedBG\x1b[0m");
+        let ansi = emu.contents_ansi();
+        // The output must end with ESC[J then ESC[0m — the ESC[J clears all
+        // rows below the buffer, and ESC[0m resets any color so the user's
+        // terminal prompt is not colored.
+        assert!(ansi.ends_with("\x1b[J\x1b[0m"),
+            "Must end with clear-screen + reset to prevent color bleed below buffer");
     }
 
     #[test]
