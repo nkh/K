@@ -555,6 +555,42 @@ pub async fn lookup_command(
     }))
 }
 
+/// POST /api/commands/:id/keep
+/// Tag a running command so its terminal rendering is kept after exit.
+/// Sets `retain_on_exit = true` on the command's exit configuration.
+pub async fn keep_command(State(state): State<AppState>, Path(id): Path<String>) -> Json<Value> {
+    match state.manager.keep(&id) {
+        Ok(_) => Json(serde_json::json!({
+            "status": "ok",
+            "data": { "id": id, "retain_on_exit": true },
+            "error": null
+        })),
+        Err(e) => Json(serde_json::json!({
+            "status": "error",
+            "data": null,
+            "error": e.to_string()
+        })),
+    }
+}
+
+/// POST /api/commands/:id/unkeep
+/// Remove the keep tag from a command. The command will be removed from
+/// the manager when it exits.
+pub async fn unkeep_command(State(state): State<AppState>, Path(id): Path<String>) -> Json<Value> {
+    match state.manager.unkeep(&id) {
+        Ok(_) => Json(serde_json::json!({
+            "status": "ok",
+            "data": { "id": id, "retain_on_exit": false },
+            "error": null
+        })),
+        Err(e) => Json(serde_json::json!({
+            "status": "error",
+            "data": null,
+            "error": e.to_string()
+        })),
+    }
+}
+
 /// DELETE /api/commands/:id
 /// Purge a retained (exited) command from the manager.
 /// This permanently discards the VTTY buffer and all associated state.

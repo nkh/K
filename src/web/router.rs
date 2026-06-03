@@ -69,6 +69,14 @@ pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
             "/api/commands/:id/thaw",
             post(handlers::commands::thaw_command),
         )
+        .route(
+            "/api/commands/:id/keep",
+            post(handlers::commands::keep_command),
+        )
+        .route(
+            "/api/commands/:id/unkeep",
+            post(handlers::commands::unkeep_command),
+        )
         .route("/api/commands/:id/vtty", get(handlers::vtty::get_vtty_full))
         .route(
             "/api/commands/:id/vtty/html",

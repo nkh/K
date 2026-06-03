@@ -454,6 +454,28 @@ pub enum Commands {
         interactive: bool,
     },
 
+    /// Tag a running command to keep its terminal rendering after exit.
+    /// The VTTY buffer is retained in memory so you can inspect the final output.
+    /// Use `vrw unkeep` to remove the tag, or `vrw purge` to discard it.
+    #[cfg(feature = "vrw")]
+    Keep {
+        /// PID or name of the command to keep
+        target: Option<String>,
+        /// Interactively select running commands to keep
+        #[arg(short = 'i', long)]
+        interactive: bool,
+    },
+
+    /// Remove the keep tag from a command so it will be removed on exit.
+    #[cfg(feature = "vrw")]
+    Unkeep {
+        /// PID or name of the command to unkeep
+        target: Option<String>,
+        /// Interactively select kept commands to unkeep
+        #[arg(short = 'i', long)]
+        interactive: bool,
+    },
+
     /// Resize the VTTY of a running command (buffer + PTY)
     #[cfg(feature = "vrw")]
     Resize {

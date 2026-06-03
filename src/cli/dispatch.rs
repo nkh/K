@@ -287,6 +287,8 @@ pub fn pre_runtime() -> Result<Option<Cli>> {
         Some(Commands::StopCommand { target: _, interactive: _, all: _ }) => {}
         Some(Commands::Kill { target: _, interactive: _, all: _ }) => {}
         Some(Commands::Purge { target: _, interactive: _ }) => {}
+        Some(Commands::Keep { target: _, interactive: _ }) => {}
+        Some(Commands::Unkeep { target: _, interactive: _ }) => {}
         Some(Commands::Resize { target: _, rows: _, cols: _, interactive: _ }) => {}
         Some(Commands::ConfigCheck) => {
             subcommands::handle_config_check_command(cli.config.as_deref())?;
@@ -445,6 +447,36 @@ pub async fn handle_subcommands(cli: &Cli) -> Result<bool> {
                     ),
                     None => tracing::error!(
                         "No exited command to purge."
+                    ),
+                }
+                std::process::exit(1);
+            }
+            Ok(true)
+        }
+        Some(Commands::Keep { target, interactive }) => {
+            let kept = subcommands::handle_keep_command(cli, target.as_deref(), *interactive).await?;
+            if !kept {
+                match target {
+                    Some(t) => tracing::error!(
+                        "No matching running command found for '{}'. Use `vrw list` to see running commands.", t
+                    ),
+                    None => tracing::error!(
+                        "No running command to keep."
+                    ),
+                }
+                std::process::exit(1);
+            }
+            Ok(true)
+        }
+        Some(Commands::Unkeep { target, interactive }) => {
+            let unkept = subcommands::handle_unkeep_command(cli, target.as_deref(), *interactive).await?;
+            if !unkept {
+                match target {
+                    Some(t) => tracing::error!(
+                        "No matching kept command found for '{}'.", t
+                    ),
+                    None => tracing::error!(
+                        "No kept command to unkeep."
                     ),
                 }
                 std::process::exit(1);

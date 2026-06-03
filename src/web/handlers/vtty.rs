@@ -192,6 +192,16 @@ pub async fn resize_vtty(
 
     match state.manager.get(&id) {
         Some(handle) => {
+            // Reject resize for exited commands — their terminal rendering is
+            // frozen and cannot be meaningfully resized (no live PTY to send
+            // SIGWINCH to).  The VTTY buffer is retained as-is for inspection.
+            if !handle.is_alive() {
+                return Json(serde_json::json!({
+                    "status": "error",
+                    "data": null,
+                    "error": "Cannot resize an exited command's terminal"
+                }));
+            }
             // Use resize_pty: resizes PTY master (sends SIGWINCH to child)
             // AND resizes the in-memory VTTY buffer.
             match handle.resize_pty(rows, cols).await {

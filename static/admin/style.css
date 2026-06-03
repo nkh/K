@@ -451,6 +451,11 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .pin-btn { background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:0.7rem;padding:0 0.15rem;line-height:1;flex-shrink:0; }
 .pin-btn:hover { color:var(--yellow); }
 .pin-btn.active { color:var(--yellow); }
+/* Keep/Unkeep button (star toggle for retain_on_exit) */
+.keep-btn { background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:0.7rem;padding:0 0.15rem;line-height:1;flex-shrink:0; }
+.keep-btn:hover { color:var(--green); }
+.keep-btn.active { color:var(--green); }
+.keep-badge { color:var(--green);font-size:0.65rem;margin-left:0.15rem; }
 .pinned-section-header { font-size:0.6rem;color:var(--text-muted);padding:0.3rem 0.4rem 0.1rem;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid var(--border);margin-bottom:0.15rem; }
 
 /* Sidebar sort bar */

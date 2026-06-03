@@ -12,6 +12,8 @@ pub mod cat;
 #[cfg(feature = "vrw")]
 pub mod cert;
 #[cfg(feature = "vrw")]
+pub mod keep;
+#[cfg(feature = "vrw")]
 pub mod purge;
 #[cfg(feature = "vrw")]
 pub mod resize;
@@ -46,6 +48,8 @@ pub use common::{
 };
 #[cfg(feature = "vrw")]
 pub use list::{handle_list_commands_command, handle_list_vrw_command};
+#[cfg(feature = "vrw")]
+pub use keep::{handle_keep_command, handle_unkeep_command};
 #[cfg(feature = "vrw")]
 pub use purge::handle_purge_command;
 #[cfg(feature = "vrw")]

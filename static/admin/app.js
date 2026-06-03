@@ -1188,6 +1188,13 @@ function _buildSidebar() {
             const instUnreachable = inst.reachable === false;
             const dimStyle = instUnreachable ? 'opacity:0.4;' : ((isAlive || isFrozen) ? '' : 'opacity:0.6;');
             const killDisabled = instUnreachable ? ' disabled title="Server disconnected"' : ' title="Kill"';
+            const retainOnExit = cmd.exit && cmd.exit.retain_on_exit === true;
+            const keepTitle = retainOnExit ? 'Unkeep (terminal will be removed on exit)' : 'Keep (retain terminal after exit)';
+            const keepBtnHtml = isAlive
+                ? `<button class="keep-btn${retainOnExit ? ' active' : ''}" onclick="event.stopPropagation();toggleKeepCmd('${escHtml(inst.url)}','${escHtml(cmd.id)}')" title="${keepTitle}">${retainOnExit ? '&#9733;' : '&#9734;'}</button>`
+                : (retainOnExit
+                    ? `<span class="keep-badge" title="Terminal kept after exit">&#9733;</span>`
+                    : '');
             // Build detail parts as separate spans for the detail row
             const detailParts = [];
             if (runtimeStr) detailParts.push(escHtml(runtimeStr));
@@ -1197,9 +1204,10 @@ function _buildSidebar() {
             if (cmd.pid) detailParts.push('pid ' + cmd.pid);
             const unreachableTitle = instUnreachable ? ` [disconnected]` : '';
             out += `
-                <div class="cmd-item${selected}${frozenClass}${exitedClass}${instUnreachable ? ' unreachable' : ''}" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" onclick="selectCommand(this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)}${unreachableTitle}" style="${dimStyle}">
+                <div class="cmd-item${selected}${frozenClass}${exitedClass}${instUnreachable ? ' unreachable' : ''}" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" data-cmd-retained="${retainOnExit}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" onclick="selectCommand(this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true',this.dataset.cmdRetained==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)}${unreachableTitle}" style="${dimStyle}">
                     <div class="cmd-item-row">
                         <button class="btn btn-xs btn-danger cmd-kill-btn" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}"${killDisabled}>&#x2715;</button>
+                        ${keepBtnHtml}
                         <button class="pin-btn${isPinned ? ' active' : ''}" onclick="event.stopPropagation();togglePinCmd('${escHtml(cmdName)}')" title="${isPinned ? 'Unpin' : 'Pin'}">&#9734;</button>
                         <span class="name">${escHtml(cmdName)}</span>
                         ${certBadge}
@@ -2634,6 +2642,27 @@ async function spawnCommand() {
     } catch (e) {
         alert('Spawn failed: ' + e.message);
     }
+}
+
+/// Toggle keep/unkeep on a command via the API.
+/// When kept, the terminal rendering is retained after the command exits.
+async function toggleKeepCmd(instUrl, cmdId) {
+    // Determine current state from the sidebar data
+    const inst = state.instanceUrls.find(i => i.url === instUrl);
+    const cmd = inst && inst._commands ? inst._commands.find(c => c.id === cmdId) : null;
+    const isKept = cmd && cmd.exit && cmd.exit.retain_on_exit === true;
+    const endpoint = isKept ? 'unkeep' : 'keep';
+    try {
+        const res = await fetch(apiUrl(`/api/commands/${cmdId}/${endpoint}`, { url: instUrl }), {
+            method: 'POST',
+            headers: authHeadersForInstance({ url: instUrl }),
+        });
+        if (res.ok) {
+            // Force full rebuild to update the keep button
+            _lastCommandState = '';
+            loadCommands();
+        }
+    } catch (e) { /* ignore */ }
 }
 
 async function killCommand(instUrl, cmdId) {
@@ -4636,7 +4665,7 @@ function _focusCtxMenuItem(items) {
     });
 }
 
-function showCmdContextMenu(e, instUrl, cmdId, cmdName, isAlive) {
+function showCmdContextMenu(e, instUrl, cmdId, cmdName, isAlive, isRetained) {
     e.preventDefault();
     closeContextMenu();
     const menu = document.createElement('div');
@@ -4655,6 +4684,9 @@ function showCmdContextMenu(e, instUrl, cmdId, cmdName, isAlive) {
         sep1.className = 'ctx-menu-sep';
         sep1.setAttribute('role', 'separator');
         menu.appendChild(sep1);
+        // Keep/Unkeep
+        const keepLabel = isRetained ? 'Unkeep' : 'Keep';
+        menu.appendChild(_createCtxMenuItem(keepLabel, () => toggleKeepCmd(instUrl, cmdId), false));
         // Pause/Resume
         menu.appendChild(_createCtxMenuItem('Pause/Resume', () => togglePauseCmd(instUrl, cmdId), false));
         // Restart

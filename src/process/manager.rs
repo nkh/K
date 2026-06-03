@@ -587,6 +587,41 @@ impl CommandManager {
         Ok(())
     }
 
+    /// Tag a command to retain its VTTY buffer after exit.
+    /// Sets `retain_on_exit = true` on the command's exit config so that
+    /// when the child process exits, the command is kept in the manager
+    /// instead of being removed.
+    pub fn keep(&self, id: &CommandId) -> Result<()> {
+        let (pid, name) = if let Some(handle) = self.commands.get(id) {
+            (handle.pid, handle.name.clone())
+        } else {
+            return Err(ProcessError::CommandNotFound(id.to_string()));
+        };
+        if let Some(mut handle) = self.commands.get_mut(id) {
+            handle.exit_config.retain_on_exit = true;
+            drop(handle);
+        }
+        self.logger.log("keep", &format!("id={} pid={} name={} retain_on_exit=true", id, pid, name));
+        Ok(())
+    }
+
+    /// Remove the retain tag from a command (un-keep).
+    /// Sets `retain_on_exit = false` so the command will be removed from
+    /// the manager when it exits.
+    pub fn unkeep(&self, id: &CommandId) -> Result<()> {
+        let (pid, name) = if let Some(handle) = self.commands.get(id) {
+            (handle.pid, handle.name.clone())
+        } else {
+            return Err(ProcessError::CommandNotFound(id.to_string()));
+        };
+        if let Some(mut handle) = self.commands.get_mut(id) {
+            handle.exit_config.retain_on_exit = false;
+            drop(handle);
+        }
+        self.logger.log("unkeep", &format!("id={} pid={} name={} retain_on_exit=false", id, pid, name));
+        Ok(())
+    }
+
     /// Kill a command by its PID.
     pub async fn kill_by_pid(&self, pid: u32) -> Result<()> {
         if let Some(id) = self.find_by_pid(pid) {
