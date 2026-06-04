@@ -43,17 +43,18 @@
         <!-- Sidebar -->
         <div class="sidebar" id="sidebar">
             <div class="sidebar-tabs">
-                <div class="sidebar-tab active" onclick="switchSidebarTab('commands', this)">Commands</div>
+                <div class="sidebar-tab active" onclick="switchSidebarTab('servers', this)">Servers</div>
                 <div class="sidebar-tab" onclick="switchSidebarTab('spawn', this)">Spawn</div>
                 <div class="sidebar-tab" onclick="switchSidebarTab('templates', this)">Templates</div>
                 <div class="sidebar-tab" onclick="switchSidebarTab('certs', this)">Certs</div>
             </div>
             <div class="sidebar-content" id="sidebarContent">
-                <!-- Commands tab (default) -->
-                <div id="tab-commands">
-                    <div id="cmdToolbar" style="padding:0.2rem 0.3rem;display:none;gap:0.2rem;align-items:center;">
-                        <input type="text" id="cmdFilter" placeholder="Filter..." oninput="loadCommands()" style="flex:1;min-width:0;font-size:0.65rem;padding:0.1rem 0.3rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:2px;">
-                        <button class="btn btn-xs btn-danger" onclick="killAllCommands()" title="Kill all running commands">Kill All</button>
+                <!-- Servers tab (default) -->
+                <div id="tab-servers">
+                    <div style="padding:0.2rem 0.3rem;display:flex;gap:0.2rem;align-items:center;">
+                        <input type="text" id="cmdFilter" placeholder="Filter commands..." oninput="loadCommands()" style="flex:1;min-width:0;font-size:0.65rem;padding:0.1rem 0.3rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:2px;">
+                        <button class="btn btn-xs" onclick="showAddServerModal()" title="Add server connection">+ Server</button>
+                        <button class="btn btn-xs btn-danger" id="killAllBtn" onclick="killAllCommands()" title="Kill all running commands" style="display:none;">Kill All</button>
                     </div>
                     <div id="commandList"></div>
                 </div>
@@ -247,13 +248,13 @@
 <!-- Add panel modal -->
 <div class="modal-overlay" id="panelModal" style="display:none;" onclick="if(event.target===this)closePanelModal()">
     <div class="modal">
-        <h2>Add Instance Panel</h2>
+        <h2>Add Server &amp; Panel</h2>
         <div class="field">
-            <label>Instance URL</label>
+            <label>Server URL</label>
             <input type="text" id="panelUrl" placeholder="http://localhost:9090" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmAddPanel()}">
         </div>
         <div class="field">
-            <label>Label (optional)</label>
+            <label>Server Label (optional)</label>
             <input type="text" id="panelLabel" placeholder="Instance 2" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmAddPanel()}">
         </div>
         <div class="field">
@@ -271,6 +272,29 @@
         <div class="actions">
             <button class="btn" onclick="closePanelModal()">Cancel</button>
             <button class="btn btn-primary" onclick="confirmAddPanel()">Add Panel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Add Server modal (add connection without panel) -->
+<div class="modal-overlay" id="addServerModal" style="display:none;" onclick="if(event.target===this)closeAddServerModal()">
+    <div class="modal">
+        <h2>Add Server Connection</h2>
+        <div class="field">
+            <label>Server URL</label>
+            <input type="text" id="addServerUrl" placeholder="http://localhost:9090" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmAddServer()}">
+        </div>
+        <div class="field">
+            <label>Label (optional)</label>
+            <input type="text" id="addServerLabel" placeholder="Production">
+        </div>
+        <div class="field">
+            <label>Auth Token (optional)</label>
+            <input type="text" id="addServerToken" placeholder="Bearer token">
+        </div>
+        <div class="actions">
+            <button class="btn" onclick="closeAddServerModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="confirmAddServer()">Add Server</button>
         </div>
     </div>
 </div>

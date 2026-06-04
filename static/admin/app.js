@@ -259,25 +259,29 @@ function releaseCurrentFocusTrap() {
     const params = new URLSearchParams(window.location.search);
     const instances = params.getAll('instance');
     if (instances.length > 0) {
-        // First instance is the primary (current origin), rest are additional panels
-        state.instanceUrls = instances.map((u, i) => ({
+        // Multiple instances from URL params — add as connections
+        // First instance is the primary (current origin)
+        state.connections = instances.map((u, i) => ({
             url: u,
             label: params.getAll('label')[i] || `Instance ${i + 1}`,
             token: params.getAll('token')[i] || '',
-            reachable: undefined, // not yet checked
+            reachable: undefined,
         }));
     } else {
-        // Default: current origin
-        state.instanceUrls = [{
+        // Default: auto-connect to current origin
+        state.connections = [{
             url: window.location.origin,
             label: 'Local',
             token: '',
-            reachable: undefined, // not yet checked
+            reachable: undefined,
         }];
     }
 
     // Create initial panels
-    state.instanceUrls.forEach(inst => addPanelDirect(inst.url, inst.label, inst.token));
+    // Auto-connect to local server
+    addConnection(state.connections[0].url, state.connections[0].label, state.connections[0].token);
+    // Create initial panel (empty, will show local server's main command after loadSnapshot)
+    addPanelDirect();
 
     // ── Scroll detection: pause VTTY DOM updates while user is scrolling ──
     // Listens on scroll events bubbling from .vtty-container elements.
@@ -463,7 +467,7 @@ function formatRuntime(secs) {
 }
 
 function getBaseUrl() {
-    return state.instanceUrls.length > 0 ? state.instanceUrls[0].url : window.location.origin;
+    return state.connections.length > 0 ? state.connections[0].url : window.location.origin;
 }
 
 function authHeaders(token) {
@@ -726,7 +730,7 @@ function toggleLogsView() {
 function switchSidebarTab(tab, el) {
     document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
     el.classList.add('active');
-    document.getElementById('tab-commands').style.display = tab === 'commands' ? '' : 'none';
+    document.getElementById('tab-servers').style.display = tab === 'servers' ? '' : 'none';
     document.getElementById('tab-spawn').style.display = tab === 'spawn' ? '' : 'none';
     document.getElementById('tab-templates').style.display = tab === 'templates' ? '' : 'none';
     document.getElementById('tab-certs').style.display = tab === 'certs' ? '' : 'none';
@@ -738,7 +742,7 @@ function switchSidebarTab(tab, el) {
 function updateSidebarTabsVisibility() {
     const spawnTab = document.querySelector('.sidebar-tab:nth-child(2)');
     const spawnContent = document.getElementById('tab-spawn');
-    const anyReachable = state.instanceUrls.some(i => i.reachable === true);
+    const anyReachable = state.connections.some(i => i.reachable === true);
     if (anyReachable) {
         if (spawnTab) spawnTab.style.display = '';
         // Only show spawn content if the spawn tab is currently active;
@@ -762,13 +766,13 @@ function updateSidebarTabsVisibility() {
 /// there is a reachable server with commands.  Hidden when no server is
 /// reachable or when there are zero commands across all instances.
 function updateCmdToolbarVisibility() {
-    const toolbar = document.getElementById('cmdToolbar');
-    if (!toolbar) return;
-    const anyReachable = state.instanceUrls.some(i => i.reachable === true);
-    const anyCommands = state.instanceUrls.some(
+    const killAllBtn = document.getElementById('killAllBtn');
+    if (!killAllBtn) return;
+    const anyReachable = state.connections.some(i => i.reachable === true);
+    const anyCommands = state.connections.some(
         i => i._commands && i._commands.length > 0
     );
-    toolbar.style.display = (anyReachable && anyCommands) ? 'flex' : 'none';
+    killAllBtn.style.display = (anyReachable && anyCommands) ? '' : 'none';
 }
 
 // ─── Disconnected state ───
@@ -785,7 +789,7 @@ function updateDisconnectedUI() {
 /// Show/hide a disconnected banner in the sidebar header area.
 function updateSidebarBanner() {
     let banner = document.getElementById('disconnectedBanner');
-    const unreachable = state.instanceUrls.filter(i => i.reachable === false);
+    const unreachable = state.connections.filter(i => i.reachable === false);
     if (unreachable.length > 0) {
         if (!banner) {
             banner = document.createElement('div');
@@ -810,7 +814,7 @@ function updateTerminalDisconnectedOverlay() {
         const panelEl = document.getElementById(panelObj.id);
         if (!panelEl) continue;
         let overlay = panelEl.querySelector('.disconnected-overlay');
-        const inst = state.instanceUrls.find(i => i.url === panelObj.instUrl);
+        const inst = panelObj.selectedInstUrl ? state.connections.find(i => i.url === panelObj.selectedInstUrl) : null;
         if (inst && inst.reachable === false) {
             if (!overlay) {
                 overlay = document.createElement('div');
@@ -839,7 +843,7 @@ async function fetchPeers() {
 
         for (const peer of json.data) {
             // Skip if already known
-            if (state.instanceUrls.some(i => i.url === peer.url)) continue;
+            if (state.connections.some(i => i.url === peer.url)) continue;
             addDiscoveredPeer(peer.url, peer.label || peer.url, peer.token || '');
         }
 
@@ -856,14 +860,7 @@ async function fetchPeers() {
 
 /// Add a peer instance to instanceUrls and create a panel for it.
 function addDiscoveredPeer(url, label, token) {
-    state.instanceUrls.push({
-        url,
-        label,
-        token,
-        reachable: undefined, // not yet checked
-    });
-    // Add a panel so the user can see this instance's commands
-    addPanelDirect(url, label, token);
+    addConnection(url, label, token);
     console.log('[vrw] Peer discovered:', label, '(' + url + ')');
 }
 
@@ -875,12 +872,8 @@ function handlePeerEvent(msg) {
         savePeersToStorage();
     } else if (msg.type === 'peer_unregistered' && msg.data) {
         const { url } = msg.data;
-        const idx = state.instanceUrls.findIndex(i => i.url === url);
-        if (idx !== -1) {
-            state.instanceUrls.splice(idx, 1);
-            removePanelByInstUrl(url);
-            loadCommands();
-        }
+        removeConnection(url);
+        loadCommands();
         savePeersToStorage();
     }
 }
@@ -888,7 +881,7 @@ function handlePeerEvent(msg) {
 /// Save known peer URLs to localStorage so that if the primary dies
 /// and the page is reloaded pointing to a peer, the peer list survives.
 function savePeersToStorage() {
-    const peers = state.instanceUrls.filter(i => i.url !== window.location.origin);
+    const peers = state.connections.filter(i => i.url !== window.location.origin);
     if (peers.length > 0) {
         try {
             localStorage.setItem('vrw_peers', JSON.stringify(
@@ -971,7 +964,7 @@ async function loadSnapshot() {
     if (_snapshotLoaded) { loadCommands(); return; }
     _snapshotLoaded = true;
 
-    const primaryInst = state.instanceUrls[0];
+    const primaryInst = state.connections[0];
     if (!primaryInst) { loadCommands(); return; }
 
     try {
@@ -996,7 +989,7 @@ async function loadSnapshot() {
         }
 
         // Fetch peer instances in parallel (don't block the primary display)
-        const peerPromises = state.instanceUrls.slice(1).map(async (inst) => {
+        const peerPromises = state.connections.slice(1).map(async (inst) => {
             try {
                 const r = await fetch(apiUrl('/api/commands', inst),
                     { headers: authHeadersForInstance(inst) });
@@ -1093,13 +1086,13 @@ function _buildSidebar() {
     );
     const selectedInstUrl = selectedPanel ? selectedPanel.instUrl : state.selectedInstUrl;
     if (!_sidebarSort || _sidebarSort === 'name') {
-        if (selectedInstUrl && state.instanceUrls.length > 1) {
+        if (selectedInstUrl && state.connections.length > 1) {
             _sidebarSort = selectedInstUrl;
         }
     }
 
     let fingerprint = '';
-    for (const inst of state.instanceUrls) {
+    for (const inst of state.connections) {
         fingerprint += inst.url + ':reachable=' + inst.reachable + '|';
         for (const cmd of (inst._commands || [])) {
             const cmdName = cmd.name || cmd.id;
@@ -1114,7 +1107,7 @@ function _buildSidebar() {
         if (state._pendingSelectId) {
             const pendingId = state._pendingSelectId;
             state._pendingSelectId = null;
-            for (const inst of state.instanceUrls) {
+            for (const inst of state.connections) {
                 if (inst._commands && inst._commands.find(c => c.id === pendingId)) {
                     const cmd = inst._commands.find(c => c.id === pendingId);
                     selectCommand(inst.url, cmd.id, cmd.name || cmd.id);
@@ -1135,10 +1128,10 @@ function _buildSidebar() {
     const container = document.getElementById('commandList');
     let html = '';
 
-    if (state.instanceUrls.length > 1) {
+    if (state.connections.length > 1) {
         html += '<div class="sidebar-sort-bar">';
         html += `<span class="sidebar-sort-item${_sidebarSort === 'name' ? ' active' : ''}" onclick="_sidebarSort='name';loadCommands()">All</span>`;
-        for (const inst of state.instanceUrls) {
+        for (const inst of state.connections) {
             const active = _sidebarSort === inst.url ? ' active' : '';
             html += `<span class="sidebar-sort-item${active}" onclick="_sidebarSort='${escHtml(inst.url)}';loadCommands()">${escHtml(inst.label)}</span>`;
         }
@@ -1146,7 +1139,7 @@ function _buildSidebar() {
     }
 
     let allCmds = [];
-    for (const inst of state.instanceUrls) {
+    for (const inst of state.connections) {
         for (const cmd of (inst._commands || [])) {
             const cmdName = cmd.name || cmd.id;
             if (filterLower && !cmdName.toLowerCase().includes(filterLower) &&
@@ -1172,7 +1165,7 @@ function _buildSidebar() {
     } else {
         const targetUrl = _sidebarSort;
         const grouped = targetUrl === 'all' ? null : targetUrl;
-        for (const inst of state.instanceUrls) {
+        for (const inst of state.connections) {
             if (grouped && inst.url !== grouped) continue;
             const instCmds = allCmds.filter(c => c.inst.url === inst.url);
             if (instCmds.length === 0 && grouped) continue;
@@ -1180,7 +1173,7 @@ function _buildSidebar() {
                 html += `<div style="padding:0.5rem;color:var(--red);font-size:0.7rem;">${escHtml(inst.label)}: ${escHtml(inst._lastError)}</div>`;
                 continue;
             }
-            if (state.instanceUrls.length > 1) {
+            if (state.connections.length > 1) {
                 html += `<div class="pinned-section-header">${escHtml(inst.label)}</div>`;
             }
             if (instCmds.length === 0) {
@@ -1236,7 +1229,7 @@ function _buildSidebar() {
             if (cmd.pid) detailParts.push('pid ' + cmd.pid);
             const unreachableTitle = instUnreachable ? ` [disconnected]` : '';
             out += `
-                <div class="cmd-item${selected}${frozenClass}${exitedClass}${instUnreachable ? ' unreachable' : ''}" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" data-cmd-retained="${retainOnExit}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" onclick="selectCommand(this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true',this.dataset.cmdRetained==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)}${unreachableTitle}" style="${dimStyle}">
+                <div class="cmd-item${selected}${frozenClass}${exitedClass}${instUnreachable ? ' unreachable' : ''}" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" data-cmd-retained="${retainOnExit}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" draggable="true" ondragstart="onCmdDragStart(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" onclick="selectCommand(this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true',this.dataset.cmdRetained==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)}${unreachableTitle}" style="${dimStyle}">
                     <div class="cmd-item-row">
                         <button class="btn btn-xs btn-danger cmd-kill-btn" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}"${killDisabled}>&#x2715;</button>
                         ${keepBtnHtml}
@@ -1259,7 +1252,7 @@ function _buildSidebar() {
     if (state._pendingSelectId) {
         const pendingId = state._pendingSelectId;
         state._pendingSelectId = null;
-        for (const inst of state.instanceUrls) {
+        for (const inst of state.connections) {
             if (inst._commands && inst._commands.find(c => c.id === pendingId)) {
                 const cmd = inst._commands.find(c => c.id === pendingId);
                 selectCommand(inst.url, cmd.id, cmd.name || cmd.id);
@@ -1269,7 +1262,7 @@ function _buildSidebar() {
     }
 
     if (!state.selectedCmdId) {
-        for (const inst of state.instanceUrls) {
+        for (const inst of state.connections) {
             if (inst._commands && inst._commands.length > 0) {
                 const cmd = inst._commands[0];
                 selectCommand(inst.url, cmd.id, cmd.name || cmd.id);
@@ -1289,7 +1282,7 @@ function _buildSidebar() {
 async function loadCommands() {
     // Load commands from all instances in PARALLEL and track reachability.
     let anyReachableChanged = false;
-    await Promise.all(state.instanceUrls.map(async (inst) => {
+    await Promise.all(state.connections.map(async (inst) => {
         try {
             const res = await fetch(apiUrl('/api/commands', inst), { headers: authHeadersForInstance(inst) });
             if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -1313,7 +1306,7 @@ async function loadCommands() {
 
     // Check if welcome-panel state changed and re-render panels if so
     let hasAnyCommands = false;
-    for (const inst of state.instanceUrls) {
+    for (const inst of state.connections) {
         if (inst._commands && inst._commands.length > 0) {
             hasAnyCommands = true;
             break;
@@ -1444,7 +1437,7 @@ function updatePanelCommandInfo() {
     if (!state.selectedInstUrl || !state.selectedCmdId) return;
     // Find the command data from the loaded instance commands
     let cmd = null;
-    for (const inst of state.instanceUrls) {
+    for (const inst of state.connections) {
         if (inst.url === state.selectedInstUrl && inst._commands) {
             cmd = inst._commands.find(c => c.id === state.selectedCmdId);
             break;
@@ -1607,7 +1600,7 @@ function getActivePanelId() {
 // ─── Pause/Run Toggle ───
 async function togglePauseRun() {
     if (!state.selectedCmdId) return;
-    const inst = state.instanceUrls.find(i => i.url === state.selectedInstUrl);
+    const inst = state.connections.find(i => i.url === state.selectedInstUrl);
     const cmd = inst && inst._commands ? inst._commands.find(c => c.id === state.selectedCmdId) : null;
     const isFrozen = cmd && cmd.frozen;
     const endpoint = isFrozen ? 'thaw' : 'freeze';
@@ -1623,20 +1616,17 @@ async function togglePauseRun() {
 
 async function togglePauseRunPanel(panelId) {
     const panelObj = state.panels.find(p => p.id === panelId);
-    if (!panelObj) return;
-    const inst = state.instanceUrls.find(i => i.url === panelObj.instUrl);
+    if (!panelObj || !panelObj.selectedInstUrl || !panelObj.selectedCmdId) return;
+    const inst = state.connections.find(i => i.url === panelObj.selectedInstUrl);
     if (!inst || !inst._commands) return;
-    // Find the command shown in this panel
-    const isForSelected = (panelObj.instUrl === state.selectedInstUrl);
-    const cmdId = isForSelected ? state.selectedCmdId : null;
-    if (!cmdId) return;
+    const cmdId = panelObj.selectedCmdId;
     const cmd = inst._commands.find(c => c.id === cmdId);
     const isFrozen = cmd && cmd.frozen;
     const endpoint = isFrozen ? 'thaw' : 'freeze';
     try {
-        await fetch(apiUrl(`/api/commands/${cmdId}/${endpoint}`, { url: panelObj.instUrl }), {
+        await fetch(apiUrl(`/api/commands/${cmdId}/${endpoint}`, { url: panelObj.selectedInstUrl }), {
             method: 'POST',
-            headers: authHeadersForInstance({ url: panelObj.instUrl, token: panelObj.token }),
+            headers: authHeadersForInstance({ url: panelObj.selectedInstUrl }),
             body: JSON.stringify({}),
         });
         loadCommands();
@@ -1779,7 +1769,7 @@ function connectVttyWs(instUrl, cmdId) {
     disconnectVttyWs();
 
     const wsUrl = instUrl.replace(/^http/, 'ws');
-    const token = state.authToken || (state.instanceUrls.find(i => i.url === instUrl) || {}).token || '';
+    const token = state.authToken || (state.connections.find(i => i.url === instUrl) || {}).token || '';
     const sep = token ? '?' : '';
     const url = `${wsUrl}/api/commands/${cmdId}/ws${sep}${token ? 'token=' + encodeURIComponent(token) : ''}`;
 
@@ -1890,7 +1880,7 @@ function connectVttyWs(instUrl, cmdId) {
                 updateWsQualityIndicator();
                 // Mark instance as potentially unreachable when WS drops
                 if (state.vttyWsUrl) {
-                    const wsInst = state.instanceUrls.find(i => i.url === state.vttyWsUrl);
+                    const wsInst = state.connections.find(i => i.url === state.vttyWsUrl);
                     if (wsInst && wsInst.reachable) {
                         // Don't immediately mark unreachable — the server might just
                         // have closed this particular WS.  A failed /api/commands
@@ -1911,7 +1901,7 @@ function connectVttyWs(instUrl, cmdId) {
                             state._wsReconnectTimer = null;
                             if (state.selectedInstUrl && state.selectedCmdId && state.updateMode === 'push') {
                                 // Only reconnect if the instance is still reachable
-                                const inst = state.instanceUrls.find(i => i.url === state.selectedInstUrl);
+                                const inst = state.connections.find(i => i.url === state.selectedInstUrl);
                                 if (inst && inst.reachable !== false) {
                                     connectVttyWs(state.selectedInstUrl, state.selectedCmdId);
                                 }
@@ -2693,7 +2683,7 @@ async function spawnCommand() {
 /// When kept, the terminal rendering is retained after the command exits.
 async function toggleKeepCmd(instUrl, cmdId) {
     // Determine current state from the sidebar data
-    const inst = state.instanceUrls.find(i => i.url === instUrl);
+    const inst = state.connections.find(i => i.url === instUrl);
     const cmd = inst && inst._commands ? inst._commands.find(c => c.id === cmdId) : null;
     const isKept = cmd && cmd.exit && cmd.exit.retain_on_exit === true;
     const endpoint = isKept ? 'unkeep' : 'keep';
@@ -2766,7 +2756,7 @@ async function killAllCommands() {
     // Force full rebuild on state transition
     _lastCommandState = '';
     const promises = [];
-    for (const inst of state.instanceUrls) {
+    for (const inst of state.connections) {
         for (const cmd of (inst._commands || [])) {
             if (cmd.alive) {
                 promises.push(
@@ -2780,7 +2770,7 @@ async function killAllCommands() {
         }
     }
     // Clear cached commands immediately so the sidebar empties
-    for (const inst of state.instanceUrls) {
+    for (const inst of state.connections) {
         inst._commands = [];
     }
     state.selectedInstUrl = null;
@@ -2826,16 +2816,16 @@ async function resizeTerminal() {
 async function resizeTerminalPanel(panelId) {
     const panelObj = state.panels.find(p => p.id === panelId);
     if (!panelObj) return;
-    // Use the globally selected command when the panel matches the selected instance
-    const cmdId = (panelObj.instUrl === state.selectedInstUrl) ? state.selectedCmdId : null;
+    // Use the per-panel selected command
+    const cmdId = panelObj.selectedCmdId;
     if (!cmdId) return;
     // Try shared toolbar inputs first, fall back to per-panel inputs
     const rows = parseInt(document.getElementById('stResizeRows')?.value || document.getElementById('resizeRows-' + panelId)?.value) || 24;
     const cols = parseInt(document.getElementById('stResizeCols')?.value || document.getElementById('resizeCols-' + panelId)?.value) || 80;
     try {
-        const res = await fetch(apiUrl(`/api/commands/${cmdId}/resize`, { url: panelObj.instUrl }), {
+        const res = await fetch(apiUrl(`/api/commands/${cmdId}/resize`, { url: panelObj.selectedInstUrl }), {
             method: 'POST',
-            headers: authHeadersForInstance({ url: panelObj.instUrl, token: panelObj.token }),
+            headers: authHeadersForInstance({ url: panelObj.selectedInstUrl }),
             body: JSON.stringify({ rows, cols }),
         });
         if (res.ok) {
@@ -2854,7 +2844,7 @@ function switchBufferPanel(panelId, view) {
     const sel = document.getElementById('stBufferSelect') || document.getElementById('bufferSelect-' + panelId);
     if (sel) sel.value = view;
     // If this is the currently selected panel, apply the buffer switch
-    if (panelObj.instUrl === state.selectedInstUrl && state.selectedCmdId) {
+    if (panelObj.selectedInstUrl === state.selectedInstUrl && state.selectedCmdId) {
         state.bufferView = view;
         state.panels.forEach(p => p.scrollbackOffset = 0);
         sessionStorage.removeItem('vrw_scrollback_' + state.selectedCmdId);
@@ -2862,14 +2852,14 @@ function switchBufferPanel(panelId, view) {
             startUpdateMode();
         } else {
             stopUpdateMode();
-            loadVttyHttp(panelObj.instUrl, state.selectedCmdId);
+            loadVttyHttp(panelObj.selectedInstUrl, state.selectedCmdId);
         }
     }
 }
 
 // ─── Certificates ───
 async function loadCertificates() {
-    for (const inst of state.instanceUrls) {
+    for (const inst of state.connections) {
         try {
             const res = await fetch(apiUrl('/api/certificates', inst), { headers: authHeadersForInstance(inst) });
             const json = await res.json();
@@ -2881,7 +2871,7 @@ async function loadCertificates() {
 
     const container = document.getElementById('certList');
     let html = '';
-    for (const inst of state.instanceUrls) {
+    for (const inst of state.connections) {
         html += `<div style="font-size:0.7rem;color:var(--text-muted);padding:0.3rem 0;margin-top:0.3rem;">${escHtml(inst.label)}</div>`;
         const certs = inst._certs || [];
         if (certs.length === 0) {
@@ -2903,7 +2893,7 @@ async function loadCertificates() {
 function updateCertDropdown() {
     const select = document.getElementById('spawnCert');
     let html = '<option value="">None</option>';
-    for (const inst of state.instanceUrls) {
+    for (const inst of state.connections) {
         for (const cert of (inst._certs || [])) {
             html += `<option value="${escHtml(cert.name)}">${escHtml(inst.label)}: ${escHtml(cert.name)}</option>`;
         }
@@ -2915,7 +2905,7 @@ function updateInstanceDropdown() {
     const select = document.getElementById('spawnInstance');
     const current = select.value;
     let html = '';
-    for (const inst of state.instanceUrls) {
+    for (const inst of state.connections) {
         html += `<option value="${escHtml(inst.url)}">${escHtml(inst.label)} (${escHtml(inst.url.replace(/^https?:\/\//, ''))})</option>`;
     }
     select.innerHTML = html;
@@ -2928,7 +2918,9 @@ function updateInstanceDropdown() {
 }
 
 // ─── Panels (Multi-view) ───
-function addPanelDirect(instUrl, label, token) {
+// Panels are pure display containers — decoupled from server connections.
+// A panel can display any command's VTTY from any server connection.
+function addPanelDirect() {
     const id = 'panel-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
     const savedFontSize = parseInt(localStorage.getItem('vrw_panel_font_' + id));
     const fontSize = (savedFontSize >= 8 && savedFontSize <= 28) ? savedFontSize : state.fontSize;
@@ -2937,7 +2929,7 @@ function addPanelDirect(instUrl, label, token) {
     const savedTheme = localStorage.getItem('vrw_panel_theme_' + id);
     // Per-panel theme: 'light', 'dark', or '' (inherit global). Default is inherit.
     const theme = (savedTheme === 'light' || savedTheme === 'dark') ? savedTheme : '';
-    const panel = { id, instUrl, label, token, scrollbackOffset: 0, mouseTracking: false, mouseSgr: false, focused: false, fontSize, selectionMode, theme, selectedCmdId: null, selectedInstUrl: null };
+    const panel = { id, scrollbackOffset: 0, mouseTracking: false, mouseSgr: false, focused: false, fontSize, selectionMode, theme, selectedCmdId: null, selectedInstUrl: null };
     state.panels.push(panel);
     renderPanels();
     return panel;
@@ -2971,16 +2963,11 @@ function confirmAddPanel() {
         try { label = new URL(url).host; } catch (e) { label = url; }
     }
 
-    // Allow adding a panel for an already-connected instance.
-    // Multiple panels can display the same server — useful for viewing
-    // different commands side by side from the same instance.
-    const already = state.instanceUrls.some(i => i.url === url);
-    if (!already) {
-        const inst = { url, label, token };
-        state.instanceUrls.push(inst);
-    }
     try {
-        addPanelDirect(url, label, token);
+        // Ensure server connection exists (addConnection is idempotent)
+        addConnection(url, label, token);
+        // Create a new panel
+        addPanelDirect();
         closePanelModal();
 
         // Apply layout direction
@@ -2992,6 +2979,15 @@ function confirmAddPanel() {
         // 'auto' doesn't change the layout
         localStorage.setItem('vrw_panel_layout', state.panelLayout);
 
+        // The new panel will auto-select the first command from this server
+        // after loadCommands() runs and _buildSidebar() selects it.
+        const newPanel = state.panels[state.panels.length - 1];
+        if (newPanel) {
+            newPanel.selectedInstUrl = url;
+            // Set _pendingSelectId to null so _buildSidebar picks the first command
+            state._pendingSelectId = null;
+        }
+
         renderPanels();
         loadCommands();
         loadCertificates();
@@ -3002,17 +2998,77 @@ function confirmAddPanel() {
     }
 }
 
+// ─── Server Connection Management ───
+// Connections are separate from panels. Adding a connection makes its
+// commands available in the sidebar. Removing a connection removes its
+// commands from the sidebar but does NOT close any panels (they keep
+// their last VTTY state).
+function addConnection(url, label, token) {
+    // Idempotent: if connection already exists, just update label/token
+    const existing = state.connections.find(c => c.url === url);
+    if (existing) {
+        if (label) existing.label = label;
+        if (token !== undefined) existing.token = token;
+        return existing;
+    }
+    const conn = { url, label: label || url, token: token || '', reachable: undefined, _lastError: null, _commands: null, _certs: null };
+    state.connections.push(conn);
+    return conn;
+}
+
+function removeConnection(url) {
+    state.connections = state.connections.filter(c => c.url !== url);
+    _lastCommandState = ''; // force sidebar rebuild
+    loadCommands();
+    updateDisconnectedUI();
+}
+
+// ─── Add Server Modal (sidebar only, no panel) ───
+function showAddServerModal() {
+    const modal = document.getElementById('addServerModal');
+    modal.style.display = '';
+    document.getElementById('addServerUrl').value = 'http://localhost:9090';
+    document.getElementById('addServerLabel').value = '';
+    document.getElementById('addServerToken').value = '';
+    const modalInner = modal.querySelector('.modal');
+    if (modalInner) trapFocus(modalInner);
+    document.getElementById('addServerUrl').focus();
+}
+
+function closeAddServerModal() {
+    releaseCurrentFocusTrap();
+    document.getElementById('addServerModal').style.display = 'none';
+}
+
+function confirmAddServer() {
+    const url = document.getElementById('addServerUrl').value.trim();
+    if (!url) return;
+    const token = document.getElementById('addServerToken').value.trim();
+    let label = document.getElementById('addServerLabel').value.trim();
+    if (!label) {
+        try { label = new URL(url).host; } catch (e) { label = url; }
+    }
+    addConnection(url, label, token);
+    closeAddServerModal();
+    loadCommands();
+    loadCertificates();
+    fetchServerTemplates();
+}
+
 function removePanel(id) {
     state.panels = state.panels.filter(p => p.id !== id);
-    // Remove from instanceUrls if no more panels for it
-    const remainingUrls = new Set(state.panels.map(p => p.instUrl));
-    state.instanceUrls = state.instanceUrls.filter(i => remainingUrls.has(i.url));
     // If only one panel left, reset layout to row
     if (state.panels.length <= 1) {
         state.panelLayout = 'row';
         localStorage.setItem('vrw_panel_layout', state.panelLayout);
     }
+    // If the removed panel was focused, focus the first remaining
+    if (state._focusedPanelId === id) {
+        state._focusedPanelId = state.panels.length > 0 ? state.panels[0].id : null;
+    }
     renderPanels();
+    // Update shared toolbar to reflect new focused panel
+    updateSharedToolbar();
 }
 
 /// Toggle panel layout between horizontal (row) and vertical (column).
@@ -3063,7 +3119,7 @@ function renderPanels() {
 
     // Check if there are any commands at all for the welcome state
     let hasAnyCommands = false;
-    for (const inst of state.instanceUrls) {
+    for (const inst of state.connections) {
         if (inst._commands && inst._commands.length > 0) {
             hasAnyCommands = true;
             break;
@@ -3091,19 +3147,19 @@ function renderPanels() {
         const toolbar = document.getElementById('sharedToolbar');
         if (toolbar) toolbar.style.display = '';
         for (const panel of state.panels) {
-            const inst = state.instanceUrls.find(i => i.url === panel.instUrl);
+            const conn = panel.selectedInstUrl ? state.connections.find(i => i.url === panel.selectedInstUrl) : null;
             const resizeHandle = hasMultiplePanels ? `<div class="panel-resize-handle" data-panel="${panel.id}"></div>` : '';
             const dragHandle = hasMultiplePanels ? `<span class="drag-handle" draggable="true" ondragstart="onPanelDragStart(event,'${panel.id}')" title="Drag to reorder">&#x2840;</span>` : '';
             const isFocused = panel.id === state._focusedPanelId;
             html += `
                 <div class="panel${isFocused ? ' focused' : ''}" id="${panel.id}" draggable="${hasMultiplePanels}" ondragover="onPanelDragOver(event)" ondrop="onPanelDrop(event,'${panel.id}')" ondragend="onPanelDragEnd(event)" ondragleave="onPanelDragLeave(event)" style="flex: 1 1 0;">
-                    <div class="panel-header" data-panel-id="${panel.id}" oncontextmenu="showPanelContextMenu(event,'${panel.id}')" tabindex="0" role="button" aria-label="Panel: ${escHtml(inst ? inst.label : panel.instUrl)}">
+                    <div class="panel-header" data-panel-id="${panel.id}" oncontextmenu="showPanelContextMenu(event,'${panel.id}')" tabindex="0" role="button" aria-label="Panel: ${escHtml(panel.selectedInstUrl || 'empty')}">
                         ${dragHandle}
                         <div class="cmd-info" id="cmdInfo-${panel.id}">
                             <span class="cmd-fullname" id="cmdName-${panel.id}"></span>
                             <span class="cmd-args" id="cmdArgs-${panel.id}"></span>
                         </div>
-                        <span class="panel-header-label" id="panelLabel-${panel.id}">${escHtml(inst ? inst.label : panel.instUrl.replace(/^https?:\/\//, ''))}</span>
+                        <span class="panel-header-label" id="panelLabel-${panel.id}"></span>
                         ${hasMultiplePanels ? `<button class="btn btn-xs btn-danger" onclick="event.stopPropagation();removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
                     </div>
                     <div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px;">
@@ -3179,6 +3235,8 @@ function renderPanels() {
     _updatePanelMultiUI();
     // Sync shared toolbar with current state
     if (!_showingWelcome) updateSharedToolbar();
+    // Initialize drop targets for command drag-and-drop
+    initPanelDropTargets();
 }
 
 /// Update multi-panel UI elements (drag handles, remove buttons, layout toggle)
@@ -3237,7 +3295,7 @@ function updateSharedToolbar() {
 
     // Instance URL
     const instUrlEl = document.getElementById('stInstanceUrl');
-    if (instUrlEl) instUrlEl.textContent = panelObj.instUrl.replace(/^https?:\/\//, '');
+    if (instUrlEl) instUrlEl.textContent = (panelObj.selectedInstUrl || '').replace(/^https?:\/\//, '');
 
     // Refresh throttle
     const refreshVal = document.getElementById('stRefreshVal');
@@ -3275,13 +3333,13 @@ async function sendKeysToPanel(panelId) {
     if (!input || !input.value || !state.selectedCmdId) return;
 
     const keysValue = input.value;
-    const cmdId = state.selectedCmdId;
-    const instUrl = panel.instUrl;
+    const cmdId = panel.selectedCmdId || state.selectedCmdId;
+    const instUrl = panel.selectedInstUrl || state.selectedInstUrl;
 
     try {
         const res = await fetch(apiUrl(`/api/commands/${cmdId}/keys`, { url: instUrl }), {
             method: 'POST',
-            headers: authHeadersForInstance({ url: instUrl, token: panel.token }),
+            headers: authHeadersForInstance({ url: instUrl }),
             body: JSON.stringify({ keys: keysValue }),
         });
         let json;
@@ -3377,7 +3435,7 @@ function connectLogWs() {
     disconnectLogWs();
 
     const wsUrl = getBaseUrl().replace(/^http/, 'ws');
-    const token = state.authToken || (state.instanceUrls[0] || {}).token || '';
+    const token = state.authToken || (state.connections[0] || {}).token || '';
     const sep = token ? '?' : '';
     const url = `${wsUrl}/api/ws/logs${sep}${token ? 'token=' + encodeURIComponent(token) : ''}`;
 
@@ -3949,7 +4007,7 @@ document.addEventListener('keydown', (e) => {
 // ─── Direct key sending (when terminal is focused) ───
 // Encodes a KeyboardEvent into escape sequences and sends to the PTY.
 async function sendDirectKey(e, panelObj) {
-    if (!state.selectedCmdId || !panelObj.instUrl) return;
+    if (!state.selectedCmdId || !panelObj.selectedInstUrl) return;
 
     // Map common special keys to escape sequences
     const keyMap = {
@@ -4004,15 +4062,15 @@ async function sendDirectKey(e, panelObj) {
     if (!seq) return;
 
     try {
-        const res = await fetch(apiUrl(`/api/commands/${state.selectedCmdId}/keys`, { url: panelObj.instUrl }), {
+        const res = await fetch(apiUrl(`/api/commands/${state.selectedCmdId}/keys`, { url: panelObj.selectedInstUrl }), {
             method: 'POST',
-            headers: authHeadersForInstance({ url: panelObj.instUrl }),
+            headers: authHeadersForInstance({ url: panelObj.selectedInstUrl }),
             body: JSON.stringify({ keys: seq }),
         });
         const json = await res.json();
         if (json.status === 'ok') {
             // Trigger a refresh
-            scheduleVttyHttp(panelObj.instUrl, state.selectedCmdId, 50);
+            scheduleVttyHttp(panelObj.selectedInstUrl, state.selectedCmdId, 50);
         }
     } catch (err) {
         console.error('Direct key send error:', err);
@@ -4099,7 +4157,7 @@ document.addEventListener('wheel', (e) => {
             e.preventDefault();
             panelObj.scrollbackOffset += 3;
             sessionStorage.setItem('vrw_scrollback_' + state.selectedCmdId, panelObj.scrollbackOffset.toString());
-            loadVttyHttp(panelObj.instUrl, state.selectedCmdId);
+            loadVttyHttp(panelObj.selectedInstUrl, state.selectedCmdId);
             // Show scrollback indicator
             const sbIndicator = document.getElementById('scrollbackIndicator');
             if (sbIndicator) sbIndicator.style.display = '';
@@ -4247,7 +4305,7 @@ document.addEventListener('mousemove', (e) => {
 
 // Send a mouse event to the PTY via the API
 async function sendMouseEvent(panelObj, eventType, button, e) {
-    if (!state.selectedCmdId || !panelObj.instUrl) return;
+    if (!state.selectedCmdId || !panelObj.selectedInstUrl) return;
 
     // Calculate terminal cell coordinates from pixel position
     const vttyEl = document.getElementById(panelObj.id)?.querySelector('.vtty-container');
@@ -4261,9 +4319,9 @@ async function sendMouseEvent(panelObj, eventType, button, e) {
     const y = Math.max(1, Math.floor((e.clientY - rect.top) / charH) + 1);
 
     try {
-        await fetch(apiUrl(`/api/commands/${state.selectedCmdId}/mouse`, { url: panelObj.instUrl }), {
+        await fetch(apiUrl(`/api/commands/${state.selectedCmdId}/mouse`, { url: panelObj.selectedInstUrl }), {
             method: 'POST',
-            headers: authHeadersForInstance({ url: panelObj.instUrl }),
+            headers: authHeadersForInstance({ url: panelObj.selectedInstUrl }),
             body: JSON.stringify({
                 event: eventType,
                 button: button,
@@ -4272,7 +4330,7 @@ async function sendMouseEvent(panelObj, eventType, button, e) {
             }),
         });
         // Refresh display after mouse events (the child may have reacted)
-        scheduleVttyHttp(panelObj.instUrl, state.selectedCmdId, 30);
+        scheduleVttyHttp(panelObj.selectedInstUrl, state.selectedCmdId, 30);
     } catch (err) {
         // Silently ignore — mouse events are best-effort
     }
@@ -4441,8 +4499,8 @@ function scrollTerminalBottom(panelId) {
         }
         const sbIndicator = document.getElementById('scrollbackIndicator');
         if (sbIndicator) sbIndicator.style.display = 'none';
-        if (state.selectedCmdId && panelObj.instUrl) {
-            loadVttyHttp(panelObj.instUrl, state.selectedCmdId);
+        if (state.selectedCmdId && panelObj.selectedInstUrl) {
+            loadVttyHttp(panelObj.selectedInstUrl, state.selectedCmdId);
         }
     }
 }
@@ -4457,7 +4515,7 @@ function notifyCommandEnded(cmdId) {
     // Find command name and exit code
     let cmdName = cmdId;
     let exitCode = null;
-    for (const inst of state.instanceUrls) {
+    for (const inst of state.connections) {
         if (inst._commands) {
             const cmd = inst._commands.find(c => c.id === cmdId);
             if (cmd) { cmdName = cmd.name || cmdId; exitCode = cmd.exit_code; break; }
@@ -4484,7 +4542,7 @@ function notifyCommandEnded(cmdId) {
 
 // Also detect command exits via polling — notify when a previously-alive command exits
 function checkForExitedCommands() {
-    for (const inst of state.instanceUrls) {
+    for (const inst of state.connections) {
         if (!inst._commands) continue;
         for (const cmd of inst._commands) {
             if (cmd.alive === false && !_notifiedExits.has(cmd.id)) {
@@ -4590,7 +4648,7 @@ function exportTerminal(panelId) {
     const a = document.createElement('a');
     // Use command name for the filename
     let cmdName = 'terminal';
-    for (const inst of state.instanceUrls) {
+    for (const inst of state.connections) {
         if (inst._commands) {
             const cmd = inst._commands.find(c => c.id === state.selectedCmdId);
             if (cmd) { cmdName = (cmd.name || cmd.id).replace(/\//g, '_'); break; }
@@ -4608,7 +4666,7 @@ async function screenshotPanel(panelId) {
     // Determine which command is shown in this panel
     const panelObj = state.panels.find(p => p.id === panelId);
     if (!panelObj) return;
-    const instUrl = panelObj.instUrl;
+    const instUrl = panelObj.selectedInstUrl || state.selectedInstUrl;
     const isSelectedPanel = (instUrl === state.selectedInstUrl);
     const cmdId = isSelectedPanel ? state.selectedCmdId : null;
     if (!cmdId) {
@@ -4641,7 +4699,7 @@ async function screenshotPanel(panelId) {
 
         // Build filename: vrw_YYYYMMDD_HHMMSS_rowsxcols_command_args.png
         let cmdInfo = 'vrw';
-        for (const inst of state.instanceUrls) {
+        for (const inst of state.connections) {
             if (inst._commands) {
                 const cmd = inst._commands.find(c => c.id === cmdId);
                 if (cmd) {
@@ -4809,10 +4867,8 @@ function showPanelContextMenu(e, panelId) {
     const panel = state.panels.find(p => p.id === panelId);
     if (!panel) return;
 
-    const instUrl = panel.instUrl;
-    // Determine which command is shown in this panel
-    const isSelectedPanel = (instUrl === state.selectedInstUrl);
-    const cmdId = isSelectedPanel ? state.selectedCmdId : null;
+    const instUrl = panel.selectedInstUrl;
+    const cmdId = panel.selectedCmdId;
 
     const menu = document.createElement('div');
     menu.id = 'ctxMenu';
@@ -4823,7 +4879,7 @@ function showPanelContextMenu(e, panelId) {
     menu.appendChild(_createCtxMenuItem('Copy URL', () => {
         if (cmdId) {
             // Find the command name from instance data
-            const inst = state.instanceUrls.find(i => i.url === instUrl);
+            const inst = state.connections.find(i => i.url === instUrl);
             const cmd = inst && inst._commands ? inst._commands.find(c => c.id === cmdId) : null;
             const cmdName = cmd ? (cmd.name || cmd.id) : cmdId;
             copyCommandUrl(instUrl, cmdId, cmdName);
@@ -5034,7 +5090,7 @@ async function toggleMaxFont(panelId) {
 async function _resizePanelTo(panelId, rows, cols) {
     const panelObj = state.panels.find(p => p.id === panelId);
     if (!panelObj) return;
-    const cmdId = (panelObj.instUrl === state.selectedInstUrl) ? state.selectedCmdId : null;
+    const cmdId = panelObj.selectedCmdId;
     if (!cmdId) return;
 
     // Update the input fields (shared toolbar first, per-panel fallback)
@@ -5044,9 +5100,9 @@ async function _resizePanelTo(panelId, rows, cols) {
     if (ci) ci.value = cols;
 
     try {
-        await fetch(apiUrl(`/api/commands/${cmdId}/resize`, { url: panelObj.instUrl }), {
+        await fetch(apiUrl(`/api/commands/${cmdId}/resize`, { url: panelObj.selectedInstUrl }), {
             method: 'POST',
-            headers: authHeadersForInstance({ url: panelObj.instUrl, token: panelObj.token }),
+            headers: authHeadersForInstance({ url: panelObj.selectedInstUrl }),
             body: JSON.stringify({ rows, cols }),
         });
     } catch (e) { /* ignore */ }
@@ -5094,7 +5150,7 @@ function closeShortcuts() {
 async function pollResources() {
     // Fetch all alive commands' resources in PARALLEL (not serial).
     const promises = [];
-    for (const inst of state.instanceUrls) {
+    for (const inst of state.connections) {
         if (!inst._commands) continue;
         for (const cmd of inst._commands) {
             if (cmd.alive === false) continue;
@@ -5122,7 +5178,7 @@ async function pollResources() {
 /// the latest resource data from state._resourceCache. This avoids a full
 /// DOM rebuild (which the fingerprint optimization would skip anyway).
 function updateSidebarResourceText() {
-    for (const inst of state.instanceUrls) {
+    for (const inst of state.connections) {
         if (!inst._commands) continue;
         for (const cmd of inst._commands) {
             if (cmd.alive === false) continue;
@@ -5163,12 +5219,11 @@ function updateSidebarResourceText() {
 async function restartCommand(panelId) {
     const panelObj = state.panels.find(p => p.id === panelId);
     if (!panelObj) return;
-    const inst = state.instanceUrls.find(i => i.url === panelObj.instUrl);
+    const inst = panelObj.selectedInstUrl ? state.connections.find(i => i.url === panelObj.selectedInstUrl) : null;
     if (!inst || !inst._commands) return;
-    const isForSelected = (panelObj.instUrl === state.selectedInstUrl);
-    const cmdId = isForSelected ? state.selectedCmdId : null;
+    const cmdId = panelObj.selectedCmdId;
     if (!cmdId) return;
-    await restartCommandById(panelObj.instUrl, cmdId);
+    await restartCommandById(panelObj.selectedInstUrl, cmdId);
 }
 
 async function restartCommandById(instUrl, cmdId) {
@@ -5190,7 +5245,7 @@ async function restartCommandById(instUrl, cmdId) {
             // Reload command list so the sidebar contains the new command.
             await loadCommands();
             // Find the new command's name from the refreshed list.
-            const inst = state.instanceUrls.find(i => i.url === instUrl);
+            const inst = state.connections.find(i => i.url === instUrl);
             let newName = newId;
             if (inst && inst._commands) {
                 const newCmd = inst._commands.find(c => c.id === newId);
@@ -5563,6 +5618,61 @@ function onPanelDragEnd(e) {
     });
 }
 
+// ─── Drag-and-Drop: Sidebar Commands to Panels ───
+let _draggedCmd = null; // { instUrl, cmdId, cmdName }
+
+function onCmdDragStart(e, instUrl, cmdId, cmdName) {
+    _draggedCmd = { instUrl, cmdId, cmdName };
+    e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.setData('text/plain', cmdId);
+    e.dataTransfer.setData('application/x-cmd', JSON.stringify({ instUrl, cmdId, cmdName }));
+    e.target.style.opacity = '0.5';
+    setTimeout(() => { if (e.target) e.target.style.opacity = ''; }, 0);
+}
+
+// Make panels accept command drops from sidebar
+function initPanelDropTargets() {
+    document.querySelectorAll('.panel').forEach(panelEl => {
+        panelEl.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+            panelEl.classList.add('drag-over-left');
+        });
+        panelEl.addEventListener('dragleave', (e) => {
+            panelEl.classList.remove('drag-over-left');
+        });
+        panelEl.addEventListener('drop', (e) => {
+            e.preventDefault();
+            panelEl.classList.remove('drag-over-left');
+            try {
+                const data = JSON.parse(e.dataTransfer.getData('application/x-cmd'));
+                if (data && data.cmdId) {
+                    // Assign command to this specific panel
+                    const panelObj = state.panels.find(p => p.id === panelEl.id);
+                    if (panelObj) {
+                        _cacheTerminalForSwitch();
+                        panelObj.selectedInstUrl = data.instUrl;
+                        panelObj.selectedCmdId = data.cmdId;
+                        focusPanel(panelObj.id);
+                        state.selectedInstUrl = data.instUrl;
+                        state.selectedCmdId = data.cmdId;
+                        state._pendingVttyData = null;
+                        state._pendingVttyDirty = false;
+                        state.bufferView = 'current';
+                        _restoreCachedDom(data.cmdId);
+                        updatePanelCommandInfo();
+                        updateTerminalDisconnectedOverlay();
+                        updateSidebarSelection();
+                        loadVttyHttp(data.instUrl, data.cmdId);
+                        startUpdateMode();
+                    }
+                }
+            } catch (err) { /* ignore invalid drops */ }
+            _draggedCmd = null;
+        });
+    });
+}
+
 // ─── Global Search ───
 function openGlobalSearch() {
     const modal = document.getElementById('globalSearchModal');
@@ -5584,7 +5694,7 @@ async function executeGlobalSearch() {
     const resultsContainer = document.getElementById('globalSearchResults');
     resultsContainer.innerHTML = '<div style="padding:1rem;color:var(--text-muted);text-align:center;font-size:0.75rem;">Searching...</div>';
     let allResults = [];
-    for (const inst of state.instanceUrls) {
+    for (const inst of state.connections) {
         if (!inst._commands) continue;
         for (const cmd of inst._commands) {
             try {

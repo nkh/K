@@ -485,6 +485,11 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .panel.dragging { opacity:0.5; }
 .panel.drag-over-left { border-left:2px solid var(--accent); }
 .panel.drag-over-right { border-right:2px solid var(--accent); }
+/* Command items in sidebar are draggable to panels */
+.cmd-item[draggable="true"] { cursor:grab; }
+.cmd-item[draggable="true"]:active { cursor:grabbing; opacity:0.5; }
+/* Panel drop target highlight when dragging command from sidebar */
+.panel.cmd-drop-target { outline:2px dashed var(--accent); outline-offset:-2px; }
 
 /* Global search modal */
 .search-modal { position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:120;display:flex;align-items:flex-start;justify-content:center;padding-top:10vh; }
