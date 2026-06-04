@@ -33,7 +33,7 @@ pub struct HooksConfig {
 /// Exit configuration for a command.
 /// Controls what happens when a command exits, including cleanup commands and timeouts.
 /// This can be set per-command via the spawn API or as defaults in the config.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ExitConfig {
     /// Command to run when the child exits cleanly (exit code 0).
     /// The string is split on whitespace into a binary and arguments.
@@ -50,7 +50,6 @@ pub struct ExitConfig {
     /// before sending SIGKILL. Default: 10 seconds.
     /// Applies when kill is called or when the server shuts down.
     #[serde(default = "default_exit_timeout")]
-    #[default = "default_exit_timeout()"]
     pub timeout_secs: u64,
     /// When true, the command's VTTY buffer is retained in memory after
     /// the child process exits.  The command appears in the display tab
@@ -58,7 +57,6 @@ pub struct ExitConfig {
     /// the final output.  The buffer can be manually purged via the API.
     /// Default: false (commands are removed from the manager on exit).
     #[serde(default)]
-    #[default]
     pub retain_on_exit: bool,
     /// When set to a file path, the VTTY buffer is saved to that file
     /// as plain text when the child process exits.  The snapshot is taken
@@ -75,6 +73,18 @@ pub struct ExitConfig {
 
 fn default_exit_timeout() -> u64 {
     10
+}
+
+impl Default for ExitConfig {
+    fn default() -> Self {
+        Self {
+            on_exit: None,
+            on_error: None,
+            timeout_secs: default_exit_timeout(),
+            retain_on_exit: false,
+            snapshot_on_exit: None,
+        }
+    }
 }
 
 
@@ -127,7 +137,7 @@ pub struct ColorField {
 ///       cmd: 16
 ///       event: 17
 /// ```
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TerminalLogConfig {
     /// Printf-like format string controlling which fields appear in the
     /// terminal log line and in what order.  Available placeholders:
@@ -141,7 +151,6 @@ pub struct TerminalLogConfig {
     ///
     /// Default: "%timestamp% %pid% %cmd% %event% %details%"
     #[serde(default = "default_terminal_format")]
-    #[default = "default_terminal_format()"]
     pub format: String,
     /// Per-field ANSI color configuration.  Each field maps to a ColorField
     /// containing the ANSI SGR escape sequence.
@@ -157,8 +166,18 @@ fn default_terminal_format() -> String {
     "%timestamp% %pid% %cmd% %event% %details%".to_string()
 }
 
+impl Default for TerminalLogConfig {
+    fn default() -> Self {
+        Self {
+            format: default_terminal_format(),
+            colors: TerminalLogColors::default(),
+            pad: TerminalLogPad::default(),
+        }
+    }
+}
+
 /// Per-field ANSI color settings for terminal log output.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TerminalLogColors {
     #[serde(default = "default_clr_timestamp")]
     pub timestamp: ColorField,
@@ -198,25 +217,50 @@ fn default_clr_detail() -> ColorField { ColorField { ansi: "\x1b[90m".to_string(
 
 
 /// Per-field padding widths for terminal log output.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TerminalLogPad {
     /// PID field width (default: 6)
     #[serde(default = "default_pad_pid")]
-    #[default = "default_pad_pid()"]
     pub pid: usize,
     /// Command name field width (default: 16)
     #[serde(default = "default_pad_cmd")]
-    #[default = "default_pad_cmd()"]
     pub cmd: usize,
     /// Event type field width (default: 17, fits "thaw_keybinding")
     #[serde(default = "default_pad_event")]
-    #[default = "default_pad_event()"]
     pub event: usize,
 }
 
 fn default_pad_pid() -> usize { 6 }
 fn default_pad_cmd() -> usize { 16 }
 fn default_pad_event() -> usize { 17 }
+
+impl Default for TerminalLogPad {
+    fn default() -> Self {
+        Self {
+            pid: default_pad_pid(),
+            cmd: default_pad_cmd(),
+            event: default_pad_event(),
+        }
+    }
+}
+
+impl Default for TerminalLogColors {
+    fn default() -> Self {
+        Self {
+            timestamp: default_clr_timestamp(),
+            pid: default_clr_pid(),
+            id: default_clr_id(),
+            cmd: default_clr_cmd(),
+            event: default_clr_event(),
+            arg: default_clr_arg(),
+            cert: default_clr_cert(),
+            env: default_clr_env(),
+            size: default_clr_size(),
+            dir: default_clr_dir(),
+            detail: default_clr_detail(),
+        }
+    }
+}
 
 
 

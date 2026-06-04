@@ -1084,7 +1084,7 @@ function _buildSidebar() {
     const selectedPanel = state.panels.find(p =>
         p.id === (document.querySelector('.panel') || {}).id
     );
-    const selectedInstUrl = selectedPanel ? selectedPanel.instUrl : state.selectedInstUrl;
+    const selectedInstUrl = selectedPanel ? selectedPanel.selectedInstUrl : state.selectedInstUrl;
     if (!_sidebarSort || _sidebarSort === 'name') {
         if (selectedInstUrl && state.connections.length > 1) {
             _sidebarSort = selectedInstUrl;
@@ -2799,7 +2799,7 @@ async function sendKeys() {
 
 async function resizeTerminal() {
     if (!state.selectedCmdId) return;
-    const panelId = state.panels.find(p => p.id && p.instUrl === state.selectedInstUrl)?.id;
+    const panelId = state.panels.find(p => p.id && p.selectedInstUrl === state.selectedInstUrl)?.id;
     if (panelId) { resizeTerminalPanel(panelId); return; }
     // Fallback: use old global elements if present (backward compat)
     const rows = parseInt(document.getElementById('resizeRows')?.value) || 24;
@@ -4197,20 +4197,20 @@ document.addEventListener('wheel', (e) => {
                 // Reached the live buffer — restore native scroll
                 p.scrollbackOffset = 0;
                 sessionStorage.removeItem('vrw_scrollback_' + state.selectedCmdId);
-                loadVttyHttp(p.instUrl, state.selectedCmdId);
+                loadVttyHttp(p.selectedInstUrl, state.selectedCmdId);
                 // Scroll to bottom after returning to live view
                 const vtty = panelEl.querySelector('.vtty-container');
                 if (vtty) vtty.scrollTop = vtty.scrollHeight;
             } else {
                 p.scrollbackOffset = newOffset;
                 sessionStorage.setItem('vrw_scrollback_' + state.selectedCmdId, p.scrollbackOffset.toString());
-                loadVttyHttp(p.instUrl, state.selectedCmdId);
+                loadVttyHttp(p.selectedInstUrl, state.selectedCmdId);
             }
         } else {
             // Wheel up: increase scrollback offset (move into history)
             p.scrollbackOffset += lines;
             sessionStorage.setItem('vrw_scrollback_' + state.selectedCmdId, p.scrollbackOffset.toString());
-            loadVttyHttp(p.instUrl, state.selectedCmdId);
+            loadVttyHttp(p.selectedInstUrl, state.selectedCmdId);
         }
 
         // Update scroll-to-bottom button visibility and scrollback indicator
