@@ -272,3 +272,18 @@ STEP 6: Verify individual kill works from sidebar
 STEP 7: Update documentation
 
 STEP 8: Compile, lint, commit and push
+- cargo build --release --features "vrc,vrw" — SUCCESS (58s first build, 1m56s full build)
+- cargo clippy — ZERO warnings
+- Commit c91b395 pushed to origin/complexity_fix
+
+Stage Summary:
+- 3 files changed: static/admin/app.js (+478/-77), docs/usage.md (+11/-7), worklog.md (+43)
+- Per-panel WebSocket: each panel has independent WS with its own reconnect, ping/pong, latency tracking
+- Per-panel VTTY routing: new functions updateVttyDisplayForPanel, applyVttyDiffForPanel,
+  scheduleVttyHttpForPanel, loadVttyHttpForPanel, updateVttyMetadataForPanel
+- Per-panel poll: startPanelPoll/stopPanelPoll/pollOncePanel
+- Shared toolbar toggle sync: updateSharedToolbar now syncs MaxFit/MaxFont button text+style
+- Empty panels: addPanel() creates empty panels, no server URL modal required
+- Kill All fixed: kills across all reachable servers, refreshes state properly
+- Zero clippy warnings, clean release build
+- Commit c91b395 pushed to complexity_fix branch
