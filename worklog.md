@@ -192,3 +192,40 @@ Stage Summary:
 - --color-always flag enables ANSI colors in terminal log output
 - Tab-separated file output for easy parsing
 - Comprehensive decision table added to documentation
+---
+Task ID: 6
+Agent: main
+Task: Complete remaining work for web UI panel decoupling refactor
+
+Work Log:
+- Verified Rust toolchain: rustc 1.96.0, cargo 1.96.0
+- Copied repo from /tmp/K-quality to /home/z/K-work (writable location)
+- Fixed 5 field name mismatches in static/admin/app.js from incomplete refactor:
+  - Line 1087: selectedPanel.instUrl → selectedPanel.selectedInstUrl
+  - Line 2802: p.instUrl → p.selectedInstUrl (resizeTerminal)
+  - Lines 4200, 4207, 4213: p.instUrl → p.selectedInstUrl (scrollback handler)
+- Verified all remaining .instUrl references are on instance/connection objects (correct)
+- Step 12 (toolbar commands): Verified all panel toolbar buttons are correctly wired
+  - Shared toolbar: Restart, Resources, Font A-/A+, Resize, MaxFit, MaxFont, Buffer Select, Refresh, Send Keys, Layout, Select, Copy, Export, Screenshot, Theme
+  - Panel context menu: Copy URL, Pause/Resume, Restart, Kill, Remove Panel
+- Step 13 (icons): No duplicate icons found; all toolbar buttons use distinct Unicode symbols/emoji
+- Step 14 (keyboard shortcuts): Added 4 new shortcuts:
+  - Ctrl+Shift+E — Export terminal as text
+  - Ctrl+Shift+R — Restart command in active panel
+  - Alt+T — Toggle panel theme (inherit/light/dark)
+  - Alt+N — Add new panel
+  - Updated showShortcuts() help overlay with new entries
+- Step 15 (docs): Updated docs/web-ui/shortcuts.md with new shortcuts
+- Step 16 (clippy): Fixed 6 compilation errors in src/config/hooks.rs
+  - Removed invalid #[default] attributes from struct fields (only valid on unit enum variants)
+  - #[serde(default = "...")] attributes were already correct and sufficient
+  - Build: cargo build --release --features "vrc,vrw" — SUCCESS
+  - Clippy: ZERO warnings
+- Step 17: Committed as df3339f and pushed to origin/complexity_fix (after rebase on remote)
+
+Stage Summary:
+- 3 files changed: static/admin/app.js (+42/-5), src/config/hooks.rs (-6), docs/web-ui/shortcuts.md (+4)
+- All 5 field name bugs fixed from panel decoupling refactor
+- 4 new keyboard shortcuts added with updated documentation
+- Zero clippy warnings, clean release build
+- Commit df3339f pushed to complexity_fix branch
