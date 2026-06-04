@@ -7,7 +7,11 @@ The web UI provides several keyboard shortcuts for common actions.
 | Shortcut | Action |
 |----------|--------|
 | `Ctrl+Shift+C` | Copy terminal text selection to clipboard |
+| `Ctrl+Shift+E` | Export terminal as text |
+| `Ctrl+Shift+R` | Restart the command in the active panel |
 | `Ctrl+Shift+S` / `Alt+S` | Toggle selection mode in the terminal panel |
+| `Alt+T` | Toggle panel theme (inherit / light / dark) |
+| `Alt+N` | Add a new panel |
 | `Alt+Left` / `Alt+Right` | Navigate to previous/next command in the list |
 | `?` | Show keyboard shortcuts overlay |
 | `Shift+F10` / Context Menu key | Open context menu for the focused element (command item or panel header) |

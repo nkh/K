@@ -3987,6 +3987,39 @@ document.addEventListener('keydown', (e) => {
     if (e.key === '?' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
         showShortcuts();
     }
+    // Ctrl+Shift+E — export terminal as text
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'E' || e.key === 'e')) {
+        const panel = getSelectedPanel();
+        if (panel) {
+            e.preventDefault();
+            exportTerminal(panel.id);
+            return;
+        }
+    }
+    // Ctrl+Shift+R — restart command (only when not in input)
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'R' || e.key === 'r') && !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
+        const panel = getSelectedPanel();
+        if (panel) {
+            e.preventDefault();
+            restartCommand(panel.id);
+            return;
+        }
+    }
+    // Alt+T — toggle panel theme (only when not in input)
+    if (e.altKey && (e.key === 't' || e.key === 'T') && !e.ctrlKey && !e.metaKey && !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
+        const panelId = getActivePanelId();
+        if (panelId) {
+            e.preventDefault();
+            togglePanelTheme(panelId);
+            return;
+        }
+    }
+    // Alt+N — add new panel (only when not in input)
+    if (e.altKey && (e.key === 'n' || e.key === 'N') && !e.ctrlKey && !e.metaKey && !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
+        e.preventDefault();
+        addPanel();
+        return;
+    }
     // Alt+Left / Alt+Right — navigate prev/next command (only when not focused on terminal)
     if (e.altKey && !e.ctrlKey && !e.metaKey && !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
         const panel = getSelectedPanel();
@@ -5122,8 +5155,12 @@ function showShortcuts() {
             <tr><td>Ctrl+F</td><td>Search in terminal</td></tr>
             <tr><td>Ctrl+Shift+C</td><td>Copy terminal selection</td></tr>
             <tr><td>Ctrl+Shift+S / Alt+S</td><td>Toggle selection mode</td></tr>
+            <tr><td>Ctrl+Shift+E</td><td>Export terminal as text</td></tr>
+            <tr><td>Ctrl+Shift+R</td><td>Restart command</td></tr>
             <tr><td>Escape</td><td>Close search / menu</td></tr>
             <tr><td>Alt+Left / Alt+Right</td><td>Navigate prev/next command</td></tr>
+            <tr><td>Alt+T</td><td>Toggle panel theme</td></tr>
+            <tr><td>Alt+N</td><td>Add new panel</td></tr>
             <tr><td>Any key</td><td>Focus key input (when not in a field)</td></tr>
             <tr><td>Enter</td><td>Send keystrokes to terminal</td></tr>
         </table>
