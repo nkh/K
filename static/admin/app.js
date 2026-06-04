@@ -26,13 +26,15 @@ const state = {
     fontSize: parseInt(localStorage.getItem('vrw_font_size') || '10'),
     instanceUrls: [],
     currentView: 'vtty',
-    // WebSocket for real-time VTTY streaming
+    // DEPRECATED: kept for backward compat with log WS, quality indicator, etc.
+    // Per-panel WebSocket is now stored on panel objects (panel.ws).
     vttyWs: null,
     vttyWsUrl: null,
     vttyWsCmdId: null,
-    // Buffer view: 'current', 'main', 'alt'
+    // Buffer view: 'current', 'main', 'alt' — GLOBAL for shared toolbar
     bufferView: 'current',
-    // Debounce timer for throttled HTTP VTTY fetches.
+    // Debounce timer for throttled HTTP VTTY fetches (per panel).
+    // Keyed by panelId.
     _vttyHttpTimer: null,
     // Last-known buffer generation per command ID. Used to skip redundant
     // DOM updates when the server reports no change (Level 2 optimization).
@@ -1393,7 +1395,7 @@ function selectCommand(instUrl, cmdId, name) {
     focusPanel(panelObj.id);
 
     // Cache the current command's terminal DOM before switching away.
-    disconnectVttyWs();
+    disconnectPanelWs(panelObj.id);
     _cacheTerminalForSwitch();
 
     // Update per-panel selection
@@ -1427,9 +1429,9 @@ function selectCommand(instUrl, cmdId, name) {
     updateTerminalDisconnectedOverlay();
     updateSidebarSelection();
     // Fetch VTTY content — will skip DOM write if generation unchanged
-    loadVttyHttp(instUrl, cmdId);
-    // Start the active update mode (push or poll)
-    startUpdateMode();
+    loadVttyHttpForPanel(panelObj.id, instUrl, cmdId);
+    // Start per-panel WS for push mode (or poll)
+    startPanelUpdateMode(panelObj.id);
 }
 
 // Update the panel header with the selected command's full name and args.
@@ -1748,19 +1750,31 @@ function _flushPendingVttyUpdate() {
 
 /// Start the active update mode (push or poll).
 function startUpdateMode() {
-    stopUpdateMode();
-    if (state.bufferView !== 'current') return;
+    // Legacy wrapper: start update for the focused panel
+    const panelId = getActivePanelId();
+    if (panelId) startPanelUpdateMode(panelId);
+}
+
+function startPanelUpdateMode(panelId) {
+    stopPanelUpdateMode(panelId);
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj || panelObj.selectedCmdId === null || panelObj.bufferView !== 'current') return;
     if (state.updateMode === 'push') {
-        connectVttyWs(state.selectedInstUrl, state.selectedCmdId);
+        connectPanelWs(panelId);
     } else {
-        startPoll();
+        startPanelPoll(panelId);
     }
 }
 
-/// Stop the active update mode.
+function stopPanelUpdateMode(panelId) {
+    disconnectPanelWs(panelId);
+    stopPanelPoll(panelId);
+}
+
+/// Stop the active update mode for the focused panel (legacy wrapper).
 function stopUpdateMode() {
-    disconnectVttyWs();
-    stopPoll();
+    const panelId = getActivePanelId();
+    if (panelId) stopPanelUpdateMode(panelId);
 }
 
 // ─── Push Mode: WebSocket ───
@@ -1941,14 +1955,175 @@ function disconnectVttyWs() {
     updateWsQualityIndicator();
 }
 
+// ─── Per-Panel WebSocket Management ───
+// Each panel has its own WebSocket connection to its selected command.
+// This allows multiple panels to stream different commands simultaneously.
+
+function connectPanelWs(panelId) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj || !panelObj.selectedInstUrl || !panelObj.selectedCmdId) return;
+
+    // Disconnect existing WS for this panel
+    disconnectPanelWs(panelId);
+
+    const instUrl = panelObj.selectedInstUrl;
+    const cmdId = panelObj.selectedCmdId;
+    const wsUrl = instUrl.replace(/^http/, 'ws');
+    const token = state.authToken || (state.connections.find(i => i.url === instUrl) || {}).token || '';
+    const sep = token ? '?' : '';
+    const url = `${wsUrl}/api/commands/${cmdId}/ws${sep}${token ? 'token=' + encodeURIComponent(token) : ''}`;
+
+    try {
+        const ws = new WebSocket(url);
+        panelObj.ws = ws;
+        panelObj.wsInstUrl = instUrl;
+        panelObj.wsCmdId = cmdId;
+
+        ws.onopen = () => {
+            // Update connStatus if this is the focused panel
+            if (panelObj.id === state._focusedPanelId) {
+                document.getElementById('connStatus').textContent = 'WS Connected';
+            }
+            // Start ping/pong latency measurement (every 10s)
+            clearInterval(panelObj.wsPingInterval);
+            panelObj.wsPingInterval = setInterval(() => {
+                if (panelObj.ws && panelObj.ws.readyState === WebSocket.OPEN) {
+                    panelObj.wsPingSendTime = Date.now();
+                    panelObj.ws.send(JSON.stringify({ type: 'ping' }));
+                }
+            }, 10000);
+            updateWsQualityIndicator();
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                // Guard: discard messages for a command that is no longer selected on this panel
+                if (msg.cmd_id && msg.cmd_id !== panelObj.selectedCmdId) return;
+                if (msg.data && msg.data.id && msg.data.id !== panelObj.selectedCmdId) return;
+
+                // Route VTTY updates to THIS panel's DOM
+                const panelEl = document.getElementById(panelObj.id);
+                if (!panelEl) return;
+
+                if (msg.type === 'vtty_full' && msg.data) {
+                    if (!_throttleRefresh()) {
+                        updateVttyDisplayForPanel(panelObj, panelEl, msg.data);
+                    }
+                    // Alt screen badge
+                    const badge = panelEl.querySelector('.alt-screen-badge');
+                    if (badge) badge.classList.toggle('visible', !!msg.data.alternate_screen);
+                } else if (msg.type === 'vtty_diff' && msg.data) {
+                    if (!_throttleRefresh()) {
+                        applyVttyDiffForPanel(panelObj, panelEl, msg.data);
+                    }
+                } else if (msg.type === 'vtty_dirty' && msg.data) {
+                    scheduleVttyHttpForPanel(panelObj.id, panelObj.selectedInstUrl, panelObj.selectedCmdId, 50);
+                } else if (msg.type === 'command_ended') {
+                    if (panelObj.id === state._focusedPanelId) {
+                        document.getElementById('connStatus').textContent = 'Command ended';
+                    }
+                    disconnectPanelWs(panelObj.id);
+                    notifyCommandEnded(panelObj.selectedCmdId);
+                } else if (msg.type === 'pong') {
+                    if (panelObj.wsPingSendTime > 0) {
+                        panelObj.wsLatency = Date.now() - panelObj.wsPingSendTime;
+                        panelObj.wsPingSendTime = 0;
+                        if (panelObj.id === state._focusedPanelId) {
+                            updateWsQualityIndicator();
+                            const connEl = document.getElementById('connStatus');
+                            if (connEl) connEl.textContent = 'Connected (' + panelObj.wsLatency + 'ms)';
+                        }
+                    }
+                } else if (msg.type === 'connected') {
+                    // Server confirms connection. A vtty_full follows immediately.
+                } else if (msg.type === 'peer_registered' || msg.type === 'peer_unregistered') {
+                    handlePeerEvent(msg);
+                }
+            } catch (e) {
+                console.error('WS message parse error (panel ' + panelId + '):', e);
+            }
+        };
+
+        ws.onclose = () => {
+            if (panelObj.ws === ws) {
+                panelObj.ws = null;
+                clearInterval(panelObj.wsPingInterval);
+                panelObj.wsPingInterval = null;
+                panelObj.wsPingSendTime = 0;
+                panelObj.wsLatency = 0;
+                if (panelObj.id === state._focusedPanelId) {
+                    document.getElementById('connStatus').textContent = 'WS Disconnected';
+                    updateWsQualityIndicator();
+                }
+                // Schedule HTTP fallback to keep display alive
+                if (panelObj.selectedInstUrl && panelObj.selectedCmdId) {
+                    scheduleVttyHttpForPanel(panelObj.id, panelObj.selectedInstUrl, panelObj.selectedCmdId, 0);
+                }
+                // Auto-reconnect (max 5 attempts)
+                if (panelObj.selectedInstUrl && panelObj.selectedCmdId && !panelObj.wsReconnectTimer) {
+                    panelObj.wsReconnectCount++;
+                    if (panelObj.wsReconnectCount <= 5) {
+                        panelObj.wsReconnectTimer = setTimeout(() => {
+                            panelObj.wsReconnectTimer = null;
+                            if (panelObj.selectedInstUrl && panelObj.selectedCmdId && state.updateMode === 'push') {
+                                const inst = state.connections.find(i => i.url === panelObj.selectedInstUrl);
+                                if (inst && inst.reachable !== false) {
+                                    connectPanelWs(panelObj.id);
+                                }
+                            }
+                        }, 2000);
+                    }
+                }
+            }
+        };
+
+        ws.onerror = (err) => {
+            console.error('WebSocket error (panel ' + panelId + '):', err);
+        };
+    } catch (e) {
+        console.error('WebSocket connect failed (panel ' + panelId + '):', e);
+    }
+}
+
+function disconnectPanelWs(panelId) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj) return;
+    if (panelObj.wsReconnectTimer) {
+        clearTimeout(panelObj.wsReconnectTimer);
+        panelObj.wsReconnectTimer = null;
+    }
+    clearInterval(panelObj.wsPingInterval);
+    panelObj.wsPingInterval = null;
+    panelObj.wsPingSendTime = 0;
+    panelObj.wsLatency = 0;
+    panelObj.wsReconnectCount = 0;
+    if (panelObj.ws) {
+        panelObj.ws.onclose = null; // prevent re-entry
+        panelObj.ws.close();
+        panelObj.ws = null;
+        panelObj.wsInstUrl = null;
+        panelObj.wsCmdId = null;
+    }
+}
+
+/// Disconnect WS for ALL panels (e.g. on page unload).
+function disconnectAllPanelWs() {
+    for (const panel of state.panels) {
+        disconnectPanelWs(panel.id);
+    }
+}
+
 // ─── WebSocket Connection Quality Indicator ───
 function updateWsQualityIndicator() {
     const el = document.getElementById('wsQuality');
     if (!el) return;
 
-    const latency = state._wsLatency;
-    const reconnects = state._wsReconnectCount;
-    const isConnected = state.vttyWs && state.vttyWs.readyState === WebSocket.OPEN;
+    // Use focused panel's WS state
+    const focusedPanel = state.panels.find(p => p.id === state._focusedPanelId);
+    const latency = focusedPanel ? focusedPanel.wsLatency : 0;
+    const reconnects = focusedPanel ? focusedPanel.wsReconnectCount : 0;
+    const isConnected = focusedPanel && focusedPanel.ws && focusedPanel.ws.readyState === WebSocket.OPEN;
 
     if (!isConnected && latency === 0) {
         el.textContent = '--';
@@ -1976,31 +2151,49 @@ function updateWsQualityIndicator() {
 
 // ─── Poll Mode ───
 function startPoll() {
-    stopPoll();
-    if (!state.selectedInstUrl || !state.selectedCmdId) return;
-    state._pollTimer = setInterval(() => pollOnce(), state.pollInterval);
-    // Also poll immediately
-    pollOnce();
+    // Legacy wrapper for focused panel
+    const panelId = getActivePanelId();
+    if (panelId) startPanelPoll(panelId);
+}
+
+function startPanelPoll(panelId) {
+    stopPanelPoll(panelId);
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj || !panelObj.selectedInstUrl || !panelObj.selectedCmdId) return;
+    panelObj.pollTimer = setInterval(() => pollOncePanel(panelId), state.pollInterval);
+    pollOncePanel(panelId);
 }
 
 function stopPoll() {
-    if (state._pollTimer) {
-        clearInterval(state._pollTimer);
-        state._pollTimer = null;
+    // Legacy: stop all panel polls
+    for (const panel of state.panels) stopPanelPoll(panel.id);
+}
+
+function stopPanelPoll(panelId) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj) return;
+    if (panelObj.pollTimer) {
+        clearInterval(panelObj.pollTimer);
+        panelObj.pollTimer = null;
     }
 }
 
 async function pollOnce() {
-    if (!state.selectedInstUrl || !state.selectedCmdId) return;
-    // Skip fetching when terminal is not visible
-    if (!_isTerminalVisible()) return;
-    const cmdId = state.selectedCmdId;
-    const instUrl = state.selectedInstUrl;
+    // Legacy: poll focused panel
+    const panelId = getActivePanelId();
+    if (panelId) await pollOncePanel(panelId);
+}
+
+async function pollOncePanel(panelId) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj || !panelObj.selectedInstUrl || !panelObj.selectedCmdId) return;
+    const cmdId = panelObj.selectedCmdId;
+    const instUrl = panelObj.selectedInstUrl;
     try {
         const res = await fetch(apiUrl(`/api/commands/${cmdId}/vtty/changed`, { url: instUrl }), { headers: authHeadersForInstance({ url: instUrl }) });
         const json = await res.json();
         if (json.status === 'ok' && json.data && json.data.changed) {
-            loadVttyHttp(instUrl, cmdId);
+            loadVttyHttpForPanel(panelId, instUrl, cmdId);
         }
     } catch (e) {
         // Silently ignore — next poll will retry
@@ -2054,6 +2247,148 @@ function updateVttyDisplay(data) {
     }
 
     updateVttyMetadata(data, panel, vttyEl);
+}
+
+// ─── Per-Panel VTTY Display ───
+// These functions route VTTY updates to a specific panel's DOM,
+// rather than always targeting the focused panel.
+
+function updateVttyDisplayForPanel(panelObj, panelEl, data) {
+    const vttyEl = panelEl.querySelector('.vtty-container');
+    const pre = vttyEl ? vttyEl.querySelector('pre') : null;
+    if (!pre) return;
+
+    const cmdId = panelObj.selectedCmdId;
+    if (cmdId && data.generation !== undefined) {
+        if (state._lastGeneration[cmdId] === data.generation) {
+            updateVttyMetadataForPanel(panelObj, panelEl, vttyEl, data);
+            return;
+        }
+        state._lastGeneration[cmdId] = data.generation;
+    }
+
+    if (data.html !== undefined && data.html !== null) {
+        const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
+        const oldScrollHeight = vttyEl.scrollHeight;
+        pre.innerHTML = data.html;
+        if (state._level3Enabled && data.dimensions) {
+            buildCellGrid(cmdId, pre, data.dimensions.rows, data.dimensions.cols);
+        }
+        if (wasAtBottom) {
+            vttyEl.scrollTop = vttyEl.scrollHeight;
+        } else {
+            vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
+        }
+    }
+
+    updateVttyMetadataForPanel(panelObj, panelEl, vttyEl, data);
+}
+
+function updateVttyMetadataForPanel(panelObj, panelEl, vttyEl, data) {
+    const cursor = data.cursor || {};
+    const dims = data.dimensions || {};
+    // Only update bottombar if this is the focused panel
+    if (panelObj.id === state._focusedPanelId) {
+        document.getElementById('cursorPos').textContent = `Cursor: ${cursor.row + 1},${cursor.col + 1}`;
+        document.getElementById('termDims').textContent = `${dims.rows}x${dims.cols}`;
+    }
+    const inScrollback = panelObj.scrollbackOffset > 0;
+    const cursorHidden = data.cursor_visible === false;
+    const cursorEl = vttyEl ? vttyEl.querySelector('.cursor-indicator') : null;
+    if (cursorEl && cursor.row !== undefined && !inScrollback && !cursorHidden) {
+        const charW = panelObj.fontSize * 0.6;
+        const charH = panelObj.fontSize * 1.2;
+        cursorEl.style.top = (cursor.row * charH) + 'px';
+        cursorEl.style.left = (cursor.col * charW) + 'px';
+        cursorEl.style.width = charW + 'px';
+        cursorEl.style.height = charH + 'px';
+        cursorEl.style.display = '';
+    } else if (cursorEl) {
+        cursorEl.style.display = 'none';
+    }
+    panelObj.mouseTracking = !!data.mouse_tracking;
+    panelObj.mouseSgr = !!data.mouse_sgr;
+    if (vttyEl) {
+        const mt = panelObj.mouseTracking;
+        vttyEl.classList.toggle('selectable', !mt);
+        const pre = vttyEl.querySelector('pre');
+        if (pre && dims.rows && dims.cols) {
+            pre._vttyRows = dims.rows;
+            pre._vttyCols = dims.cols;
+        }
+    }
+}
+
+/// Per-panel version of applyVttyDiff.
+function applyVttyDiffForPanel(panelObj, panelEl, data) {
+    const cmdId = panelObj.selectedCmdId;
+    if (!cmdId) return;
+    const vttyEl = panelEl.querySelector('.vtty-container');
+    const pre = vttyEl ? vttyEl.querySelector('pre') : null;
+    if (!pre) return;
+
+    if (data.generation !== undefined && state._lastGeneration[cmdId] === data.generation) {
+        if (data.cursor || data.dimensions || data.mouse_tracking !== undefined) {
+            updateVttyMetadataForPanel(panelObj, panelEl, vttyEl, data);
+        }
+        return;
+    }
+    if (data.generation !== undefined) {
+        state._lastGeneration[cmdId] = data.generation;
+    }
+
+    if (data.ops && state._level3Enabled && state._cellGrids[cmdId]) {
+        applyDiffOps(pre, state._cellGrids[cmdId], data.ops, data.dimensions);
+    } else if (data.html !== undefined) {
+        pre.innerHTML = data.html;
+        if (data.dimensions) {
+            buildCellGrid(cmdId, pre, data.dimensions.rows, data.dimensions.cols);
+        }
+    }
+
+    updateVttyMetadataForPanel(panelObj, panelEl, vttyEl, data);
+}
+
+/// Per-panel version of scheduleVttyHttp.
+function scheduleVttyHttpForPanel(panelId, instUrl, cmdId, delayMs) {
+    if (state._vttyHttpTimer) clearTimeout(state._vttyHttpTimer);
+    state._vttyHttpTimer = setTimeout(() => {
+        state._vttyHttpTimer = null;
+        loadVttyHttpForPanel(panelId, instUrl, cmdId);
+    }, delayMs);
+}
+
+/// Per-panel version of loadVttyHttp.
+async function loadVttyHttpForPanel(panelId, instUrl, cmdId) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj) return;
+    const panelEl = document.getElementById(panelId);
+    if (!panelEl) return;
+
+    const sbOffset = panelObj.scrollbackOffset;
+
+    let endpoint;
+    if (state.bufferView !== 'current') {
+        const screenParam = `?screen=${state.bufferView}`;
+        endpoint = `/api/commands/${cmdId}/vtty/buffer${screenParam}`;
+    } else if (sbOffset > 0) {
+        endpoint = `/api/commands/${cmdId}/vtty/html?scrollback_offset=${sbOffset}`;
+    } else {
+        endpoint = `/api/commands/${cmdId}/vtty/html`;
+    }
+
+    try {
+        const res = await fetch(apiUrl(endpoint, { url: instUrl }), {
+            headers: authHeadersForInstance({ url: instUrl }),
+        });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json.status === 'ok' && json.data) {
+            updateVttyDisplayForPanel(panelObj, panelEl, json.data);
+        }
+    } catch (e) {
+        // Silently ignore fetch errors (server might be unreachable)
+    }
 }
 
 /// Update cursor, dimensions, mouse state, etc. without touching the DOM content.
@@ -2379,13 +2714,9 @@ function applyVttyDiff(data) {
 // periodic refresh, sendKeys) all want to refresh the VTTY display.
 // Only the last call within the debounce window actually fires.
 function scheduleVttyHttp(instUrl, cmdId, delayMs) {
-    // Skip scheduling when terminal is not visible
-    if (!_isTerminalVisible()) return;
-    if (state._vttyHttpTimer) clearTimeout(state._vttyHttpTimer);
-    state._vttyHttpTimer = setTimeout(() => {
-        state._vttyHttpTimer = null;
-        loadVttyHttp(instUrl, cmdId);
-    }, delayMs);
+    // Legacy wrapper: delegate to per-panel
+    const panelId = getActivePanelId();
+    if (panelId) scheduleVttyHttpForPanel(panelId, instUrl, cmdId, delayMs);
 }
 
 /// Pre-fetch VTTY HTML for instant initial display.
@@ -2417,7 +2748,8 @@ async function _prefetchVttyHtml(instUrl, cmdId) {
             updateVttyMetadataFromHttp(json.data, panel,
                 state.panels.find(p => p.id === panel.id), 0);
             // Start the push/poll update mode now that initial content is displayed
-            startUpdateMode();
+            const panelObj = state.panels.find(p => p.id === panel.id);
+            if (panelObj) startPanelUpdateMode(panelObj.id);
         }
     } catch (e) {
         console.error('Failed to pre-fetch VTTY HTML:', e);
@@ -2664,9 +2996,10 @@ async function spawnCommand() {
             const newId = json.data && json.data.id ? json.data.id : null;
             if (newId) {
                 state.selectedInstUrl = instUrl;
-                // Disconnect the old WS FIRST to prevent stale vtty_full
+                // Disconnect the old panel WS FIRST to prevent stale vtty_full
                 // messages from the previous command overwriting the cleared terminal.
-                disconnectVttyWs();
+                const focusedId = state._focusedPanelId || getActivePanelId();
+                if (focusedId) disconnectPanelWs(focusedId);
                 _cacheTerminalForSwitch();
                 state._pendingSelectId = newId;
             }
@@ -2752,11 +3085,12 @@ async function purgeCommand(instUrl, cmdId, cmdName) {
 }
 
 async function killAllCommands() {
-    if (!confirm('Kill all running commands?')) return;
+    if (!confirm('Kill all running commands on all servers?')) return;
     // Force full rebuild on state transition
     _lastCommandState = '';
     const promises = [];
     for (const inst of state.connections) {
+        if (!inst.reachable) continue;
         for (const cmd of (inst._commands || [])) {
             if (cmd.alive) {
                 promises.push(
@@ -2769,25 +3103,11 @@ async function killAllCommands() {
             }
         }
     }
-    // Clear cached commands immediately so the sidebar empties
-    for (const inst of state.connections) {
-        inst._commands = [];
-    }
-    state.selectedInstUrl = null;
-    state.selectedCmdId = null;
-    // Render the empty sidebar immediately — do NOT call loadCommands() yet
-    // because the server may not have processed all kills, causing stale data.
-    const container = document.getElementById('commandList');
-    if (container) {
-        container.innerHTML = '<div style="padding:1rem;color:var(--text-muted);text-align:center;">No running commands</div>';
-    }
-    // Show empty terminal (not the welcome/spawn panel)
-    _showingWelcome = false;
-    renderPanels();
     // Wait for all kill requests to complete
     await Promise.all(promises);
-    // Re-fetch from server after a delay to let the backend process kills
-    setTimeout(() => { _lastCommandState = ''; loadCommands(); }, 1500);
+    // Re-fetch from server to get accurate state (some kills may have failed)
+    _lastCommandState = '';
+    await loadCommands();
 }
 
 async function sendKeys() {
@@ -2929,22 +3249,24 @@ function addPanelDirect() {
     const savedTheme = localStorage.getItem('vrw_panel_theme_' + id);
     // Per-panel theme: 'light', 'dark', or '' (inherit global). Default is inherit.
     const theme = (savedTheme === 'light' || savedTheme === 'dark') ? savedTheme : '';
-    const panel = { id, scrollbackOffset: 0, mouseTracking: false, mouseSgr: false, focused: false, fontSize, selectionMode, theme, selectedCmdId: null, selectedInstUrl: null };
+    const panel = { id, scrollbackOffset: 0, mouseTracking: false, mouseSgr: false, focused: false, fontSize, selectionMode, theme, selectedCmdId: null, selectedInstUrl: null,
+        // Per-panel WebSocket connection
+        ws: null, wsCmdId: null, wsInstUrl: null, wsReconnectCount: 0, wsReconnectTimer: null, wsPingInterval: null, wsPingSendTime: 0, wsLatency: 0,
+        // Per-panel poll timer
+        pollTimer: null,
+    };
     state.panels.push(panel);
     renderPanels();
     return panel;
 }
 
 function addPanel() {
-    const modal = document.getElementById('panelModal');
-    modal.style.display = '';
-    document.getElementById('panelUrl').value = 'http://localhost:9090';
-    document.getElementById('panelLabel').value = '';
-    document.getElementById('panelToken').value = '';
-    // Trap focus inside the modal and auto-focus the URL input
-    const modalInner = modal.querySelector('.modal');
-    if (modalInner) trapFocus(modalInner);
-    document.getElementById('panelUrl').focus();
+    // Create an empty panel directly (no server URL required).
+    // Users can connect a command from the sidebar later.
+    addPanelDirect();
+    // Focus the new panel
+    const newPanel = state.panels[state.panels.length - 1];
+    if (newPanel) focusPanel(newPanel.id);
 }
 
 function closePanelModal() {
@@ -3056,6 +3378,9 @@ function confirmAddServer() {
 }
 
 function removePanel(id) {
+    // Disconnect panel's WS and poll before removing
+    disconnectPanelWs(id);
+    stopPanelPoll(id);
     state.panels = state.panels.filter(p => p.id !== id);
     // If only one panel left, reset layout to row
     if (state.panels.length <= 1) {
@@ -3171,7 +3496,7 @@ function renderPanels() {
                             <button onclick="vttySearchPrev('${panel.id}')" title="Previous match">&#x25B2;</button>
                             <button onclick="vttySearchClose('${panel.id}')" title="Close search">&#x2715;</button>
                         </div>
-                        <pre style="color:#484f58;">No command selected — spawn or select a command to view its output</pre>
+                        <pre style="color:#484f58;">No command selected — select a command from the sidebar to view its output</pre>
                         <div class="cursor-indicator" style="display:none;"></div>
                         <div class="copy-feedback" id="copyFeedback-${panel.id}">Copied!</div>
                         <button class="scroll-bottom-btn" id="scrollBtn-${panel.id}" onclick="scrollTerminalBottom('${panel.id}')" title="Scroll to bottom">&#x25BC;</button>
@@ -3322,6 +3647,36 @@ function updateSharedToolbar() {
     const restartBtn = document.getElementById('stRestartBtn');
     if (restartBtn) {
         restartBtn.style.display = panelObj.selectedCmdId ? '' : 'none';
+    }
+
+    // Max Fit button state
+    const maxFitBtn = document.getElementById('stMaxFitBtn');
+    if (maxFitBtn) {
+        const fitState = _maxFitState[panelId];
+        if (fitState && fitState.active) {
+            maxFitBtn.textContent = 'Restore';
+            maxFitBtn.style.background = 'var(--accent)';
+            maxFitBtn.style.color = '#fff';
+        } else {
+            maxFitBtn.textContent = 'Max fit';
+            maxFitBtn.style.background = '';
+            maxFitBtn.style.color = '';
+        }
+    }
+
+    // Max Font button state
+    const maxFontBtn = document.getElementById('stMaxFontBtn');
+    if (maxFontBtn) {
+        const fontState = _maxFontState[panelId];
+        if (fontState && fontState.active) {
+            maxFontBtn.textContent = 'Restore';
+            maxFontBtn.style.background = 'var(--accent)';
+            maxFontBtn.style.color = '#fff';
+        } else {
+            maxFontBtn.textContent = 'Max font';
+            maxFontBtn.style.background = '';
+            maxFontBtn.style.color = '';
+        }
     }
 }
 
@@ -4230,20 +4585,20 @@ document.addEventListener('wheel', (e) => {
                 // Reached the live buffer — restore native scroll
                 p.scrollbackOffset = 0;
                 sessionStorage.removeItem('vrw_scrollback_' + state.selectedCmdId);
-                loadVttyHttp(p.selectedInstUrl, state.selectedCmdId);
+                loadVttyHttpForPanel(panel.id, p.selectedInstUrl, p.selectedCmdId);
                 // Scroll to bottom after returning to live view
                 const vtty = panelEl.querySelector('.vtty-container');
                 if (vtty) vtty.scrollTop = vtty.scrollHeight;
             } else {
                 p.scrollbackOffset = newOffset;
                 sessionStorage.setItem('vrw_scrollback_' + state.selectedCmdId, p.scrollbackOffset.toString());
-                loadVttyHttp(p.selectedInstUrl, state.selectedCmdId);
+                loadVttyHttpForPanel(panel.id, p.selectedInstUrl, p.selectedCmdId);
             }
         } else {
             // Wheel up: increase scrollback offset (move into history)
             p.scrollbackOffset += lines;
             sessionStorage.setItem('vrw_scrollback_' + state.selectedCmdId, p.scrollbackOffset.toString());
-            loadVttyHttp(p.selectedInstUrl, state.selectedCmdId);
+            loadVttyHttpForPanel(panel.id, p.selectedInstUrl, p.selectedCmdId);
         }
 
         // Update scroll-to-bottom button visibility and scrollback indicator

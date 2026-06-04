@@ -229,3 +229,46 @@ Stage Summary:
 - 4 new keyboard shortcuts added with updated documentation
 - Zero clippy warnings, clean release build
 - Commit df3339f pushed to complexity_fix branch
+---
+Task ID: 7
+Agent: main
+Task: Per-panel WebSocket, fix toolbar toggles, decouple panels from connections, fix Kill All
+
+Work Log:
+STEP 1: Read and understand current architecture
+- WS: single shared state.vttyWs, connected to state.selectedCmdId only
+- Panel focus: syncs global state → one active command at a time
+- MaxFit/MaxFont: state stored per-panel in _maxFitState/_maxFontState, but toolbar buttons
+  use shared IDs (stMaxFitBtn, stMaxFontBtn) and updateSharedToolbar() never syncs button text/style
+- Kill All: kills across all servers but clears ALL commands and hides button immediately
+- addPanel(): requires server URL in modal — cannot create empty panel
+
+STEP 2: Per-panel WebSocket connections
+- Add per-panel WS fields: panel.ws, panel.wsCmdId, panel.wsUrl
+- Refactor connectVttyWs() → connectPanelWs(panelId) — connects to panel's selectedInstUrl/selectedCmdId
+- Each panel manages its own WS lifecycle (connect/disconnect/reconnect)
+- onmessage routes VTTY updates to that panel's DOM (find panel element by ID)
+- Select command: disconnect other panels' WS when switching a command to a different panel
+
+STEP 3: Fix MaxFit/MaxFont toolbar button sync
+- updateSharedToolbar() now syncs stMaxFitBtn and stMaxFontBtn text/style from per-panel state
+- When a panel is focused, the shared toolbar reflects its toggle state accurately
+
+STEP 4: Decouple panels from connections — empty panels
+- "+ Panel" button creates empty panel directly (no server URL required)
+- Modal becomes optional: "Connect to Server" button on empty panel header
+- Empty panels show placeholder: "No command selected — click to connect"
+- User can select a command from sidebar to connect to any panel
+
+STEP 5: Fix Kill All
+- Kill All now kills commands across ALL reachable servers
+- Button stays visible as long as any commands remain alive on any server
+- loadCommands() runs after kills complete to refresh state
+
+STEP 6: Verify individual kill works from sidebar
+- Context menu kill works per-command ✓
+- No changes needed
+
+STEP 7: Update documentation
+
+STEP 8: Compile, lint, commit and push

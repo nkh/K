@@ -301,7 +301,8 @@ The layout uses a consistent button sizing system: `btn-xs` (compact), `btn-sm` 
 
 **Terminal Interaction:**
 
-- **Real-time VTTY Viewer** — Streams terminal output via the incremental diff WebSocket protocol (`GET /api/commands/{id}/ws`). Falls back to 1-second HTTP polling if WebSocket is unavailable. Automatically selects the first running command on load.
+- **Per-Panel WebSocket Streaming** — Each panel maintains its own independent WebSocket connection to the server, streaming VTTY output in real-time. Multiple panels can display different commands simultaneously without interference. The WebSocket quality indicator in the bottom bar reflects the focused panel's connection state.
+- **Per-Panel Poll Fallback** — When WebSocket is unreliable, each panel independently falls back to HTTP polling at the configured interval.
 - **Click to Focus** — Click anywhere on the terminal pane to immediately capture keyboard input for sending keystrokes.
 - **Mouse Event Forwarding** — Clicks, drags, and wheel events are forwarded to the child process via `POST /api/commands/{id}/mouse` when mouse tracking is enabled by the child application.
 - **Mouse Wheel Scrollback** — Scroll through command history; when the child application has mouse tracking enabled, wheel events are forwarded to it, otherwise they scroll the view.
@@ -309,7 +310,10 @@ The layout uses a consistent button sizing system: `btn-xs` (compact), `btn-sm` 
 - **Scroll-to-Bottom** — When scrolled up, a floating button appears in the bottom-right corner of the terminal. Click it to jump back to live output.
 - **Selection Mode** — Toggle with `Ctrl+Shift+S` or `Alt+S` to enable native text selection on the terminal. When active, mouse events are not forwarded to the PTY, allowing you to select and copy text. The panel shows an accent border as a visual indicator.
 - **Copy to Clipboard** — `Ctrl+Shift+C` copies the selected terminal text to the clipboard. If no text is selected, the full VTTY buffer content is copied instead. A "Copied!" toast confirms the action.
-- **Per-Panel Font Size** — Each panel has A-/A+ buttons in its header for independent font sizing (8–28px). The size is persisted to `localStorage` and restored on page load. The global font size buttons in the top bar set the default for new panels only.
+- **Per-Panel Font Size** — Each panel has A-/A+ buttons in its header for independent font sizing (8–28px). The size is persisted to `localStorage` and restored on page load. The shared toolbar font size controls reflect and modify the focused panel's font size.
+- **Per-Panel Themes** — Each panel can independently toggle between inherit, light, and dark themes. The shared toolbar theme button reflects and toggles the focused panel's theme.
+- **Per-Panel Max Fit/Max Font** — The Max Fit and Max Font toolbar toggles operate per-panel. The shared toolbar buttons correctly reflect the active toggle state of the focused panel.
+- **Empty Panels** — Clicking "+ Panel" creates an empty panel with no command selected. Select any command from the sidebar to connect it to the focused panel. Panels and server connections are fully decoupled — a panel can display a command from any connected server.
 - **Persistent Scrollback** — The scrollback offset is saved to `sessionStorage` when scrolling. Re-selecting a command restores the previous scroll position. Uses session storage to avoid stale data across sessions.
 - **Auto-Fit Terminal** — The terminal automatically resizes to fill the available panel space when the browser window is resized.
 - **Export Output** — Download the current terminal buffer contents as a `.txt` file via the toolbar or context menu.
@@ -336,8 +340,7 @@ The layout uses a consistent button sizing system: `btn-xs` (compact), `btn-sm` 
 
 **Connection and Theming:**
 
-- **Connection Quality Indicator** — The bottom bar displays WebSocket round-trip latency (measured via ping/pong every 10 seconds) with color coding: green (< 100ms), yellow (100–500ms), red (> 500ms). A tooltip shows the reconnect count. Latency resets on disconnect and reconnects are tracked across the connection lifecycle.
-- **Auto-Reconnect** — WebSocket connections automatically re-establish after network interruptions or server restarts, with no manual refresh needed.
+- **Connection Quality Indicator** — The bottom bar displays WebSocket round-trip latency for the focused panel (measured via ping/pong every 10 seconds) with color coding: green (< 50ms), yellow (50–200ms), red (> 200ms). A tooltip shows the reconnect count. Latency resets on disconnect and reconnects are tracked per-panel.
 - **Light Theme** — Toggle between dark and light themes via the sun/moon button in the top bar. The light theme uses a GitHub-inspired palette. When no explicit choice has been made, the theme follows the operating system's `prefers-color-scheme` media query. The active theme is persisted to `localStorage`.
 - **VTTY Theme-Aware** — The terminal background adapts to the active theme (dark or light) for a seamless visual experience.
 - **Responsive Layout** — The dashboard adapts to mobile and tablet screen sizes. The sidebar collapses into a toggleable drawer on narrow viewports.
