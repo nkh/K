@@ -4,6 +4,7 @@
 //! functions: tab bar, split pane, search bar/highlights, context menu,
 //! exited watermark, cell SGR building, search match finding, and log overlay.
 
+use std::io::Write;
 use std::sync::Arc;
 
 use crate::process::manager::CommandManager;

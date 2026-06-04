@@ -98,7 +98,7 @@ pub struct DefaultExitConfig {
 
 /// ANSI color code for a single log field.
 /// Stores the raw escape sequence (e.g. "\x1b[32m" for green).
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct ColorField {
     /// ANSI SGR escape sequence.  Empty string means no color (reset).
     /// Common values:
@@ -115,12 +115,6 @@ pub struct ColorField {
     ///   "\x1b[1;36m"      — bright cyan
     #[serde(default)]
     pub ansi: String,
-}
-
-impl Default for ColorField {
-    fn default() -> Self {
-        Self { ansi: String::new() }
-    }
 }
 
 /// Terminal log appearance configuration.
@@ -268,7 +262,7 @@ impl Default for TerminalLogConfig {
 
 /// Command logging configuration.
 /// Records API command events (spawn, kill, resize, etc.) to a log file.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct CommandLogConfig {
     /// Enable logging of API commands.
     #[serde(default)]
@@ -309,17 +303,6 @@ pub struct CommandLogConfig {
     ///         event: 17
     #[serde(default)]
     pub terminal: TerminalLogConfig,
-}
-
-impl Default for CommandLogConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            file: None,
-            pty_raw_log: None,
-            terminal: TerminalLogConfig::default(),
-        }
-    }
 }
 
 #[cfg(test)]

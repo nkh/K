@@ -259,12 +259,12 @@ pub(crate) fn base64_encode(input: &str) -> String {
         let n = (bytes[i] as u32) << 16 | (bytes[i + 1] as u32) << 8;
         result.push(CHARS[((n >> 18) & 63) as usize] as char);
         result.push(CHARS[((n >> 12) & 63) as usize] as char);
-        result.push('=');
+        result.push(CHARS[((n >> 6) & 63) as usize] as char);
         result.push('=');
     } else if i < bytes.len() {
         let n = (bytes[i] as u32) << 16;
         result.push(CHARS[((n >> 18) & 63) as usize] as char);
-        result.push('=');
+        result.push(CHARS[((n >> 12) & 63) as usize] as char);
         result.push('=');
         result.push('=');
     }

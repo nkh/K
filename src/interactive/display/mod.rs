@@ -23,15 +23,14 @@ use tokio::sync::{broadcast, mpsc};
 
 use crate::interactive::Binding;
 use crate::process::manager::CommandManager;
-use std::io::Write;
 
 // Re-export sub-module items that are used externally
 pub(crate) use mouse::{
-    base64_encode, copy_selection_to_clipboard, render_selection_highlight, try_parse_mouse_event,
-    MouseEvent, MouseButton, MouseEventType,
+    copy_selection_to_clipboard, render_selection_highlight, try_parse_mouse_event,
+    MouseButton, MouseEventType,
 };
 pub(crate) use render::{
-    build_cell_sgr, find_search_matches, render_context_menu, render_exited_watermark,
+    find_search_matches, render_context_menu, render_exited_watermark,
     render_log_overlay, render_search_bar, render_search_highlights, render_split_pane,
     render_tab_bar, render_vtty,
 };
@@ -1237,6 +1236,8 @@ pub async fn wait_for_child(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::mouse::base64_encode;
+    use super::render::build_cell_sgr;
 
     #[test]
     fn test_mouse_event_sgr_press() {
@@ -1285,7 +1286,10 @@ mod tests {
             bold: false,
             italic: false,
             underline: false,
+            blink: false,
             reverse: false,
+            invisible: false,
+            strikethrough: false,
             width: 1,
         };
         let sgr = build_cell_sgr(&cell);
@@ -1301,7 +1305,10 @@ mod tests {
             bold: true,
             italic: false,
             underline: false,
+            blink: false,
             reverse: false,
+            invisible: false,
+            strikethrough: false,
             width: 1,
         };
         let sgr = build_cell_sgr(&cell);
