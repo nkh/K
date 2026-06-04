@@ -400,14 +400,6 @@ function showCommandPicker(matches) {
     const old = document.getElementById('cmdPicker');
     if (old) old.remove();
 
-    function formatRuntime(secs) {
-        if (secs < 60) return Math.floor(secs) + 's';
-        if (secs < 3600) return Math.floor(secs / 60) + 'm ' + Math.floor(secs % 60) + 's';
-        const h = Math.floor(secs / 3600);
-        const m = Math.floor((secs % 3600) / 60);
-        return h + 'h ' + m + 'm';
-    }
-
     let items = matches.map(m => {
         const argsStr = (m.args || []).join(' ');
         const detail = argsStr ? `${argsStr} (pid ${m.pid})` : `pid ${m.pid}`;
@@ -457,6 +449,17 @@ function pickCommand(id, name) {
     if (picker) picker.remove();
     state._pendingSelectId = id;
     loadCommands();
+}
+
+/// Format a runtime duration in seconds to a human-readable string.
+/// Handles null/undefined inputs gracefully.
+function formatRuntime(secs) {
+    if (!secs || secs < 0) return '';
+    if (secs < 60) return Math.floor(secs) + 's';
+    if (secs < 3600) return Math.floor(secs / 60) + 'm ' + Math.floor(secs % 60) + 's';
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    return h + 'h ' + m + 'm';
 }
 
 function getBaseUrl() {
@@ -1140,15 +1143,6 @@ function _buildSidebar() {
             html += `<span class="sidebar-sort-item${active}" onclick="_sidebarSort='${escHtml(inst.url)}';loadCommands()">${escHtml(inst.label)}</span>`;
         }
         html += '</div>';
-    }
-
-    function formatRuntime(secs) {
-        if (!secs || secs < 0) return '';
-        if (secs < 60) return Math.floor(secs) + 's';
-        if (secs < 3600) return Math.floor(secs / 60) + 'm ' + Math.floor(secs % 60) + 's';
-        const h = Math.floor(secs / 3600);
-        const m = Math.floor((secs % 3600) / 60);
-        return h + 'h ' + m + 'm';
     }
 
     let allCmds = [];
