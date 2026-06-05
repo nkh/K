@@ -308,6 +308,7 @@ function releaseCurrentFocusTrap() {
     startRefresh();
     loadCertificates();
     fetchServerTemplates();
+    fetchEnvironments();
     // Fetch server config and apply update mode defaults
     fetchServerConfig();
     applyUpdateModeUI();
@@ -735,8 +736,10 @@ function switchSidebarTab(tab, el) {
     document.getElementById('tab-servers').style.display = tab === 'servers' ? '' : 'none';
     document.getElementById('tab-spawn').style.display = tab === 'spawn' ? '' : 'none';
     document.getElementById('tab-templates').style.display = tab === 'templates' ? '' : 'none';
+    document.getElementById('tab-envs').style.display = tab === 'envs' ? '' : 'none';
     document.getElementById('tab-certs').style.display = tab === 'certs' ? '' : 'none';
     if (tab === 'templates') renderTemplates();
+    if (tab === 'envs') renderEnvironments();
 }
 
 // Update sidebar tab visibility based on server reachability.
@@ -2961,6 +2964,9 @@ async function spawnCommand() {
     const cert = document.getElementById('spawnCert').value || null;
     const instSelect = document.getElementById('spawnInstance');
     const instUrl = instSelect.value;
+    // Remember the user's chosen instance so updateInstanceDropdown won't
+    // overwrite it during the subsequent loadCommands() rebuild.
+    _userSpawnInstUrl = instUrl;
 
     // Terminal size from spawn form (optional, use server defaults if empty)
     const body = { cmd, args, certificate: cert };
@@ -3221,6 +3227,12 @@ function updateCertDropdown() {
     select.innerHTML = html;
 }
 
+// Track the user's explicit spawn instance choice separately from
+// state.selectedInstUrl.  Without this, updateInstanceDropdown() would
+// reset the dropdown to whatever panel is focused, overwriting the user's
+// choice every time the sidebar rebuilds.
+let _userSpawnInstUrl = null;
+
 function updateInstanceDropdown() {
     const select = document.getElementById('spawnInstance');
     const current = select.value;
@@ -3229,11 +3241,20 @@ function updateInstanceDropdown() {
         html += `<option value="${escHtml(inst.url)}">${escHtml(inst.label)} (${escHtml(inst.url.replace(/^https?:\/\//, ''))})</option>`;
     }
     select.innerHTML = html;
-    // Auto-select the selected panel's instance (prefer over last selection)
-    if (state.selectedInstUrl) {
-        select.value = state.selectedInstUrl;
-    } else if (current) {
+
+    // Priority:
+    // 1. The user's explicit spawn-instance choice (set when the user
+    //    manually changes the dropdown or when a command is spawned).
+    // 2. The previous dropdown value, if it still exists in the list.
+    // 3. The focused panel's instance (as a sensible default for a new user).
+    if (_userSpawnInstUrl && state.connections.some(i => i.url === _userSpawnInstUrl)) {
+        select.value = _userSpawnInstUrl;
+    } else if (current && state.connections.some(i => i.url === current)) {
         select.value = current;
+        _userSpawnInstUrl = current;  // remember the restored value
+    } else if (state.selectedInstUrl) {
+        select.value = state.selectedInstUrl;
+        _userSpawnInstUrl = state.selectedInstUrl;
     }
 }
 
@@ -6158,3 +6179,158 @@ function playExitSound(success) {
         osc.stop(ctx.currentTime + 0.5);
     } catch (e) { /* ignore — audio not supported */ }
 }
+
+// ─── Workspace Environments ──
+// Environments are named sets of [panels, servers, commands] defined in
+// the server config file ([[environments]]).  They allow the user to
+// switch between predefined workspaces with a single click.
+//
+// On the CLI, environments can be specified in separate config files or
+// inline in the main config.  The server exposes them via /api/environments.
+// Environments with auto_start=true are pre-spawned when the server loads.
+
+// Server-side environments fetched from /api/environments.
+let _serverEnvironments = [];
+
+/// Fetch workspace environments from the server.
+async function fetchEnvironments() {
+    try {
+        const res = await fetch(apiUrl('/api/environments'), { headers: authHeaders() });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json.status === 'ok' && Array.isArray(json.data)) {
+            _serverEnvironments = json.data;
+        }
+    } catch (e) {
+        // Not critical — environments are optional
+    }
+}
+
+/// Render the environments list in the Envs tab.
+function renderEnvironments() {
+    const container = document.getElementById('envList');
+    if (!container) return;
+
+    // Merge server environments with any user-defined ones from localStorage
+    const userEnvs = JSON.parse(localStorage.getItem('vrw_environments') || '[]');
+    const allEnvs = [..._serverEnvironments, ...userEnvs];
+
+    if (allEnvs.length === 0) {
+        container.innerHTML = '<div style="padding:0.5rem;color:var(--text-muted);font-size:0.7rem;text-align:center;">No environments configured. Add [[environments]] to your config file or create user environments.</div>';
+        return;
+    }
+
+    let html = '';
+    for (const env of allEnvs) {
+        const panelCount = (env.panels || []).length;
+        const cmdCount = (env.panels || []).reduce((sum, p) => sum + (p.commands || []).length, 0);
+        const autoBadge = env.auto_start
+            ? '<span style="color:var(--green);font-size:0.6rem;">auto</span>'
+            : '';
+        const descHtml = env.description
+            ? `<div style="font-size:0.6rem;color:var(--text-muted);margin-top:0.15rem;">${escHtml(env.description)}</div>`
+            : '';
+        const layoutHtml = env.layout
+            ? `<span style="font-size:0.6rem;color:var(--text-muted);">${env.layout === 'vertical' ? 'stacked' : 'side-by-side'}</span>`
+            : '';
+
+        html += `<div class="template-card" onclick="activateEnvironment('${escHtml(env.name)}')" title="Click to activate this environment" style="cursor:pointer;">
+            <div class="template-name">${escHtml(env.name)} ${autoBadge}</div>
+            <div class="template-cmd">${panelCount} panel${panelCount !== 1 ? 's' : ''}, ${cmdCount} command${cmdCount !== 1 ? 's' : ''} ${layoutHtml}</div>
+            ${descHtml}
+        </div>`;
+    }
+    container.innerHTML = html;
+}
+
+/// Activate a workspace environment: create panels, connect servers, and spawn commands.
+async function activateEnvironment(name) {
+    const allEnvs = [..._serverEnvironments, ...JSON.parse(localStorage.getItem('vrw_environments') || '[]')];
+    const env = allEnvs.find(e => e.name === name);
+    if (!env) {
+        console.error('[vrw] Environment not found:', name);
+        return;
+    }
+
+    // Remove all existing panels
+    const existingIds = state.panels.map(p => p.id);
+    for (const id of existingIds) {
+        disconnectPanelWs(id);
+        stopPanelPoll(id);
+    }
+    state.panels = [];
+    state._focusedPanelId = null;
+
+    // Set layout direction
+    if (env.layout === 'vertical') {
+        state.panelLayout = 'column';
+    } else if (env.layout === 'horizontal') {
+        state.panelLayout = 'row';
+    }
+    localStorage.setItem('vrw_panel_layout', state.panelLayout);
+
+    const defaultServer = env.default_server || getBaseUrl();
+    const defaultToken = env.default_token || '';
+
+    // Register all servers from the environment
+    for (const panelDef of (env.panels || [])) {
+        const serverUrl = panelDef.server || defaultServer;
+        const serverToken = panelDef.token || defaultToken;
+        const serverLabel = panelDef.server_label || '';
+        addConnection(serverUrl, serverLabel, serverToken);
+    }
+
+    // Create panels and spawn commands
+    for (let i = 0; i < (env.panels || []).length; i++) {
+        const panelDef = env.panels[i];
+        const panel = addPanelDirect();
+        if (!panel) continue;
+
+        const serverUrl = panelDef.server || defaultServer;
+        panel.selectedInstUrl = serverUrl;
+
+        // Focus the first panel
+        if (i === 0) focusPanel(panel.id);
+
+        // Spawn the first command in this panel (others can be spawned later)
+        if (panelDef.commands && panelDef.commands.length > 0) {
+            const cmdDef = panelDef.commands[0];
+            try {
+                const body = { cmd: cmdDef.cmd };
+                if (cmdDef.args) body.args = cmdDef.args.split(' ');
+                if (cmdDef.workdir) body.dir = cmdDef.workdir;
+                if (cmdDef.certificate) body.certificate = cmdDef.certificate;
+                if (cmdDef.rows) body.rows = cmdDef.rows;
+                if (cmdDef.cols) body.cols = cmdDef.cols;
+                if (cmdDef.retain_on_exit) body.retain_on_exit = true;
+
+                const res = await fetch(apiUrl('/api/commands', { url: serverUrl }), {
+                    method: 'POST',
+                    headers: authHeadersForInstance({ url: serverUrl, token: serverUrl === defaultServer ? defaultToken : (panelDef.token || '') }),
+                    body: JSON.stringify(body),
+                });
+                const json = await res.json();
+                if (json.status === 'ok' && json.data && json.data.id) {
+                    panel.selectedCmdId = json.data.id;
+                }
+            } catch (e) {
+                console.error('[vrw] Failed to spawn command for panel:', e);
+            }
+        }
+    }
+
+    // Re-render panels
+    _lastRenderedPanelCount = -1; // force rebuild
+    renderPanels();
+
+    // Reload commands list to show spawned commands in sidebar
+    loadCommands();
+    loadCertificates();
+
+    // Switch to Servers tab to show the results
+    const serversTab = document.querySelector('.sidebar-tab:first-child');
+    if (serversTab) switchSidebarTab('servers', serversTab);
+
+    console.log('[vrw] Environment activated:', name, '—', (env.panels || []).length, 'panels');
+}
+

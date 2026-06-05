@@ -3,6 +3,7 @@
 pub mod admin;
 pub mod certificates;
 pub mod commands;
+pub mod environments;
 pub mod handles;
 pub mod keys;
 pub mod logs;

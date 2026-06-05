@@ -1,6 +1,7 @@
 pub mod daemon;
 pub mod display;
 pub mod environment;
+pub mod environments;
 pub mod handles;
 pub mod hooks;
 pub mod loader;

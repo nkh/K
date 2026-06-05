@@ -46,6 +46,7 @@
                 <div class="sidebar-tab active" onclick="switchSidebarTab('servers', this)">Servers</div>
                 <div class="sidebar-tab" onclick="switchSidebarTab('spawn', this)">Spawn</div>
                 <div class="sidebar-tab" onclick="switchSidebarTab('templates', this)">Templates</div>
+                <div class="sidebar-tab" onclick="switchSidebarTab('envs', this)">Envs</div>
                 <div class="sidebar-tab" onclick="switchSidebarTab('certs', this)">Certs</div>
             </div>
             <div class="sidebar-content" id="sidebarContent">
@@ -93,7 +94,7 @@
                         </div>
                         <div class="field">
                             <label>Target Instance</label>
-                            <select id="spawnInstance"></select>
+                            <select id="spawnInstance" onchange="_userSpawnInstUrl=this.value"></select>
                         </div>
                         <div class="field checkbox-field">
                             <label><input type="checkbox" id="spawnRetainOnExit"> Keep terminal after command exits (retain on exit)</label>
@@ -124,6 +125,16 @@
                             </div>
                         </div>
                         <div id="templateList"></div>
+                    </div>
+                </div>
+                <!-- Environments tab -->
+                <div id="tab-envs" style="display:none;">
+                    <div style="padding:0.3rem;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.3rem;">
+                            <span style="font-size:0.7rem;color:var(--text-secondary);">Workspace Environments</span>
+                        </div>
+                        <p style="font-size:0.65rem;color:var(--text-muted);margin-bottom:0.3rem;">Select an environment to create its panels, connect servers, and spawn commands.</p>
+                        <div id="envList"></div>
                     </div>
                 </div>
                 <!-- Certs tab -->

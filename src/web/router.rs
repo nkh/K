@@ -33,6 +33,7 @@ pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
         )
         .route("/api/info", get(handlers::commands::get_info))
         .route("/api/templates", get(handlers::templates::list_templates))
+        .route("/api/environments", get(handlers::environments::list_environments))
         .route("/api/log", get(handlers::logs::get_log))
         // Peers — registration and discovery for multi-instance failover
         .route(

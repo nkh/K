@@ -9,6 +9,7 @@ pub use super::handles::HandleConfig;
 pub use super::hooks::{CommandLogConfig, DefaultExitConfig, ExitConfig, HooksConfig};
 pub use super::profiles::ProfilesConfig;
 pub use super::templates::{TemplateConfig, TemplatesConfig};
+pub use super::environments::{EnvironmentCommand, EnvironmentPanel, WorkspaceEnvironment, EnvironmentsConfig};
 pub use super::vtty::VttyConfig;
 
 #[cfg(feature = "vrw")]
@@ -83,6 +84,9 @@ pub struct Config {
     /// Pre-defined command templates.
     #[serde(default)]
     pub templates: TemplatesConfig,
+    /// Named workspace environments (panels, servers, commands).
+    #[serde(default)]
+    pub environments: EnvironmentsConfig,
     /// Named configuration presets.
     #[serde(default)]
     pub profiles: ProfilesConfig,

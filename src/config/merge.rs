@@ -26,6 +26,11 @@ pub fn merge_configs(global: Config, local: Config) -> Config {
         } else {
             local.templates
         },
+        environments: if local.environments.is_empty() {
+            global.environments
+        } else {
+            local.environments
+        },
         profiles: merge_profiles(global.profiles, local.profiles),
         #[cfg(feature = "vrw")]
         server: local.server,
@@ -76,6 +81,7 @@ pub fn apply_profile(base: Config, profile: &PartialConfig) -> Config {
         environment: profile.environment.clone().unwrap_or(base.environment),
         hooks: profile.hooks.clone().unwrap_or(base.hooks),
         templates: profile.templates.clone().unwrap_or(base.templates),
+        environments: base.environments,
         profiles: base.profiles,
         #[cfg(feature = "vrw")]
         server: profile.server.clone().unwrap_or(base.server),
