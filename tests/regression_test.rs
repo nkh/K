@@ -1241,6 +1241,105 @@ async fn regression_spawn_with_env_vars() {
     let _ = manager.kill(&id, None).await;
 }
 
+/// Per-command env vars override config-level env vars.
+/// When the same key appears in both config and per-command env,
+/// the per-command value wins.  This is the core merging behaviour
+/// used by the spawn form's "Environment Variables" textarea.
+#[tokio::test]
+#[cfg(feature = "vrw")]
+async fn regression_spawn_command_env_overrides_config_env() {
+    let mut cfg = test_config();
+    cfg.environment = vrc_core::config::schema::EnvironmentConfig {
+        variables: HashMap::from([
+            ("BASE_VAR".into(), "from_config".into()),
+            ("OVERRIDE_VAR".into(), "from_config".into()),
+        ]),
+    };
+    let manager = Arc::new(CommandManager::new(cfg));
+
+    // Per-command env overrides OVERRIDE_VAR, adds NEW_VAR
+    let mut env = HashMap::new();
+    env.insert("OVERRIDE_VAR".into(), "from_command".into());
+    env.insert("NEW_VAR".into(), "new_value".into());
+
+    let id = manager
+        .spawn(
+            "sh".into(),
+            vec!["-c".into(), "echo $OVERRIDE_VAR $NEW_VAR $BASE_VAR".into()],
+            None,
+            None,
+            env,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    sleep(Duration::from_millis(300)).await;
+    if let Some(handle) = manager.get(&id) {
+        let plain = handle.vtty_plain().await;
+        assert!(
+            plain.contains("from_command"),
+            "per-command override not applied: got '{}'",
+            plain
+        );
+        assert!(
+            plain.contains("new_value"),
+            "new per-command var not present: got '{}'",
+            plain
+        );
+        assert!(
+            plain.contains("from_config"),
+            "config-level var should still be present: got '{}'",
+            plain
+        );
+    }
+    let _ = manager.kill(&id, None).await;
+}
+
+/// Per-command env vars can contain values with equals signs.
+/// The parseSpawnEnvVars JS function splits on the first '=' only,
+/// so "FOO=bar=baz" becomes { "FOO": "bar=baz" }.  The backend
+/// receives this as a HashMap<String, String> and passes it through
+/// unchanged to the child process environment.
+#[tokio::test]
+#[cfg(feature = "vrw")]
+async fn regression_spawn_env_value_with_equals_sign() {
+    let mut env = HashMap::new();
+    env.insert("CONN_STR".into(), "host=localhost&port=5432".into());
+    env.insert("MATH".into(), "1+1=2".into());
+    let cfg = test_config();
+    let manager = Arc::new(CommandManager::new(cfg));
+    let id = manager
+        .spawn(
+            "sh".into(),
+            vec!["-c".into(), "echo $CONN_STR $MATH".into()],
+            None,
+            None,
+            env,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    sleep(Duration::from_millis(300)).await;
+    if let Some(handle) = manager.get(&id) {
+        let plain = handle.vtty_plain().await;
+        assert!(
+            plain.contains("host=localhost&port=5432"),
+            "env value with = not preserved: got '{}'",
+            plain
+        );
+        assert!(
+            plain.contains("1+1=2"),
+            "env value with = not preserved: got '{}'",
+            plain
+        );
+    }
+    let _ = manager.kill(&id, None).await;
+}
+
 #[tokio::test]
 #[cfg(feature = "vrw")]
 async fn regression_spawn_with_custom_vtty_size() {

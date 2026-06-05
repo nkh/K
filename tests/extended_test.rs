@@ -748,6 +748,7 @@ fn manager_keep_nonexistent_errors() {
         profiles: Default::default(),
         hooks: Default::default(),
         templates: Default::default(),
+        environments: Default::default(),
     };
     let mgr = CommandManager::new(cfg);
     let result = mgr.keep(&"nonexistent".into());
@@ -779,6 +780,7 @@ fn manager_unkeep_nonexistent_errors() {
         profiles: Default::default(),
         hooks: Default::default(),
         templates: Default::default(),
+        environments: Default::default(),
     };
     let mgr = CommandManager::new(cfg);
     let result = mgr.unkeep(&"nonexistent".into());
@@ -810,6 +812,7 @@ fn manager_freeze_nonexistent_errors() {
         profiles: Default::default(),
         hooks: Default::default(),
         templates: Default::default(),
+        environments: Default::default(),
     };
     let mgr = CommandManager::new(cfg);
     let result = mgr.freeze(&"nonexistent".into());
@@ -841,6 +844,7 @@ fn manager_thaw_nonexistent_errors() {
         profiles: Default::default(),
         hooks: Default::default(),
         templates: Default::default(),
+        environments: Default::default(),
     };
     let mgr = CommandManager::new(cfg);
     let result = mgr.thaw(&"nonexistent".into());
@@ -872,6 +876,7 @@ fn manager_logger_accessible() {
         profiles: Default::default(),
         hooks: Default::default(),
         templates: Default::default(),
+        environments: Default::default(),
     };
     let mgr = CommandManager::new(cfg);
     let logger = mgr.logger();
@@ -904,6 +909,7 @@ fn manager_config_accessible() {
         profiles: Default::default(),
         hooks: Default::default(),
         templates: Default::default(),
+        environments: Default::default(),
     };
     let mgr = CommandManager::new(cfg);
     assert_eq!(mgr.config().binary_name, "test");
@@ -934,6 +940,7 @@ fn manager_subscribe_vtty() {
         profiles: Default::default(),
         hooks: Default::default(),
         templates: Default::default(),
+        environments: Default::default(),
     };
     let mgr = CommandManager::new(cfg);
     let mut rx = mgr.subscribe_vtty();

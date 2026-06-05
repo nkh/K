@@ -68,13 +68,19 @@ See [Command States](./command-states.md) for detailed screenshots and explanati
 
 ![Spawn tab](screenshots/04-sidebar-spawn.png)
 
-The spawn form allows you to create new commands with full control over all options.
+The spawn form allows you to create new commands with full control over all options. The form is decoupled from the currently focused panel — the Target Instance dropdown remembers your selection independently, so navigating between panels never resets where commands will be spawned.
+
+### Target Instance Dropdown
+Placed at the top of the form so the target server is selected first. The dropdown is fully decoupled from the focused panel's server connection: once you select an instance (or let it default to the first connection), it retains that selection across sidebar rebuilds, panel focus changes, and command spawns. This fixes a bug where the spawn instance would silently reset to whichever panel was focused.
 
 ### Command Field
 The executable to run (e.g., `/usr/bin/htop`, `bash`, `npm`). Pressing Enter in this field triggers the spawn action.
 
 ### Arguments Field
-Space-separated arguments passed to the command. For complex arguments, use shell quoting: `-c "echo hello; echo world"`. Pressing Enter triggers the spawn action.
+Space-separated arguments passed to the command. Supports quoted strings with double quotes and single quotes. For complex arguments: `-c "echo hello; echo world"` or `--name 'my value'`. Backslash escapes are also supported. Pressing Enter triggers the spawn action.
+
+### Environment Variables Field
+A multi-line textarea for specifying per-command environment variables. Each line should be in `KEY=VALUE` format. Empty lines and lines starting with `#` are ignored as comments. Values may contain `=` signs (only the first `=` is treated as the separator). These environment variables are merged on top of the config-level `[environment]` variables, with per-command values taking precedence. This mirrors the env var support available in config templates and environment definitions. Pressing Ctrl+Enter in the textarea triggers the spawn action.
 
 ### Working Directory Field
 The directory in which the command will be executed. Defaults to vrw's working directory if left empty. The server validates that the directory exists before spawning.
@@ -88,8 +94,11 @@ Calculates the optimal terminal dimensions based on the current panel container 
 ### Certificate Dropdown
 Select an optional named certificate to bind to the command. Certificate-bound commands require the matching certificate for API access. See the Certificates tab for managing certificates.
 
-### Target Instance Dropdown
-When multiple vrw instances are connected, this dropdown lets you choose which instance will run the new command.
+### Retain on Exit Checkbox
+When checked, the terminal buffer is kept after the command exits, allowing you to review the final output.
+
+### Open in New Panel Checkbox
+When checked (default), spawning a command creates a new panel for it instead of taking over the currently focused panel. This decouples the spawn action from your current workspace — you can spawn commands on any instance without disturbing the view you're watching. The new panel displays the spawned command (or the main/oldest command if the spawn was part of a multi-command workflow). When unchecked, the traditional behavior applies: the spawned command takes over the focused panel's terminal view.
 
 ### Spawn Command Button
 Submits the form and creates the new command. The button uses the primary style (green background) to indicate it's a creation action.

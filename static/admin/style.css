@@ -307,7 +307,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .spawn-form { padding: 0.5rem; }
 .spawn-form .field { margin-bottom: 0.4rem; }
 .spawn-form label { display: block; font-size: 0.7rem; color: var(--text-secondary); margin-bottom: 0.15rem; }
-.spawn-form input, .spawn-form select { width: 100%; }
+.spawn-form input, .spawn-form select, .spawn-form textarea { width: 100%; font-size: 0.7rem; padding: 0.2rem 0.3rem; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 2px; }
+.spawn-form textarea { font-family: var(--font-mono); resize: vertical; min-height: 3rem; }
 .spawn-form .field-row { display: flex; gap: 0.5rem; }
 .spawn-form .field-row .field { flex: 1; }
 .spawn-form .autofit-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; }
@@ -316,6 +317,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .spawn-form .checkbox-field { display: flex; align-items: center; margin-top: 0.3rem; }
 .spawn-form .checkbox-field label { display: flex; align-items: center; gap: 0.3rem; margin-bottom: 0; font-size: 0.7rem; color: var(--text-secondary); cursor: pointer; }
 .spawn-form .checkbox-field input[type="checkbox"] { width: auto; }
+.spawn-open-panel-hint { font-size: 0.6rem; color: var(--text-muted); margin-top: -0.15rem; margin-bottom: 0.2rem; }
 
 /* Log viewer */
 .log-viewer { flex: 1; display: flex; flex-direction: column; overflow: hidden; }

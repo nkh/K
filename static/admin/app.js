@@ -2972,6 +2972,25 @@ function parseSpawnArgs(str) {
     return args;
 }
 
+/// Parse the environment variables textarea into a {key: value} object.
+/// Each line should be KEY=VALUE. Lines not containing '=' are skipped.
+/// Whitespace around key and value is trimmed. Empty lines are ignored.
+function parseSpawnEnvVars(text) {
+    const env = {};
+    if (!text) return env;
+    const lines = text.split('\n');
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;  // skip empty/comment lines
+        const eqIdx = trimmed.indexOf('=');
+        if (eqIdx < 1) continue;  // skip lines without '=' or with '=' at start
+        const key = trimmed.substring(0, eqIdx).trim();
+        const value = trimmed.substring(eqIdx + 1).trim();
+        if (key) env[key] = value;
+    }
+    return env;
+}
+
 async function spawnCommand() {
     const cmd = document.getElementById('spawnCmd').value.trim();
     if (!cmd) return;
@@ -3001,6 +3020,15 @@ async function spawnCommand() {
         body.retain_on_exit = true;
     }
 
+    // Per-command environment variables (optional)
+    const envVars = parseSpawnEnvVars(document.getElementById('spawnEnv').value);
+    if (Object.keys(envVars).length > 0) {
+        body.env = envVars;
+    }
+
+    // Whether to open the spawned command in a new panel
+    const openInPanel = document.getElementById('spawnOpenPanel').checked;
+
     try {
         const res = await fetch(apiUrl('/api/commands', { url: instUrl }), {
             method: 'POST',
@@ -3011,6 +3039,7 @@ async function spawnCommand() {
         if (json.status === 'ok') {
             document.getElementById('spawnCmd').value = '';
             document.getElementById('spawnArgs').value = '';
+            document.getElementById('spawnEnv').value = '';
             document.getElementById('spawnDir').value = '';
             document.getElementById('spawnRows').value = '';
             document.getElementById('spawnCols').value = '';
@@ -3019,12 +3048,21 @@ async function spawnCommand() {
             const newId = json.data && json.data.id ? json.data.id : null;
             if (newId) {
                 state.selectedInstUrl = instUrl;
-                // Disconnect the old panel WS FIRST to prevent stale vtty_full
-                // messages from the previous command overwriting the cleared terminal.
-                const focusedId = state._focusedPanelId || getActivePanelId();
-                if (focusedId) disconnectPanelWs(focusedId);
-                _cacheTerminalForSwitch();
-                state._pendingSelectId = newId;
+                if (openInPanel) {
+                    // Create a new panel for this command instead of taking over the
+                    // focused panel.  This decouples the spawn target from the current
+                    // view, so spawning never disturbs the user's focused workspace.
+                    const newPanel = addPanelDirect();
+                    focusPanel(newPanel.id);
+                    _cacheTerminalForSwitch();
+                    state._pendingSelectId = newId;
+                } else {
+                    // Traditional behavior: take over the focused panel.
+                    const focusedId = state._focusedPanelId || getActivePanelId();
+                    if (focusedId) disconnectPanelWs(focusedId);
+                    _cacheTerminalForSwitch();
+                    state._pendingSelectId = newId;
+                }
             }
             loadCommands();
         } else {
@@ -3277,7 +3315,10 @@ function updateCertDropdown() {
 // Track the user's explicit spawn instance choice separately from
 // state.selectedInstUrl.  Without this, updateInstanceDropdown() would
 // reset the dropdown to whatever panel is focused, overwriting the user's
-// choice every time the sidebar rebuilds.
+// choice every time the sidebar rebuilds.  Once set (either by the user
+// manually changing the dropdown or by spawning a command), it persists
+// for the lifetime of the session — it is never silently overridden by
+// the focused panel's instance.
 let _userSpawnInstUrl = null;
 
 function updateInstanceDropdown() {
@@ -3289,19 +3330,22 @@ function updateInstanceDropdown() {
     }
     select.innerHTML = html;
 
+    // The spawn instance dropdown is fully decoupled from the focused panel.
+    // It only changes when the user explicitly selects a different instance.
     // Priority:
     // 1. The user's explicit spawn-instance choice (set when the user
     //    manually changes the dropdown or when a command is spawned).
     // 2. The previous dropdown value, if it still exists in the list.
-    // 3. The focused panel's instance (as a sensible default for a new user).
+    // 3. Fall back to the first connection (never to the focused panel,
+    //    since that would re-introduce the coupling bug).
     if (_userSpawnInstUrl && state.connections.some(i => i.url === _userSpawnInstUrl)) {
         select.value = _userSpawnInstUrl;
     } else if (current && state.connections.some(i => i.url === current)) {
         select.value = current;
         _userSpawnInstUrl = current;  // remember the restored value
-    } else if (state.selectedInstUrl) {
-        select.value = state.selectedInstUrl;
-        _userSpawnInstUrl = state.selectedInstUrl;
+    } else if (state.connections.length > 0) {
+        select.value = state.connections[0].url;
+        _userSpawnInstUrl = state.connections[0].url;
     }
 }
 
@@ -5964,7 +6008,15 @@ function spawnServerTemplate(index) {
     const instUrl = instSelect ? instSelect.value : getBaseUrl();
     const args = t.args ? t.args.split(/\s+/) : [];
     const body = { cmd: t.cmd, args };
-    if (t.env && t.env.length > 0) body.env = t.env;
+    // Convert env from ["KEY=VALUE", ...] to { "KEY": "VALUE", ... }
+    if (t.env && t.env.length > 0) {
+        const envObj = {};
+        for (const entry of t.env) {
+            const eqIdx = entry.indexOf('=');
+            if (eqIdx > 0) envObj[entry.substring(0, eqIdx)] = entry.substring(eqIdx + 1);
+        }
+        body.env = envObj;
+    }
     if (t.workdir) body.workdir = t.workdir;
     if (t.certificate) body.certificate = t.certificate;
     if (t.rows) body.rows = t.rows;

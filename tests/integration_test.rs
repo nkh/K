@@ -66,6 +66,7 @@ fn test_config() -> Config {
         profiles: Default::default(),
         hooks: Default::default(),
         templates: Default::default(),
+        environments: Default::default(),
     }
 }
 

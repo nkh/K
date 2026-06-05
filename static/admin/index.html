@@ -63,12 +63,20 @@
                 <div id="tab-spawn" style="display:none;">
                     <div class="spawn-form">
                         <div class="field">
+                            <label>Target Instance</label>
+                            <select id="spawnInstance" onchange="_userSpawnInstUrl=this.value"></select>
+                        </div>
+                        <div class="field">
                             <label>Command</label>
                             <input type="text" id="spawnCmd" placeholder="/usr/bin/htop" onkeydown="if(event.key==='Enter'){event.preventDefault();spawnCommand()}">
                         </div>
                         <div class="field">
-                            <label>Arguments (space-separated)</label>
-                            <input type="text" id="spawnArgs" placeholder='--flag value  or  -c "echo hello; echo world"' onkeydown="if(event.key==='Enter'){event.preventDefault();spawnCommand()}">
+                            <label>Arguments (space-separated; supports quoted strings)</label>
+                            <input type="text" id="spawnArgs" placeholder='--flag value  or  -c "echo hello"  or  --name '\''my value'\''' onkeydown="if(event.key==='Enter'){event.preventDefault();spawnCommand()}">
+                        </div>
+                        <div class="field">
+                            <label>Environment Variables</label>
+                            <textarea id="spawnEnv" rows="3" placeholder="KEY=value&#10;PATH=/custom/bin&#10;DEBUG=true" onkeydown="if(event.key==='Enter'&&event.ctrlKey){event.preventDefault();spawnCommand()}"></textarea>
                         </div>
                         <div class="field">
                             <label>Working Directory</label>
@@ -92,13 +100,13 @@
                                 <option value="">None</option>
                             </select>
                         </div>
-                        <div class="field">
-                            <label>Target Instance</label>
-                            <select id="spawnInstance" onchange="_userSpawnInstUrl=this.value"></select>
-                        </div>
                         <div class="field checkbox-field">
                             <label><input type="checkbox" id="spawnRetainOnExit"> Keep terminal after command exits (retain on exit)</label>
                         </div>
+                        <div class="field checkbox-field">
+                            <label><input type="checkbox" id="spawnOpenPanel" checked> Open in new panel</label>
+                        </div>
+                        <div class="spawn-open-panel-hint" id="spawnOpenPanelHint" style="font-size:0.6rem;color:var(--text-muted);margin-top:-0.2rem;margin-bottom:0.3rem;">Shows the main command or the oldest command in a new panel after spawning.</div>
                         <button class="btn btn-primary" onclick="spawnCommand()" style="width:100%;margin-top:0.5rem;">Spawn Command</button>
                     </div>
                 </div>

@@ -60,21 +60,23 @@ The sidebar is the primary context panel for server management, command browsing
 
 ## 4. Spawn Form (Sidebar Tab)
 
-The Spawn form allows users to create new command processes on any connected server instance. It provides fields for the command path, arguments, working directory, terminal dimensions, optional TLS certificate selection, target instance selection, and a retain-on-exit toggle. The form supports Enter-key submission from any input field and includes an Auto-fit button that calculates optimal terminal dimensions from the focused panel's container size.
+The Spawn form allows users to create new command processes on any connected server instance. It is fully decoupled from the focused panel — the Target Instance dropdown retains its selection across sidebar rebuilds and panel focus changes. The form provides fields for the target server, command path, arguments, per-command environment variables, working directory, terminal dimensions, optional TLS certificate selection, retain-on-exit toggle, and an "Open in new panel" option. The form supports Enter-key submission from input fields and Ctrl+Enter from the environment variables textarea.
 
 | Element | Description |
 |---------|-------------|
+| Target Instance Select | Dropdown of all connected servers. Decoupled from the focused panel — selection persists across sidebar rebuilds and panel focus changes. Defaults to the first connection. |
 | Command Input | The executable path (e.g., `/usr/bin/htop`). Required field. |
-| Arguments Input | Space-separated arguments. Supports quoted strings with double and single quotes. |
+| Arguments Input | Space-separated arguments. Supports quoted strings with double and single quotes, and backslash escapes. |
+| Environment Variables | Multi-line textarea for per-command `KEY=VALUE` pairs. Empty lines and `#` comments are ignored. Values may contain `=` signs (split on first `=` only). Merged on top of config-level env vars. |
 | Working Directory | Optional directory to set as the command's cwd. |
 | Rows/Cols Inputs | Terminal dimensions. Blank uses server defaults. |
 | Auto-fit Button | Calculates optimal rows and cols from the focused panel's VTTY container size and current font size. |
 | Certificate Select | Dropdown populated from all connected servers' certificate lists. |
-| Target Instance Select | Dropdown of all connected servers. BUG: This dropdown auto-resets to the focused panel's server on every sidebar rebuild. |
 | Retain on Exit | Checkbox to keep the terminal buffer after the command exits. |
+| Open in New Panel | Checkbox (default: checked). When enabled, spawn creates a new panel for the command instead of taking over the focused panel. |
 | Spawn Button | Submits the form via POST to the selected instance's `/api/commands` endpoint. |
 
-**Interactions:** On successful spawn, the new command is auto-selected in the focused panel: the old panel WebSocket is disconnected, the terminal cache is cleared, and the new command's VTTY is loaded. This triggers a `loadCommands()` call which rebuilds the sidebar command list. The Target Instance dropdown is populated by `updateInstanceDropdown()`, which runs after every sidebar rebuild. The bug where the user's chosen server was overwritten has been fixed by introducing `_userSpawnInstUrl` to decouple the spawn instance selection from `state.selectedInstUrl`.
+**Interactions:** On successful spawn, if "Open in new panel" is checked (default), a new panel is created and focused for the spawned command. If unchecked, the traditional behavior applies: the old panel WebSocket is disconnected, the terminal cache is cleared, and the new command's VTTY is loaded in the focused panel. Both paths trigger a `loadCommands()` call which rebuilds the sidebar command list. The Target Instance dropdown is populated by `updateInstanceDropdown()`, which runs after every sidebar rebuild. The spawn instance selection is fully decoupled from the focused panel via `_userSpawnInstUrl`.
 
 ---
 
@@ -270,7 +272,7 @@ The following table summarizes the key interaction pathways between UI areas. Ea
 | Sidebar | Click command | Focused Panel, Shared Toolbar | Selects command, starts panel WS |
 | Sidebar | Click Kill All | All Servers, All Panels | Sends kill to all, rebuilds sidebar |
 | Sidebar | Click + Server | Connections, Command List | Adds connection, reloads commands |
-| Spawn Form | Submit spawn | Focused Panel, Sidebar | Spawns command, auto-selects in panel |
+| Spawn Form | Submit spawn | New Panel (or Focused Panel) | Spawns command, creates/focuses panel |
 | Shared Toolbar | Click Max Fit | Focused Panel | Resizes terminal, updates button state |
 | Shared Toolbar | Click Layout | Panel Container | Switches flex-direction, toggles layout |
 | Panel | Click/focus | Shared Toolbar, Bottom Bar | Syncs toolbar/bottom bar to panel state |
