@@ -503,6 +503,15 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .search-result-line { font-size:0.65rem;color:var(--text-secondary);font-family:var(--font-mono);padding:0.1rem 0.5rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
 .search-result-line:hover { background:var(--bg-tertiary); }
 
+/* Frozen VTTY indicator (shown when global search keeps a panel frozen) */
+.search-frozen-indicator {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: rgba(210, 153, 34, 0.85); color: #fff;
+    font-size: 0.65rem; text-align: center; padding: 0.25rem;
+    cursor: pointer; z-index: 5; user-select: none;
+}
+.search-frozen-indicator:hover { background: rgba(210, 153, 34, 1); }
+
 /* Sound notifications */
 .sound-btn-active { color:var(--yellow) !important;background:rgba(210,153,34,0.15) !important;border-color:rgba(210,153,34,0.3) !important; }
 

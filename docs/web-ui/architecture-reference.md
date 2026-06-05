@@ -23,9 +23,9 @@ The top bar is the primary navigation and global control strip that spans the fu
 | Element | Description |
 |---------|-------------|
 | Hamburger Button | Toggles the sidebar between expanded and collapsed states. On screens narrower than 768 pixels, the sidebar auto-collapses on load. |
-| Prev/Next Command | Navigates through the flat, alphabetically-sorted command list. Wraps around at boundaries. Useful when the sidebar is hidden. |
+| Prev/Next Command | Navigates through commands on the same server as the focused panel, in chronological (spawn) order. Wraps around at boundaries. Useful when the sidebar is hidden. If the panel has no server connection, falls back to all commands in spawn order. |
 | + Panel Button | Creates a new empty panel. Panels are decoupled from server connections; the user can later connect a command from the sidebar to any panel. |
-| Global Search | Opens a search overlay that searches across all command output on all connected servers. |
+| Global Search | Opens a search overlay that searches across all command output on all connected servers. When opened, all panel VTTY updates are paused (WS and poll) so text does not change while searching. An optional "Freeze cmds" checkbox sends SIGSTOP to all running commands. Clicking a result loads that command into the focused panel, which remains frozen while other panels thaw. A "VTTY frozen" indicator appears on the frozen panel; clicking it resumes updates. |
 | Theme Toggle | Cycles the global theme through Auto (OS preference), Grey, and Dark. Stored in localStorage. |
 | Sound Toggle | Enables or disables browser notification sounds when commands exit. |
 | Logs Button | Toggles between the terminal view and the log streaming view. The log viewer has its own WebSocket for real-time streaming. |
@@ -214,15 +214,18 @@ The log viewer is an alternative view to the terminal display that shows the ser
 
 ## 13. Global Search Overlay
 
-The global search overlay is a modal dialog that allows searching across all command output on all connected servers simultaneously. It submits a search query to the server's `/api/search` endpoint and displays results grouped by command, showing matching lines with context. Results are clickable to navigate to the matching command.
+The global search overlay is a modal dialog that allows searching across all command output on all connected servers simultaneously. When the overlay opens, all panel VTTY updates (WebSocket push and HTTP poll) are paused to prevent terminal content from shifting while the user reads search results. An optional "Freeze cmds" checkbox sends SIGSTOP to all running commands, halting their execution entirely.
 
 | Element | Description |
 |---------|-------------|
 | Search Input | Full-text query input. Supports Enter-key submission. |
-| Search/Close Buttons | Execute the search or dismiss the overlay. |
-| Results Area | Scrollable container displaying search results grouped by command. Each result shows the command name, matching line, and line number. |
+| Freeze Commands Checkbox | Optional toggle that freezes (SIGSTOP) all running commands across all servers. Prevents any text changes in terminal buffers. Unchecking thaws them. |
+| Search/Close Buttons | Execute the search or dismiss the overlay. Closing thaws all panels and commands. |
+| Results Area | Scrollable container displaying search results grouped by command. Each result shows the command name, matching line, and line number. Clickable — clicking a result loads that command into the focused panel. |
 
-**Interactions:** The overlay is opened by the search button in the top bar. Clicking outside the overlay or pressing Escape closes it. Search results are fetched from a single server endpoint; multi-server search requires the server to aggregate results from peers.
+**Freeze/thaw behavior:** When the search overlay opens, every panel's WebSocket connection is disconnected and poll timers are stopped, tracked in `_searchFrozenPanelIds`. When closed, all panels resume their update mode. If the user clicks a search result, the focused panel loads the selected command but remains frozen (its WS/poll stays stopped). All other panels thaw. A "VTTY frozen (click to unfreeze)" indicator bar appears at the bottom of the frozen panel; clicking it resumes updates for that panel.
+
+**Interactions:** The overlay is opened by the search button in the top bar. Clicking outside the overlay or pressing Escape closes it and thaws all panels/commands. Search results are fetched from a single server endpoint; multi-server search requires the server to aggregate results from peers.
 
 ---
 

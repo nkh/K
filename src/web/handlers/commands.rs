@@ -15,7 +15,8 @@ pub async fn list_commands(State(state): State<AppState>) -> Json<Value> {
     let commands = state.manager.list();
     let data: Vec<Value> = commands
         .into_iter()
-        .map(|(id, name, args, pid, certificate)| {
+        .enumerate()
+        .map(|(idx, (id, name, args, pid, certificate))| {
             // Look up exit config for the command
             let exit_info = state
                 .manager
@@ -58,6 +59,7 @@ pub async fn list_commands(State(state): State<AppState>) -> Json<Value> {
                 "status": if frozen { "frozen" } else if alive { "running" } else { "exited" },
                 "certificate": certificate,
                 "exit": exit_info,
+                "spawn_order": idx,
             })
         })
         .collect();
@@ -622,7 +624,7 @@ pub async fn get_snapshot(State(state): State<AppState>) -> Json<Value> {
     let mut data: Vec<Value> = Vec::new();
     let mut first_alive_id: Option<String> = None;
 
-    for (id, name, args, pid, certificate) in &commands {
+    for (idx, (id, name, args, pid, certificate)) in commands.iter().enumerate() {
         let exit_info = state
             .manager
             .get(id)
@@ -668,6 +670,7 @@ pub async fn get_snapshot(State(state): State<AppState>) -> Json<Value> {
             "status": if frozen { "frozen" } else if alive { "running" } else { "exited" },
             "certificate": certificate,
             "exit": exit_info,
+            "spawn_order": idx,
         }));
     }
 

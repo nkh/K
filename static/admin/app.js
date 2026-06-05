@@ -10,6 +10,11 @@ let _showingWelcome = true;
 // Clicking an instance header sets it to that instance URL.
 let _sidebarSort = 'name';
 
+// Global search freeze state: tracks which panels had their updates stopped
+// while the search overlay was open, and which commands were frozen.
+let _searchFrozenPanelIds = new Set();
+let _searchFrozenCmdIds = []; // { instUrl, cmdId, wasFrozen }
+
 // Track panel count to avoid unnecessary DOM rebuilds.
 let _lastRenderedPanelCount = -1;
 let _lastRenderedPanelIds = '';
@@ -1154,17 +1159,24 @@ function _buildSidebar() {
         }
     }
 
-    // Sort allCmds globally for navigation (alphabetical by name)
-    allCmds.sort((a, b) => a.cmdName.localeCompare(b.cmdName));
-
-    // Build the flat navigation list from the sorted commands
-    _navCommands = allCmds.map(({ inst, cmd, cmdName }) => ({
+    // Build the navigation list for prev/next: commands from the active
+    // panel's server only, sorted by spawn_order (chronological).
+    // Falls back to all commands in spawn order if no panel has a server.
+    const activePanelId = getActivePanelId();
+    const activePanel = activePanelId ? state.panels.find(p => p.id === activePanelId) : null;
+    const navInstUrl = activePanel && activePanel.selectedInstUrl ? activePanel.selectedInstUrl : null;
+    const navCmds = navInstUrl
+        ? allCmds.filter(c => c.inst.url === navInstUrl)
+        : allCmds;
+    navCmds.sort((a, b) => (a.cmd.spawn_order ?? 0) - (b.cmd.spawn_order ?? 0));
+    _navCommands = navCmds.map(({ inst, cmd, cmdName }) => ({
         instUrl: inst.url,
         cmdId: cmd.id,
         name: cmdName,
     }));
 
     if (_sidebarSort === 'name') {
+        // Sidebar "All" view: alphabetical by name
         allCmds.sort((a, b) => a.cmdName.localeCompare(b.cmdName));
         html += renderCmdList(allCmds);
     } else {
@@ -6087,18 +6099,157 @@ function initPanelDropTargets() {
 }
 
 // ─── Global Search ───
+// When the search overlay opens, all panel VTTY updates are paused so text
+// doesn't shift under the user's eyes. Optionally, the commands themselves
+// can be frozen (SIGSTOP). On cancel, everything resumes. On result click,
+// the selected panel stays frozen so the matched text remains stable.
+
+function _freezeAllPanelsForSearch() {
+    _searchFrozenPanelIds.clear();
+    _searchFrozenCmdIds = [];
+    for (const panel of state.panels) {
+        if (panel.selectedInstUrl && panel.selectedCmdId) {
+            stopPanelUpdateMode(panel.id);
+            _searchFrozenPanelIds.add(panel.id);
+        }
+    }
+}
+
+async function _thawAllPanelsFromSearch() {
+    for (const panelId of _searchFrozenPanelIds) {
+        const panelObj = state.panels.find(p => p.id === panelId);
+        if (panelObj && panelObj.selectedInstUrl && panelObj.selectedCmdId) {
+            startPanelUpdateMode(panelId);
+        }
+    }
+    _searchFrozenPanelIds.clear();
+    // Thaw any commands that were frozen during search
+    for (const entry of _searchFrozenCmdIds) {
+        try {
+            await fetch(apiUrl(`/api/commands/${entry.cmdId}/thaw`, { url: entry.instUrl }), {
+                method: 'POST',
+                headers: authHeadersForInstance({ url: entry.instUrl }),
+                body: JSON.stringify({}),
+            });
+        } catch (e) { /* ignore */ }
+    }
+    _searchFrozenCmdIds = [];
+}
+
 function openGlobalSearch() {
+    _freezeAllPanelsForSearch();
     const modal = document.getElementById('globalSearchModal');
     modal.style.display = '';
     const input = document.getElementById('globalSearchInput');
     input.value = '';
     input.focus();
+    document.getElementById('searchFreezeToggle').checked = false;
     document.getElementById('globalSearchResults').innerHTML = '<div style="padding:1rem;color:var(--text-muted);text-align:center;font-size:0.75rem;">Type a query and press Enter to search across all command output</div>';
 }
 
 function closeGlobalSearch() {
     const modal = document.getElementById('globalSearchModal');
     modal.style.display = 'none';
+    _thawAllPanelsFromSearch();
+}
+
+async function _toggleSearchFreezeCommands() {
+    const freeze = document.getElementById('searchFreezeToggle').checked;
+    if (freeze) {
+        // Freeze all running commands across all servers
+        for (const inst of state.connections) {
+            if (!inst._commands) continue;
+            for (const cmd of inst._commands) {
+                if (!cmd.alive || cmd.frozen) continue;
+                try {
+                    const res = await fetch(apiUrl(`/api/commands/${cmd.id}/freeze`, { url: inst.url }), {
+                        method: 'POST',
+                        headers: authHeadersForInstance(inst),
+                        body: JSON.stringify({}),
+                    });
+                    if (res.ok) {
+                        _searchFrozenCmdIds.push({ instUrl: inst.url, cmdId: cmd.id, wasFrozen: false });
+                    }
+                } catch (e) { /* skip */ }
+            }
+        }
+    } else {
+        // Thaw all commands we froze
+        for (const entry of _searchFrozenCmdIds) {
+            if (!entry.wasFrozen) {
+                try {
+                    await fetch(apiUrl(`/api/commands/${entry.cmdId}/thaw`, { url: entry.instUrl }), {
+                        method: 'POST',
+                        headers: authHeadersForInstance({ url: entry.instUrl }),
+                        body: JSON.stringify({}),
+                    });
+                } catch (e) { /* ignore */ }
+            }
+        }
+        _searchFrozenCmdIds = [];
+    }
+}
+
+function onSearchResultClick(instUrl, cmdId, cmdName) {
+    const modal = document.getElementById('globalSearchModal');
+    modal.style.display = 'none';
+
+    // Select the command in the focused panel
+    const activePanelId = getActivePanelId();
+    selectCommand(instUrl, cmdId, cmdName);
+
+    // Thaw all OTHER panels and commands, but keep the selected panel frozen
+    const keepFrozenId = activePanelId;
+    for (const panelId of _searchFrozenPanelIds) {
+        if (panelId !== keepFrozenId) {
+            const panelObj = state.panels.find(p => p.id === panelId);
+            if (panelObj && panelObj.selectedInstUrl && panelObj.selectedCmdId) {
+                startPanelUpdateMode(panelId);
+            }
+        }
+    }
+    // Thaw all frozen commands
+    for (const entry of _searchFrozenCmdIds) {
+        if (!entry.wasFrozen) {
+            fetch(apiUrl(`/api/commands/${entry.cmdId}/thaw`, { url: entry.instUrl }), {
+                method: 'POST',
+                headers: authHeadersForInstance({ url: entry.instUrl }),
+                body: JSON.stringify({}),
+            }).catch(() => {});
+        }
+    }
+    _searchFrozenCmdIds = [];
+    _searchFrozenPanelIds.clear();
+
+    // Keep only the active panel frozen
+    if (keepFrozenId) {
+        _searchFrozenPanelIds.add(keepFrozenId);
+    }
+
+    // Show a frozen indicator on the panel so the user knows updates are paused
+    updateFrozenIndicator();
+}
+
+function updateFrozenIndicator() {
+    // Remove any existing frozen indicators
+    document.querySelectorAll('.search-frozen-indicator').forEach(el => el.remove());
+    for (const panelId of _searchFrozenPanelIds) {
+        const panelEl = document.getElementById(panelId);
+        if (!panelEl) continue;
+        const indicator = document.createElement('div');
+        indicator.className = 'search-frozen-indicator';
+        indicator.textContent = 'VTTY frozen (click to unfreeze)';
+        indicator.onclick = () => {
+            _searchFrozenPanelIds.delete(panelId);
+            indicator.remove();
+            const panelObj = state.panels.find(p => p.id === panelId);
+            if (panelObj && panelObj.selectedInstUrl && panelObj.selectedCmdId) {
+                startPanelUpdateMode(panelId);
+            }
+        };
+        panelEl.style.position = 'relative';
+        panelEl.appendChild(indicator);
+    }
 }
 
 async function executeGlobalSearch() {
@@ -6137,7 +6288,7 @@ async function executeGlobalSearch() {
     }
     resultsContainer.innerHTML = allResults.map(group => `
         <div class="search-result-group">
-            <div class="search-result-header" onclick="selectCommand('${escHtml(group.instUrl)}','${escHtml(group.cmdId)}','${escHtml(group.cmdName)}');closeGlobalSearch()">
+            <div class="search-result-header" onclick="onSearchResultClick('${escHtml(group.instUrl)}','${escHtml(group.cmdId)}','${escHtml(group.cmdName)}')">
                 ${escHtml(group.cmdName)} <span style="color:var(--text-muted);font-size:0.6rem;">(${group.lines.length} matches)</span>
             </div>
             ${group.lines.map(l => `<div class="search-result-line" title="${escHtml(l.text)}"><span style="color:var(--text-muted);">${l.lineNum}:</span> ${escHtml(l.text)}</div>`).join('')}

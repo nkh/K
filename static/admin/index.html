@@ -247,6 +247,9 @@
     <div class="search-modal-content">
         <div class="search-modal-toolbar">
             <input type="text" id="globalSearchInput" placeholder="Search command output..." onkeydown="if(event.key==='Enter'){event.preventDefault();executeGlobalSearch()}" autofocus>
+            <label style="font-size:0.65rem;color:var(--text-muted);display:flex;align-items:center;gap:0.2rem;cursor:pointer;" title="Freeze (SIGSTOP) all running commands while searching to prevent text changes">
+                <input type="checkbox" id="searchFreezeToggle" onchange="_toggleSearchFreezeCommands()"> Freeze cmds
+            </label>
             <button class="btn btn-xs btn-primary" onclick="executeGlobalSearch()">Search</button>
             <button class="btn btn-xs" onclick="closeGlobalSearch()">&#x2715;</button>
         </div>
