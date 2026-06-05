@@ -18,10 +18,10 @@ The web UI is divided into four main regions:
 
 | # | Region | Description |
 |---|--------|-------------|
-| 1 | **Sidebar** | Command list (with filter, kill all, pinning), spawn form, templates, and certificate management |
+| 1 | **Sidebar** | Command list (with filter, kill all, pinning), spawn form, templates, environment presets, and certificate management. The sidebar has five tabs: Servers, Spawn, Templates, Envs, and Certs |
 | 2 | **Top Bar** | Global controls: sidebar toggle, command navigation, panel management, search, theme, sound, logs, status, auth token, docs, shortcuts |
-| 3 | **Panel Header** | Per-panel controls: command info, restart, resources, font size, terminal resize, buffer select, refresh throttle, send keys, copy, export, screenshot, panel theme |
-| 4 | **Terminal (VTTY)** | Real-time terminal output rendered in the browser with search, scrollback, and copy support |
+| 3 | **Panel Header** | Per-panel controls: command info, restart, resources, font size, terminal resize, buffer select, refresh throttle, send keys, copy, export, screenshot, panel theme. Controls act on the focused panel and maintain per-panel state |
+| 4 | **Terminal (VTTY)** | Real-time terminal output rendered in the browser with search, scrollback, and copy support. Each panel has its own dedicated WebSocket connection |
 | 5 | **Bottom Bar** | Status information: command label, cursor position, dimensions, scrollback indicator, connection status, update mode, poll interval, refresh throttle, WebSocket quality |
 
 ## Responsive Design
@@ -35,3 +35,9 @@ The web UI can connect to multiple vrw instances simultaneously. Use the **+ Pan
 ## Technology
 
 The web UI is a single-page application (SPA) embedded into the vrw binary via `rust_embed`. It uses vanilla HTML, CSS, and JavaScript with no external dependencies. Terminal rendering uses a `<pre>` element updated via WebSocket push or HTTP polling. An incremental diff protocol (Level 3) minimizes bandwidth by sending only changed cells rather than full HTML replacements.
+
+## Architecture Principles
+
+The UI follows a **decoupled panel architecture**. Each panel is an independent terminal display unit with its own WebSocket connection, font size, theme, selection mode, and command selection state. Panels are pure display containers with no mandatory ties to server connections: a panel can exist without any connected server, displaying a placeholder message until the user selects a command. Server connections are managed independently as reusable resources available to all panels. This design enables powerful workflows such as monitoring commands from multiple servers simultaneously in a split-panel layout, or creating empty panels and assigning commands to them later.
+
+Environment presets extend this architecture by allowing users to define complete workspace configurations — specifying panels, their assigned servers, and commands to spawn — in the server's TOML configuration file. Named environments can be activated from the Envs tab in the sidebar, or automatically started by the server on boot.

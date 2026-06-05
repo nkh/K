@@ -25,7 +25,7 @@ Displays a reference table of all available keyboard shortcuts in the web UI.
 
 ![Add panel modal](screenshots/20-add-panel-modal.png)
 
-Used to connect to an additional vrw instance in a new panel.
+Used to connect to an additional vrw instance in a new panel. This creates both a server connection and an empty panel pre-linked to that server.
 
 ### Instance URL
 The base URL of the vrw instance (e.g., `http://localhost:9090`).
@@ -36,11 +36,39 @@ A friendly name for this instance, displayed in the panel header and instance UR
 ### Auth Token (optional)
 A bearer token for authenticating with this instance. If omitted, the global token (set in the top bar) is used.
 
+### Split Direction
+Controls how the new panel is arranged relative to existing panels:
+
+| Option | Description |
+|--------|-------------|
+| **Auto** | Stacks panels horizontally if 2 panels, or uses the current layout direction if 3+ |
+| **Horizontal** | Places panels side by side |
+| **Vertical** | Stacks panels top to bottom |
+
 ### Actions
 - **Cancel**: Close the modal without adding a panel.
-- **Add Panel**: Create the new panel and connect to the specified instance.
+- **Add Panel**: Create the new panel and connect to the specified instance. The connection is added idempotently — if a connection to the same URL already exists, it is reused.
 
 **Open**: Click the **+ Panel** button in the top bar.
+
+## Add Server Modal
+
+Used to register a new server connection **without** creating a panel. This is useful when you want commands from a remote instance to appear in the sidebar command list for all existing panels, without adding another panel to the layout.
+
+### Instance URL
+The base URL of the vrw instance (e.g., `http://localhost:9090`).
+
+### Label (optional)
+A friendly name for this instance, displayed in the sidebar's instance headers and sort bar.
+
+### Auth Token (optional)
+A bearer token for authenticating with this instance.
+
+### Actions
+- **Cancel**: Close the modal without adding a connection.
+- **Add Server**: Register the connection. Commands from this instance appear in the sidebar's Servers tab for all panels.
+
+**Open**: Click the **+ Server** button in the sidebar header.
 
 ## Command Picker Modal
 

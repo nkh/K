@@ -43,7 +43,17 @@ Controls a client-side throttle that limits how often VTTY updates are applied t
 This throttle is shared with the per-panel throttle controls in the panel header.
 
 ### WebSocket Quality Indicator
-Shows the round-trip time (latency) of the WebSocket connection in milliseconds, measured via periodic ping/pong messages (every 10 seconds). Hover over it for a tooltip with detailed connection statistics.
+Shows the round-trip time (latency) of the **focused panel's** WebSocket connection in milliseconds, measured via periodic ping/pong messages (every 10 seconds). Each panel maintains its own independent latency measurement (`wsLatency` on the panel's state object), so the indicator reflects the connection quality of whichever panel is currently focused. Hover over it for a tooltip with detailed connection statistics.
+
+The quality indicator uses color coding to communicate connection health at a glance:
+
+| Latency | Color | Meaning |
+|---------|-------|---------|
+| < 50ms | Green | Excellent — local or low-latency connection |
+| 50–200ms | Yellow | Acceptable — remote or lightly loaded connection |
+| > 200ms | Red | Degraded — high latency or congested connection |
+
+When switching focus between panels, the quality indicator updates to reflect the newly focused panel's connection statistics. If the focused panel has no active WebSocket (e.g., an empty panel with no command selected), the indicator shows "--".
 
 ### Connection Status
-Shows the current connection state to the vrw server. Displays **Connected** with latency (e.g., "Connected (5ms)"), **Reconnecting...**, or other status messages. When the connection is lost, a disconnected overlay appears on the terminal panel and a warning banner appears in the sidebar.
+Shows the current connection state of the **focused panel's** server. Displays **Connected** with latency (e.g., "Connected (5ms)"), **Reconnecting...**, **WS Disconnected**, **WS Error**, or **Command ended**. When the connection is lost, a disconnected overlay appears on the terminal panel and a warning banner appears in the sidebar. The connection status is per-panel — switching focus updates the status to reflect the newly focused panel's server connection state.

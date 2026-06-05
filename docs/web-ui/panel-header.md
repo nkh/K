@@ -1,6 +1,6 @@
 # Panel Header
 
-The panel header appears above each terminal view and contains per-panel controls for managing the selected command. When multiple panels are open (multi-instance mode), each panel has its own header.
+The panel header appears above each terminal view and contains per-panel controls for managing the selected command. When multiple panels are open (multi-instance mode), each panel has its own header. All controls in the panel header operate exclusively on the **focused panel** — they read and write state from `state.panels[activePanelId]`, ensuring that toggles, font sizes, and resize operations on one panel never affect another.
 
 ![Panel header](screenshots/07-panel-header.png)
 

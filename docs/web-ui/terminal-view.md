@@ -4,6 +4,12 @@ The terminal view is the main content area that renders command output in real t
 
 ![Terminal view](screenshots/08-terminal-view.png)
 
+## Per-Panel WebSocket Architecture
+
+Each panel in the UI maintains its own dedicated WebSocket connection to stream VTTY updates independently. When a command is selected for a panel, `connectPanelWs(panelId)` opens a WebSocket to `/api/commands/{id}/ws` scoped to that panel. When the command is changed or the panel is removed, `disconnectPanelWs(panelId)` closes it. This per-panel model allows multiple panels to display output from different commands (and different server instances) simultaneously, each with its own independent update stream, latency measurement, and reconnection logic.
+
+The per-panel WebSocket handles five message types from the server: `vtty_full` (complete HTML snapshot), `vtty_diff` (incremental cell-level diff), `vtty_dirty` (buffer-changed notification), `command_ended` (process exit notification), and `pong` (latency measurement response). All VTTY updates are routed exclusively to the panel's own DOM elements via the panel's state object (`state.panels[panelId]`).
+
 ## Rendering
 
 Terminal output is rendered inside a `<pre>` element using monospace fonts. The content is updated via two transport modes:

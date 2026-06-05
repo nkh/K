@@ -48,4 +48,4 @@ By default, exited commands are automatically purged from the manager after thei
 
 ![Collapsed sidebar](screenshots/22-collapsed-sidebar.png)
 
-When the sidebar is collapsed, all sidebar content is hidden. The command list, spawn form, templates, and certificates are all inaccessible until the sidebar is expanded. The toggle button in the top bar or the sidebar resize handle can be used to expand it.
+When the sidebar is collapsed, all sidebar content is hidden. The command list, spawn form, templates, environment presets, and certificates are all inaccessible until the sidebar is expanded. The toggle button in the top bar or the sidebar resize handle can be used to expand it.

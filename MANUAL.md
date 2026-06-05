@@ -571,23 +571,25 @@ Navigate to `http://localhost:9090/<command_name>` to jump straight to a command
 
 > **vrw only** — The web admin interface is not available in vrc.
 
-The admin dashboard is a single-page application embedded in the vrw binary and served at `/admin`. It is split into three files — `index.html`, `style.css`, and `app.js` — and communicates with the REST API and WebSocket endpoints. All static assets are embedded at compile time via `rust-embed`; no external CDN or build step is required.
+The admin dashboard is a single-page application embedded in the vrw binary and served at `/admin`. It is split into three files — `index.html`, `style.css`, and `app.js` (~6300 lines) — and communicates with the REST API and WebSocket endpoints. All static assets are embedded at compile time via `rust-embed`; no external CDN or build step is required.
+
+The UI follows a **decoupled panel architecture**: each panel is an independent terminal display unit with its own dedicated WebSocket connection, font size, theme, selection mode, and command selection state. Panels are pure display containers with no mandatory ties to server connections — an empty panel can exist without any connected server, and the user can assign a command to any panel at any time. This enables powerful multi-server monitoring workflows.
 
 ### Layout
 
-The top bar is organized into three button groups:
+The interface is organized into distinct functional areas:
 
-- **Left group** — Add Panel (spawn), Pause/Run toggle, Kill All
-- **Center group** — Font size controls (A-/A+), resize to fit, alternate screen buffer selector
-- **Right group** — Auth token input, documentation link, keyboard shortcuts (`?`), theme toggle (sun/moon)
-
-The layout uses a consistent button sizing system with four variants: `btn-xs` (compact toolbars), `btn-sm` (secondary actions), `btn` (default primary), and `btn-primary`/`btn-danger` (color variants). The center group collapses on mobile viewports.
-
-- **Top bar** — grouped button layout (left/center/right), theme toggle, shortcuts
-- **Sidebar** — command list with name, PID, status, runtime, and context menu actions
-- **Panel tab bar** — tab strip for multi-panel layouts; right-click for context menu
-- **Main pane** — VTTY terminal viewer with per-panel font size, copy, export, and selection mode
-- **Bottom bar** — connection quality indicator (latency + reconnect count), scrollback indicator
+- **Top bar** — navigation and global controls: sidebar toggle, command navigation, panel creation, global search, theme toggle, sound notifications, log viewer toggle, status bar toggle, auth token input, documentation viewer, keyboard shortcuts
+- **Sidebar** — five tabs for managing the workspace:
+  - **Servers** — command list with filter, kill all, pinning, sort bar, instance headers, disconnected banner
+  - **Spawn** — command creation form with server selection, terminal dimensions, certificate binding, retain-on-exit toggle
+  - **Templates** — saved command configurations for one-click spawning
+  - **Envs** — environment presets that define complete panel/server/command layouts, activatable with one click
+  - **Certs** — TLS certificate management
+- **Shared toolbar** — per-panel controls acting on the focused panel: restart, resources, font size, terminal resize, max fit/max font toggles (per-panel state), buffer select, refresh throttle, key sending, layout toggle, selection mode, copy, export, screenshot, panel theme
+- **Panel container** — flexbox parent holding terminal panels, with resize handles and DOM caching for fast switches
+- **Terminal (VTTY)** — real-time output rendered per-panel with independent WebSocket connections, search, scrollback, exited banner, disconnected overlay
+- **Bottom bar** — status information for the focused panel: command label, cursor position, dimensions, scrollback indicator, update mode, poll interval, refresh throttle, WebSocket quality indicator, connection status
 
 ### Features
 
@@ -611,12 +613,12 @@ The layout uses a consistent button sizing system with four variants: `btn-xs` (
 
 | Feature | Description |
 |---------|-------------|
-| Command sidebar | Name, arguments, PID, status, runtime with search/filter |
-| Batch Kill All | One-click terminate all running commands |
-| Pause / Run | Freeze/thaw current command (SIGSTOP/SIGCONT) |
-| Retained VTTY display | Exited commands shown with status and purge option |
-| Delete retained VTTYs | Purge button on exited commands in the sidebar |
-| Incremental DOM updates | Command list polling skips redundant DOM rebuilds when state is unchanged |
+| Per-panel WebSocket | Each panel maintains its own dedicated WebSocket for independent VTTY streaming |
+| Connectionless panels | Panels can exist without any connected server; commands can be assigned later |
+| Max Fit / Max Font toggles | Per-panel toggle state tracked independently; toggling one panel does not affect others |
+| Spawn instance isolation | Target Instance dropdown in the Spawn form preserves user choice across sidebar rebuilds |
+| Kill All | Terminates all running commands across ALL connected servers in parallel |
+| Environment presets | Named workspace environments (`[[environments]]` in config) for one-click panel/server/command setup |
 
 #### Context Menu and Accessibility
 

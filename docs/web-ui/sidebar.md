@@ -1,6 +1,6 @@
 # Sidebar
 
-The sidebar provides the primary navigation for managing commands. It contains four tabs, each serving a distinct purpose: command management, spawning new commands, saved templates, and certificate management.
+The sidebar provides the primary navigation for managing commands. It contains five tabs, each serving a distinct purpose: command management, spawning new commands, saved templates, environment presets, and certificate management.
 
 The sidebar width can be adjusted by dragging the resize handle on its right edge (minimum 150px, maximum 600px). It can also be fully collapsed via the toggle button in the top bar.
 
@@ -97,6 +97,16 @@ Opens the template creation form with fields for name, command, and arguments.
 
 ### Template Card Actions
 Each template card can be clicked to immediately spawn that command with the saved configuration. User-created templates also have a **Delete** button (`✕`) to remove them. Server-provided templates (from the configuration file) cannot be deleted from the web UI.
+
+## Environments Tab
+
+The Environments tab provides a mechanism for activating preconfigured workspace environments. Each environment defines a named set of panels, server connections, and commands to spawn. Environments are loaded from the server's configuration file (`[[environments]]` sections in TOML config).
+
+### Environment List
+Displays named workspace environments with a summary of their configuration (panel count, server count, command count). Clicking an environment entry activates it, creating all defined panels, connecting servers, and spawning the configured commands.
+
+### Auto-Start
+Environments can be marked for automatic activation on server boot via the `auto_start = true` flag in the configuration. Auto-started environments are immediately displayed by the UI when the page loads.
 
 ## Certificates Tab
 

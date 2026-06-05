@@ -13,7 +13,7 @@ Collapses or expands the sidebar. The sidebar state persists across page reloads
 Navigates through the command list without using the sidebar. These buttons cycle through all commands alphabetically, wrapping from last to first and vice versa. Useful when the sidebar is collapsed or for quick keyboard-driven navigation.
 
 ### + Panel
-Opens a dialog to add a new instance panel. Each panel connects to a different vrw instance, allowing you to monitor commands from multiple servers simultaneously.
+Opens a dialog to add a new empty panel. Each panel is decoupled from server connections — it can exist independently and be assigned a command from the sidebar at any time. The dialog also accepts an optional server URL, label, auth token, and split direction. Panels can also be created without connections; the user selects which command to display via the sidebar.
 
 ### Search Output (`🔍`)
 Opens the global search overlay, which searches across all command output buffers. See [Global Search](./global-search.md) for details.

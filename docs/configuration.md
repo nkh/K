@@ -20,6 +20,7 @@ Complete reference for all configuration entries, CLI flags, and their relations
    - [templates](#templates)
    - [environment](#environment)
    - [profiles](#profiles)
+   - [environments](#environments)
 4. [CLI Flag Reference](#cli-flag-reference)
 5. [Config-to-CLI Mapping](#config-to-cli-mapping)
 6. [Full Example](#full-example)
@@ -287,6 +288,91 @@ profiles:
       variables:
         RUST_LOG: "debug"
 ```
+
+### `environments`
+
+Workspace environment presets that define complete panel layouts, server connections, and commands to spawn. Environments allow users to quickly switch between different work contexts (e.g., "Development", "Production Monitoring", "CI Pipeline") with a single click in the web UI.
+
+Each environment is defined as a `[[environments]]` TOML array entry. The web UI exposes these via the Envs tab in the sidebar and the `/api/environments` API endpoint. Environments marked with `auto_start = true` are automatically activated by the server on boot.
+
+#### Environment Entry
+
+| Key | Type | Required | Description |
+|-----|------|----------|-------------|
+| `name` | `string` | Yes | Unique name for this environment. Used for display in the web UI and CLI selection. Case-insensitive lookup. |
+| `description` | `string?` | No | Optional description of the environment's purpose. |
+| `layout` | `string?` | No | Panel layout: `"horizontal"` (side-by-side) or `"vertical"` (stacked). Defaults to `"horizontal"`. |
+| `auto_start` | `bool?` | No | If `true`, the server automatically activates this environment on boot, spawning all configured commands. |
+| `default_server` | `string?` | No | Default server URL for panels that don't specify their own. Defaults to the primary (local) instance. |
+| `default_token` | `string?` | No | Default auth token for panels that don't specify their own. |
+| `panels` | `array<EnvironmentPanel>` | No | The panels that make up this environment. Defaults to empty (no panels). |
+
+#### Panel Entry (`[[environments.panels]]`)
+
+| Key | Type | Required | Description |
+|-----|------|----------|-------------|
+| `title` | `string?` | No | Panel title/label displayed in the panel header. Defaults to the command name or "Panel N". |
+| `server` | `string?` | No | Server URL for this panel's commands. If omitted, uses the environment's `default_server`. |
+| `token` | `string?` | No | Auth token for the server (overrides the environment's `default_token`). |
+| `server_label` | `string?` | No | Label for the server connection displayed in the sidebar. |
+| `commands` | `array<EnvironmentCommand>` | No | Commands to spawn in this panel. If empty, the panel is created without a running command. |
+
+#### Command Entry (within `panels[].commands`)
+
+| Key | Type | Required | Description |
+|-----|------|----------|-------------|
+| `cmd` | `string` | Yes | The command executable to run (e.g., `"npm"`, `"/usr/bin/htop"`). |
+| `args` | `string?` | No | Space-separated arguments (e.g., `"run dev"`, `"--sort-key PID"`). |
+| `workdir` | `string?` | No | Working directory for the command. Defaults to the server's working directory. |
+| `certificate` | `string?` | No | Certificate name to bind (from the server's certificate store). |
+| `rows` | `u16?` | No | VTTY rows. Defaults to the global `[vtty].rows` setting. |
+| `cols` | `u16?` | No | VTTY columns. Defaults to the global `[vtty].cols` setting. |
+| `retain_on_exit` | `bool?` | No | Whether to retain the terminal buffer after the command exits. |
+
+**Example:**
+
+```toml
+[[environments]]
+name = "Dev Workspace"
+description = "Local development with frontend, backend, and database monitors"
+layout = "horizontal"
+auto_start = true
+
+[[environments.panels]]
+title = "Frontend"
+commands = [
+  { cmd = "npm", args = "run dev", workdir = "/home/user/frontend" }
+]
+
+[[environments.panels]]
+title = "Backend"
+commands = [
+  { cmd = "cargo", args = "run", workdir = "/home/user/api" }
+]
+
+[[environments.panels]]
+title = "Database"
+server = "http://db-server:9090"
+server_label = "DB Server"
+commands = [
+  { cmd = "psql", args = "-U admin mydb" }
+]
+
+[[environments]]
+name = "Production Monitor"
+description = "Monitor production services"
+auto_start = false
+
+[[environments.panels]]
+title = "App Server"
+server = "https://prod.example.com:9090"
+server_label = "Production"
+commands = [
+  { cmd = "tail", args = "-f /var/log/app.log" }
+]
+```
+
+When activated from the web UI (via the Envs tab), the `activateEnvironment()` function creates the required number of panels, adds server connections idempotently, and spawns commands sequentially on the specified instances. Multiple environments can be defined in a single configuration file.
 
 ---
 

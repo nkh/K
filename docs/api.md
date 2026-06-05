@@ -611,6 +611,68 @@ Get instance information and server configuration.
 
 ---
 
+#### `GET /api/environments`
+
+List all workspace environments defined in the server configuration file. These correspond to `[[environments]]` entries in the TOML configuration. The response includes each environment's name, description, layout, auto-start flag, and its full panel/command definitions.
+
+**Response:**
+
+```json
+{
+  "status": "ok",
+  "data": [
+    {
+      "name": "Dev Workspace",
+      "description": "Local development with frontend, backend, and database monitors",
+      "layout": "horizontal",
+      "auto_start": true,
+      "default_server": null,
+      "panels": [
+        {
+          "title": "Frontend",
+          "server": null,
+          "token": null,
+          "server_label": null,
+          "commands": [
+            {
+              "cmd": "npm",
+              "args": "run dev",
+              "workdir": "/home/user/frontend",
+              "certificate": null,
+              "rows": null,
+              "cols": null,
+              "retain_on_exit": null
+            }
+          ]
+        },
+        {
+          "title": "Backend",
+          "server": null,
+          "token": null,
+          "server_label": null,
+          "commands": [
+            {
+              "cmd": "cargo",
+              "args": "run",
+              "workdir": "/home/user/api",
+              "certificate": null,
+              "rows": null,
+              "cols": null,
+              "retain_on_exit": null
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "error": null
+}
+```
+
+The web UI uses this endpoint to populate the Environments tab in the sidebar. When a user clicks an environment, the client-side `activateEnvironment()` function creates panels, connects servers, and spawns commands based on the environment's definition.
+
+---
+
 #### `GET /api/certificates`
 
 List all certificates in the certificate store.
