@@ -22,8 +22,10 @@ use std::time::Duration;
 use tokio::time::sleep;
 
 use vrc_core::config::schema::{
-    CommandLogConfig, Config, DaemonConfig, DisplayConfig, EnvironmentConfig, ExitConfig,
+    CommandLogConfig, Config, DaemonConfig, DisplayConfig, ExitConfig,
 };
+#[cfg(feature = "vrw")]
+use vrc_core::config::schema::EnvironmentConfig;
 #[cfg(feature = "vrw")]
 use vrc_core::config::schema::{SecurityConfig, ServerConfig, TlsConfig, VttyConfig};
 use vrc_core::process::manager::CommandManager;
@@ -77,6 +79,7 @@ fn test_config() -> Config {
         profiles: Default::default(),
         hooks: Default::default(),
         templates: Default::default(),
+        environments: Default::default(),
     }
 }
 
@@ -114,9 +117,10 @@ fn test_config() -> Config {
         interactive: Default::default(),
         default_exit: Default::default(),
         environment: Default::default(),
+        templates: Default::default(),
+        environments: Default::default(),
         profiles: Default::default(),
         hooks: Default::default(),
-        templates: Default::default(),
     }
 }
 

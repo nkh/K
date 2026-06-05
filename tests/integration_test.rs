@@ -5,8 +5,11 @@
 //! Tests that only use shared modules (vtty, process manager basics) work
 //! with both features.
 
+#[cfg(feature = "vrw")]
 use std::sync::Arc;
+#[cfg(feature = "vrw")]
 use std::time::Duration;
+#[cfg(feature = "vrw")]
 use tokio::time::sleep;
 
 #[cfg(feature = "vrw")]
@@ -14,6 +17,7 @@ use vrc_core::config::schema::{
     CommandLogConfig, Config, DaemonConfig, DisplayConfig, SecurityConfig, ServerConfig, TlsConfig,
     VttyConfig,
 };
+#[cfg(feature = "vrw")]
 use vrc_core::process::manager::CommandManager;
 
 #[cfg(feature = "vrw")]
