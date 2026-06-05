@@ -319,3 +319,41 @@ Stage Summary:
 - Prev/Next now scopes to panel's server in spawn order
 - Global search pauses all VTTY updates; optional command freeze; per-panel thaw on result click
 - Commit ba84374 pushed to complexity_fix branch
+---
+Task ID: 9
+Agent: main
+Task: Spawn form — env vars, open-in-new-panel, decouple instance selection
+
+Work Log:
+- Explored codebase thoroughly: spawn handler (commands.rs), spawnCommand() in app.js,
+  updateInstanceDropdown(), template spawning, env var merging, config structures
+- Moved Target Instance dropdown to top of spawn form in index.html
+- Added Environment Variables textarea (spawnEnv) with KEY=VALUE parsing support
+- Added "Open in new panel" checkbox (spawnOpenPanel, default checked)
+- Added parseSpawnEnvVars() JS function: parses textarea into {key: value} object,
+  supports empty lines, # comments, values with = signs (splits on first =)
+- Updated spawnCommand(): sends env in request body, creates new panel when
+  openInPanel is checked (instead of taking over focused panel)
+- Fixed updateInstanceDropdown(): fully decoupled from focused panel — falls back
+  to first connection instead of state.selectedInstUrl
+- Fixed spawnServerTemplate(): env was sent as array instead of object; now converts
+  ["KEY=VALUE", ...] → {"KEY": "VALUE", ...} before sending
+- Added CSS for spawn form textarea and open-panel-hint
+- Added 2 new regression tests:
+  - regression_spawn_command_env_overrides_config_env: verifies per-command env
+    overrides config-level env, config vars preserved
+  - regression_spawn_env_value_with_equals_sign: verifies values with = preserved
+- Fixed pre-existing test failures: added missing `environments` field to Config
+  structs in integration_test.rs and extended_test.rs
+- Updated docs: sidebar.md (spawn tab section), architecture-reference.md (spawn form, data flow)
+- Build: cargo build + cargo clippy --features vrw — clean, zero warnings
+- Tests: 70 regression tests pass (with --features vrw), all unit tests pass
+- Pushed as commit 905df19 to origin/web_ui_fix
+
+Stage Summary:
+- 8 files changed: app.js, index.html, style.css, regression_test.rs,
+  extended_test.rs, integration_test.rs, sidebar.md, architecture-reference.md
+- Spawn form now has env vars textarea, open-in-panel option, decoupled instance
+- Template env var bug fixed (array → object conversion)
+- 2 new tests, 70 regression tests pass with vrw feature
+- Commit 905df19 pushed to web_ui_fix branch
