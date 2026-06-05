@@ -156,10 +156,10 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .panel { flex: 1 1 0; display: flex; flex-direction: column; border-right: none; min-width: 100px; position: relative; }
 
 /* Command list items */
-.cmd-item { padding: 0.3rem 0.4rem; cursor: pointer; display: flex; flex-direction: column; gap: 0.05rem; font-size: 0.75rem; }
+.cmd-item { padding: 0.2rem 0.3rem; cursor: pointer; display: flex; flex-direction: column; gap: 0.02rem; font-size: 0.75rem; }
 .cmd-item:hover { background: var(--bg-tertiary); }
 .cmd-item.selected { background: var(--bg-tertiary); border-left: 2px solid var(--accent); }
-.cmd-item-row { display: flex; align-items: center; gap: 0.4rem; width: 100%; }
+.cmd-item-row { display: flex; align-items: center; gap: 0.25rem; width: 100%; }
 .cmd-item-row .pin-btn { flex-shrink: 0; }
 .cmd-item-row .status-dot { flex-shrink: 0; }
 .cmd-item-row .pid { flex-shrink: 0; }
@@ -172,7 +172,7 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .cmd-item .pid { color: var(--text-muted); font-size: 0.7rem; font-family: var(--font-mono); flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60px; }
 /* Detail row: secondary info (runtime, cpu, memory, pid) shown on a separate
    line below the command name.  Uses padding-left to align with the name. */
-.cmd-item .cmd-detail-row { display: flex; align-items: center; gap: 0.5rem; padding-left: 2.2rem; font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmd-item .cmd-detail-row { display: flex; align-items: center; gap: 0.35rem; padding-left: 2rem; font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cmd-item .cmd-detail-row:empty { display: none; }
 .cmd-item .cmd-detail-row .detail-sep { color: var(--border); }
 .cmd-item .cmd-detail-inline { font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 0%; min-width: 0; }
@@ -459,12 +459,22 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .pin-btn { background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:0.7rem;padding:0 0.15rem;line-height:1;flex-shrink:0; }
 .pin-btn:hover { color:var(--yellow); }
 .pin-btn.active { color:var(--yellow); }
+/* Command grab handle for reordering */
+.cmd-grab-handle { cursor:grab;color:var(--text-muted);font-size:0.7rem;padding:0 0.15rem;user-select:none;flex-shrink:0;opacity:0.4;transition:opacity 0.15s; }
+.cmd-grab-handle:hover { opacity:1;color:var(--text-secondary); }
+.cmd-grab-handle:active { cursor:grabbing; }
 /* Keep/Unkeep button (star toggle for retain_on_exit) */
 .keep-btn { background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:0.7rem;padding:0 0.15rem;line-height:1;flex-shrink:0; }
 .keep-btn:hover { color:var(--green); }
 .keep-btn.active { color:var(--green); }
 .keep-badge { color:var(--green);font-size:0.65rem;margin-left:0.15rem; }
-.pinned-section-header { font-size:0.6rem;color:var(--text-muted);padding:0.3rem 0.4rem 0.1rem;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid var(--border);margin-bottom:0.15rem; }
+.pinned-section-header { font-size:0.6rem;color:var(--text-muted);padding:0.3rem 0.4rem 0.1rem;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid var(--border);margin-bottom:0.15rem;display:flex;align-items:center;justify-content:space-between; }
+.server-close-btn { background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:0.6rem;padding:0 0.15rem;line-height:1;flex-shrink:0; }
+.server-close-btn:hover { color:var(--red); }
+/* Command reorder drag indicators */
+.cmd-item.cmd-dragging { opacity:0.5; }
+.cmd-item.cmd-drag-over-top { border-top:2px solid var(--accent); }
+.cmd-item.cmd-drag-over-bottom { border-bottom:2px solid var(--accent); }
 
 /* Sidebar sort bar */
 .sidebar-sort-bar { display:flex;gap:0.2rem;padding:0.15rem 0.2rem;margin-bottom:0.15rem;border-bottom:1px solid var(--border); }

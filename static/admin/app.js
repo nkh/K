@@ -1191,14 +1191,16 @@ function _buildSidebar() {
                 continue;
             }
             if (state.connections.length > 1) {
-                html += `<div class="pinned-section-header">${escHtml(inst.label)}</div>`;
+                html += `<div class="pinned-section-header">${escHtml(inst.label)}<button class="server-close-btn" onclick="event.stopPropagation();disconnectServer('${escHtml(inst.url)}')" title="Disconnect this server">&#x2715;</button></div>`;
             }
             if (instCmds.length === 0) {
                 html += `<div style="padding:0.3rem 0.4rem;color:var(--text-muted);font-size:0.7rem;">No commands</div>`;
                 continue;
             }
-            instCmds.sort((a, b) => a.cmdName.localeCompare(b.cmdName));
-            html += renderCmdList(instCmds);
+            // Apply custom reorder if set for this instance
+            const orderedCmds = getOrderedCmds(inst.url, instCmds);
+            orderedCmds.sort((a, b) => a.cmdName.localeCompare(b.cmdName));
+            html += renderCmdList(orderedCmds);
         }
     }
 
@@ -1241,8 +1243,8 @@ function _buildSidebar() {
             const detailParts = [];
             if (runtimeStr) detailParts.push(escHtml(runtimeStr));
             if (frozenBadge) detailParts.push(escHtml(frozenBadge.trim()));
-            if (res && res.cpu_percent != null) detailParts.push('CPU ' + res.cpu_percent.toFixed(1) + '%');
-            if (res && res.memory_mb != null) detailParts.push('MEM ' + res.memory_mb.toFixed(1) + 'MB');
+            if (res && res.cpu_percent != null) detailParts.push(res.cpu_percent.toFixed(1) + '%');
+            if (res && res.memory_mb != null) detailParts.push(res.memory_mb.toFixed(1) + 'MB');
             if (cmd.pid) detailParts.push('pid ' + cmd.pid);
             const unreachableTitle = instUnreachable ? ` [disconnected]` : '';
             out += `
@@ -1250,7 +1252,8 @@ function _buildSidebar() {
                     <div class="cmd-item-row">
                         <button class="btn btn-xs btn-danger cmd-kill-btn" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}"${killDisabled}>&#x2715;</button>
                         ${keepBtnHtml}
-                        <button class="pin-btn${isPinned ? ' active' : ''}" onclick="event.stopPropagation();togglePinCmd('${escHtml(cmdName)}')" title="${isPinned ? 'Unpin' : 'Pin'}">&#9734;</button>
+                        <button class="pin-btn${isPinned ? ' active' : ''}" onclick="event.stopPropagation();togglePinCmd('${escHtml(cmdName)}')" title="${isPinned ? 'Unpin' : 'Pin'}">${isPinned ? '◉' : '◎'}</button>
+                        <span class="cmd-grab-handle" draggable="true" ondragstart="event.stopPropagation();onCmdReorderDragStart(event,'${escHtml(inst.url)}','${escHtml(cmd.id)}')" ondragend="onCmdReorderDragEnd(event)" title="Drag to reorder">&#x2807;</span>
                         <span class="name">${escHtml(cmdName)}</span>
                         ${certBadge}
                         ${exitBadge}
@@ -1265,6 +1268,8 @@ function _buildSidebar() {
     container.innerHTML = html || '<div style="padding:1rem;color:var(--text-muted);text-align:center;">No running commands</div>';
     updateInstanceDropdown();
     updateCmdToolbarVisibility();
+    initCmdReorderDropTargets();
+    initPanelDropTargets();
 
     if (state._pendingSelectId) {
         const pendingId = state._pendingSelectId;
@@ -3103,22 +3108,52 @@ async function purgeCommand(instUrl, cmdId, cmdName) {
 }
 
 async function killAllCommands() {
-    if (!confirm('Kill all running commands on all servers?')) return;
+    const filter = (document.getElementById('cmdFilter') || {}).value || '';
+    const filterLower = filter.toLowerCase();
+    let count = 0;
+    // Count matching commands to give a useful confirmation message
+    for (const inst of state.connections) {
+        if (!inst.reachable) continue;
+        for (const cmd of (inst._commands || [])) {
+            if (!cmd.alive) continue;
+            if (filterLower) {
+                const cmdName = cmd.name || cmd.id;
+                if (!cmdName.toLowerCase().includes(filterLower) &&
+                    !(cmd.args || []).join(' ').toLowerCase().includes(filterLower) &&
+                    !String(cmd.pid).includes(filterLower)) continue;
+            }
+            count++;
+        }
+    }
+    if (count === 0) {
+        if (filterLower) alert('No running commands match the filter.');
+        else alert('No running commands to kill.');
+        return;
+    }
+    const scopeMsg = filterLower
+        ? `Kill ${count} matching command(s)? (filter: "${filter}")`
+        : `Kill all ${count} running command(s) on all servers?`;
+    if (!confirm(scopeMsg)) return;
     // Force full rebuild on state transition
     _lastCommandState = '';
     const promises = [];
     for (const inst of state.connections) {
         if (!inst.reachable) continue;
         for (const cmd of (inst._commands || [])) {
-            if (cmd.alive) {
-                promises.push(
-                    fetch(apiUrl(`/api/commands/${cmd.id}/kill`, { url: inst.url }), {
-                        method: 'POST',
-                        headers: authHeadersForInstance({ url: inst.url }),
-                        body: JSON.stringify({}),
-                    }).catch(() => {})
-                );
+            if (!cmd.alive) continue;
+            if (filterLower) {
+                const cmdName = cmd.name || cmd.id;
+                if (!cmdName.toLowerCase().includes(filterLower) &&
+                    !(cmd.args || []).join(' ').toLowerCase().includes(filterLower) &&
+                    !String(cmd.pid).includes(filterLower)) continue;
             }
+            promises.push(
+                fetch(apiUrl(`/api/commands/${cmd.id}/kill`, { url: inst.url }), {
+                    method: 'POST',
+                    headers: authHeadersForInstance({ url: inst.url }),
+                    body: JSON.stringify({}),
+                }).catch(() => {})
+            );
         }
     }
     // Wait for all kill requests to complete
@@ -3378,6 +3413,24 @@ function removeConnection(url) {
     updateDisconnectedUI();
 }
 
+function disconnectServer(url) {
+    const inst = state.connections.find(c => c.url === url);
+    if (!inst) return;
+    // Check if any panels are connected to commands on this server
+    const activePanels = state.panels.filter(p => p.selectedInstUrl === url && p.selectedCmdId);
+    if (activePanels.length > 0) {
+        if (!confirm(`Disconnect from "${inst.label}"? ${activePanels.length} panel(s) showing commands from this server will keep their last state.`)) return;
+    } else {
+        if (!confirm(`Disconnect from "${inst.label}"?`)) return;
+    }
+    // Disconnect WS and poll for panels on this server
+    for (const panel of activePanels) {
+        disconnectPanelWs(panel.id);
+        stopPanelPoll(panel.id);
+    }
+    removeConnection(url);
+}
+
 // ─── Add Server Modal (sidebar only, no panel) ───
 function showAddServerModal() {
     const modal = document.getElementById('addServerModal');
@@ -3385,6 +3438,7 @@ function showAddServerModal() {
     document.getElementById('addServerUrl').value = 'http://localhost:9090';
     document.getElementById('addServerLabel').value = '';
     document.getElementById('addServerToken').value = '';
+    document.getElementById('addServerOpenPane').checked = true;
     const modalInner = modal.querySelector('.modal');
     if (modalInner) trapFocus(modalInner);
     document.getElementById('addServerUrl').focus();
@@ -3395,7 +3449,7 @@ function closeAddServerModal() {
     document.getElementById('addServerModal').style.display = 'none';
 }
 
-function confirmAddServer() {
+async function confirmAddServer() {
     const url = document.getElementById('addServerUrl').value.trim();
     if (!url) return;
     const token = document.getElementById('addServerToken').value.trim();
@@ -3403,11 +3457,45 @@ function confirmAddServer() {
     if (!label) {
         try { label = new URL(url).host; } catch (e) { label = url; }
     }
-    addConnection(url, label, token);
+    const openPane = document.getElementById('addServerOpenPane').checked;
+    const conn = addConnection(url, label, token);
     closeAddServerModal();
     loadCommands();
     loadCertificates();
     fetchServerTemplates();
+
+    if (openPane) {
+        // Wait for commands to load, then open a pane connected to the server's
+        // main command (first spawned, i.e. spawn_order 0) or the first command.
+        await loadCommands();
+        const targetCmd = (conn._commands || []).find(c => c.spawn_order === 0) ||
+                         (conn._commands || [])[0];
+        if (targetCmd) {
+            _cacheTerminalForSwitch();
+            // Create a new panel and connect it to the server's main/first command
+            const panelObj = addPanelDirect();
+            panelObj.selectedInstUrl = url;
+            panelObj.selectedCmdId = targetCmd.id;
+            focusPanel(panelObj.id);
+            state.selectedInstUrl = url;
+            state.selectedCmdId = targetCmd.id;
+            state._pendingVttyData = null;
+            state._pendingVttyDirty = false;
+            state.bufferView = 'current';
+            _restoreCachedDom(targetCmd.id);
+            updatePanelCommandInfo();
+            updateTerminalDisconnectedOverlay();
+            updateSidebarSelection();
+            loadVttyHttp(url, targetCmd.id);
+            startUpdateMode();
+        } else {
+            // No commands yet — create an empty panel focused on this server
+            const panelObj = addPanelDirect();
+            panelObj.selectedInstUrl = url;
+            focusPanel(panelObj.id);
+        }
+        renderPanels();
+    }
 }
 
 function removePanel(id) {
@@ -5757,7 +5845,7 @@ function rearrangePinnedCommands(container) {
             // Create pinned section header
             const header = document.createElement('div');
             header.className = 'pinned-section-header';
-            header.textContent = '★ Pinned';
+            header.textContent = '◉ Pinned';
             // Insert pinned items first
             const parent = items[0] && items[0].parentNode;
             if (parent) {
@@ -5776,11 +5864,11 @@ function rearrangePinnedCommands(container) {
             const item = btn.closest('.cmd-item');
             if (item && pinned.includes(item.dataset.cmdName)) {
                 btn.classList.add('active');
-                btn.textContent = '★';
+                btn.textContent = '◉';
                 btn.title = 'Unpin';
             } else {
                 btn.classList.remove('active');
-                btn.textContent = '☆';
+                btn.textContent = '◎';
                 btn.title = 'Pin';
             }
         });
@@ -6095,6 +6183,120 @@ function initPanelDropTargets() {
             } catch (err) { /* ignore invalid drops */ }
             _draggedCmd = null;
         });
+    });
+}
+
+// ─── Drag-and-Drop: Sidebar Command Reorder ───
+// Commands can be reordered within the sidebar by dragging the grab handle.
+// The custom order is persisted in localStorage as 'vrw_cmd_order'.
+// { instUrl: [cmdId1, cmdId2, ...] }
+function getCmdOrder() {
+    try { return JSON.parse(localStorage.getItem('vrw_cmd_order') || '{}'); } catch { return {}; }
+}
+function setCmdOrder(order) {
+    localStorage.setItem('vrw_cmd_order', JSON.stringify(order));
+}
+function getOrderedCmds(instUrl, items) {
+    const order = getCmdOrder();
+    const instOrder = order[instUrl];
+    if (!instOrder) return items;
+    // items are { inst, cmd, cmdName } objects; order by cmd.id
+    const ordered = [];
+    const remaining = [];
+    for (const item of items) {
+        const idx = instOrder.indexOf(item.cmd.id);
+        if (idx >= 0) {
+            ordered.push({ item, idx });
+        } else {
+            remaining.push(item);
+        }
+    }
+    ordered.sort((a, b) => a.idx - b.idx);
+    return [...ordered.map(x => x.item), ...remaining];
+}
+
+let _cmdReorderDragSrc = null;
+
+function onCmdReorderDragStart(e, instUrl, cmdId) {
+    _cmdReorderDragSrc = { instUrl, cmdId };
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', cmdId);
+    e.dataTransfer.setData('application/x-cmd-reorder', JSON.stringify({ instUrl, cmdId }));
+    e.target.closest('.cmd-item').classList.add('cmd-dragging');
+}
+
+function onCmdReorderDragEnd(e) {
+    document.querySelectorAll('.cmd-item').forEach(el => {
+        el.classList.remove('cmd-dragging', 'cmd-drag-over-top', 'cmd-drag-over-bottom');
+    });
+    _cmdReorderDragSrc = null;
+}
+
+function initCmdReorderDropTargets() {
+    const container = document.getElementById('commandList');
+    if (!container) return;
+
+    container.addEventListener('dragover', (e) => {
+        // Only handle reorder drags, not cmd-to-panel drags
+        if (!e.dataTransfer.types.includes('application/x-cmd-reorder')) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const target = e.target.closest('.cmd-item');
+        // Remove previous indicators
+        container.querySelectorAll('.cmd-item').forEach(el => {
+            el.classList.remove('cmd-drag-over-top', 'cmd-drag-over-bottom');
+        });
+        if (!target) return;
+        if (_cmdReorderDragSrc && target.dataset.cmdId === _cmdReorderDragSrc.cmdId) return;
+        const rect = target.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        if (e.clientY < midY) {
+            target.classList.add('cmd-drag-over-top');
+        } else {
+            target.classList.add('cmd-drag-over-bottom');
+        }
+    });
+
+    container.addEventListener('dragleave', (e) => {
+        const target = e.target.closest('.cmd-item');
+        if (target && !container.contains(e.relatedTarget)) {
+            target.classList.remove('cmd-drag-over-top', 'cmd-drag-over-bottom');
+        }
+    });
+
+    container.addEventListener('drop', (e) => {
+        container.querySelectorAll('.cmd-item').forEach(el => {
+            el.classList.remove('cmd-dragging', 'cmd-drag-over-top', 'cmd-drag-over-bottom');
+        });
+        if (!e.dataTransfer.types.includes('application/x-cmd-reorder')) return;
+        e.preventDefault();
+        try {
+            const data = JSON.parse(e.dataTransfer.getData('application/x-cmd-reorder'));
+            const target = e.target.closest('.cmd-item');
+            if (!data || !target || target.dataset.cmdId === data.cmdId) return;
+            if (data.instUrl !== target.dataset.instUrl) return; // can only reorder within same server
+
+            const order = getCmdOrder();
+            let instOrder = order[data.instUrl] || [];
+            // Remove source from current position
+            instOrder = instOrder.filter(id => id !== data.cmdId);
+            // Find target position
+            const targetIdx = instOrder.indexOf(target.dataset.cmdId);
+            const rect = target.getBoundingClientRect();
+            const midY = rect.top + rect.height / 2;
+            if (e.clientY < midY) {
+                // Insert before target
+                instOrder.splice(targetIdx >= 0 ? targetIdx : instOrder.length, 0, data.cmdId);
+            } else {
+                // Insert after target
+                instOrder.splice(targetIdx >= 0 ? targetIdx + 1 : instOrder.length, 0, data.cmdId);
+            }
+            order[data.instUrl] = instOrder;
+            setCmdOrder(order);
+            _lastCommandState = ''; // force sidebar rebuild with new order
+            loadCommands();
+        } catch (err) { /* ignore */ }
+        _cmdReorderDragSrc = null;
     });
 }
 
