@@ -23,6 +23,9 @@ Restarts the command with the same configuration (command, arguments, working di
 ### Kill
 Terminates the selected command. Equivalent to clicking the red kill button (`✕`) in the command list.
 
+### Keep/Unkeep
+Toggles the retain-on-exit flag for the command. When kept (filled star `★`), the terminal buffer is retained after the command exits instead of being removed. The button is green when active.
+
 ### Purge (exited commands only)
 Permanently removes an exited command from the manager. This discards the VTTY buffer and all associated state. Only available for commands that have already exited.
 

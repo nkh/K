@@ -64,9 +64,12 @@ A friendly name for this instance, displayed in the sidebar's instance headers a
 ### Auth Token (optional)
 A bearer token for authenticating with this instance.
 
+### Open pane connected to this server
+A checkbox (checked by default). When checked, adding a server also creates a new panel and connects it to the server's main command (the command that was launched on the command line, identified as `spawn_order` 0). If the server has no main command, the first spawned command is shown instead. If the server has no commands at all, an empty panel is created focused on the server. Unchecking this option adds the server connection without opening a panel (original behavior).
+
 ### Actions
 - **Cancel**: Close the modal without adding a connection.
-- **Add Server**: Register the connection. Commands from this instance appear in the sidebar's Servers tab for all panels.
+- **Add Server**: Register the connection. Commands from this instance appear in the sidebar's Servers tab for all panels. If the "Open pane" checkbox is checked, a new panel is created and connected to the server's main or first command.
 
 **Open**: Click the **+ Server** button in the sidebar header.
 

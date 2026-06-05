@@ -44,16 +44,17 @@ The sidebar is the primary context panel for server management, command browsing
 
 | Element | Description |
 |---------|-------------|
-| Tab Bar (5 tabs) | Servers (command list), Spawn (new command form), Templates (saved command templates), Envs (environment presets), Certs (certificate list). Tabs are shown/hidden based on server reachability. |
-| Command Filter | Real-time text filter for the command list. Filters by command name, arguments, and PID. |
-| + Server Button | Opens the Add Server modal to register a new remote instance connection. |
-| Kill All Button | Kills all running commands across ALL connected servers. Only visible when at least one server is reachable and has running commands. |
-| Command List | Displays commands grouped by server instance. Each item shows: kill button, keep/unkeep button, pin button, command name, exit badge, runtime, resource badges, and PID. |
+| Tab Bar (5 tabs) | Servers (command list), Spawn (new command form), Templates (saved command templates), Envs (environment presets), Certs (certificate list). Envs and Certs are kept in the sidebar because they serve the spawn workflow — environments activate preconfigured panel sets, and certificates are selected during spawning. Tabs are shown/hidden based on server reachability. |
+| Command Filter | Real-time text filter for the command list. Filters by command name, arguments, and PID. Also scopes the Kill All button — when a filter is active, Kill All only affects matching commands. |
+| + Server Button | Opens the Add Server modal to register a new remote instance connection. The modal includes an "Open pane connected to this server" checkbox (checked by default) that auto-creates a panel showing the server's main command (spawn_order 0) or first spawned command. |
+| Kill All Button | Kills running commands across connected servers, **respecting the current filter**. When the filter is empty, kills all running commands (original behavior). When a filter is active, only kills commands matching name/args/PID. Only visible when at least one server is reachable and has running commands. |
+| Command List | Displays commands grouped by server instance. Each item shows: kill button, keep/unkeep button (star), pin button (target circle), grab handle (for reorder), command name, exit badge, runtime, resource badges, and PID. |
 | Sort Bar | When multiple instances are connected, shows tabs: All (alphabetical), plus one tab per instance label. Clicking an instance tab filters to that server's commands. |
-| Instance Headers | Visual separators in the command list showing the server label, URL, and reachable/disconnected status. |
+| Instance Headers | Visual separators in the command list showing the server label, URL, and reachable/disconnected status. Each header includes a close button (`✕`) to disconnect from that server. |
 | Disconnected Banner | Warning banner inserted at the top of the sidebar when one or more servers become unreachable. |
+| Command Reorder | Commands can be reordered within each server group by dragging the grab handle (`⠇`). Custom order is persisted in localStorage (`vrw_cmd_order`). |
 
-**Interactions:** The sidebar is the primary input surface for command selection. Clicking a command item calls `selectCommand()`, which routes the command's VTTY output to the currently focused panel and starts a per-panel WebSocket connection. The Kill All button sends kill requests to all connected servers in parallel. The Spawn tab interacts with the Panel Container through the instance dropdown, which suffers from a bug where the selected server resets to the globally focused panel's server during sidebar rebuilds. The Templates tab stores command templates in localStorage and provides one-click spawning. The Envs tab allows activating preconfigured workspace environments.
+**Interactions:** The sidebar is the primary input surface for command selection. Clicking a command item calls `selectCommand()`, which routes the command's VTTY output to the currently focused panel and starts a per-panel WebSocket connection. The Kill All button sends kill requests scoped by the active filter to all connected servers in parallel. The Spawn tab interacts with the Panel Container through the instance dropdown, which has been fixed via `_userSpawnInstUrl` to avoid resetting during sidebar rebuilds. The Templates tab stores command templates in localStorage and provides one-click spawning. The Envs tab allows activating preconfigured workspace environments. Server headers include close buttons that call `disconnectServer()`, which removes the connection and disconnects any panels viewing commands from that server (panels retain their last VTTY state).
 
 ---
 

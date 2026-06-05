@@ -1,31 +1,39 @@
 # Sidebar
 
-The sidebar provides the primary navigation for managing commands. It contains five tabs, each serving a distinct purpose: command management, spawning new commands, saved templates, environment presets, and certificate management.
+The sidebar provides the primary navigation for managing commands. It contains five tabs, each serving a distinct purpose: command management, spawning new commands, saved templates, environment presets, and certificate management. The Envs and Certs tabs remain in the sidebar (rather than the main toolbar) because they serve the command spawn workflow: environments define preconfigured panel/server/command sets that activate via the sidebar, and certificates are selected during command spawning from the Spawn form.
 
 The sidebar width can be adjusted by dragging the resize handle on its right edge (minimum 150px, maximum 600px). It can also be fully collapsed via the toggle button in the top bar.
 
 ### Sort Bar (multi-instance)
 When multiple vrw instances are connected, a sort bar appears above the command list with options to sort commands: **All** (alphabetical across instances) or by individual instance label. Clicking an instance name filters the list to show only that instance's commands.
 
+### Server Headers
+When commands are grouped by instance, each group has a header showing the server label and a **close button** (`✕`) on the right side. Clicking the close button disconnects from that server, removing its commands from the sidebar. If any panels are actively displaying commands from that server, a confirmation dialog warns about the disconnect; the panels retain their last VTTY state after disconnection.
+
 ## Commands Tab
 
 ![Commands tab](screenshots/03-sidebar-commands.png)
 
 ### Filter Input
-A text filter that narrows the command list in real time. Matches against command names, arguments, and PIDs. As you type, only matching commands remain visible.
+A text filter that narrows the command list in real time. Matches against command names, arguments, and PIDs. As you type, only matching commands remain visible. The filter also scopes the **Kill All** button — when a filter is active, Kill All only affects matching commands.
 
 ### Kill All Button
-Terminates all running commands across all instances. This button uses the danger style (red background) to indicate its destructive nature. It sends a kill signal to every active command managed by the connected instance(s).
+Terminates running commands across all instances, **respecting the current filter**. This button uses the danger style (red background) to indicate its destructive nature. Its behavior depends on the filter state:
+
+- **Filter empty**: Kills all running commands on all reachable servers (same as before).
+- **Filter active**: Only kills running commands whose name, arguments, or PID match the filter text. The confirmation dialog indicates the scope: "Kill N matching command(s)? (filter: "...")".
 
 ### Command List Items
-Each command in the list uses a two-row layout. The first row shows the primary identification; the second row shows live status information:
+Each command in the list uses a two-row layout with compact spacing. The first row shows the primary identification and action buttons; the second row shows live status information:
 
 **Row 1 (name row):**
 
 | Element | Description |
 |---------|-------------|
-| **Kill button** (`✕`) | Kills the individual command. Always visible even when sidebar is narrow |
-| **Pin button** (`☆`) | Pins/unpins a command to keep it at the top of the list |
+| **Kill button** (`✕`) | Kills the individual command. Disabled when the server is unreachable |
+| **Keep button** (`★`/`☆`) | Toggles retain-on-exit for the command. Active (filled) means the terminal is kept after the command exits |
+| **Pin button** (`◉`/`◎`) | Pins/unpins a command to keep it at the top of the list. Uses a distinct symbol to differentiate from Keep |
+| **Grab handle** (`⠇`) | Drag handle for reordering commands within the sidebar. Drag to a new position to set a custom sort order (persisted in localStorage) |
 | **Command name** | The name of the running command, truncated with ellipsis if too long |
 | **Certificate badge** | Shows the bound certificate name or `--` if none |
 | **Exit badge** | Shows the exit code (green for 0, red for non-zero) |
@@ -35,16 +43,19 @@ Each command in the list uses a two-row layout. The first row shows the primary 
 | Element | Description |
 |---------|-------------|
 | **Runtime** | Shows elapsed time (e.g., `5m 30s`) for running commands |
-| **CPU** | Real-time CPU usage percentage (e.g., `CPU 12.5%`) |
-| **MEM** | Real-time memory usage (e.g., `MEM 45.2MB`) |
+| **CPU usage** | Real-time CPU usage percentage (e.g., `12.5%`) |
+| **Memory** | Real-time memory usage (e.g., `45.2MB`) |
 | **PID** | Process ID of the child command |
 | **Status** | `PAUSED` for frozen/paused commands |
 
-Detail items are separated by `|` and rendered in a smaller, muted font. The detail row is indented to align with the command name. Resource data (CPU, memory) is polled from the server every 2 seconds via `/api/commands/{id}/resources`.
+Detail items are separated by `|` and rendered in a smaller, muted font. The detail row is indented to align with the command name. Resource data (CPU, memory) is polled from the server every 2 seconds via `/api/commands/{id}/resources`. CPU and memory values are shown without labels since the `%` and `MB` units make them self-explanatory.
 
 The filter and kill-all toolbar at the top of the commands tab is automatically hidden when no server is reachable or when there are no running commands.
 
 Clicking a command selects it and displays its terminal output in the main panel area. Right-clicking opens a context menu with additional actions.
+
+### Command Reorder (drag-and-drop)
+Commands can be reordered within the sidebar by dragging the **grab handle** (`⠇`) on the left side of each command item. The custom order is persisted in localStorage per server instance (`vrw_cmd_order`). When a custom order exists, commands are displayed in that order (with pinned commands still appearing first in a separate section). Dragging a command to a position above or below another command sets the insertion point (indicated by an accent-colored top/bottom border). Commands can only be reordered within the same server instance.
 
 ### Command States
 - **Running**: Green status dot, normal background, runtime badge visible
