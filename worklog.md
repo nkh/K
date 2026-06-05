@@ -287,3 +287,35 @@ Stage Summary:
 - Kill All fixed: kills across all reachable servers, refreshes state properly
 - Zero clippy warnings, clean release build
 - Commit c91b395 pushed to complexity_fix branch
+---
+Task ID: 8
+Agent: main
+Task: Scope prev/next to panel's server (chronological) and freeze VTTY during global search
+
+Work Log:
+- Added `spawn_order` field (usize, from enumerate) to /api/commands and /api/snapshot
+  API responses in src/web/handlers/commands.rs. DashMap preserves insertion order
+  which equals spawn order, so enumerate() gives chronological indices.
+- Changed _navCommands construction in loadCommands(): filters to commands on the
+  active panel's selectedInstUrl, sorted by spawn_order ascending. Falls back to
+  all commands if no panel has a server connection. Sidebar "All" view remains alphabetical.
+- Rewrote global search: openGlobalSearch() calls _freezeAllPanelsForSearch() which
+  stops WS and poll for all panels, tracking IDs in _searchFrozenPanelIds.
+- Added _toggleSearchFreezeCommands() for optional SIGSTOP of all running commands.
+- closeGlobalSearch() calls _thawAllPanelsFromSearch() to resume all panels and thaw commands.
+- onSearchResultClick(): loads command into focused panel, thaws all other panels and
+  commands, keeps selected panel frozen. Shows "VTTY frozen" indicator bar.
+- Added "Freeze cmds" checkbox to search modal in index.html.
+- Added .search-frozen-indicator CSS class in style.css.
+- Updated docs/web-ui/architecture-reference.md: Top Bar table, Section 13.
+- Build: cargo build --release --features "vrc,vrw" — SUCCESS
+- Clippy: zero warnings
+- Tests: 371 lib + 127 comprehensive = 498 tests ALL PASS
+  (pre-existing compilation errors in integration/extended/regression tests unrelated to changes)
+- Pushed as commit ba84374 to origin/complexity_fix
+
+Stage Summary:
+- 5 files changed: commands.rs (+2), app.js (+130/-18), index.html (+3), style.css (+9), architecture-reference.md (+16/-7)
+- Prev/Next now scopes to panel's server in spawn order
+- Global search pauses all VTTY updates; optional command freeze; per-panel thaw on result click
+- Commit ba84374 pushed to complexity_fix branch
