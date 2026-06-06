@@ -7278,6 +7278,107 @@ async function _thawAllPanelsFromSearch() {
     _searchFrozenCmdIds = [];
 }
 
+// ─── Command Manager Dialog ───
+function openCmdManager() {
+    document.getElementById('cmdManagerModal').style.display = '';
+    document.getElementById('cmdManagerFilter').value = '';
+    renderCmdManagerList();
+}
+
+function closeCmdManager() {
+    document.getElementById('cmdManagerModal').style.display = 'none';
+}
+
+function renderCmdManagerList() {
+    const container = document.getElementById('cmdManagerList');
+    const filter = (document.getElementById('cmdManagerFilter').value || '').toLowerCase();
+    const sortBy = document.getElementById('cmdManagerSort').value;
+    const footer = document.getElementById('cmdManagerFooter');
+
+    // Collect all commands across all instances
+    let cmds = [];
+    for (const inst of state.connections) {
+        if (!inst._commands) continue;
+        for (const cmd of inst._commands) {
+            const res = state._resourceCache[cmd.id] || {};
+            cmds.push({ ...cmd, instUrl: inst.url, cpu: res.cpu_percent || 0, mem: res.memory_mb || 0 });
+        }
+    }
+
+    // Filter
+    if (filter) {
+        cmds = cmds.filter(c => {
+            const name = (c.name || c.id).toLowerCase();
+            const args = (c.args || []).join(' ').toLowerCase();
+            return name.includes(filter) || args.includes(filter);
+        });
+    }
+
+    // Sort
+    if (sortBy === 'name') cmds.sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+    else if (sortBy === 'runtime') cmds.sort((a, b) => (b.runtime_secs || 0) - (a.runtime_secs || 0));
+    else if (sortBy === 'cpu') cmds.sort((a, b) => b.cpu - a.cpu);
+    else if (sortBy === 'mem') cmds.sort((a, b) => b.mem - a.mem);
+
+    // Stats
+    const alive = cmds.filter(c => c.alive !== false).length;
+    const total = cmds.length;
+    const totalCpu = cmds.reduce((s, c) => s + c.cpu, 0);
+    const totalMem = cmds.reduce((s, c) => s + c.mem, 0);
+    footer.textContent = total + ' commands (' + alive + ' running) | CPU: ' + totalCpu.toFixed(1) + '% | Mem: ' + totalMem.toFixed(1) + 'MB';
+
+    // Render rows
+    if (cmds.length === 0) {
+        container.innerHTML = '<div class="cmd-manager-empty">No commands found</div>';
+        return;
+    }
+
+    let html = '<div class="cmd-manager-header"><span class="cm-col cm-name">Name</span><span class="cm-col cm-status">Status</span><span class="cm-col cm-runtime">Runtime</span><span class="cm-col cm-res">CPU</span><span class="cm-col cm-res">Mem</span><span class="cm-col cm-server">Server</span><span class="cm-col cm-actions">Actions</span></div>';
+    for (const cmd of cmds) {
+        const isAlive = cmd.alive !== false;
+        const name = cmd.name || cmd.id;
+        const args = (cmd.args || []).join(' ');
+        const runtime = cmd.runtime_secs != null ? formatRuntime(cmd.runtime_secs) : '-';
+        const statusClass = isAlive ? 'cm-running' : 'cm-exited';
+        const statusText = isAlive ? (cmd.frozen ? 'frozen' : 'running') : ('exit ' + (cmd.exit_code != null ? cmd.exit_code : '?'));
+        const exitCode = cmd.exit_code;
+        const kept = cmd.exit && cmd.exit.retain_on_exit;
+        const pinned = getPinnedNames().includes(name);
+        const serverLabel = cmd.instUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+
+        html += `<div class="cmd-manager-row${isAlive ? '' : ' cm-row-dead'}" data-cmd-id="${escHtml(cmd.id)}" data-inst-url="${escHtml(cmd.instUrl)}">
+            <span class="cm-col cm-name" title="${escHtml(name + (args ? ' ' + args : ''))}"><span class="cm-cmd-name">${escHtml(name)}</span>${args ? '<span class="cm-cmd-args">' + escHtml(args) + '</span>' : ''}</span>
+            <span class="cm-col cm-status ${statusClass}">${statusText}</span>
+            <span class="cm-col cm-runtime">${escHtml(runtime)}</span>
+            <span class="cm-col cm-res">${cmd.cpu.toFixed(1)}%</span>
+            <span class="cm-col cm-res">${cmd.mem.toFixed(1)}MB</span>
+            <span class="cm-col cm-server" title="${escHtml(cmd.instUrl)}">${escHtml(serverLabel)}</span>
+            <span class="cm-col cm-actions">
+                ${isAlive ? `<button class="btn btn-xs" onclick="restartCommandById('${escHtml(cmd.instUrl)}','${escHtml(cmd.id)}')" title="Restart">&#x21BB;</button>` : ''}
+                ${isAlive ? `<button class="btn btn-xs" onclick="toggleKeepCmd('${escHtml(cmd.instUrl)}','${escHtml(cmd.id)}')" title="${kept ? 'Unkeep' : 'Keep'}">${kept ? '★' : '☆'}</button>` : ''}
+                <button class="btn btn-xs ${pinned ? 'btn-primary' : ''}" onclick="togglePinCmd('${escHtml(name)}')" title="Pin/Unpin">${pinned ? '◉' : '◎'}</button>
+                ${isAlive ? `<button class="btn btn-xs btn-danger" onclick="killCommand('${escHtml(cmd.instUrl)}','${escHtml(cmd.id)}')" title="Kill">&#x2715;</button>` : ''}
+                <button class="btn btn-xs" onclick="selectCommand('${escHtml(cmd.instUrl)}','${escHtml(cmd.id)}','${escHtml(name)}');closeCmdManager()" title="View">&#x25B6;</button>
+            </span>
+        </div>`;
+    }
+    container.innerHTML = html;
+}
+
+async function cmdManagerKillAll() {
+    if (!confirm('Kill all running commands on all servers?')) return;
+    for (const inst of state.connections) {
+        if (!inst._commands) continue;
+        for (const cmd of inst._commands) {
+            if (cmd.alive !== false) {
+                try { await fetch(apiUrl('/api/commands/' + cmd.id, { url: inst.url }), { method: 'DELETE', headers: authHeadersForInstance(inst) }); } catch {}
+            }
+        }
+    }
+    loadCommands();
+    renderCmdManagerList();
+}
+
 function openGlobalSearch() {
     _freezeAllPanelsForSearch();
     const modal = document.getElementById('globalSearchModal');

@@ -616,3 +616,26 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .minimized-icon { color: var(--accent); font-size: 0.5rem; }
 .minimized-label { font-family: var(--font-mono); color: var(--text-muted); max-width: 100px; overflow: hidden; text-overflow: ellipsis; }
 .minimized-panel-item:hover .minimized-label { color: var(--text-primary); }
+
+/* Command Manager Dialog */
+.modal-lg { max-width: 800px; width: 90vw; max-height: 80vh; }
+.modal-lg .cmd-manager-toolbar { display: flex; align-items: center; gap: 0.3rem; margin-bottom: 0.5rem; }
+.cmd-manager-list { overflow-y: auto; max-height: 50vh; font-family: var(--font-mono); font-size: 0.65rem; border: 1px solid var(--border); border-radius: 3px; }
+.cmd-manager-header { display: flex; align-items: center; gap: 0; padding: 0.25rem 0.4rem; background: var(--bg-tertiary); border-bottom: 1px solid var(--border); font-weight: bold; color: var(--text-muted); position: sticky; top: 0; z-index: 1; }
+.cmd-manager-row { display: flex; align-items: center; gap: 0; padding: 0.2rem 0.4rem; border-bottom: 1px solid var(--border); cursor: default; }
+.cmd-manager-row:hover { background: var(--bg-secondary); }
+.cmd-manager-row.cm-row-dead { opacity: 0.6; }
+.cm-col { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cm-name { flex: 2; min-width: 100px; }
+.cm-status { width: 60px; flex-shrink: 0; }
+.cm-runtime { width: 50px; flex-shrink: 0; text-align: right; }
+.cm-res { width: 65px; flex-shrink: 0; text-align: right; }
+.cm-server { width: 80px; flex-shrink: 0; color: var(--text-muted); }
+.cm-actions { width: 120px; flex-shrink: 0; text-align: right; display: flex; gap: 0.15rem; justify-content: flex-end; }
+.cm-cmd-name { color: var(--text-primary); }
+.cm-cmd-args { color: var(--text-muted); margin-left: 0.3rem; }
+.cm-running { color: var(--green); }
+.cm-exited { color: var(--text-muted); }
+.cm-frozen { color: var(--yellow); }
+.cmd-manager-footer { margin-top: 0.4rem; font-size: 0.6rem; color: var(--text-muted); text-align: center; }
+.cmd-manager-empty { padding: 1rem; text-align: center; color: var(--text-muted); }

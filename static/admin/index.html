@@ -29,6 +29,7 @@
             <button class="btn btn-xs" id="soundBtn" onclick="toggleSoundNotifications()" title="Toggle sound notifications">&#128276;</button>
             <button class="btn btn-xs" id="logsBtn" onclick="toggleLogsView()" title="Toggle log viewer">Logs</button>
             <button class="btn btn-xs" id="statusBtn" onclick="toggleBottombar()" title="Toggle status bar">Status</button>
+            <button class="btn btn-xs" onclick="openCmdManager()" title="Command Manager — manage all commands across servers">&#x2630; Commands</button>
             <div class="token-bar">
                 <label for="authToken">Token:</label>
                 <input type="password" id="authToken" placeholder="Bearer token" title="Authorization token">
@@ -334,6 +335,26 @@
             <button class="btn" onclick="closeAddServerModal()">Cancel</button>
             <button class="btn btn-primary" onclick="confirmAddServer()">Add Server</button>
         </div>
+    </div>
+</div>
+
+<!-- Command Manager Dialog -->
+<div class="modal-overlay" id="cmdManagerModal" style="display:none;" onclick="if(event.target===this)closeCmdManager()">
+    <div class="modal modal-lg">
+        <h2>Command Manager</h2>
+        <div class="cmd-manager-toolbar">
+            <input type="text" id="cmdManagerFilter" placeholder="Filter commands..." oninput="renderCmdManagerList()" style="flex:1;min-width:120px;">
+            <select id="cmdManagerSort" onchange="renderCmdManagerList()" style="font-size:0.65rem;padding:0.1rem 0.2rem;">
+                <option value="name">Sort: Name</option>
+                <option value="runtime">Sort: Runtime</option>
+                <option value="cpu">Sort: CPU</option>
+                <option value="mem">Sort: Memory</option>
+            </select>
+            <button class="btn btn-xs btn-danger" onclick="cmdManagerKillAll()" title="Kill all commands">Kill All</button>
+            <button class="btn btn-xs" onclick="closeCmdManager()">&#x2715;</button>
+        </div>
+        <div class="cmd-manager-list" id="cmdManagerList"></div>
+        <div class="cmd-manager-footer" id="cmdManagerFooter"></div>
     </div>
 </div>
 
