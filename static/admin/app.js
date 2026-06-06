@@ -765,8 +765,10 @@ function switchSidebarTab(tab, el) {
     document.getElementById('tab-templates').style.display = tab === 'templates' ? '' : 'none';
     document.getElementById('tab-envs').style.display = tab === 'envs' ? '' : 'none';
     document.getElementById('tab-certs').style.display = tab === 'certs' ? '' : 'none';
+    document.getElementById('tab-groups').style.display = tab === 'groups' ? '' : 'none';
     if (tab === 'templates') renderTemplates();
     if (tab === 'envs') renderEnvironments();
+    if (tab === 'groups') renderGroups();
 }
 
 // Update sidebar tab visibility based on server reachability.
@@ -6554,6 +6556,26 @@ function showCmdContextMenu(e, instUrl, cmdId, cmdName, isAlive, isRetained) {
     // Copy URL
     menu.appendChild(_createCtxMenuItem('Copy URL', () => copyCommandUrl(instUrl, cmdId, cmdName), false));
 
+    // Add to Group submenu
+    const groups = getCmdGroups();
+    const groupNames = Object.keys(groups);
+    if (groupNames.length > 0) {
+        // Separator
+        const sepGroup = document.createElement('div');
+        sepGroup.className = 'ctx-menu-sep';
+        sepGroup.setAttribute('role', 'separator');
+        menu.appendChild(sepGroup);
+
+        // "Add to Group" — show sub-pickers for each group
+        for (const gName of groupNames) {
+            const inGroup = groups[gName].includes(cmdName);
+            const label = (inGroup ? '✓ ' : '') + escHtml(gName);
+            menu.appendChild(_createCtxMenuItem(label, () => {
+                toggleCmdInGroup(gName, cmdName);
+            }, false));
+        }
+    }
+
     if (isAlive) {
         // Separator
         const sep1 = document.createElement('div');
@@ -8373,4 +8395,421 @@ async function activateEnvironment(name) {
 
     console.log('[vrw] Environment activated:', name, '—', (env.panels || []).length, 'panels');
 }
+
+// ─── Command Groups ───
+// Groups are stored in localStorage as vrw_cmd_groups = { "group-name": ["cmdName1", ...], ... }
+
+/// Load command groups from localStorage.
+function getCmdGroups() {
+    try {
+        const raw = localStorage.getItem('vrw_cmd_groups');
+        if (!raw) return {};
+        return JSON.parse(raw);
+    } catch (e) {
+        return {};
+    }
+}
+
+/// Save command groups to localStorage.
+function saveCmdGroups(groups) {
+    try {
+        localStorage.setItem('vrw_cmd_groups', JSON.stringify(groups));
+    } catch (e) { /* quota exceeded */ }
+}
+
+/// Load collapsed state for group sections.
+function getGroupCollapsedState() {
+    try {
+        const raw = localStorage.getItem('vrw_group_collapsed');
+        if (!raw) return {};
+        return JSON.parse(raw);
+    } catch (e) {
+        return {};
+    }
+}
+
+function saveGroupCollapsedState(state) {
+    try {
+        localStorage.setItem('vrw_group_collapsed', JSON.stringify(state));
+    } catch (e) { /* ignore */ }
+}
+
+/// Create a new command group.
+function createCmdGroup() {
+    const input = document.getElementById('newGroupName');
+    if (!input) return;
+    const name = input.value.trim();
+    if (!name) return;
+    const groups = getCmdGroups();
+    if (groups[name]) {
+        // Group already exists
+        input.value = '';
+        renderGroups();
+        return;
+    }
+    groups[name] = [];
+    saveCmdGroups(groups);
+    input.value = '';
+    renderGroups();
+}
+
+/// Delete a command group.
+function deleteCmdGroup(groupName) {
+    const groups = getCmdGroups();
+    delete groups[groupName];
+    saveCmdGroups(groups);
+    renderGroups();
+}
+
+/// Rename a command group.
+function renameCmdGroup(oldName) {
+    const newName = prompt('Rename group "' + oldName + '" to:');
+    if (!newName || !newName.trim()) return;
+    const trimmed = newName.trim();
+    if (trimmed === oldName) return;
+    const groups = getCmdGroups();
+    if (groups[trimmed]) {
+        alert('A group named "' + trimmed + '" already exists.');
+        return;
+    }
+    groups[trimmed] = groups[oldName] || [];
+    delete groups[oldName];
+    saveCmdGroups(groups);
+    // Also update collapsed state
+    const collapsed = getGroupCollapsedState();
+    if (collapsed[oldName] !== undefined) {
+        collapsed[trimmed] = collapsed[oldName];
+        delete collapsed[oldName];
+        saveGroupCollapsedState(collapsed);
+    }
+    renderGroups();
+}
+
+/// Toggle a command name in a group (add if absent, remove if present).
+function toggleCmdInGroup(groupName, cmdName) {
+    const groups = getCmdGroups();
+    if (!groups[groupName]) groups[groupName] = [];
+    const idx = groups[groupName].indexOf(cmdName);
+    if (idx >= 0) {
+        groups[groupName].splice(idx, 1);
+    } else {
+        groups[groupName].push(cmdName);
+    }
+    saveCmdGroups(groups);
+    // Re-render groups if the tab is visible
+    if (document.getElementById('tab-groups').style.display !== 'none') {
+        renderGroups();
+    }
+}
+
+/// Toggle collapsed state of a group section.
+function toggleGroupCollapse(groupName) {
+    const collapsed = getGroupCollapsedState();
+    collapsed[groupName] = !collapsed[groupName];
+    saveGroupCollapsedState(collapsed);
+    renderGroups();
+}
+
+/// Render the groups tab content.
+function renderGroups() {
+    const container = document.getElementById('groupList');
+    if (!container) return;
+    const groups = getCmdGroups();
+    const groupNames = Object.keys(groups);
+    const collapsed = getGroupCollapsedState();
+
+    if (groupNames.length === 0) {
+        container.innerHTML = '<div style="padding:0.5rem;color:var(--text-muted);font-size:0.7rem;text-align:center;">No groups created yet. Right-click a command in the Servers tab to add it to a group.</div>';
+        return;
+    }
+
+    // Build a lookup of all available commands: cmdName → { inst, cmd }
+    const cmdMap = {};
+    for (const inst of state.connections) {
+        if (!inst._commands) continue;
+        for (const cmd of inst._commands) {
+            const cmdName = cmd.name || cmd.id;
+            if (!cmdMap[cmdName]) {
+                cmdMap[cmdName] = { inst, cmd, cmdName };
+            }
+        }
+    }
+
+    let html = '';
+    for (const gName of groupNames) {
+        const isCollapsed = collapsed[gName] === true;
+        const cmdNames = groups[gName] || [];
+        html += '<div class="group-section">';
+        html += '<div class="group-header" onclick="toggleGroupCollapse(\'' + escHtml(gName).replace(/'/g, "\\'") + '\')">';
+        html += '<span class="group-caret">' + (isCollapsed ? '&#x25B6;' : '&#x25BC;') + '</span>';
+        html += '<span class="group-name">' + escHtml(gName) + '</span>';
+        html += '<span class="group-count">' + cmdNames.length + '</span>';
+        html += '<span class="group-actions">';
+        html += '<button class="btn btn-xs" onclick="event.stopPropagation();renameCmdGroup(\'' + escHtml(gName).replace(/'/g, "\\'") + '\')" title="Rename group">&#9998;</button>';
+        html += '<button class="btn btn-xs btn-danger" onclick="event.stopPropagation();deleteCmdGroup(\'' + escHtml(gName).replace(/'/g, "\\'") + '\')" title="Delete group">&#x2715;</button>';
+        html += '</span>';
+        html += '</div>';
+        if (!isCollapsed) {
+            if (cmdNames.length === 0) {
+                html += '<div style="padding:0.3rem 0.5rem 0.3rem 1.5rem;color:var(--text-muted);font-size:0.65rem;font-style:italic;">Empty — right-click a command to add it here</div>';
+            } else {
+                for (const cmdName of cmdNames) {
+                    const entry = cmdMap[cmdName];
+                    if (entry) {
+                        const isAlive = entry.cmd.alive !== false;
+                        const isFrozen = entry.cmd.frozen === true;
+                        const isUnreachable = entry.inst.reachable === false;
+                        const statusDot = isAlive ? '<span class="status-dot status-running"></span>' :
+                            (isFrozen ? '<span class="status-dot status-frozen"></span>' : '<span class="status-dot status-exited"></span>');
+                        const selected = (state.selectedInstUrl === entry.inst.url && state.selectedCmdId === entry.cmd.id) ? ' group-cmd-selected' : '';
+                        html += '<div class="group-cmd-item' + selected + '"' +
+                            ' data-inst-url="' + escHtml(entry.inst.url) + '"' +
+                            ' data-cmd-id="' + escHtml(entry.cmd.id) + '"' +
+                            ' data-cmd-name="' + escHtml(cmdName) + '"' +
+                            (isUnreachable ? ' style="opacity:0.4;"' : '') +
+                            ' onclick="selectCommand(this.dataset.instUrl, this.dataset.cmdId, this.dataset.cmdName)"' +
+                            ' title="' + escHtml(entry.inst.label) + ' / ' + escHtml(cmdName) + '">' +
+                            statusDot +
+                            '<span class="group-cmd-name">' + escHtml(cmdName) + '</span>' +
+                            '<button class="btn btn-xs" onclick="event.stopPropagation();toggleCmdInGroup(\'' + escHtml(gName).replace(/'/g, "\\'") + '\',\'' + escHtml(cmdName).replace(/'/g, "\\'") + '\');renderGroups()" title="Remove from group" style="margin-left:auto;padding:0 0.2rem;font-size:0.55rem;">&#x2715;</button>' +
+                            '</div>';
+                    } else {
+                        html += '<div class="group-cmd-item" style="opacity:0.4;cursor:default;">' +
+                            '<span class="group-cmd-name" style="text-decoration:line-through;">' + escHtml(cmdName) + '</span>' +
+                            '<span style="font-size:0.55rem;color:var(--text-muted);margin-left:auto;">(not running)</span>' +
+                            '<button class="btn btn-xs" onclick="event.stopPropagation();toggleCmdInGroup(\'' + escHtml(gName).replace(/'/g, "\\'") + '\',\'' + escHtml(cmdName).replace(/'/g, "\\'") + '\');renderGroups()" title="Remove from group" style="margin-left:auto;padding:0 0.2rem;font-size:0.55rem;">&#x2715;</button>' +
+                            '</div>';
+                    }
+                }
+            }
+        }
+        html += '</div>';
+    }
+    container.innerHTML = html;
+}
+
+// ─── Workspaces ───
+// Workspaces save/restore the current panel configuration.
+// Stored in localStorage as vrw_workspaces = { "name": { panels: [...], layout: "row", ... }, ... }
+
+/// Load workspaces from localStorage.
+function getWorkspaces() {
+    try {
+        const raw = localStorage.getItem('vrw_workspaces');
+        if (!raw) return {};
+        return JSON.parse(raw);
+    } catch (e) {
+        return {};
+    }
+}
+
+/// Save workspaces to localStorage.
+function saveWorkspaces(workspaces) {
+    try {
+        localStorage.setItem('vrw_workspaces', JSON.stringify(workspaces));
+    } catch (e) { /* quota exceeded */ }
+}
+
+/// Toggle the workspace dropdown menu.
+function toggleWorkspaceDropdown(e) {
+    e.stopPropagation();
+    const menu = document.getElementById('workspaceMenu');
+    if (!menu) return;
+    const isVisible = menu.style.display !== 'none';
+    if (isVisible) {
+        menu.style.display = 'none';
+    } else {
+        renderWorkspaceList();
+        menu.style.display = '';
+    }
+}
+
+/// Render the workspace list inside the dropdown.
+function renderWorkspaceList() {
+    const container = document.getElementById('workspaceList');
+    if (!container) return;
+    const workspaces = getWorkspaces();
+    const names = Object.keys(workspaces);
+
+    if (names.length === 0) {
+        container.innerHTML = '<div style="padding:0.3rem 0.5rem;color:var(--text-muted);font-size:0.65rem;">No saved workspaces</div>';
+        return;
+    }
+
+    let html = '';
+    for (const name of names) {
+        const panelCount = (workspaces[name].panels || []).length;
+        html += '<div style="display:flex;align-items:center;gap:0.3rem;">';
+        html += '<button class="ws-load-btn" onclick="loadWorkspace(\'' + escHtml(name).replace(/'/g, "\\'") + '\');toggleWorkspaceDropdown(event)" style="flex:1;text-align:left;">' +
+            '<span style="color:var(--accent);">&#x1F4C2;</span> ' + escHtml(name) +
+            ' <span style="color:var(--text-muted);font-size:0.55rem;">(' + panelCount + ' panels)</span></button>';
+        html += '<button class="btn btn-xs" onclick="deleteWorkspace(\'' + escHtml(name).replace(/'/g, "\\'") + '\')" title="Delete" style="font-size:0.55rem;">&#x2715;</button>';
+        html += '</div>';
+    }
+    container.innerHTML = html;
+}
+
+/// Save the current workspace configuration.
+function saveCurrentWorkspace() {
+    const name = prompt('Workspace name:');
+    if (!name || !name.trim()) return;
+    const trimmed = name.trim();
+
+    // Capture current panel configuration
+    const panels = state.panels.map(p => ({
+        instUrl: p.selectedInstUrl || null,
+        cmdId: p.selectedCmdId || null,
+        cmdName: _getPanelCmdName(p),
+        fontSize: p.fontSize,
+        theme: p.theme || '',
+        customTitle: p.customTitle || '',
+    }));
+
+    const workspaces = getWorkspaces();
+    workspaces[trimmed] = {
+        panels: panels,
+        layout: state.panelLayout || 'row',
+        timestamp: Date.now(),
+    };
+    saveWorkspaces(workspaces);
+    renderWorkspaceList();
+
+    // Close dropdown after a short delay so user sees the list update
+    setTimeout(() => {
+        const menu = document.getElementById('workspaceMenu');
+        if (menu) menu.style.display = 'none';
+    }, 600);
+}
+
+/// Get the command name for a panel from the current connections.
+function _getPanelCmdName(panel) {
+    if (!panel.selectedInstUrl || !panel.selectedCmdId) return null;
+    const inst = state.connections.find(i => i.url === panel.selectedInstUrl);
+    if (!inst || !inst._commands) return null;
+    const cmd = inst._commands.find(c => c.id === panel.selectedCmdId);
+    return cmd ? (cmd.name || cmd.id) : null;
+}
+
+/// Load a workspace and restore panel configuration.
+function loadWorkspace(name) {
+    const workspaces = getWorkspaces();
+    const ws = workspaces[name];
+    if (!ws) return;
+
+    // Apply layout
+    if (ws.layout) {
+        state.panelLayout = ws.layout;
+        localStorage.setItem('vrw_panel_layout', ws.layout);
+    }
+
+    // Clear existing panels (keep connections)
+    // Disconnect WS for all existing panels first
+    for (const p of state.panels) {
+        if (p.ws) {
+            try { p.ws.close(); } catch (e) { /* ignore */ }
+            p.ws = null;
+        }
+        if (p.pollTimer) {
+            clearInterval(p.pollTimer);
+            p.pollTimer = null;
+        }
+    }
+    state.panels = [];
+
+    // Create panels from saved config
+    const panelConfigs = ws.panels || [];
+    if (panelConfigs.length === 0) {
+        addPanelDirect();
+    } else {
+        for (const cfg of panelConfigs) {
+            const panel = addPanelDirect();
+            panel.fontSize = cfg.fontSize || state.fontSize;
+            panel.theme = cfg.theme || '';
+            panel.customTitle = cfg.customTitle || '';
+            panel.selectedInstUrl = cfg.instUrl || null;
+            panel.selectedCmdId = cfg.cmdId || null;
+        }
+    }
+
+    // Force panel re-render
+    _lastRenderedPanelCount = -1;
+    renderPanels();
+
+    // Focus the first panel
+    if (state.panels.length > 0) {
+        focusPanel(state.panels[0].id);
+    }
+
+    // Trigger command loading to populate sidebar and auto-select
+    if (panelConfigs.length > 0) {
+        loadCommands();
+    }
+
+    // Close the workspace menu
+    const menu = document.getElementById('workspaceMenu');
+    if (menu) menu.style.display = 'none';
+}
+
+/// Delete a workspace.
+function deleteWorkspace(name) {
+    const workspaces = getWorkspaces();
+    delete workspaces[name];
+    saveWorkspaces(workspaces);
+    renderWorkspaceList();
+}
+
+/// Open the workspace management dialog.
+function openWorkspaceManage() {
+    // Close dropdown
+    const menu = document.getElementById('workspaceMenu');
+    if (menu) menu.style.display = 'none';
+
+    const workspaces = getWorkspaces();
+    const names = Object.keys(workspaces);
+
+    // Create a simple management overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.style.display = 'flex';
+    overlay.id = 'workspaceManageOverlay';
+    overlay.onclick = (e) => { if (e.target === overlay) { releaseCurrentFocusTrap(); overlay.remove(); } };
+
+    let content = '<div class="modal">';
+    content += '<h2>Manage Workspaces</h2>';
+    if (names.length === 0) {
+        content += '<p style="font-size:0.75rem;color:var(--text-muted);">No saved workspaces.</p>';
+    } else {
+        content += '<div style="max-height:300px;overflow-y:auto;">';
+        for (const name of names) {
+            const panelCount = (workspaces[name].panels || []).length;
+            const ts = workspaces[name].timestamp ? new Date(workspaces[name].timestamp).toLocaleString() : 'unknown';
+            content += '<div style="display:flex;align-items:center;gap:0.3rem;padding:0.3rem 0;border-bottom:1px solid var(--border);">';
+            content += '<div style="flex:1;min-width:0;">';
+            content += '<div style="font-size:0.75rem;color:var(--text-primary);font-weight:500;">' + escHtml(name) + '</div>';
+            content += '<div style="font-size:0.6rem;color:var(--text-muted);">' + panelCount + ' panels &middot; saved ' + escHtml(ts) + '</div>';
+            content += '</div>';
+            content += '<button class="btn btn-xs" onclick="loadWorkspace(\'' + escHtml(name).replace(/'/g, "\\'") + '\');releaseCurrentFocusTrap();document.getElementById(\'workspaceManageOverlay\').remove()" title="Load">&#x25B6;</button>';
+            content += '<button class="btn btn-xs" onclick="deleteWorkspace(\'' + escHtml(name).replace(/'/g, "\\'") + '\');openWorkspaceManage()" title="Delete">&#x2715;</button>';
+            content += '</div>';
+        }
+        content += '</div>';
+    }
+    content += '<div class="actions" style="margin-top:1rem;">';
+    content += '<button class="btn" onclick="releaseCurrentFocusTrap();document.getElementById(\'workspaceManageOverlay\').remove()">Close</button>';
+    content += '</div>';
+    content += '</div>';
+
+    overlay.innerHTML = content;
+    document.body.appendChild(overlay);
+    trapFocus(overlay.querySelector('.modal'));
+}
+
+// Close workspace menu when clicking outside
+document.addEventListener('click', (e) => {
+    const dropdown = document.getElementById('workspaceDropdown');
+    const menu = document.getElementById('workspaceMenu');
+    if (dropdown && menu && menu.style.display !== 'none' && !dropdown.contains(e.target)) {
+        menu.style.display = 'none';
+    }
+});
 

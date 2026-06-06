@@ -30,6 +30,16 @@
             <button class="btn btn-xs" id="logsBtn" onclick="toggleLogsView()" title="Toggle log viewer">Logs</button>
             <button class="btn btn-xs" id="statusBtn" onclick="toggleBottombar()" title="Toggle status bar">Status</button>
             <button class="btn btn-xs" onclick="openCmdManager()" title="Command Manager — manage all commands across servers">&#x2630; Commands</button>
+            <div class="workspace-dropdown" id="workspaceDropdown" title="Workspaces — save/restore panel configurations">
+                <button class="btn btn-xs" onclick="toggleWorkspaceDropdown(event)">&#x1F3E0; Workspaces</button>
+                <div class="workspace-menu" id="workspaceMenu" style="display:none;">
+                    <button onclick="saveCurrentWorkspace()">&#x1F4BE; Save Current</button>
+                    <div class="ctx-menu-sep"></div>
+                    <div id="workspaceList"></div>
+                    <div class="ctx-menu-sep"></div>
+                    <button onclick="openWorkspaceManage()">&#x2699; Manage</button>
+                </div>
+            </div>
             <div class="token-bar">
                 <label for="authToken">Token:</label>
                 <input type="password" id="authToken" placeholder="Bearer token" title="Authorization token">
@@ -49,6 +59,7 @@
                 <div class="sidebar-tab" onclick="switchSidebarTab('templates', this)">Templates</div>
                 <div class="sidebar-tab" onclick="switchSidebarTab('envs', this)">Envs</div>
                 <div class="sidebar-tab" onclick="switchSidebarTab('certs', this)">Certs</div>
+                <div class="sidebar-tab" onclick="switchSidebarTab('groups', this)">Groups</div>
             </div>
             <div class="sidebar-content" id="sidebarContent">
                 <!-- Servers tab (default) -->
@@ -149,6 +160,19 @@
                 <!-- Certs tab -->
                 <div id="tab-certs" style="display:none;">
                     <div id="certList"></div>
+                </div>
+                <!-- Groups tab -->
+                <div id="tab-groups" style="display:none;">
+                    <div style="padding:0.3rem;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.3rem;">
+                            <span style="font-size:0.7rem;color:var(--text-secondary);">Command Groups</span>
+                        </div>
+                        <div style="display:flex;gap:0.2rem;margin-bottom:0.4rem;">
+                            <input type="text" id="newGroupName" placeholder="New group name..." style="flex:1;min-width:0;font-size:0.7rem;padding:0.15rem 0.3rem;" onkeydown="if(event.key==='Enter'){event.preventDefault();createCmdGroup()}">
+                            <button class="btn btn-xs btn-primary" onclick="createCmdGroup()">Create</button>
+                        </div>
+                        <div id="groupList"></div>
+                    </div>
                 </div>
             </div>
         </div>

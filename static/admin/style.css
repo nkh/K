@@ -662,3 +662,37 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .onboarding-body { font-size: 0.7rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 0.6rem; }
 .onboarding-actions { display: flex; align-items: center; gap: 0.3rem; }
 .onboarding-spacer { flex: 1; }
+
+/* Command Groups — sidebar Groups tab */
+.group-section { margin-bottom: 0.15rem; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+.group-header { display: flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.4rem; background: var(--bg-tertiary); cursor: pointer; user-select: none; font-size: 0.7rem; transition: background 0.1s; }
+.group-header:hover { background: var(--bg-primary); }
+.group-caret { font-size: 0.55rem; color: var(--text-muted); width: 0.8rem; text-align: center; flex-shrink: 0; }
+.group-name { flex: 1; min-width: 0; color: var(--text-primary); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.group-count { font-size: 0.55rem; color: var(--text-muted); background: var(--bg-secondary); border-radius: 2px; padding: 0 0.25rem; flex-shrink: 0; }
+.group-actions { display: flex; gap: 0.15rem; flex-shrink: 0; opacity: 0; transition: opacity 0.15s; }
+.group-header:hover .group-actions { opacity: 1; }
+.group-cmd-item { display: flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.4rem 0.2rem 1.1rem; cursor: pointer; font-size: 0.7rem; transition: background 0.1s; }
+.group-cmd-item:hover { background: var(--bg-tertiary); }
+.group-cmd-item.group-cmd-selected { background: var(--accent-dim); border-left: 2px solid var(--accent); }
+.group-cmd-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-primary); }
+.group-cmd-item .status-dot { flex-shrink: 0; }
+
+/* Workspace dropdown — topbar */
+.workspace-dropdown { position: relative; display: inline-block; }
+.workspace-menu {
+    position: absolute; top: 100%; right: 0; z-index: 50;
+    background: var(--bg-secondary); border: 1px solid var(--border);
+    border-radius: 4px; padding: 0.2rem 0; min-width: 180px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    max-height: 300px; overflow-y: auto;
+}
+.workspace-menu button {
+    display: block; width: 100%; text-align: left; padding: 0.3rem 0.5rem;
+    border: none; background: none; color: var(--text-primary); cursor: pointer;
+    font-size: 0.7rem; font-family: inherit; white-space: nowrap;
+}
+.workspace-menu button:hover { background: var(--accent); color: var(--bg-primary); }
+.workspace-menu .ws-load-btn { display: block; width: 100%; text-align: left; padding: 0.3rem 0.5rem; border: none; background: none; color: var(--text-primary); cursor: pointer; font-size: 0.65rem; font-family: inherit; }
+.workspace-menu .ws-load-btn:hover { background: var(--accent-dim); }
+.workspace-menu .ws-load-btn span { white-space: nowrap; }
