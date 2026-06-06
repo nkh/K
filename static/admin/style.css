@@ -198,6 +198,18 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .panel-resize-handle:hover, .panel-resize-handle.active { background: var(--accent); }
 .panel { flex: 1 1 0; display: flex; flex-direction: column; border-right: none; min-width: 100px; position: relative; }
 
+/* Split panel */
+.split-container { flex: 1; display: flex; overflow: hidden; position: relative; }
+.split-container.horizontal { flex-direction: row; }
+.split-container.vertical { flex-direction: column; }
+.split-container .vtty-container { flex: 1 1 0; min-width: 0; min-height: 0; }
+.split-divider { flex-shrink: 0; background: var(--border); z-index: 5; transition: background 0.15s; }
+.split-divider:hover, .split-divider.active { background: var(--accent); }
+.split-container.horizontal .split-divider { width: 3px; cursor: col-resize; }
+.split-container.vertical .split-divider { height: 3px; cursor: row-resize; }
+.split-empty-hint { display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 0.75rem; text-align: center; padding: 1rem; height: 100%; user-select: none; flex-direction: column; gap: 0.5rem; }
+.split-empty-hint .split-empty-icon { font-size: 1.5rem; opacity: 0.4; }
+
 /* Command list items */
 .cmd-item { padding: 0.2rem 0.3rem; cursor: pointer; display: flex; flex-direction: column; gap: 0.02rem; font-size: 0.75rem; }
 .cmd-item:hover { background: var(--bg-tertiary); }

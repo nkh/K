@@ -18,6 +18,7 @@ let _searchFrozenCmdIds = []; // { instUrl, cmdId, wasFrozen }
 // Track panel count to avoid unnecessary DOM rebuilds.
 let _lastRenderedPanelCount = -1;
 let _lastRenderedPanelIds = '';
+let _lastSplitState = '';
 // Track welcome-panel state to force rebuild on welcome ↔ panel transitions.
 let _lastShowingWelcome = true;
 
@@ -1526,12 +1527,59 @@ function selectCommand(instUrl, cmdId, name) {
     if (!panelObj) panelObj = state.panels[0];
     if (!panelObj) return;
 
+    // Check if panel is split and the active side is secondary
+    const isSecondary = panelObj.split && panelObj.split.activeSide === 'secondary';
+
     // Record current command in history before switching
     _pushPanelHistory(panelObj);
 
     // Ensure this panel is visually focused
     focusPanel(panelObj.id);
 
+    if (isSecondary) {
+        // ── Secondary pane command selection ──
+        // Disconnect existing secondary WS
+        _disconnectSecondaryWs(panelObj);
+        if (panelObj.split.secondaryPollTimer) {
+            clearInterval(panelObj.split.secondaryPollTimer);
+            panelObj.split.secondaryPollTimer = null;
+        }
+
+        // Update secondary pane selection
+        panelObj.split.secondaryInstUrl = instUrl;
+        panelObj.split.secondaryCmdId = cmdId;
+        panelObj.split.secondaryScrollbackOffset = 0;
+
+        // Also sync global state so bottom bar etc. work
+        state.selectedInstUrl = instUrl;
+        state.selectedCmdId = cmdId;
+
+        // Clear any buffered update
+        state._pendingVttyData = null;
+        state._pendingVttyDirty = false;
+        state.bufferView = 'current';
+
+        // Fetch VTTY content for secondary pane
+        _loadSecondaryVttyHttp(panelObj);
+
+        // Start secondary WS/poll
+        if (state.updateMode === 'push') {
+            _connectSecondaryWs(panelObj);
+        } else {
+            panelObj.split.secondaryPollTimer = setInterval(() => {
+                if (panelObj.split && panelObj.split.secondaryCmdId) {
+                    _loadSecondaryVttyHttp(panelObj);
+                }
+            }, state.pollInterval);
+        }
+
+        // Update panel header to show secondary command info
+        _updateSplitPanelHeader(panelObj);
+        updateSidebarSelection();
+        return;
+    }
+
+    // ── Primary pane command selection (existing behavior) ──
     // Cache the current command's terminal DOM before switching away.
     disconnectPanelWs(panelObj.id);
     _cacheTerminalForSwitch();
@@ -2233,6 +2281,11 @@ function connectPanelWs(panelId) {
     } catch (e) {
         console.error('WebSocket connect failed (panel ' + panelId + '):', e);
     }
+
+    // Also connect secondary WS if panel is split and secondary has a command
+    if (panelObj.split && panelObj.split.secondaryCmdId && panelObj.split.secondaryInstUrl) {
+        _connectSecondaryWs(panelObj);
+    }
 }
 
 function disconnectPanelWs(panelId) {
@@ -2253,6 +2306,14 @@ function disconnectPanelWs(panelId) {
         panelObj.ws = null;
         panelObj.wsInstUrl = null;
         panelObj.wsCmdId = null;
+    }
+    // Also disconnect secondary WS if panel is split
+    if (panelObj.split) {
+        _disconnectSecondaryWs(panelObj);
+        if (panelObj.split.secondaryPollTimer) {
+            clearInterval(panelObj.split.secondaryPollTimer);
+            panelObj.split.secondaryPollTimer = null;
+        }
     }
 }
 
@@ -4004,6 +4065,412 @@ function toggleMinimizePanel(panelId) {
     renderPanels();
 }
 
+// ─── Split Panel ───
+function splitPanel(panelId, direction) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj || panelObj.split) return;
+    panelObj.split = {
+        direction: direction, // 'horizontal' or 'vertical'
+        splitRatio: 0.5,
+        // Which sub-pane is active for command selection from sidebar
+        activeSide: 'primary',
+        // Secondary pane command state
+        secondaryCmdId: null,
+        secondaryInstUrl: null,
+        // Secondary pane WebSocket connection
+        secondaryWs: null,
+        secondaryWsCmdId: null,
+        secondaryWsInstUrl: null,
+        secondaryWsReconnectCount: 0,
+        secondaryWsReconnectTimer: null,
+        secondaryWsPingInterval: null,
+        secondaryWsPingSendTime: 0,
+        secondaryWsLatency: 0,
+        // Secondary pane poll timer
+        secondaryPollTimer: null,
+        // Secondary pane scrollback
+        secondaryScrollbackOffset: 0,
+        // Secondary pane mouse tracking
+        secondaryMouseTracking: false,
+        secondaryMouseSgr: false,
+    };
+    renderPanels();
+}
+
+function unsplitPanel(panelId) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj || !panelObj.split) return;
+    // Disconnect secondary WS and poll
+    _disconnectSecondaryWs(panelObj);
+    if (panelObj.split.secondaryPollTimer) {
+        clearInterval(panelObj.split.secondaryPollTimer);
+    }
+    panelObj.split = null;
+    renderPanels();
+}
+
+/// Disconnect the secondary WebSocket for a split panel.
+function _disconnectSecondaryWs(panelObj) {
+    if (!panelObj || !panelObj.split) return;
+    const s = panelObj.split;
+    if (s.secondaryWsReconnectTimer) {
+        clearTimeout(s.secondaryWsReconnectTimer);
+        s.secondaryWsReconnectTimer = null;
+    }
+    clearInterval(s.secondaryWsPingInterval);
+    s.secondaryWsPingInterval = null;
+    s.secondaryWsPingSendTime = 0;
+    s.secondaryWsLatency = 0;
+    s.secondaryWsReconnectCount = 0;
+    if (s.secondaryWs) {
+        s.secondaryWs.onclose = null;
+        s.secondaryWs.close();
+        s.secondaryWs = null;
+        s.secondaryWsCmdId = null;
+        s.secondaryWsInstUrl = null;
+    }
+}
+
+/// Connect a secondary WebSocket for a split panel's secondary pane.
+function _connectSecondaryWs(panelObj) {
+    if (!panelObj || !panelObj.split) return;
+    const s = panelObj.split;
+    if (!s.secondaryCmdId || !s.secondaryInstUrl) return;
+
+    // Disconnect existing secondary WS
+    _disconnectSecondaryWs(panelObj);
+
+    const instUrl = s.secondaryInstUrl;
+    const cmdId = s.secondaryCmdId;
+    const wsUrl = instUrl.replace(/^http/, 'ws');
+    const token = state.authToken || (state.connections.find(i => i.url === instUrl) || {}).token || '';
+    const sep = token ? '?' : '';
+    const url = `${wsUrl}/api/commands/${cmdId}/ws${sep}${token ? 'token=' + encodeURIComponent(token) : ''}`;
+
+    try {
+        const ws = new WebSocket(url);
+        s.secondaryWs = ws;
+        s.secondaryWsInstUrl = instUrl;
+        s.secondaryWsCmdId = cmdId;
+
+        ws.onopen = () => {
+            clearInterval(s.secondaryWsPingInterval);
+            s.secondaryWsPingInterval = setInterval(() => {
+                if (s.secondaryWs && s.secondaryWs.readyState === WebSocket.OPEN) {
+                    s.secondaryWsPingSendTime = Date.now();
+                    s.secondaryWs.send(JSON.stringify({ type: 'ping' }));
+                }
+            }, 10000);
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                // Guard: discard messages for a command that is no longer selected on this pane
+                if (msg.cmd_id && msg.cmd_id !== s.secondaryCmdId) return;
+                if (msg.data && msg.data.id && msg.data.id !== s.secondaryCmdId) return;
+
+                // Route VTTY updates to the secondary vtty-container
+                const secondaryId = panelObj.id + '-secondary';
+                const panelEl = document.getElementById(panelObj.id);
+                if (!panelEl) return;
+                const vttyEl = document.getElementById('vtty-' + secondaryId);
+                if (!vttyEl) return;
+
+                if (msg.type === 'vtty_full' && msg.data) {
+                    if (!_throttleRefresh()) {
+                        _updateSecondaryVttyDisplay(panelObj, vttyEl, msg.data);
+                    }
+                } else if (msg.type === 'vtty_diff' && msg.data) {
+                    if (!_throttleRefresh()) {
+                        _applySecondaryVttyDiff(panelObj, vttyEl, msg.data);
+                    }
+                } else if (msg.type === 'vtty_dirty' && msg.data) {
+                    scheduleSecondaryVttyHttp(panelObj, 50);
+                } else if (msg.type === 'command_ended') {
+                    _disconnectSecondaryWs(panelObj);
+                    notifyCommandEnded(s.secondaryCmdId);
+                } else if (msg.type === 'pong') {
+                    if (s.secondaryWsPingSendTime > 0) {
+                        s.secondaryWsLatency = Date.now() - s.secondaryWsPingSendTime;
+                        s.secondaryWsPingSendTime = 0;
+                    }
+                } else if (msg.type === 'connected') {
+                    // Server confirms connection.
+                } else if (msg.type === 'peer_registered' || msg.type === 'peer_unregistered') {
+                    handlePeerEvent(msg);
+                }
+            } catch (e) {
+                console.error('Secondary WS message parse error (panel ' + panelObj.id + '):', e);
+            }
+        };
+
+        ws.onclose = () => {
+            if (s.secondaryWs === ws) {
+                s.secondaryWs = null;
+                clearInterval(s.secondaryWsPingInterval);
+                s.secondaryWsPingInterval = null;
+                s.secondaryWsPingSendTime = 0;
+                s.secondaryWsLatency = 0;
+                // Schedule HTTP fallback to keep display alive
+                if (s.secondaryInstUrl && s.secondaryCmdId) {
+                    scheduleSecondaryVttyHttp(panelObj, 0);
+                }
+                // Auto-reconnect (max 5 attempts)
+                if (s.secondaryInstUrl && s.secondaryCmdId && !s.secondaryWsReconnectTimer) {
+                    s.secondaryWsReconnectCount++;
+                    if (s.secondaryWsReconnectCount <= 5) {
+                        s.secondaryWsReconnectTimer = setTimeout(() => {
+                            s.secondaryWsReconnectTimer = null;
+                            if (s.secondaryInstUrl && s.secondaryCmdId && state.updateMode === 'push') {
+                                const inst = state.connections.find(i => i.url === s.secondaryInstUrl);
+                                if (inst && inst.reachable !== false) {
+                                    _connectSecondaryWs(panelObj);
+                                }
+                            }
+                        }, 2000);
+                    }
+                }
+            }
+        };
+
+        ws.onerror = (err) => {
+            console.error('Secondary WebSocket error (panel ' + panelObj.id + '):', err);
+        };
+    } catch (e) {
+        console.error('Secondary WebSocket connect failed (panel ' + panelObj.id + '):', e);
+    }
+}
+
+/// Schedule an HTTP fetch for the secondary pane's VTTY content.
+function scheduleSecondaryVttyHttp(panelObj, delayMs) {
+    if (!panelObj || !panelObj.split) return;
+    const s = panelObj.split;
+    if (!s.secondaryCmdId || !s.secondaryInstUrl) return;
+    const timerKey = '_secondaryVttyHttpTimer_' + panelObj.id;
+    if (state[timerKey]) clearTimeout(state[timerKey]);
+    state[timerKey] = setTimeout(() => {
+        state[timerKey] = null;
+        _loadSecondaryVttyHttp(panelObj);
+    }, delayMs);
+}
+
+/// Load secondary pane's VTTY content via HTTP.
+async function _loadSecondaryVttyHttp(panelObj) {
+    if (!panelObj || !panelObj.split) return;
+    const s = panelObj.split;
+    const secondaryId = panelObj.id + '-secondary';
+    const vttyEl = document.getElementById('vtty-' + secondaryId);
+    if (!vttyEl) return;
+
+    const cmdId = s.secondaryCmdId;
+    const instUrl = s.secondaryInstUrl;
+    const endpoint = `/api/commands/${cmdId}/vtty/html`;
+
+    try {
+        const res = await fetch(apiUrl(endpoint, { url: instUrl }), {
+            headers: authHeadersForInstance({ url: instUrl }),
+        });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json.status === 'ok' && json.data) {
+            _updateSecondaryVttyDisplay(panelObj, vttyEl, json.data);
+        }
+    } catch (e) {
+        // Silently ignore fetch errors
+    }
+}
+
+/// Update secondary pane's VTTY display (similar to updateVttyDisplayForPanel).
+function _updateSecondaryVttyDisplay(panelObj, vttyEl, data) {
+    const pre = vttyEl ? vttyEl.querySelector('pre') : null;
+    if (!pre) return;
+
+    const cmdId = panelObj.split.secondaryCmdId;
+    // Use a separate generation cache key for secondary
+    const genKey = '_secondaryGen_' + cmdId;
+    if (cmdId && data.generation !== undefined) {
+        if (state[genKey] === data.generation) {
+            _updateSecondaryVttyMetadata(panelObj, vttyEl, data);
+            return;
+        }
+        state[genKey] = data.generation;
+    }
+
+    if (data.html !== undefined && data.html !== null) {
+        const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
+        const oldScrollHeight = vttyEl.scrollHeight;
+        pre.innerHTML = data.html;
+        if (wasAtBottom) {
+            vttyEl.scrollTop = vttyEl.scrollHeight;
+        } else {
+            vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
+        }
+    }
+
+    _updateSecondaryVttyMetadata(panelObj, vttyEl, data);
+}
+
+/// Update secondary pane's VTTY metadata (cursor, dimensions, mouse state).
+function _updateSecondaryVttyMetadata(panelObj, vttyEl, data) {
+    const cursor = data.cursor || {};
+    const dims = data.dimensions || {};
+    const inScrollback = panelObj.split.secondaryScrollbackOffset > 0;
+    const cursorHidden = data.cursor_visible === false;
+    const cursorEl = vttyEl ? vttyEl.querySelector('.cursor-indicator') : null;
+    if (cursorEl && cursor.row !== undefined && !inScrollback && !cursorHidden) {
+        const charW = panelObj.fontSize * 0.6;
+        const charH = panelObj.fontSize * 1.2;
+        cursorEl.style.top = (cursor.row * charH) + 'px';
+        cursorEl.style.left = (cursor.col * charW) + 'px';
+        cursorEl.style.width = charW + 'px';
+        cursorEl.style.height = charH + 'px';
+        cursorEl.style.display = '';
+    } else if (cursorEl) {
+        cursorEl.style.display = 'none';
+    }
+    panelObj.split.secondaryMouseTracking = !!data.mouse_tracking;
+    panelObj.split.secondaryMouseSgr = !!data.mouse_sgr;
+    if (vttyEl) {
+        const mt = panelObj.split.secondaryMouseTracking;
+        vttyEl.classList.toggle('selectable', !mt);
+        const pre = vttyEl.querySelector('pre');
+        if (pre && dims.rows && dims.cols) {
+            pre._vttyRows = dims.rows;
+            pre._vttyCols = dims.cols;
+        }
+    }
+}
+
+/// Apply VTTY diff to secondary pane (similar to applyVttyDiffForPanel).
+function _applySecondaryVttyDiff(panelObj, vttyEl, data) {
+    const cmdId = panelObj.split.secondaryCmdId;
+    if (!cmdId) return;
+    const pre = vttyEl ? vttyEl.querySelector('pre') : null;
+    if (!pre) return;
+
+    const genKey = '_secondaryGen_' + cmdId;
+    if (data.generation !== undefined && state[genKey] === data.generation) {
+        if (data.cursor || data.dimensions || data.mouse_tracking !== undefined) {
+            _updateSecondaryVttyMetadata(panelObj, vttyEl, data);
+        }
+        return;
+    }
+    if (data.generation !== undefined) {
+        state[genKey] = data.generation;
+    }
+
+    // If full HTML is embedded, use it directly
+    if (data.html !== undefined) {
+        const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
+        const oldScrollHeight = vttyEl.scrollHeight;
+        pre.innerHTML = data.html;
+        if (wasAtBottom) {
+            vttyEl.scrollTop = vttyEl.scrollHeight;
+        } else {
+            vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
+        }
+        _updateSecondaryVttyMetadata(panelObj, vttyEl, data);
+        return;
+    }
+
+    // Level 3 cell-level incremental diff not supported for secondary pane — fall back to HTTP
+    scheduleSecondaryVttyHttp(panelObj, 0);
+}
+
+/// Render a single vtty-container (non-split panel).
+function _renderVttyContainer(panel) {
+    return `<div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px;">
+                        <div class="exited-banner" id="exitedBanner-${panel.id}" style="display:none;"></div>
+                        <div class="search-bar" id="searchBar-${panel.id}">
+                            <input type="text" id="searchInput-${panel.id}" placeholder="Search terminal..." oninput="vttySearch('${panel.id}')">
+                            <span class="search-count" id="searchCount-${panel.id}"></span>
+                            <button onclick="vttySearchNext('${panel.id}')" title="Next match">&#x25BC;</button>
+                            <button onclick="vttySearchPrev('${panel.id}')" title="Previous match">&#x25B2;</button>
+                            <button onclick="vttySearchClose('${panel.id}')" title="Close search">&#x2715;</button>
+                        </div>
+                        <pre style="color:#484f58;">No command selected — select a command from the sidebar to view its output</pre>
+                        <div class="cursor-indicator" style="display:none;"></div>
+                        <div class="copy-feedback" id="copyFeedback-${panel.id}">Copied!</div>
+                        <button class="scroll-bottom-btn" id="scrollBtn-${panel.id}" onclick="scrollTerminalBottom('${panel.id}')" title="Scroll to bottom">&#x25BC;</button>
+                    </div>`;
+}
+
+/// Render a split container with two vtty-panes and a draggable divider.
+function _renderSplitContainer(panel) {
+    const split = panel.split;
+    const dir = split.direction; // 'horizontal' or 'vertical'
+    const secondaryId = panel.id + '-secondary';
+    const primaryWidth = split.splitRatio ? (split.splitRatio * 100).toFixed(1) : '50';
+    const secondaryWidth = (100 - parseFloat(primaryWidth)).toFixed(1);
+    const flexProp = dir === 'horizontal' ? 'width' : 'height';
+
+    // Primary pane content
+    const primaryVtty = `<div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" data-split-side="primary" data-panel="${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px; flex: 0 0 ${primaryWidth}%;">
+                        <div class="exited-banner" id="exitedBanner-${panel.id}" style="display:none;"></div>
+                        <div class="search-bar" id="searchBar-${panel.id}">
+                            <input type="text" id="searchInput-${panel.id}" placeholder="Search terminal..." oninput="vttySearch('${panel.id}')">
+                            <span class="search-count" id="searchCount-${panel.id}"></span>
+                            <button onclick="vttySearchNext('${panel.id}')" title="Next match">&#x25BC;</button>
+                            <button onclick="vttySearchPrev('${panel.id}')" title="Previous match">&#x25B2;</button>
+                            <button onclick="vttySearchClose('${panel.id}')" title="Close search">&#x2715;</button>
+                        </div>
+                        <pre>${panel.selectedCmdId ? '' : '<span style="color:#484f58;">No command selected — select a command from the sidebar</span>'}</pre>
+                        <div class="cursor-indicator" style="display:none;"></div>
+                        <div class="copy-feedback" id="copyFeedback-${panel.id}">Copied!</div>
+                        <button class="scroll-bottom-btn" id="scrollBtn-${panel.id}" onclick="scrollTerminalBottom('${panel.id}')" title="Scroll to bottom">&#x25BC;</button>
+                    </div>`;
+
+    // Secondary pane content
+    const hasSecondaryCmd = !!split.secondaryCmdId;
+    const secondaryVtty = `<div class="vtty-container" id="vtty-${secondaryId}" data-split-side="secondary" data-panel="${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px; flex: 0 0 ${secondaryWidth}%;">
+                        <div class="exited-banner" id="exitedBanner-${secondaryId}" style="display:none;"></div>
+                        <pre>${hasSecondaryCmd ? '' : '<span style="color:#484f58;">No command selected — select a command from the sidebar</span>'}</pre>
+                        <div class="cursor-indicator" style="display:none;"></div>
+                        <button class="scroll-bottom-btn" id="scrollBtn-${secondaryId}" onclick="scrollTerminalBottom('${secondaryId}')" title="Scroll to bottom">&#x25BC;</button>
+                    </div>`;
+
+    return `<div class="split-container ${dir}" id="split-${panel.id}" data-panel="${panel.id}">
+                    ${primaryVtty}
+                    <div class="split-divider" data-panel="${panel.id}"></div>
+                    ${secondaryVtty}
+                </div>`;
+}
+
+/// Update the panel header for a split panel to indicate both commands.
+function _updateSplitPanelHeader(panelObj) {
+    if (!panelObj || !panelObj.split) return;
+    const panelEl = document.getElementById(panelObj.id);
+    if (!panelEl) return;
+    const nameEl = panelEl.querySelector('.cmd-fullname');
+    const argsEl = panelEl.querySelector('.cmd-args');
+    if (!nameEl) return;
+
+    // Show the active side's command name
+    const s = panelObj.split;
+    let cmdId, instUrl;
+    if (s.activeSide === 'secondary') {
+        cmdId = s.secondaryCmdId;
+        instUrl = s.secondaryInstUrl;
+    } else {
+        cmdId = panelObj.selectedCmdId;
+        instUrl = panelObj.selectedInstUrl;
+    }
+
+    if (cmdId && instUrl) {
+        const inst = state.connections.find(i => i.url === instUrl);
+        const cmd = inst && inst._commands ? inst._commands.find(c => c.id === cmdId) : null;
+        const fullName = cmd ? (cmd.name || cmd.id) : cmdId;
+        const displayTitle = panelObj.customTitle || fullName;
+        nameEl.textContent = displayTitle;
+        nameEl.title = fullName;
+        if (argsEl && cmd) {
+            const argsStr = (cmd.args || []).join(' ');
+            argsEl.textContent = argsStr;
+        }
+    }
+}
+
 function _renderMinimizedPanels() {
     const minimized = state.panels.filter(p => p.minimized);
     if (minimized.length === 0) return '';
@@ -4117,9 +4584,11 @@ function renderPanels() {
 
     // Fast path: if panel count and IDs haven't changed, skip the full rebuild.
     // This prevents erasing terminal content when only command selection changes.
-    // EXCEPTION: must rebuild when transitioning between welcome and panel views.
+    // EXCEPTION: must rebuild when transitioning between welcome and panel views,
+    // or when split state changes for any panel.
     const currentPanelIds = state.panels.map(p => p.id).join(',');
-    const structuralUnchanged = _lastRenderedPanelCount === state.panels.length && _lastRenderedPanelIds === currentPanelIds;
+    const currentSplitState = state.panels.map(p => p.split ? p.split.direction : '').join(',');
+    const structuralUnchanged = _lastRenderedPanelCount === state.panels.length && _lastRenderedPanelIds === currentPanelIds && _lastSplitState === currentSplitState;
     if (structuralUnchanged && _lastShowingWelcome === _showingWelcome) {
         // Just update layout direction and multi-panel visibility
         _applyPanelLayoutClass(container);
@@ -4142,6 +4611,21 @@ function renderPanels() {
                 scrollTop: vttyEl ? vttyEl.scrollTop : 0,
                 cmdId: panel.selectedCmdId,
             };
+        }
+        // Also cache secondary pane if panel is split
+        if (panel.split && panel.split.secondaryCmdId) {
+            const secondaryId = panel.id + '-secondary';
+            const secondaryVtty = document.getElementById('vtty-' + secondaryId);
+            const secondaryPre = secondaryVtty ? secondaryVtty.querySelector('pre') : null;
+            if (secondaryPre && secondaryPre.childNodes.length > 0) {
+                const secFrag = document.createDocumentFragment();
+                while (secondaryPre.firstChild) secFrag.appendChild(secondaryPre.firstChild);
+                cachedVtty[secondaryId] = {
+                    frag: secFrag,
+                    scrollTop: secondaryVtty ? secondaryVtty.scrollTop : 0,
+                    cmdId: panel.split.secondaryCmdId,
+                };
+            }
         }
     }
 
@@ -4227,20 +4711,7 @@ function renderPanels() {
                         <span class="panel-header-label" id="panelLabel-${panel.id}"></span>
                         ${hasMultiplePanels ? `<button class="btn btn-xs btn-danger" onclick="event.stopPropagation();removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
                     </div>
-                    <div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px;">
-                        <div class="exited-banner" id="exitedBanner-${panel.id}" style="display:none;"></div>
-                        <div class="search-bar" id="searchBar-${panel.id}">
-                            <input type="text" id="searchInput-${panel.id}" placeholder="Search terminal..." oninput="vttySearch('${panel.id}')">
-                            <span class="search-count" id="searchCount-${panel.id}"></span>
-                            <button onclick="vttySearchNext('${panel.id}')" title="Next match">&#x25BC;</button>
-                            <button onclick="vttySearchPrev('${panel.id}')" title="Previous match">&#x25B2;</button>
-                            <button onclick="vttySearchClose('${panel.id}')" title="Close search">&#x2715;</button>
-                        </div>
-                        <pre style="color:#484f58;">No command selected — select a command from the sidebar to view its output</pre>
-                        <div class="cursor-indicator" style="display:none;"></div>
-                        <div class="copy-feedback" id="copyFeedback-${panel.id}">Copied!</div>
-                        <button class="scroll-bottom-btn" id="scrollBtn-${panel.id}" onclick="scrollTerminalBottom('${panel.id}')" title="Scroll to bottom">&#x25BC;</button>
-                    </div>
+                    ${panel.split ? _renderSplitContainer(panel) : _renderVttyContainer(panel)}
                 </div>
                 ${resizeHandle}`;
         }
@@ -4268,13 +4739,19 @@ function renderPanels() {
     // Panel focus: clicking in a vtty-container or panel-header sets it as focused.
     document.querySelectorAll('.panel').forEach(panelEl => {
         const panelId = panelEl.id;
-        // Click on terminal area → focus this panel
-        const vttyEl = panelEl.querySelector('.vtty-container');
-        if (vttyEl) {
+        // Click on terminal area → focus this panel (and set activeSide for split panels)
+        const vttyContainers = panelEl.querySelectorAll('.vtty-container');
+        vttyContainers.forEach(vttyEl => {
             vttyEl.addEventListener('mousedown', () => {
                 focusPanel(panelId);
+                // Track which sub-pane is active in split panels
+                const panelObj = state.panels.find(p => p.id === panelId);
+                if (panelObj && panelObj.split) {
+                    const side = vttyEl.getAttribute('data-split-side');
+                    if (side) panelObj.split.activeSide = side;
+                }
             });
-        }
+        });
         // Click on panel header → focus this panel
         const headerEl = panelEl.querySelector('.panel-header');
         if (headerEl) {
@@ -4287,17 +4764,60 @@ function renderPanels() {
     // Scroll-to-bottom button visibility
     document.querySelectorAll('.vtty-container').forEach(vtty => {
         vtty.addEventListener('scroll', () => {
-            const panelEl = vtty.closest('.panel');
-            if (!panelEl) return;
-            const btn = panelEl.querySelector('.scroll-bottom-btn');
+            // Find the scroll-bottom-btn INSIDE this specific vtty-container
+            const btn = vtty.querySelector('.scroll-bottom-btn');
             if (!btn) return;
             const isNearBottom = vtty.scrollHeight - vtty.scrollTop - vtty.clientHeight < 50;
             btn.classList.toggle('visible', !isNearBottom);
         });
     });
 
+    // Split divider drag handler
+    document.querySelectorAll('.split-divider').forEach(divider => {
+        const panelId = divider.getAttribute('data-panel');
+        const panelObj = state.panels.find(p => p.id === panelId);
+        if (!panelObj || !panelObj.split) return;
+        const splitContainer = divider.parentElement;
+        const dir = panelObj.split.direction;
+
+        divider.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            divider.classList.add('active');
+            const startPos = dir === 'horizontal' ? e.clientX : e.clientY;
+            const containerSize = dir === 'horizontal' ? splitContainer.offsetWidth : splitContainer.offsetHeight;
+            const startRatio = panelObj.split.splitRatio || 0.5;
+
+            const onMouseMove = (e) => {
+                const currentPos = dir === 'horizontal' ? e.clientX : e.clientY;
+                const delta = currentPos - startPos;
+                let newRatio = startRatio + (delta / containerSize);
+                newRatio = Math.max(0.1, Math.min(0.9, newRatio));
+                panelObj.split.splitRatio = newRatio;
+
+                // Update flex basis for both vtty-containers
+                const vttyContainers = splitContainer.querySelectorAll('.vtty-container');
+                if (vttyContainers.length === 2) {
+                    const pct1 = (newRatio * 100).toFixed(1);
+                    const pct2 = (100 - parseFloat(pct1)).toFixed(1);
+                    vttyContainers[0].style.flex = `0 0 ${pct1}%`;
+                    vttyContainers[1].style.flex = `0 0 ${pct2}%`;
+                }
+            };
+
+            const onMouseUp = () => {
+                divider.classList.remove('active');
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            };
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        });
+    });
+
     _lastRenderedPanelCount = state.panels.length;
     _lastRenderedPanelIds = currentPanelIds;
+    _lastSplitState = currentSplitState;
     _lastShowingWelcome = _showingWelcome;
     _updatePanelMultiUI();
     // Sync shared toolbar with current state
@@ -5635,6 +6155,24 @@ function vttySearchClose(panelId) {
 
 // ─── Scroll to Bottom ───
 function scrollTerminalBottom(panelId) {
+    // Check if this is a secondary pane of a split panel
+    const isSecondary = panelId.endsWith('-secondary');
+    if (isSecondary) {
+        const primaryPanelId = panelId.slice(0, -'-secondary'.length);
+        const vtty = document.getElementById('vtty-' + panelId);
+        if (vtty) {
+            vtty.scrollTop = vtty.scrollHeight;
+        }
+        const panelObj = state.panels.find(p => p.id === primaryPanelId);
+        if (panelObj && panelObj.split && panelObj.split.secondaryScrollbackOffset > 0) {
+            panelObj.split.secondaryScrollbackOffset = 0;
+            if (panelObj.split.secondaryCmdId) {
+                _loadSecondaryVttyHttp(panelObj);
+            }
+        }
+        return;
+    }
+
     const panelEl = document.getElementById(panelId);
     if (!panelEl) return;
     const vtty = panelEl.querySelector('.vtty-container');
@@ -6089,6 +6627,19 @@ function showPanelContextMenu(e, panelId) {
     if (state.panels.length > 1) {
         const isMin = panel.minimized;
         menu.appendChild(_createCtxMenuItem(isMin ? 'Restore Panel' : 'Minimize Panel', () => toggleMinimizePanel(panelId), false));
+    }
+
+    // Split / Unsplit
+    const sepSplit = document.createElement('div');
+    sepSplit.className = 'ctx-menu-sep';
+    sepSplit.setAttribute('role', 'separator');
+    menu.appendChild(sepSplit);
+
+    if (!panel.split) {
+        menu.appendChild(_createCtxMenuItem('Split Horizontal', () => splitPanel(panelId, 'horizontal'), false));
+        menu.appendChild(_createCtxMenuItem('Split Vertical', () => splitPanel(panelId, 'vertical'), false));
+    } else {
+        menu.appendChild(_createCtxMenuItem('Unsplit', () => unsplitPanel(panelId), false));
     }
 
     // Separator
