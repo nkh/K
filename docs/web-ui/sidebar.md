@@ -107,16 +107,86 @@ Submits the form and creates the new command. The button uses the primary style 
 
 ![Templates tab](screenshots/05-sidebar-templates.png)
 
-Templates let you save and reuse common command configurations. Instead of re-typing the same command and arguments each time, you can save a template and spawn from it with one click.
+Templates let you save and reuse common command configurations. Instead of re-typing the same command and arguments each time, you can save a template and spawn from it with one click. Templates can come from two sources: the server's configuration file (read-only in the web UI) and user-created templates saved in the browser's localStorage.
 
-### Template List
-Displays all saved templates as cards. Each card shows the template name and command. Clicking a template card immediately spawns that command with the saved configuration.
+### Template Sources
 
-### + Add Button
-Opens the template creation form with fields for name, command, and arguments.
+Templates are displayed in two sections:
+
+- **From config**: Templates defined in the server's configuration file under `[[templates]]` sections. These are read-only and cannot be deleted from the web UI. They are marked with a "config" badge.
+- **Custom**: Templates created by the user via the + Add form. These are stored in the browser's localStorage and can be deleted from the web UI.
+
+### Config File Templates
+
+Templates can be defined in the vrw configuration file (TOML format). Each template specifies a name, command, and optional arguments, environment variables, working directory, certificate, and terminal dimensions.
+
+**Example — Simple template:**
+```toml
+[[templates]]
+name = "Dev Server"
+cmd = "npm"
+args = "run dev"
+```
+This template spawns `npm run dev` with default settings.
+
+**Example — Template with environment variables and working directory:**
+```toml
+[[templates]]
+name = "Backend API"
+cmd = "cargo"
+args = "run"
+workdir = "/home/user/api"
+env = ["DATABASE_URL=postgres://localhost/mydb", "RUST_LOG=debug", "PORT=3000"]
+```
+This template spawns the Rust backend with custom environment variables and a specific working directory.
+
+**Example — Template with certificate and custom terminal size:**
+```toml
+[[templates]]
+name = "Production Logs"
+cmd = "tail"
+args = "-f /var/log/app.log"
+certificate = "prod-access"
+rows = 50
+cols = 120
+```
+This template spawns a log follower bound to the "prod-access" certificate with a wide terminal.
+
+**Example — Multiple templates for different services:**
+```toml
+[[templates]]
+name = "Frontend"
+cmd = "npm"
+args = "run dev"
+workdir = "/home/user/frontend"
+
+[[templates]]
+name = "Backend"
+cmd = "cargo"
+args = "run"
+workdir = "/home/user/api"
+env = ["DATABASE_URL=postgres://localhost/mydb"]
+
+[[templates]]
+name = "Database Monitor"
+cmd = "psql"
+args = "-U admin -d mydb"
+workdir = "/home/user"
+```
+Clicking any of these templates immediately spawns the command on the server instance currently selected in the Spawn tab's Target Instance dropdown.
+
+### User Templates
+
+Users can create custom templates directly in the web UI by clicking the **+ Add** button. The form has three fields:
+
+- **Template name**: A display name for the template (e.g., "Run tests")
+- **Command**: The executable to run (e.g., `pytest`)
+- **Arguments**: Optional arguments (e.g., `tests/ -v --tb=short`)
+
+User templates are saved in the browser's localStorage under the key `vrw_user_templates`. They persist across page reloads but are specific to the browser — they are not shared with other users or other browsers.
 
 ### Template Card Actions
-Each template card can be clicked to immediately spawn that command with the saved configuration. User-created templates also have a **Delete** button (`✕`) to remove them. Server-provided templates (from the configuration file) cannot be deleted from the web UI.
+Each template card can be clicked to immediately spawn that command with the saved configuration. The spawn targets the server instance currently selected in the Spawn tab's Target Instance dropdown. User-created templates also have a **Delete** button (`✕`) to remove them. Server-provided templates (from the configuration file) cannot be deleted from the web UI.
 
 ## Environments Tab
 

@@ -252,6 +252,13 @@ function releaseCurrentFocusTrap() {
     initSoundToggle();
     _syncRefreshMsUI();
 
+    // Mark resize inputs as user-edited when manually changed, so that
+    // server-reported dimensions don't overwrite the user's values.
+    const stResizeRows = document.getElementById('stResizeRows');
+    const stResizeCols = document.getElementById('stResizeCols');
+    if (stResizeRows) stResizeRows.addEventListener('input', () => { stResizeRows._userEdited = true; });
+    if (stResizeCols) stResizeCols.addEventListener('input', () => { stResizeCols._userEdited = true; });
+
     // Event delegation for command list — handles kill buttons without inline onclick
     document.getElementById('commandList').addEventListener('click', (e) => {
         const killBtn = e.target.closest('.cmd-kill-btn');
@@ -2307,6 +2314,16 @@ function updateVttyDisplayForPanel(panelObj, panelEl, data) {
 function updateVttyMetadataForPanel(panelObj, panelEl, vttyEl, data) {
     const cursor = data.cursor || {};
     const dims = data.dimensions || {};
+    // Sync toolbar resize inputs with actual server dimensions so that
+    // Max Fit / Max Font / manual resize always start from the real values.
+    if (dims.rows && dims.cols && panelObj.id === state._focusedPanelId) {
+        const ri = document.getElementById('stResizeRows');
+        const ci = document.getElementById('stResizeCols');
+        // Only update if the inputs haven't been manually edited by the user
+        // (i.e., they still contain the last server-reported values or defaults).
+        if (ri && !ri._userEdited) ri.value = dims.rows;
+        if (ci && !ci._userEdited) ci.value = dims.cols;
+    }
     // Only update bottombar if this is the focused panel
     if (panelObj.id === state._focusedPanelId) {
         document.getElementById('cursorPos').textContent = `Cursor: ${cursor.row + 1},${cursor.col + 1}`;
@@ -5537,11 +5554,27 @@ async function toggleMaxFit(panelId) {
             btn.style.background = '';
             btn.style.color = '';
         }
-        await _resizePanelTo(panelId, st.prevRows, st.prevCols);
+        const ok = await _resizePanelTo(panelId, st.prevRows, st.prevCols);
+        if (!ok) {
+            // Resize failed (no command or command exited) — clean up state
+            delete _maxFitState[panelId];
+            if (btn) {
+                btn.textContent = 'Max fit';
+                btn.style.background = '';
+                btn.style.color = '';
+            }
+        }
     } else {
         // Apply max fit: calculate max rows/cols from container + current font
         const rect = vttyEl.getBoundingClientRect();
         if (rect.width < 10 || rect.height < 10) return;
+
+        // Check if the command is alive — Max Fit cannot resize exited commands.
+        const inst = panelObj.selectedInstUrl ? state.connections.find(i => i.url === panelObj.selectedInstUrl) : null;
+        const cmd = inst && inst._commands ? inst._commands.find(c => c.id === panelObj.selectedCmdId) : null;
+        if (panelObj.selectedCmdId && cmd && cmd.status === 'exited') {
+            return; // cannot resize exited commands
+        }
 
         const fontSize = panelObj.fontSize || state.fontSize;
         const charW = fontSize * 0.6;
@@ -5549,7 +5582,7 @@ async function toggleMaxFit(panelId) {
         const maxCols = Math.max(20, Math.min(500, Math.floor(rect.width / charW)));
         const maxRows = Math.max(5, Math.min(200, Math.floor(rect.height / charH)));
 
-        // Save current dimensions
+        // Save current dimensions from the toolbar inputs (synced from server)
         const curRows = parseInt(document.getElementById('stResizeRows')?.value || document.getElementById('resizeRows-' + panelId)?.value) || 24;
         const curCols = parseInt(document.getElementById('stResizeCols')?.value || document.getElementById('resizeCols-' + panelId)?.value) || 80;
 
@@ -5559,7 +5592,16 @@ async function toggleMaxFit(panelId) {
             btn.style.background = 'var(--accent)';
             btn.style.color = '#fff';
         }
-        await _resizePanelTo(panelId, maxRows, maxCols);
+        const ok = await _resizePanelTo(panelId, maxRows, maxCols);
+        if (!ok) {
+            // Resize failed — clean up state
+            delete _maxFitState[panelId];
+            if (btn) {
+                btn.textContent = 'Max fit';
+                btn.style.background = '';
+                btn.style.color = '';
+            }
+        }
     }
 }
 
@@ -5590,7 +5632,6 @@ async function toggleMaxFont(panelId) {
 
     if (st && st.active) {
         // Toggle back: restore previous font size and terminal dimensions
-        st.active = false;
         if (btn) {
             btn.textContent = 'Max font';
             btn.style.background = '';
@@ -5607,6 +5648,8 @@ async function toggleMaxFont(panelId) {
         if (stFontSize) stFontSize.textContent = panelObj.fontSize + 'px';
         // Restore terminal dimensions
         await _resizePanelTo(panelId, st.prevRows, st.prevCols);
+        // Clean up state so re-activation starts fresh
+        delete _maxFontState[panelId];
     } else {
         // Calculate max font size: largest font where rows*charH <= paneH and cols*charW <= paneW
         // charW ≈ fontSize * 0.6, charH ≈ fontSize * 1.2
@@ -5616,6 +5659,9 @@ async function toggleMaxFont(panelId) {
         const maxFontByWidth = rect.width / (0.6 * curCols);
         const maxFont = Math.floor(Math.min(maxFontByHeight, maxFontByWidth));
         const newFontSize = Math.max(8, Math.min(28, maxFont));
+
+        // Skip if new font size equals current — nothing to change
+        if (newFontSize === panelObj.fontSize) return;
 
         // Save current state
         _maxFontState[panelId] = {
@@ -5640,25 +5686,33 @@ async function toggleMaxFont(panelId) {
 }
 
 /// Helper: resize a panel's terminal to specific rows/cols via the API.
+/// Returns true if the resize was attempted, false if skipped (no command).
 async function _resizePanelTo(panelId, rows, cols) {
     const panelObj = state.panels.find(p => p.id === panelId);
-    if (!panelObj) return;
+    if (!panelObj) return false;
     const cmdId = panelObj.selectedCmdId;
-    if (!cmdId) return;
+    if (!cmdId) return false;
 
     // Update the input fields (shared toolbar first, per-panel fallback)
     const ri = document.getElementById('stResizeRows') || document.getElementById('resizeRows-' + panelId);
     const ci = document.getElementById('stResizeCols') || document.getElementById('resizeCols-' + panelId);
-    if (ri) ri.value = rows;
-    if (ci) ci.value = cols;
+    if (ri) { ri.value = rows; ri._userEdited = false; }
+    if (ci) { ci.value = cols; ci._userEdited = false; }
 
     try {
-        await fetch(apiUrl(`/api/commands/${cmdId}/resize`, { url: panelObj.selectedInstUrl }), {
+        const res = await fetch(apiUrl(`/api/commands/${cmdId}/resize`, { url: panelObj.selectedInstUrl }), {
             method: 'POST',
             headers: authHeadersForInstance({ url: panelObj.selectedInstUrl }),
             body: JSON.stringify({ rows, cols }),
         });
-    } catch (e) { /* ignore */ }
+        if (res.ok) {
+            // Invalidate cell grid so next VTTY update rebuilds at new dimensions.
+            delete state._cellGrids[cmdId];
+            // Request a fresh VTTY render to reflect the new terminal size.
+            loadVttyHttpForPanel(panelId, panelObj.selectedInstUrl, cmdId);
+        }
+        return true;
+    } catch (e) { return false; }
 }
 
 // ─── Keyboard Shortcuts Help ───

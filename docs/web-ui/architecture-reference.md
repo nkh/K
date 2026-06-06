@@ -131,9 +131,9 @@ The shared toolbar is a horizontal control strip positioned above the panel cont
 | Resource Badge | Shows CPU percentage and memory usage for the focused panel's command. |
 | Instance URL | Shows the server URL for the focused panel's selected command. |
 | Font Size Controls | A- / size label / A+ buttons that adjust the focused panel's font size (8-28px range). |
-| Resize Controls | Rows/Cols number inputs and a Resize button. Changes are sent to the server via `/api/commands/:id/resize`. |
-| Max Fit Button | Toggle that calculates the maximum terminal dimensions to fill the panel at the current font size, then restores on second click. State is tracked per-panel. |
-| Max Font Button | Toggle that calculates the largest font size that still fits the current terminal dimensions in the panel, then restores on second click. State is tracked per-panel. |
+| Resize Controls | Rows/Cols number inputs and a Resize button. Changes are sent to the server via `/api/commands/:id/resize`. The inputs are automatically synced with the server's actual terminal dimensions as VTTY metadata is received. Manual edits are preserved and not overwritten by server sync. |
+| Max Fit Button | Toggle that calculates the maximum terminal dimensions to fill the panel at the current font size, then restores on second click. State is tracked per-panel. Cannot resize exited commands (the server rejects the resize). After successful resize, the cell grid is invalidated and a fresh VTTY render is requested. |
+| Max Font Button | Toggle that calculates the largest font size that still fits the current terminal dimensions in the panel, then restores on second click. State is tracked per-panel. On restore, state is cleaned up so re-activation works correctly. Skips activation if the computed font size equals the current size. |
 | Buffer Select | Dropdown to switch between Current, Main, and Alt terminal buffers. |
 | Refresh Throttle | Adjustable client-side throttle (0-2000ms in 100ms steps) that limits how often VTTY updates are applied to the DOM. |
 | Send Keys | Text input and Send button for sending keystrokes to the focused panel's command. Supports special key sequences. |
