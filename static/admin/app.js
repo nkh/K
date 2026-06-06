@@ -5300,9 +5300,15 @@ document.addEventListener('mouseup', (e) => {
     const panelObj = state.panels.find(p => p.id === panelEl.id);
     if (!panelObj || !state.selectedCmdId) return;
 
-    // If selection mode is active, skip PTY forwarding
+    // If selection mode is active, skip PTY forwarding — auto-copy on select
     if (panelObj.selectionMode) {
         _mouseDownButton = null;
+        // Copy-on-select: if user just selected text, copy it automatically
+        setTimeout(() => {
+            const sel = window.getSelection();
+            const text = sel ? sel.toString().trim() : '';
+            if (text) copyTerminalSelection(panelEl.id);
+        }, 0);
         return;
     }
 
