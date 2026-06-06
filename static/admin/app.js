@@ -3093,6 +3093,91 @@ function parseSpawnEnvVars(text) {
     return env;
 }
 
+// ─── Spawn Command Tab Completion ───
+// Stores the last fetched completions for cycling with Tab.
+let _spawnCompletions = [];
+let _spawnCompletionIdx = -1;
+let _spawnCompletionBase = '';
+
+/// Tab completion for the spawn command input field.
+/// On first Tab: fetches executables from server PATH matching the current prefix.
+/// On subsequent Tabs: cycles through the matches.
+/// On Escape or input change: resets the completion state.
+async function spawnCmdTabComplete(event) {
+    const input = document.getElementById('spawnCmd');
+    const val = input.value;
+    const caretPos = input.selectionStart;
+
+    // Extract the word being completed — from the last space before caret to caret
+    const beforeCaret = val.substring(0, caretPos);
+    const lastSpace = beforeCaret.lastIndexOf(' ');
+    const currentWord = lastSpace >= 0 ? beforeCaret.substring(lastSpace + 1) : beforeCaret;
+
+    // Determine the prefix to match: extract basename from a path like /usr/bin/ht
+    const slashIdx = currentWord.lastIndexOf('/');
+    const prefix = slashIdx >= 0 ? currentWord.substring(slashIdx + 1) : currentWord;
+    const dirPart = slashIdx >= 0 ? currentWord.substring(0, slashIdx + 1) : '';
+
+    // Reset if the input changed since last completion
+    if (currentWord !== _spawnCompletionBase) {
+        _spawnCompletions = [];
+        _spawnCompletionIdx = -1;
+        _spawnCompletionBase = currentWord;
+    }
+
+    // If we have cached completions, cycle through them
+    if (_spawnCompletions.length > 0) {
+        _spawnCompletionIdx = (_spawnCompletionIdx + 1) % _spawnCompletions.length;
+        const match = _spawnCompletions[_spawnCompletionIdx];
+        const replacement = dirPart + match;
+        input.value = val.substring(0, beforeCaret.length - currentWord.length) + replacement + val.substring(caretPos);
+        input.setSelectionRange(
+            beforeCaret.length - currentWord.length + replacement.length,
+            beforeCaret.length - currentWord.length + replacement.length
+        );
+        return;
+    }
+
+    // Fetch completions from server
+    if (!prefix) return;
+
+    try {
+        const instSelect = document.getElementById('spawnInstance');
+        const instUrl = instSelect ? instSelect.value : '';
+        const res = await fetch(apiUrl('/api/completions?prefix=' + encodeURIComponent(prefix), { url: instUrl }), {
+            headers: authHeadersForInstance({ url: instUrl }),
+        });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json.status !== 'ok' || !Array.isArray(json.data)) return;
+
+        _spawnCompletions = json.data;
+        _spawnCompletionIdx = -1;
+        _spawnCompletionBase = currentWord;
+
+        if (_spawnCompletions.length === 0) return;
+
+        // Apply first completion
+        _spawnCompletionIdx = 0;
+        const match = _spawnCompletions[0];
+        const replacement = dirPart + match;
+        input.value = val.substring(0, beforeCaret.length - currentWord.length) + replacement + val.substring(caretPos);
+        input.setSelectionRange(
+            beforeCaret.length - currentWord.length + replacement.length,
+            beforeCaret.length - currentWord.length + replacement.length
+        );
+    } catch (e) {
+        // Silently ignore — tab completion is best-effort
+    }
+}
+
+/// Reset tab completion state when spawn command input changes.
+function _resetSpawnCompletion() {
+    _spawnCompletions = [];
+    _spawnCompletionIdx = -1;
+    _spawnCompletionBase = '';
+}
+
 async function spawnCommand() {
     const cmd = document.getElementById('spawnCmd').value.trim();
     if (!cmd) return;

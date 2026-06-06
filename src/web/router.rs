@@ -32,6 +32,10 @@ pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
             get(handlers::certificates::list_certificates),
         )
         .route("/api/info", get(handlers::commands::get_info))
+        .route(
+            "/api/completions",
+            get(handlers::commands::tab_complete),
+        )
         .route("/api/templates", get(handlers::templates::list_templates))
         .route("/api/environments", get(handlers::environments::list_environments))
         .route("/api/log", get(handlers::logs::get_log))

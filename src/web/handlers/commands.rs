@@ -724,3 +724,80 @@ pub async fn get_snapshot(State(state): State<AppState>) -> Json<Value> {
         "error": null
     }))
 }
+
+/// Tab completion for the spawn form command input.
+/// Scans the local PATH directories for executables whose basename
+/// starts with the given prefix. Returns up to 50 matches.
+/// Query parameter: ?prefix=hto  →  ["htop", ...]
+pub async fn tab_complete(
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Json<Value> {
+    use std::path::PathBuf;
+    use std::fs;
+
+    let prefix = params.get("prefix").cloned().unwrap_or_default();
+    let prefix_lower = prefix.to_lowercase();
+
+    // Get PATH from environment (server-side PATH)
+    let path_dirs: Vec<PathBuf> = if let Ok(path_var) = std::env::var("PATH") {
+        std::env::split_paths(&path_var).collect()
+    } else {
+        // Fallback to common PATH locations
+        vec![
+            PathBuf::from("/usr/local/bin"),
+            PathBuf::from("/usr/bin"),
+            PathBuf::from("/bin"),
+            PathBuf::from("/usr/local/sbin"),
+            PathBuf::from("/usr/sbin"),
+            PathBuf::from("/sbin"),
+        ]
+    };
+
+    let mut matches: Vec<String> = Vec::new();
+
+    for dir in &path_dirs {
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                // Skip directories, only consider files
+                if !path.is_file() {
+                    continue;
+                }
+                // Check if the file is executable (any execute bit set)
+                use std::os::unix::fs::PermissionsExt;
+                if let Ok(metadata) = path.metadata() {
+                    if metadata.permissions().mode() & 0o111 == 0 {
+                        continue;
+                    }
+                } else {
+                    continue;
+                }
+                // Get the basename and check prefix match
+                if let Some(name) = path.file_name() {
+                    let name_str = name.to_string_lossy();
+                    if !name_str.to_lowercase().starts_with(&prefix_lower) {
+                        continue;
+                    }
+                    // Skip if we already have this name (from an earlier PATH dir)
+                    if !matches.contains(&name_str.to_string()) {
+                        matches.push(name_str.to_string());
+                        if matches.len() >= 50 {
+                            break;
+                        }
+                    }
+                }
+            }
+            if matches.len() >= 50 {
+                break;
+            }
+        }
+    }
+
+    matches.sort();
+
+    Json(serde_json::json!({
+        "status": "ok",
+        "data": matches,
+        "error": null
+    }))
+}
