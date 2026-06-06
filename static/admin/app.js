@@ -1431,12 +1431,89 @@ function updateSidebarSelection() {
     });
 }
 
+/// Push current command selection to panel's history before switching.
+/// Truncates forward history (like browser back/forward).
+function _pushPanelHistory(panelObj) {
+    if (!panelObj || !panelObj.selectedCmdId) return;
+    // If we're not at the end of history, truncate forward entries
+    if (panelObj.cmdHistoryIdx < panelObj.cmdHistory.length - 1) {
+        panelObj.cmdHistory = panelObj.cmdHistory.slice(0, panelObj.cmdHistoryIdx + 1);
+    }
+    // Don't push duplicate of current
+    const last = panelObj.cmdHistory[panelObj.cmdHistory.length - 1];
+    if (last && last.instUrl === panelObj.selectedInstUrl && last.cmdId === panelObj.selectedCmdId) return;
+    panelObj.cmdHistory.push({
+        instUrl: panelObj.selectedInstUrl,
+        cmdId: panelObj.selectedCmdId,
+    });
+    panelObj.cmdHistoryIdx = panelObj.cmdHistory.length - 1;
+    // Cap history at 50 entries per panel
+    if (panelObj.cmdHistory.length > 50) {
+        panelObj.cmdHistory.shift();
+        panelObj.cmdHistoryIdx--;
+    }
+}
+
+/// Update back/forward button visibility for a panel.
+function _updatePanelHistoryBtns(panelId) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    const backBtn = document.getElementById('histBack-' + panelId);
+    const fwdBtn = document.getElementById('histFwd-' + panelId);
+    if (backBtn) backBtn.style.display = (panelObj && panelObj.cmdHistoryIdx > 0) ? '' : 'none';
+    if (fwdBtn) fwdBtn.style.display = (panelObj && panelObj.cmdHistoryIdx < panelObj.cmdHistory.length - 1) ? '' : 'none';
+}
+
+/// Navigate back in panel's command history.
+function panelHistoryBack(panelId) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj || panelObj.cmdHistoryIdx <= 0) return;
+    panelObj.cmdHistoryIdx--;
+    const entry = panelObj.cmdHistory[panelObj.cmdHistoryIdx];
+    // Apply selection without pushing to history (we're navigating)
+    _selectCommandForPanel(panelObj, entry.instUrl, entry.cmdId);
+    _updatePanelHistoryBtns(panelId);
+}
+
+/// Navigate forward in panel's command history.
+function panelHistoryForward(panelId) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj || panelObj.cmdHistoryIdx >= panelObj.cmdHistory.length - 1) return;
+    panelObj.cmdHistoryIdx++;
+    const entry = panelObj.cmdHistory[panelObj.cmdHistoryIdx];
+    _selectCommandForPanel(panelObj, entry.instUrl, entry.cmdId);
+    _updatePanelHistoryBtns(panelId);
+}
+
+/// Internal: switch a panel to a command without recording history.
+function _selectCommandForPanel(panelObj, instUrl, cmdId) {
+    disconnectPanelWs(panelObj.id);
+    panelObj.selectedInstUrl = instUrl;
+    panelObj.selectedCmdId = cmdId;
+    focusPanel(panelObj.id);
+    state.selectedInstUrl = instUrl;
+    state.selectedCmdId = cmdId;
+    state._pendingVttyData = null;
+    state._pendingVttyDirty = false;
+    state.bufferView = 'current';
+    _restoreCachedDom(cmdId);
+    const globalBufferSel = document.getElementById('bufferSelect');
+    if (globalBufferSel) globalBufferSel.value = 'current';
+    updatePanelCommandInfo();
+    updateTerminalDisconnectedOverlay();
+    updateSidebarSelection();
+    loadVttyHttpForPanel(panelObj.id, instUrl, cmdId);
+    startPanelUpdateMode(panelObj.id);
+}
+
 function selectCommand(instUrl, cmdId, name) {
     // Determine which panel to apply the selection to.
     // If the user clicked in a specific panel, use that; otherwise use the focused panel.
     let panelObj = state.panels.find(p => p.id === state._focusedPanelId);
     if (!panelObj) panelObj = state.panels[0];
     if (!panelObj) return;
+
+    // Record current command in history before switching
+    _pushPanelHistory(panelObj);
 
     // Ensure this panel is visually focused
     focusPanel(panelObj.id);
@@ -1479,6 +1556,8 @@ function selectCommand(instUrl, cmdId, name) {
     loadVttyHttpForPanel(panelObj.id, instUrl, cmdId);
     // Start per-panel WS for push mode (or poll)
     startPanelUpdateMode(panelObj.id);
+    // Update history button visibility
+    _updatePanelHistoryBtns(panelObj.id);
 }
 
 // Update the panel header with the selected command's full name and args.
@@ -3553,6 +3632,9 @@ function addPanelDirect() {
         ws: null, wsCmdId: null, wsInstUrl: null, wsReconnectCount: 0, wsReconnectTimer: null, wsPingInterval: null, wsPingSendTime: 0, wsLatency: 0,
         // Per-panel poll timer
         pollTimer: null,
+        // Per-panel command history (browser-like back/forward navigation)
+        cmdHistory: [],  // array of { instUrl, cmdId, cmdName }
+        cmdHistoryIdx: -1,  // -1 = no history; 0+ = index in cmdHistory
     };
     state.panels.push(panel);
     renderPanels();
@@ -3907,6 +3989,8 @@ function renderPanels() {
                 <div class="panel${isFocused ? ' focused' : ''}" id="${panel.id}" draggable="${hasMultiplePanels}" ondragover="onPanelDragOver(event)" ondrop="onPanelDrop(event,'${panel.id}')" ondragend="onPanelDragEnd(event)" ondragleave="onPanelDragLeave(event)" style="flex: 1 1 0;">
                     <div class="panel-header" data-panel-id="${panel.id}" oncontextmenu="showPanelContextMenu(event,'${panel.id}')" tabindex="0" role="button" aria-label="Panel: ${escHtml(panel.selectedInstUrl || 'empty')}">
                         ${dragHandle}
+                        <button class="btn btn-xs cmd-history-btn" id="histBack-${panel.id}" onclick="event.stopPropagation();panelHistoryBack('${panel.id}')" title="Back in command history" style="display:none;">&#x25C0;</button>
+                        <button class="btn btn-xs cmd-history-btn" id="histFwd-${panel.id}" onclick="event.stopPropagation();panelHistoryForward('${panel.id}')" title="Forward in command history" style="display:none;">&#x25B6;</button>
                         <div class="cmd-info" id="cmdInfo-${panel.id}">
                             <span class="cmd-fullname" id="cmdName-${panel.id}"></span>
                             <span class="cmd-args" id="cmdArgs-${panel.id}"></span>

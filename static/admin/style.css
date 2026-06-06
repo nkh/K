@@ -147,6 +147,8 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
     font-size: 0.7rem; font-family: inherit;
 }
 .layout-preset-menu button:hover { background: var(--accent); color: var(--bg-primary); }
+.cmd-history-btn { padding: 0 0.25rem; font-size: 0.6rem; opacity: 0.7; }
+.cmd-history-btn:hover { opacity: 1; }
 .panel-header { display: flex; align-items: center; gap: 0.2rem; padding: 0.15rem 0.3rem; background: var(--bg-tertiary); flex-shrink: 0; overflow: hidden; white-space: nowrap; cursor: pointer; }
 .panel-header .title { font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; }
 .panel-header .cmd-info { display: flex; flex-direction: column; min-width: 0; flex-shrink: 1; gap: 0; overflow: hidden; }
