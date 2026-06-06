@@ -405,6 +405,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .bottombar .cmd-label .cmd-label-sep { color: var(--text-muted); margin: 0 0.3rem; }
 .bottombar .cmd-label .cmd-label-args { color: var(--text-secondary); }
 .bottombar .cmd-label .cmd-label-pid { color: var(--text-muted); }
+.bottombar .cmd-label .cmd-label-runtime { color: var(--green); }
 .bottombar .spacer { flex: 1; }
 .bottombar.hidden { display: none; }
 

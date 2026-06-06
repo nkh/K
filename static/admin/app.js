@@ -1681,6 +1681,7 @@ function updateBottomBarLabel(cmd) {
     const fullName = cmd.name || cmd.id;
     const argsStr = (cmd.args || []).join(' ');
     const pid = cmd.pid || '';
+    const runtime = cmd.runtime_secs != null ? formatRuntime(cmd.runtime_secs) : '';
     let html = `<span class="cmd-label-name">${escHtml(fullName)}</span>`;
     if (argsStr) {
         html += `<span class="cmd-label-sep">|</span><span class="cmd-label-args">${escHtml(argsStr)}</span>`;
@@ -1688,8 +1689,11 @@ function updateBottomBarLabel(cmd) {
     if (pid) {
         html += `<span class="cmd-label-sep">|</span><span class="cmd-label-pid">${escHtml(pid)}</span>`;
     }
+    if (runtime) {
+        html += `<span class="cmd-label-sep">|</span><span class="cmd-label-runtime">${escHtml(runtime)}</span>`;
+    }
     el.innerHTML = html;
-    el.title = argsStr ? `${fullName} ${argsStr} (${pid})` : `${fullName} (${pid})`;
+    el.title = argsStr ? `${fullName} ${argsStr} (${pid})${runtime ? ' [' + runtime + ']' : ''}` : `${fullName} (${pid})${runtime ? ' [' + runtime + ']' : ''}`;
 }
 
 // ─── Spawn: auto-fit terminal size ───
@@ -3098,6 +3102,7 @@ function updateVttyMetadataFromHttp(data, panel, panelObj, sbOffset) {
     const sbIndicator = document.getElementById('scrollbackIndicator');
     if (sbIndicator) {
         sbIndicator.style.display = sbOffset > 0 ? '' : 'none';
+        sbIndicator.textContent = sbOffset > 0 ? 'SCROLLBACK -' + sbOffset + ' rows' : 'SCROLLBACK';
     }
 }
 
@@ -5295,7 +5300,7 @@ document.addEventListener('wheel', (e) => {
             loadVttyHttp(panelObj.selectedInstUrl, state.selectedCmdId);
             // Show scrollback indicator
             const sbIndicator = document.getElementById('scrollbackIndicator');
-            if (sbIndicator) sbIndicator.style.display = '';
+            if (sbIndicator) { sbIndicator.style.display = ''; sbIndicator.textContent = 'SCROLLBACK -' + panelObj.scrollbackOffset + ' rows'; }
             const btn = panelEl.querySelector('.scroll-bottom-btn');
             if (btn) btn.classList.add('visible');
         }
@@ -5352,7 +5357,10 @@ document.addEventListener('wheel', (e) => {
         const btn = panelEl.querySelector('.scroll-bottom-btn');
         if (btn) btn.classList.toggle('visible', p.scrollbackOffset > 0);
         const sbIndicator = document.getElementById('scrollbackIndicator');
-        if (sbIndicator) sbIndicator.style.display = p.scrollbackOffset > 0 ? '' : 'none';
+        if (sbIndicator) {
+            sbIndicator.style.display = p.scrollbackOffset > 0 ? '' : 'none';
+            if (p.scrollbackOffset > 0) sbIndicator.textContent = 'SCROLLBACK -' + p.scrollbackOffset + ' rows';
+        }
     });
 }, { passive: false });
 
