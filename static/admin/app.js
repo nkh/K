@@ -1045,15 +1045,32 @@ async function loadSnapshot() {
             state._pendingVttyDirty = false;
             state.bufferView = 'current';
 
+            // CRITICAL: set per-panel selection fields on the panel OBJECT
+            // (state.panels[]), not the DOM element. Without these,
+            // startPanelUpdateMode() returns immediately (selectedCmdId === null)
+            // and the per-panel WebSocket is never connected, causing all
+            // subsequent VTTY updates to be silently dropped.
+            // NOTE: getSelectedPanel() syncs global state FROM the panel object,
+            // so we must set the panel object FIRST, then call getSelectedPanel()
+            // to propagate the values to the global state.
+            const panelObj = state.panels.find(p => p.id === (state._focusedPanelId || state.panels[0].id));
+            if (panelObj) {
+                panelObj.selectedInstUrl = primaryInst.url;
+                panelObj.selectedCmdId = firstCmd.id;
+            }
+            // Now get the DOM element — getSelectedPanel() will correctly
+            // sync global state from the now-populated panel object.
+            const panel = getSelectedPanel();
+
             // Store generation for subsequent incremental updates
             if (vtty.generation !== undefined) {
                 state._lastGeneration[firstCmd.id] = vtty.generation;
             }
 
             // Write VTTY HTML directly into <pre> — NO second HTTP request
-            const panel = getSelectedPanel();
-            if (panel) {
-                const vttyEl = panel.querySelector('.vtty-container');
+            const panelEl = document.getElementById(panelObj ? panelObj.id : (state._focusedPanelId || (state.panels[0] || {}).id));
+            if (panelEl) {
+                const vttyEl = panelEl.querySelector('.vtty-container');
                 const pre = vttyEl ? vttyEl.querySelector('pre') : null;
                 if (pre) {
                     pre.innerHTML = vtty.html;
@@ -1062,8 +1079,7 @@ async function loadSnapshot() {
                         buildCellGrid(firstCmd.id, pre, vtty.dimensions.rows, vtty.dimensions.cols);
                     }
                     // Update metadata (cursor, dimensions, alt screen, etc.)
-                    updateVttyMetadataFromHttp(vtty, panel,
-                        state.panels.find(p => p.id === panel.id), 0);
+                    updateVttyMetadataFromHttp(vtty, panelEl, panelObj, 0);
                 }
             }
 
@@ -1263,7 +1279,7 @@ function _buildSidebar() {
                         <button class="btn btn-xs btn-danger cmd-kill-btn" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}"${killDisabled}>&#x2715;</button>
                         ${keepBtnHtml}
                         <button class="pin-btn${isPinned ? ' active' : ''}" onclick="event.stopPropagation();togglePinCmd('${escHtml(cmdName)}')" title="${isPinned ? 'Unpin' : 'Pin'}">${isPinned ? '◉' : '◎'}</button>
-                        <span class="cmd-grab-handle" onmousedown="_cmdReorderMouseDown(event,'${escHtml(inst.url)}','${escHtml(cmd.id)}')" title="Drag to reorder">&#x2807;</span>
+                        <span class="cmd-grab-handle" onmousedown="_cmdReorderMouseDown(event,'${escHtml(inst.url)}','${escHtml(cmd.id)}','${escHtml(cmdName)}')" title="Drag to reorder / drop on pane to open">&#x2807;</span>
                         <span class="name">${escHtml(cmdName)}</span>
                         ${certBadge}
                         ${exitBadge}
@@ -6334,9 +6350,9 @@ function getOrderedCmds(instUrl, items) {
 }
 
 // mousedown-based reorder state
-let _reorderState = null; // { instUrl, cmdId, srcEl, startY, startRect, placeholder, offsetY }
+let _reorderState = null; // { instUrl, cmdId, cmdName, srcEl, startY, startRect, placeholder, offsetY, overPane }
 
-function _cmdReorderMouseDown(e, instUrl, cmdId) {
+function _cmdReorderMouseDown(e, instUrl, cmdId, cmdName) {
     // Only left-click
     if (e.button !== 0) return;
     e.preventDefault(); // prevent text selection
@@ -6349,11 +6365,13 @@ function _cmdReorderMouseDown(e, instUrl, cmdId) {
     _reorderState = {
         instUrl,
         cmdId,
+        cmdName: cmdName || cmdId,
         srcEl,
         startY: e.clientY,
         startRect: rect,
         placeholder: null,
         offsetY: e.clientY - rect.top,
+        overPane: false,
     };
 
     document.addEventListener('mousemove', _cmdReorderMouseMove);
@@ -6390,16 +6408,37 @@ function _cmdReorderMouseMove(e) {
     // Move the floating element
     _reorderState.srcEl.style.top = (e.clientY - _reorderState.offsetY) + 'px';
 
-    // Clear old indicators
-    container.querySelectorAll('.cmd-item').forEach(el => {
-        el.classList.remove('cmd-drag-over-top', 'cmd-drag-over-bottom');
-    });
-
     // Find the element we're hovering over (use elementFromPoint to see what's
-    // under the floating ghost, then find the nearest cmd-item)
+    // under the floating ghost).
     _reorderState.srcEl.style.display = 'none';
     const underEl = document.elementFromPoint(e.clientX, e.clientY);
     _reorderState.srcEl.style.display = '';
+
+    // Check if hovering over the pane area (for drop-to-open feature)
+    const overPanel = underEl ? underEl.closest('.panel') : null;
+    const wasOverPane = _reorderState.overPane;
+    _reorderState.overPane = !!overPanel;
+
+    // Toggle pane drop indicator
+    if (_reorderState.overPane && !wasOverPane) {
+        // Entered pane area — show drop indicator
+        document.querySelectorAll('.panel').forEach(p => p.classList.add('drag-over-left'));
+        // Clear sidebar indicators
+        container.querySelectorAll('.cmd-item').forEach(el => {
+            el.classList.remove('cmd-drag-over-top', 'cmd-drag-over-bottom');
+        });
+    } else if (!_reorderState.overPane && wasOverPane) {
+        // Left pane area — remove drop indicator
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('drag-over-left'));
+    }
+
+    // If over a panel, don't try to reorder in sidebar
+    if (_reorderState.overPane) return;
+
+    // Clear old sidebar indicators
+    container.querySelectorAll('.cmd-item').forEach(el => {
+        el.classList.remove('cmd-drag-over-top', 'cmd-drag-over-bottom');
+    });
 
     const target = underEl ? underEl.closest('.cmd-item') : null;
     if (!target || target === _reorderState.srcEl) return;
@@ -6426,8 +6465,9 @@ function _cmdReorderMouseUp(e) {
     const container = document.getElementById('commandList');
     const placeholder = _reorderState.placeholder;
     const srcEl = _reorderState.srcEl;
+    const droppedOnPane = _reorderState.overPane;
 
-    // Clean up visual state
+    // Clean up visual state on the source element
     if (srcEl) {
         srcEl.style.position = '';
         srcEl.style.left = '';
@@ -6438,13 +6478,24 @@ function _cmdReorderMouseUp(e) {
         srcEl.style.pointerEvents = '';
         srcEl.classList.remove('cmd-dragging');
     }
+    // Clean up sidebar indicators
     if (container) {
         container.querySelectorAll('.cmd-item').forEach(el => {
             el.classList.remove('cmd-drag-over-top', 'cmd-drag-over-bottom');
         });
     }
+    // Clean up pane drop indicators
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('drag-over-left'));
 
-    // If placeholder was created, perform the reorder
+    // ── Drop on pane area: create new panel with this command ──
+    if (droppedOnPane && placeholder) {
+        placeholder.remove();
+        _openCommandInNewPane(_reorderState.instUrl, _reorderState.cmdId, _reorderState.cmdName);
+        _reorderState = null;
+        return;
+    }
+
+    // ── Drop on sidebar: perform reorder ──
     if (placeholder && container) {
         const targetItem = placeholder.nextElementSibling;
         const targetCmdId = targetItem && targetItem.classList.contains('cmd-item')
@@ -6474,6 +6525,30 @@ function _cmdReorderMouseUp(e) {
     }
 
     _reorderState = null;
+}
+
+// ─── Open command in a new pane (used by grab-handle drop-to-pane) ───
+function _openCommandInNewPane(instUrl, cmdId, cmdName) {
+    // Create a new empty panel
+    const newPanel = addPanelDirect();
+    if (!newPanel) return;
+    // Focus it and assign the command
+    focusPanel(newPanel.id);
+    newPanel.selectedInstUrl = instUrl;
+    newPanel.selectedCmdId = cmdId;
+    // Sync global state
+    state.selectedInstUrl = instUrl;
+    state.selectedCmdId = cmdId;
+    state._pendingVttyData = null;
+    state._pendingVttyDirty = false;
+    state.bufferView = 'current';
+    _restoreCachedDom(cmdId);
+    updatePanelCommandInfo();
+    updateTerminalDisconnectedOverlay();
+    updateSidebarSelection();
+    // Fetch VTTY content and start push/poll
+    loadVttyHttpForPanel(newPanel.id, instUrl, cmdId);
+    startPanelUpdateMode(newPanel.id);
 }
 
 // ─── Global Search ───

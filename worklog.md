@@ -357,3 +357,36 @@ Stage Summary:
 - Template env var bug fixed (array → object conversion)
 - 2 new tests, 70 regression tests pass with vrw feature
 - Commit 905df19 pushed to web_ui_fix branch
+---
+Task ID: 10
+Agent: main
+Task: Fix max-fit redraw, compact resource badges, rewrite sidebar drag-and-drop
+
+Work Log:
+- Max Fit redraw: _resizePanelTo() cleared _cellGrids but not _lastGeneration. After
+  a resize, if the server returned the same generation (content unchanged, only dimensions
+  changed), updateVttyDisplayForPanel() skipped the DOM update at the generation check.
+  Fix: also delete state._lastGeneration[cmdId] in _resizePanelTo().
+- Resource badge flipping: Two code paths built detail text differently — renderCmdList()
+  showed "12.5%|34.2MB|pid 1234" while updateSidebarResourceText() showed
+  "CPU 12.5%|MEM 34.2MB|pid 1234". Every loadCommands() rebuild used format #1, then
+  resource polling overwrote with format #2, causing visible flipping. Fix: unified both
+  paths to same format "12.5% · 34.2M", removed PID, removed labels, G for >1024MB.
+- Sidebar drag-and-drop broken: Nested draggable="true" on both .cmd-item (for drag-to-panel)
+  and .cmd-grab-handle (for reorder) is a well-known HTML5 DnD anti-pattern. Browsers
+  inconsistently handle which element becomes the drag source, causing stopPropagation()
+  to fail silently. Fix: rewrote reorder using mousedown/mousemove/mouseup custom drag.
+  Grab handle onmousedown starts tracking, mousemove creates fixed-position ghost +
+  accent-colored placeholder that moves between items, mouseup commits to localStorage.
+  Removed initCmdReorderDropTargets() (no longer needed). .cmd-item keeps draggable for
+  drag-to-panel (untouched).
+- CSS updates: .cmd-reorder-placeholder, improved grab handle visibility, .cmd-dragging
+  gets box-shadow for floating ghost effect.
+- Build: 70 tests pass, clippy clean
+- Pushed as commit a4ed62c to origin/web_ui_fix
+
+Stage Summary:
+- 2 files changed: app.js (+150/-79), style.css (+9)
+- Max Fit now redraws terminal after resize (generation cache cleared)
+- Resource badges compact and stable: "3m12s · 12.5% · 34.2M" (no PID, no labels)
+- Sidebar reorder uses mousedown-based custom drag instead of broken nested HTML5 DnD

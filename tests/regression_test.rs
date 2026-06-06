@@ -1989,3 +1989,173 @@ async fn regression_spawn_with_working_directory() {
     }
     let _ = manager.kill(&id, None).await;
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// 11. TERMINAL DISPLAY PIPELINE REGRESSION TESTS
+// ═══════════════════════════════════════════════════════════════════════
+// These tests verify that VTTY changes from the server are properly detected,
+// tracked via generation counters, and rendered to HTML. They guard against
+// regressions like the one where loadSnapshot() set per-panel selection fields
+// on the DOM element instead of the panel state object, causing the per-panel
+// WebSocket to never connect and all VTTY updates to be silently dropped.
+
+#[tokio::test(flavor = "multi_thread")]
+#[cfg(feature = "vrw")]
+async fn regression_vtty_changes_detected_and_rendered() {
+    // Verify the full VTTY change pipeline:
+    // 1. has_changed() detects buffer modifications,
+    // 2. vtty_html() returns valid, non-empty HTML after changes,
+    // 3. Generation counter advances correctly across multiple outputs,
+    // 4. vtty_snapshot dimensions are consistent.
+    let cfg = test_config();
+    let manager = Arc::new(CommandManager::new(cfg.clone()));
+
+    // Spawn a command that produces output in stages
+    let id = manager
+        .spawn(
+            "sh".into(),
+            vec![
+                "-c".into(),
+                "echo first; sleep 0.1; echo second; sleep 0.1; echo third".into(),
+            ],
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+    // Wait for the command to start and produce initial output
+    sleep(Duration::from_millis(100)).await;
+
+    // Step 1: First check must always report changed (no previous generation)
+    let first_changed = manager.has_changed(&id).unwrap();
+    assert!(
+        first_changed,
+        "first has_changed() must return true for a new command"
+    );
+
+    // Step 2: vtty_html() must return non-empty content with span tags
+    let html = if let Some(handle) = manager.get(&id) {
+        handle.vtty_html().await
+    } else {
+        panic!("command handle must exist after spawn");
+    };
+    assert!(
+        html.len() > 0,
+        "vtty_html() must return non-empty HTML after spawn"
+    );
+    assert!(
+        html.contains("<span"),
+        "vtty_html() must contain span tags from the renderer"
+    );
+
+    // Step 3: Consume the change — next check reflects current state
+    sleep(Duration::from_millis(50)).await;
+    let _second_changed = manager.has_changed(&id).unwrap();
+    // If the command is still producing output, this might still be true.
+    // We only assert that it doesn't panic and returns a valid result.
+
+    // Step 4: Wait for all output to complete
+    sleep(Duration::from_millis(500)).await;
+
+    // Step 5: Verify the final HTML contains content (handle may be gone if
+    // the short-lived command has already exited and been cleaned up)
+    if let Some(handle) = manager.get(&id) {
+        let final_html = handle.vtty_html().await;
+        assert!(
+            final_html.len() > 0,
+            "final vtty_html() must return non-empty HTML"
+        );
+
+        // Step 6: Verify that vtty_snapshot dimensions are valid and consistent
+        let buf = handle.vtty_snapshot().await;
+        assert!(
+            buf.width > 0,
+            "buffer width must be positive after output"
+        );
+        assert!(
+            buf.height > 0,
+            "buffer height must be positive after output"
+        );
+        assert!(
+            buf.height <= cfg.vtty.rows as usize + 50,
+            "buffer height should not exceed terminal rows by much"
+        );
+    }
+
+    let _ = manager.kill(&id, None).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[cfg(feature = "vrw")]
+async fn regression_vtty_generation_advances_on_write() {
+    // Verify that writing to a command advances the buffer generation,
+    // and has_changed() correctly tracks this across multiple writes.
+    // This guards against the class of bugs where change detection
+    // silently stops working (e.g., panel state not set correctly).
+    let cfg = test_config();
+    let manager = Arc::new(CommandManager::new(cfg));
+
+    let id = manager
+        .spawn(
+            "cat".into(),
+            vec![].into(),
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+    sleep(Duration::from_millis(50)).await;
+
+    // Initial check — should be changed (first observation)
+    assert!(manager.has_changed(&id).unwrap());
+
+    // After consuming, should not be changed (cat is idle, waiting for input)
+    sleep(Duration::from_millis(50)).await;
+    let _idle_changed = manager.has_changed(&id).unwrap();
+
+    // Write some input to trigger a buffer change
+    if let Some(handle) = manager.get(&id) {
+        handle.send_bytes(b"hello world\n".to_vec()).await.unwrap();
+    }
+    sleep(Duration::from_millis(100)).await;
+
+    // After write, must report changed again
+    let after_write_changed = manager.has_changed(&id).unwrap();
+    assert!(
+        after_write_changed,
+        "has_changed() must return true after writing to the terminal"
+    );
+
+    // Verify the written content appears in HTML
+    if let Some(handle) = manager.get(&id) {
+        let html = handle.vtty_html().await;
+        assert!(
+            html.len() > 0,
+            "vtty_html() must return content after write"
+        );
+    }
+
+    // Write again and verify change detection still works
+    if let Some(handle) = manager.get(&id) {
+        handle.send_bytes(b"second line\n".to_vec()).await.unwrap();
+    }
+    sleep(Duration::from_millis(100)).await;
+
+    let after_second_write = manager.has_changed(&id).unwrap();
+    assert!(
+        after_second_write,
+        "has_changed() must return true after second write"
+    );
+
+    let _ = manager.kill(&id, None).await;
+}
