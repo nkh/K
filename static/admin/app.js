@@ -6375,8 +6375,8 @@ function initPanelDropTargets() {
                         updatePanelCommandInfo();
                         updateTerminalDisconnectedOverlay();
                         updateSidebarSelection();
-                        loadVttyHttp(data.instUrl, data.cmdId);
-                        startUpdateMode();
+                        loadVttyHttpForPanel(panelObj.id, data.instUrl, data.cmdId);
+                        startPanelUpdateMode(panelObj.id);
                     }
                 }
             } catch (err) { /* ignore invalid drops */ }
