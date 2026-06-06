@@ -595,3 +595,14 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 
 /* Auto-restart indicator */
 .auto-restart-indicator { position: fixed; bottom: 2.5rem; left: 50%; transform: translateX(-50%); z-index: 100; background: var(--bg-secondary); border: 1px solid var(--accent); color: var(--accent); font-size: 0.7rem; padding: 0.2rem 0.8rem; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); pointer-events: none; }
+
+/* Mobile tabbed panel layout */
+.mobile-tab-bar { display: flex; background: var(--bg-tertiary); border-bottom: 1px solid var(--border); overflow-x: auto; flex-shrink: 0; scrollbar-width: none; }
+.mobile-tab-bar::-webkit-scrollbar { display: none; }
+.mobile-tab { display: flex; align-items: center; gap: 0.2rem; padding: 0.3rem 0.6rem; font-size: 0.65rem; color: var(--text-muted); cursor: pointer; white-space: nowrap; border-bottom: 2px solid transparent; flex-shrink: 0; transition: color 0.15s, border-color 0.15s; }
+.mobile-tab:hover { color: var(--text-primary); background: var(--bg-secondary); }
+.mobile-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.mobile-tab-label { overflow: hidden; text-overflow: ellipsis; max-width: 120px; font-family: var(--font-mono); }
+.mobile-tab-close { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.6rem; padding: 0 0.1rem; line-height: 1; opacity: 0; transition: opacity 0.15s; }
+.mobile-tab:hover .mobile-tab-close { opacity: 1; }
+.mobile-tab-close:hover { color: var(--text-danger, #e55); }

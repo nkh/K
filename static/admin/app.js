@@ -330,6 +330,9 @@ function releaseCurrentFocusTrap() {
     // Peers registered via WS push will be handled in the WS onmessage handler.
     fetchPeers();
 
+    // Check if mobile layout should be active
+    state._mobileTabbedLayout = window.innerWidth <= 768;
+
     // Auto-collapse sidebar on small screens
     if (window.innerWidth <= 768) {
         const sidebar = document.getElementById('sidebar');
@@ -347,6 +350,14 @@ function releaseCurrentFocusTrap() {
             if (window.innerWidth <= 768) {
                 sidebar.classList.add('collapsed');
                 sidebar.style.width = '';
+            }
+            // Toggle mobile tabbed layout
+            const wasMobile = state._mobileTabbedLayout;
+            state._mobileTabbedLayout = window.innerWidth <= 768;
+            if (wasMobile !== state._mobileTabbedLayout) {
+                // Structural change — force full panel re-render
+                _lastRenderedPanelCount = -1;
+                renderPanels();
             }
             // Auto-fit terminal to panel size
             autoFitActiveTerminal();
@@ -4030,6 +4041,12 @@ function applyLayoutPreset(preset) {
 /// Apply the panel layout class to the container element.
 /// Grid presets use CSS grid (class-based), row/column use flexbox (inline style).
 function _applyPanelLayoutClass(container) {
+    // On mobile tabbed layout, force column direction and clear grid
+    if (state._mobileTabbedLayout) {
+        container.classList.remove('grid-2x2', 'grid-1-2', 'grid-2-1');
+        container.style.flexDirection = 'column';
+        return;
+    }
     // Remove all layout classes first
     container.classList.remove('grid-2x2', 'grid-1-2', 'grid-2-1');
     if (state.panelLayout.startsWith('grid-')) {
@@ -4110,13 +4127,41 @@ function renderPanels() {
         // Show the shared toolbar when panels are visible
         const toolbar = document.getElementById('sharedToolbar');
         if (toolbar) toolbar.style.display = '';
+
+        // On mobile: render tab bar for multiple panels
+        const isMobile = state._mobileTabbedLayout;
+        if (isMobile && state.panels.length > 1) {
+            html += '<div class="mobile-tab-bar" id="mobileTabBar">';
+            for (const panel of state.panels) {
+                const isFocused = panel.id === state._focusedPanelId;
+                // Find command name for tab label
+                let tabLabel = 'Panel';
+                if (panel.customTitle) {
+                    tabLabel = panel.customTitle;
+                } else if (panel.selectedCmdId) {
+                    for (const inst of state.connections) {
+                        if (inst._commands) {
+                            const cmd = inst._commands.find(c => c.id === panel.selectedCmdId);
+                            if (cmd) { tabLabel = cmd.name || cmd.id; break; }
+                        }
+                    }
+                }
+                html += `<div class="mobile-tab${isFocused ? ' active' : ''}" data-panel="${panel.id}" onclick="focusPanel('${panel.id}')" title="${escHtml(tabLabel)}">
+                    <span class="mobile-tab-label">${escHtml(tabLabel)}</span>
+                    ${state.panels.length > 1 ? `<button class="mobile-tab-close" onclick="event.stopPropagation();removePanel('${panel.id}')" title="Remove">&#x2715;</button>` : ''}
+                </div>`;
+            }
+            html += '</div>';
+        }
+
         for (const panel of state.panels) {
             const conn = panel.selectedInstUrl ? state.connections.find(i => i.url === panel.selectedInstUrl) : null;
             const resizeHandle = hasMultiplePanels ? `<div class="panel-resize-handle" data-panel="${panel.id}"></div>` : '';
             const dragHandle = hasMultiplePanels ? `<span class="drag-handle" draggable="true" ondragstart="onPanelDragStart(event,'${panel.id}')" title="Drag to reorder">&#x2840;</span>` : '';
             const isFocused = panel.id === state._focusedPanelId;
+            const mobileHidden = isMobile && hasMultiplePanels && !isFocused ? ' style="display:none;"' : '';
             html += `
-                <div class="panel${isFocused ? ' focused' : ''}" id="${panel.id}" draggable="${hasMultiplePanels}" ondragover="onPanelDragOver(event)" ondrop="onPanelDrop(event,'${panel.id}')" ondragend="onPanelDragEnd(event)" ondragleave="onPanelDragLeave(event)" style="flex: 1 1 0;">
+                <div class="panel${isFocused ? ' focused' : ''}" id="${panel.id}" draggable="${hasMultiplePanels}" ondragover="onPanelDragOver(event)" ondrop="onPanelDrop(event,'${panel.id}')" ondragend="onPanelDragEnd(event)" ondragleave="onPanelDragLeave(event)"${mobileHidden}>
                     <div class="panel-header" data-panel-id="${panel.id}" oncontextmenu="showPanelContextMenu(event,'${panel.id}')" tabindex="0" role="button" aria-label="Panel: ${escHtml(panel.selectedInstUrl || 'empty')}">
                         ${dragHandle}
                         <button class="btn btn-xs cmd-history-btn" id="histBack-${panel.id}" onclick="event.stopPropagation();panelHistoryBack('${panel.id}')" title="Back in command history" style="display:none;">&#x25C0;</button>
@@ -4226,6 +4271,16 @@ function focusPanel(panelId) {
     document.querySelectorAll('.panel').forEach(el => {
         el.classList.toggle('focused', el.id === panelId);
     });
+    // Mobile: show focused panel, hide others
+    if (state._mobileTabbedLayout) {
+        document.querySelectorAll('.panel').forEach(el => {
+            el.style.display = el.id === panelId ? '' : 'none';
+        });
+        // Update mobile tab bar
+        document.querySelectorAll('.mobile-tab').forEach(el => {
+            el.classList.toggle('active', el.getAttribute('data-panel') === panelId);
+        });
+    }
     // Sync global state from the focused panel
     const panelObj = state.panels.find(p => p.id === panelId);
     if (panelObj) {
