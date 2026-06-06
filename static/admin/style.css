@@ -606,3 +606,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .mobile-tab-close { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.6rem; padding: 0 0.1rem; line-height: 1; opacity: 0; transition: opacity 0.15s; }
 .mobile-tab:hover .mobile-tab-close { opacity: 1; }
 .mobile-tab-close:hover { color: var(--text-danger, #e55); }
+
+/* Minimized panels strip */
+.minimized-panels { display: flex; align-items: center; gap: 0.2rem; padding: 0.15rem 0.3rem; background: var(--bg-tertiary); border-top: 1px solid var(--border); flex-shrink: 0; overflow-x: auto; scrollbar-width: none; }
+.minimized-panels::-webkit-scrollbar { display: none; }
+.minimized-panel-item { display: flex; align-items: center; gap: 0.25rem; padding: 0.2rem 0.5rem; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 3px; cursor: pointer; white-space: nowrap; font-size: 0.6rem; flex-shrink: 0; transition: background 0.15s, border-color 0.15s; }
+.minimized-panel-item:hover { background: var(--bg-primary); border-color: var(--accent); }
+.minimized-icon { color: var(--accent); font-size: 0.5rem; }
+.minimized-label { font-family: var(--font-mono); color: var(--text-muted); max-width: 100px; overflow: hidden; text-overflow: ellipsis; }
+.minimized-panel-item:hover .minimized-label { color: var(--text-primary); }

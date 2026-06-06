@@ -3768,7 +3768,7 @@ function addPanelDirect() {
     const theme = (savedTheme === 'light' || savedTheme === 'dark') ? savedTheme : '';
     // Per-panel custom title (user-editable via double-click or context menu)
     const customTitle = localStorage.getItem('vrw_panel_title_' + id) || '';
-    const panel = { id, scrollbackOffset: 0, mouseTracking: false, mouseSgr: false, focused: false, fontSize, selectionMode, theme, customTitle, selectedCmdId: null, selectedInstUrl: null,
+    const panel = { id, scrollbackOffset: 0, mouseTracking: false, mouseSgr: false, focused: false, fontSize, selectionMode, theme, customTitle, minimized: false, selectedCmdId: null, selectedInstUrl: null,
         // Per-panel WebSocket connection
         ws: null, wsCmdId: null, wsInstUrl: null, wsReconnectCount: 0, wsReconnectTimer: null, wsPingInterval: null, wsPingSendTime: 0, wsLatency: 0,
         // Per-panel poll timer
@@ -3978,6 +3978,49 @@ function removePanel(id) {
     updateSharedToolbar();
 }
 
+// ─── Panel Minimize / Restore ───
+function toggleMinimizePanel(panelId) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj) return;
+    panelObj.minimized = !panelObj.minimized;
+    if (panelObj.minimized) {
+        // If we're minimizing the focused panel, focus another
+        if (state._focusedPanelId === panelId) {
+            const visible = state.panels.find(p => !p.minimized && p.id !== panelId);
+            if (visible) focusPanel(visible.id);
+        }
+    } else {
+        // Restoring — focus it
+        focusPanel(panelId);
+    }
+    renderPanels();
+}
+
+function _renderMinimizedPanels() {
+    const minimized = state.panels.filter(p => p.minimized);
+    if (minimized.length === 0) return '';
+    let html = '<div class="minimized-panels" id="minimizedPanels">';
+    for (const panel of minimized) {
+        let label = 'Panel';
+        if (panel.customTitle) {
+            label = panel.customTitle;
+        } else if (panel.selectedCmdId) {
+            for (const inst of state.connections) {
+                if (inst._commands) {
+                    const cmd = inst._commands.find(c => c.id === panel.selectedCmdId);
+                    if (cmd) { label = cmd.name || cmd.id; break; }
+                }
+            }
+        }
+        html += `<div class="minimized-panel-item" onclick="toggleMinimizePanel('${panel.id}')" title="Click to restore: ${escHtml(label)}">
+            <span class="minimized-icon">&#x25A0;</span>
+            <span class="minimized-label">${escHtml(label)}</span>
+        </div>`;
+    }
+    html += '</div>';
+    return html;
+}
+
 /// Toggle panel layout between horizontal (row) and vertical (column).
 function togglePanelLayout() {
     state.panelLayout = state.panelLayout === 'row' ? 'column' : 'row';
@@ -4061,7 +4104,8 @@ function _applyPanelLayoutClass(container) {
 
 function renderPanels() {
     const container = document.getElementById('view-vtty');
-    const hasMultiplePanels = state.panels.length > 1;
+    const visiblePanels = state.panels.filter(p => !p.minimized);
+    const hasMultiplePanels = visiblePanels.length > 1;
 
     // Fast path: if panel count and IDs haven't changed, skip the full rebuild.
     // This prevents erasing terminal content when only command selection changes.
@@ -4107,7 +4151,7 @@ function renderPanels() {
         }
     }
 
-    if (state.panels.length === 1 && !hasAnyCommands && !state.selectedCmdId && !state.serverReachable) {
+    if (visiblePanels.length === 0 && !hasAnyCommands && !state.selectedCmdId && !state.serverReachable) {
         _showingWelcome = true;
         // Hide shared toolbar in welcome state
         const toolbar = document.getElementById('sharedToolbar');
@@ -4155,6 +4199,8 @@ function renderPanels() {
         }
 
         for (const panel of state.panels) {
+            // Skip minimized panels — they're shown in the minimized strip
+            if (panel.minimized) continue;
             const conn = panel.selectedInstUrl ? state.connections.find(i => i.url === panel.selectedInstUrl) : null;
             const resizeHandle = hasMultiplePanels ? `<div class="panel-resize-handle" data-panel="${panel.id}"></div>` : '';
             const dragHandle = hasMultiplePanels ? `<span class="drag-handle" draggable="true" ondragstart="onPanelDragStart(event,'${panel.id}')" title="Drag to reorder">&#x2840;</span>` : '';
@@ -4191,6 +4237,8 @@ function renderPanels() {
                 ${resizeHandle}`;
         }
     }
+    // Append minimized panels strip
+    html += _renderMinimizedPanels();
     container.innerHTML = html;
 
     // ── Restore cached terminal DOM after rebuild ──
@@ -6025,6 +6073,12 @@ function showPanelContextMenu(e, panelId) {
 
     // Rename Panel
     menu.appendChild(_createCtxMenuItem('Rename Panel', () => startRenamePanel(panelId), false));
+
+    // Minimize / Restore Panel
+    if (state.panels.length > 1) {
+        const isMin = panel.minimized;
+        menu.appendChild(_createCtxMenuItem(isMin ? 'Restore Panel' : 'Minimize Panel', () => toggleMinimizePanel(panelId), false));
+    }
 
     // Separator
     const sep = document.createElement('div');
