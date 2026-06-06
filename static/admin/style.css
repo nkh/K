@@ -639,3 +639,14 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .cm-frozen { color: var(--yellow); }
 .cmd-manager-footer { margin-top: 0.4rem; font-size: 0.6rem; color: var(--text-muted); text-align: center; }
 .cmd-manager-empty { padding: 1rem; text-align: center; color: var(--text-muted); }
+
+/* Onboarding Tutorial Overlay */
+.onboarding-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 10000; pointer-events: none; }
+.onboarding-backdrop { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); pointer-events: auto; }
+.onboarding-spotlight { position: absolute; border: 2px solid var(--accent); border-radius: 4px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.55); z-index: 1; pointer-events: none; }
+.onboarding-tooltip { position: absolute; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 6px; padding: 0.8rem 1rem; max-width: 320px; z-index: 2; box-shadow: 0 4px 20px rgba(0,0,0,0.4); pointer-events: auto; }
+.onboarding-step { font-size: 0.6rem; color: var(--text-muted); margin-bottom: 0.3rem; }
+.onboarding-title { font-size: 0.85rem; font-weight: bold; color: var(--text-primary); margin-bottom: 0.4rem; }
+.onboarding-body { font-size: 0.7rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 0.6rem; }
+.onboarding-actions { display: flex; align-items: center; gap: 0.3rem; }
+.onboarding-spacer { flex: 1; }

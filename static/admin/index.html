@@ -358,6 +358,25 @@
     </div>
 </div>
 
+<!-- Onboarding Tutorial Overlay -->
+<div class="onboarding-overlay" id="onboardingOverlay" style="display:none;">
+    <div class="onboarding-backdrop" id="onboardingBackdrop"></div>
+    <div class="onboarding-spotlight" id="onboardingSpotlight"></div>
+    <div class="onboarding-tooltip" id="onboardingTooltip">
+        <div class="onboarding-step" id="onboardingStep">1/8</div>
+        <div class="onboarding-title" id="onboardingTitle"></div>
+        <div class="onboarding-body" id="onboardingBody"></div>
+        <div class="onboarding-actions">
+            <label style="font-size:0.6rem;color:var(--text-muted);display:flex;align-items:center;gap:0.2rem;cursor:pointer;">
+                <input type="checkbox" id="onboardingDontShow"> Don't show again
+            </label>
+            <span class="onboarding-spacer"></span>
+            <button class="btn btn-xs" onclick="closeOnboarding()">Skip</button>
+            <button class="btn btn-xs btn-primary" id="onboardingNextBtn" onclick="nextOnboardingStep()">Next</button>
+        </div>
+    </div>
+</div>
+
 <script src="app.js"></script>
 </body>
 </html>
