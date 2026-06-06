@@ -462,8 +462,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .pin-btn:hover { color:var(--yellow); }
 .pin-btn.active { color:var(--yellow); }
 /* Command grab handle for reordering */
-.cmd-grab-handle { cursor:grab;color:var(--text-muted);font-size:0.7rem;padding:0 0.15rem;user-select:none;flex-shrink:0;opacity:0.4;transition:opacity 0.15s; }
-.cmd-grab-handle:hover { opacity:1;color:var(--text-secondary); }
+.cmd-grab-handle { cursor:grab;color:var(--text-secondary);font-size:0.7rem;padding:0 0.15rem;user-select:none;flex-shrink:0;opacity:0.5;transition:opacity 0.15s; }
+.cmd-grab-handle:hover { opacity:1;color:var(--text-primary); }
 .cmd-grab-handle:active { cursor:grabbing; }
 /* Keep/Unkeep button (star toggle for retain_on_exit) */
 .keep-btn { background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:0.7rem;padding:0 0.15rem;line-height:1;flex-shrink:0; }
@@ -473,8 +473,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .pinned-section-header { font-size:0.6rem;color:var(--text-muted);padding:0.3rem 0.4rem 0.1rem;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid var(--border);margin-bottom:0.15rem;display:flex;align-items:center;justify-content:space-between; }
 .server-close-btn { background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:0.6rem;padding:0 0.15rem;line-height:1;flex-shrink:0; }
 .server-close-btn:hover { color:var(--red); }
-/* Command reorder drag indicators */
-.cmd-item.cmd-dragging { opacity:0.5; }
+/* Command reorder drag indicators (mousedown-based custom drag) */
+.cmd-item.cmd-dragging { opacity:0.85; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+.cmd-reorder-placeholder { border-top:2px solid var(--accent); margin:0; pointer-events:none; height:0; }
 .cmd-item.cmd-drag-over-top { border-top:2px solid var(--accent); }
 .cmd-item.cmd-drag-over-bottom { border-bottom:2px solid var(--accent); }
 

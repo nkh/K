@@ -1247,12 +1247,15 @@ function _buildSidebar() {
                     ? `<span class="keep-badge" title="Terminal kept after exit">&#9733;</span>`
                     : '');
             // Build detail parts as separate spans for the detail row
+            // Compact: runtime · cpu% · memM  (no PID, no labels)
             const detailParts = [];
             if (runtimeStr) detailParts.push(escHtml(runtimeStr));
             if (frozenBadge) detailParts.push(escHtml(frozenBadge.trim()));
             if (res && res.cpu_percent != null) detailParts.push(res.cpu_percent.toFixed(1) + '%');
-            if (res && res.memory_mb != null) detailParts.push(res.memory_mb.toFixed(1) + 'MB');
-            if (cmd.pid) detailParts.push('pid ' + cmd.pid);
+            if (res && res.memory_mb != null) {
+                const mb = res.memory_mb;
+                detailParts.push(mb >= 1024 ? (mb / 1024).toFixed(1) + 'G' : mb.toFixed(1) + 'M');
+            }
             const unreachableTitle = instUnreachable ? ` [disconnected]` : '';
             out += `
                 <div class="cmd-item${selected}${frozenClass}${exitedClass}${instUnreachable ? ' unreachable' : ''}" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" data-cmd-retained="${retainOnExit}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" draggable="true" ondragstart="onCmdDragStart(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" onclick="selectCommand(this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true',this.dataset.cmdRetained==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)}${unreachableTitle}" style="${dimStyle}">
@@ -1260,12 +1263,12 @@ function _buildSidebar() {
                         <button class="btn btn-xs btn-danger cmd-kill-btn" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}"${killDisabled}>&#x2715;</button>
                         ${keepBtnHtml}
                         <button class="pin-btn${isPinned ? ' active' : ''}" onclick="event.stopPropagation();togglePinCmd('${escHtml(cmdName)}')" title="${isPinned ? 'Unpin' : 'Pin'}">${isPinned ? '◉' : '◎'}</button>
-                        <span class="cmd-grab-handle" draggable="true" ondragstart="event.stopPropagation();onCmdReorderDragStart(event,'${escHtml(inst.url)}','${escHtml(cmd.id)}')" ondragend="onCmdReorderDragEnd(event)" title="Drag to reorder">&#x2807;</span>
+                        <span class="cmd-grab-handle" onmousedown="_cmdReorderMouseDown(event,'${escHtml(inst.url)}','${escHtml(cmd.id)}')" title="Drag to reorder">&#x2807;</span>
                         <span class="name">${escHtml(cmdName)}</span>
                         ${certBadge}
                         ${exitBadge}
                     </div>
-                    ${detailParts.length > 0 ? `<div class="cmd-detail-row">${detailParts.join('<span class="detail-sep">|</span>')}</div>` : ''}
+                    ${detailParts.length > 0 ? `<div class="cmd-detail-row">${detailParts.join(' · ')}</div>` : ''}
                 </div>`;
         }
         return out;
@@ -1275,7 +1278,6 @@ function _buildSidebar() {
     container.innerHTML = html || '<div style="padding:1rem;color:var(--text-muted);text-align:center;">No running commands</div>';
     updateInstanceDropdown();
     updateCmdToolbarVisibility();
-    initCmdReorderDropTargets();
     initPanelDropTargets();
 
     if (state._pendingSelectId) {
@@ -5706,8 +5708,11 @@ async function _resizePanelTo(panelId, rows, cols) {
             body: JSON.stringify({ rows, cols }),
         });
         if (res.ok) {
-            // Invalidate cell grid so next VTTY update rebuilds at new dimensions.
+            // Invalidate cell grid and generation cache so next VTTY update
+            // rebuilds at new dimensions even if the content generation is
+            // unchanged (resize changes dimensions but not buffer content).
             delete state._cellGrids[cmdId];
+            delete state._lastGeneration[cmdId];
             // Request a fresh VTTY render to reflect the new terminal size.
             loadVttyHttpForPanel(panelId, panelObj.selectedInstUrl, cmdId);
         }
@@ -5803,12 +5808,16 @@ function updateSidebarResourceText() {
                    : Math.floor(cmd.runtime_secs / 3600) + 'h ' + Math.floor((cmd.runtime_secs % 3600) / 60) + 'm')
                 : '';
             const frozenBadge = isFrozen ? 'PAUSED' : '';
+            // Compact: runtime · cpu% · memM  (no PID, no labels — must match
+            // the format used in renderCmdList to avoid visual flipping)
             const detailParts = [];
             if (runtimeStr) detailParts.push(runtimeStr);
             if (frozenBadge) detailParts.push(frozenBadge);
-            if (res && res.cpu_percent != null) detailParts.push('CPU ' + res.cpu_percent.toFixed(1) + '%');
-            if (res && res.memory_mb != null) detailParts.push('MEM ' + res.memory_mb.toFixed(1) + 'MB');
-            if (cmd.pid) detailParts.push('pid ' + cmd.pid);
+            if (res && res.cpu_percent != null) detailParts.push(res.cpu_percent.toFixed(1) + '%');
+            if (res && res.memory_mb != null) {
+                const mb = res.memory_mb;
+                detailParts.push(mb >= 1024 ? (mb / 1024).toFixed(1) + 'G' : mb.toFixed(1) + 'M');
+            }
 
             // Find or create the detail row
             let detailRow = item.querySelector('.cmd-detail-row');
@@ -5820,7 +5829,7 @@ function updateSidebarResourceText() {
                     detailRow.className = 'cmd-detail-row';
                     item.appendChild(detailRow);
                 }
-                detailRow.innerHTML = detailParts.join('<span class="detail-sep">|</span>');
+                detailRow.innerHTML = detailParts.join(' · ');
             }
         }
     }
@@ -6292,8 +6301,11 @@ function initPanelDropTargets() {
     });
 }
 
-// ─── Drag-and-Drop: Sidebar Command Reorder ───
+// ─── Drag-and-Drop: Sidebar Command Reorder (mousedown-based) ───
 // Commands can be reordered within the sidebar by dragging the grab handle.
+// Uses mousedown/mousemove/mouseup instead of nested HTML5 DnD because nested
+// draggable elements (cmd-item draggable for panel-drop + grab-handle draggable
+// for reorder) is a well-known anti-pattern that fails silently in most browsers.
 // The custom order is persisted in localStorage as 'vrw_cmd_order'.
 // { instUrl: [cmdId1, cmdId2, ...] }
 function getCmdOrder() {
@@ -6321,89 +6333,147 @@ function getOrderedCmds(instUrl, items) {
     return [...ordered.map(x => x.item), ...remaining];
 }
 
-let _cmdReorderDragSrc = null;
+// mousedown-based reorder state
+let _reorderState = null; // { instUrl, cmdId, srcEl, startY, startRect, placeholder, offsetY }
 
-function onCmdReorderDragStart(e, instUrl, cmdId) {
-    _cmdReorderDragSrc = { instUrl, cmdId };
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', cmdId);
-    e.dataTransfer.setData('application/x-cmd-reorder', JSON.stringify({ instUrl, cmdId }));
-    e.target.closest('.cmd-item').classList.add('cmd-dragging');
+function _cmdReorderMouseDown(e, instUrl, cmdId) {
+    // Only left-click
+    if (e.button !== 0) return;
+    e.preventDefault(); // prevent text selection
+    e.stopPropagation(); // don't trigger cmd-item onclick
+
+    const srcEl = e.target.closest('.cmd-item');
+    if (!srcEl) return;
+
+    const rect = srcEl.getBoundingClientRect();
+    _reorderState = {
+        instUrl,
+        cmdId,
+        srcEl,
+        startY: e.clientY,
+        startRect: rect,
+        placeholder: null,
+        offsetY: e.clientY - rect.top,
+    };
+
+    document.addEventListener('mousemove', _cmdReorderMouseMove);
+    document.addEventListener('mouseup', _cmdReorderMouseUp);
 }
 
-function onCmdReorderDragEnd(e) {
-    document.querySelectorAll('.cmd-item').forEach(el => {
-        el.classList.remove('cmd-dragging', 'cmd-drag-over-top', 'cmd-drag-over-bottom');
-    });
-    _cmdReorderDragSrc = null;
-}
+function _cmdReorderMouseMove(e) {
+    if (!_reorderState) return;
 
-function initCmdReorderDropTargets() {
+    const dy = e.clientY - _reorderState.startY;
+    // Minimum 4px before starting visual drag
+    if (Math.abs(dy) < 4 && !_reorderState.placeholder) return;
+
     const container = document.getElementById('commandList');
     if (!container) return;
 
-    container.addEventListener('dragover', (e) => {
-        // Only handle reorder drags, not cmd-to-panel drags
-        if (!e.dataTransfer.types.includes('application/x-cmd-reorder')) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        const target = e.target.closest('.cmd-item');
-        // Remove previous indicators
+    // First move: create placeholder and make source float
+    if (!_reorderState.placeholder) {
+        const srcEl = _reorderState.srcEl;
+        _reorderState.placeholder = document.createElement('div');
+        _reorderState.placeholder.style.cssText = 'border-top:2px solid var(--accent);margin:0;pointer-events:none;';
+        _reorderState.placeholder.className = 'cmd-reorder-placeholder';
+        srcEl.parentNode.insertBefore(_reorderState.placeholder, srcEl);
+        srcEl.style.position = 'fixed';
+        srcEl.style.left = _reorderState.startRect.left + 'px';
+        srcEl.style.top = (e.clientY - _reorderState.offsetY) + 'px';
+        srcEl.style.width = _reorderState.startRect.width + 'px';
+        srcEl.style.zIndex = '1000';
+        srcEl.style.opacity = '0.85';
+        srcEl.style.pointerEvents = 'none';
+        srcEl.classList.add('cmd-dragging');
+    }
+
+    // Move the floating element
+    _reorderState.srcEl.style.top = (e.clientY - _reorderState.offsetY) + 'px';
+
+    // Clear old indicators
+    container.querySelectorAll('.cmd-item').forEach(el => {
+        el.classList.remove('cmd-drag-over-top', 'cmd-drag-over-bottom');
+    });
+
+    // Find the element we're hovering over (use elementFromPoint to see what's
+    // under the floating ghost, then find the nearest cmd-item)
+    _reorderState.srcEl.style.display = 'none';
+    const underEl = document.elementFromPoint(e.clientX, e.clientY);
+    _reorderState.srcEl.style.display = '';
+
+    const target = underEl ? underEl.closest('.cmd-item') : null;
+    if (!target || target === _reorderState.srcEl) return;
+
+    // Move placeholder to indicate drop position
+    const rect = target.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    if (e.clientY < midY) {
+        target.classList.add('cmd-drag-over-top');
+        target.parentNode.insertBefore(_reorderState.placeholder, target);
+    } else {
+        target.classList.add('cmd-drag-over-bottom');
+        const next = target.nextElementSibling;
+        target.parentNode.insertBefore(_reorderState.placeholder, next);
+    }
+}
+
+function _cmdReorderMouseUp(e) {
+    document.removeEventListener('mousemove', _cmdReorderMouseMove);
+    document.removeEventListener('mouseup', _cmdReorderMouseUp);
+
+    if (!_reorderState) return;
+
+    const container = document.getElementById('commandList');
+    const placeholder = _reorderState.placeholder;
+    const srcEl = _reorderState.srcEl;
+
+    // Clean up visual state
+    if (srcEl) {
+        srcEl.style.position = '';
+        srcEl.style.left = '';
+        srcEl.style.top = '';
+        srcEl.style.width = '';
+        srcEl.style.zIndex = '';
+        srcEl.style.opacity = '';
+        srcEl.style.pointerEvents = '';
+        srcEl.classList.remove('cmd-dragging');
+    }
+    if (container) {
         container.querySelectorAll('.cmd-item').forEach(el => {
             el.classList.remove('cmd-drag-over-top', 'cmd-drag-over-bottom');
         });
-        if (!target) return;
-        if (_cmdReorderDragSrc && target.dataset.cmdId === _cmdReorderDragSrc.cmdId) return;
-        const rect = target.getBoundingClientRect();
-        const midY = rect.top + rect.height / 2;
-        if (e.clientY < midY) {
-            target.classList.add('cmd-drag-over-top');
-        } else {
-            target.classList.add('cmd-drag-over-bottom');
-        }
-    });
+    }
 
-    container.addEventListener('dragleave', (e) => {
-        const target = e.target.closest('.cmd-item');
-        if (target && !container.contains(e.relatedTarget)) {
-            target.classList.remove('cmd-drag-over-top', 'cmd-drag-over-bottom');
-        }
-    });
+    // If placeholder was created, perform the reorder
+    if (placeholder && container) {
+        const targetItem = placeholder.nextElementSibling;
+        const targetCmdId = targetItem && targetItem.classList.contains('cmd-item')
+            ? targetItem.dataset.cmdId
+            : null;
 
-    container.addEventListener('drop', (e) => {
-        container.querySelectorAll('.cmd-item').forEach(el => {
-            el.classList.remove('cmd-dragging', 'cmd-drag-over-top', 'cmd-drag-over-bottom');
-        });
-        if (!e.dataTransfer.types.includes('application/x-cmd-reorder')) return;
-        e.preventDefault();
-        try {
-            const data = JSON.parse(e.dataTransfer.getData('application/x-cmd-reorder'));
-            const target = e.target.closest('.cmd-item');
-            if (!data || !target || target.dataset.cmdId === data.cmdId) return;
-            if (data.instUrl !== target.dataset.instUrl) return; // can only reorder within same server
+        // Remove placeholder before doing DOM operations
+        placeholder.remove();
 
+        // Only reorder if we moved to a different position
+        if (targetCmdId && targetCmdId !== _reorderState.cmdId) {
             const order = getCmdOrder();
-            let instOrder = order[data.instUrl] || [];
+            let instOrder = order[_reorderState.instUrl] || [];
             // Remove source from current position
-            instOrder = instOrder.filter(id => id !== data.cmdId);
+            instOrder = instOrder.filter(id => id !== _reorderState.cmdId);
             // Find target position
-            const targetIdx = instOrder.indexOf(target.dataset.cmdId);
-            const rect = target.getBoundingClientRect();
-            const midY = rect.top + rect.height / 2;
-            if (e.clientY < midY) {
-                // Insert before target
-                instOrder.splice(targetIdx >= 0 ? targetIdx : instOrder.length, 0, data.cmdId);
-            } else {
-                // Insert after target
-                instOrder.splice(targetIdx >= 0 ? targetIdx + 1 : instOrder.length, 0, data.cmdId);
-            }
-            order[data.instUrl] = instOrder;
+            const targetIdx = instOrder.indexOf(targetCmdId);
+            instOrder.splice(targetIdx >= 0 ? targetIdx : instOrder.length, 0, _reorderState.cmdId);
+            order[_reorderState.instUrl] = instOrder;
             setCmdOrder(order);
             _lastCommandState = ''; // force sidebar rebuild with new order
             loadCommands();
-        } catch (err) { /* ignore */ }
-        _cmdReorderDragSrc = null;
-    });
+        } else if (placeholder.parentNode) {
+            // Moved but dropped back to same spot — just remove placeholder
+            placeholder.remove();
+        }
+    }
+
+    _reorderState = null;
 }
 
 // ─── Global Search ───
