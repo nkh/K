@@ -5579,15 +5579,47 @@ function notifyCommandEnded(cmdId) {
 }
 
 // Also detect command exits via polling — notify when a previously-alive command exits
+// Auto-restart pinned commands on exit (with debounce to avoid restart loops)
+const _autoRestartDebounce = new Map(); // cmdName → timeout ID
+
 function checkForExitedCommands() {
+    const pinnedNames = getPinnedNames();
     for (const inst of state.connections) {
         if (!inst._commands) continue;
         for (const cmd of inst._commands) {
             if (cmd.alive === false && !_notifiedExits.has(cmd.id)) {
                 notifyCommandEnded(cmd.id);
+                // Auto-restart pinned commands
+                const cmdName = cmd.name || cmd.id;
+                if (pinnedNames.includes(cmdName)) {
+                    _autoRestartCommand(inst.url, cmd, cmdName);
+                }
             }
         }
     }
+}
+
+function _autoRestartCommand(instUrl, cmd, cmdName) {
+    // Debounce: don't restart the same command name more than once every 10s
+    // to avoid rapid restart loops on commands that exit immediately
+    if (_autoRestartDebounce.has(cmdName)) return;
+    _autoRestartDebounce.set(cmdName, setTimeout(() => {
+        _autoRestartDebounce.delete(cmdName);
+    }, 10000));
+
+    restartCommandById(instUrl, cmd.id).then(() => {
+        // Show a brief indicator that auto-restart happened
+        const indicator = document.getElementById('autoRestartIndicator');
+        if (indicator) {
+            indicator.textContent = 'Auto-restarted: ' + cmdName;
+            indicator.style.display = 'flex';
+            setTimeout(() => { indicator.style.display = 'none'; }, 3000);
+        }
+    }).catch(() => {
+        // Restart failed — remove debounce lock so it can retry
+        const t = _autoRestartDebounce.get(cmdName);
+        if (t) { clearTimeout(t); _autoRestartDebounce.delete(cmdName); }
+    });
 }
 
 // ─── Panel Resize via Drag ───
