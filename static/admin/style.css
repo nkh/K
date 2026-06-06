@@ -107,6 +107,46 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .panel-container[style*="column"] .panel { border-right: none; border-bottom: 1px solid var(--border); }
 .panel-container[style*="column"] .panel:last-child { border-bottom: none; }
 .panel-container[style*="column"] .panel.focused { box-shadow: inset 2px 0 0 0 var(--accent); }
+
+/* Grid layout presets — CSS grid replaces flexbox */
+.panel-container.grid-2x2 { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.panel-container.grid-2x2 .panel { border-right: none; border-bottom: none; min-width: 0; min-height: 0; }
+.panel-container.grid-2x2 .panel:nth-child(odd) { border-right: 1px solid var(--border); }
+.panel-container.grid-2x2 .panel:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
+.panel-container.grid-2x2 .panel.focused { box-shadow: inset 0 2px 0 0 var(--accent); }
+
+.panel-container.grid-1-2 { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.panel-container.grid-1-2 .panel { border-right: none; border-bottom: none; min-width: 0; min-height: 0; }
+.panel-container.grid-1-2 .panel:first-child { grid-column: 1 / -1; border-bottom: 1px solid var(--border); }
+.panel-container.grid-1-2 .panel:nth-child(3) { border-right: 1px solid var(--border); }
+.panel-container.grid-1-2 .panel.focused { box-shadow: inset 0 2px 0 0 var(--accent); }
+
+.panel-container.grid-2-1 { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.panel-container.grid-2-1 .panel { border-right: none; border-bottom: none; min-width: 0; min-height: 0; }
+.panel-container.grid-2-1 .panel:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
+.panel-container.grid-2-1 .panel:nth-child(odd) { border-right: 1px solid var(--border); }
+.panel-container.grid-2-1 .panel:last-child { grid-column: 1 / -1; }
+.panel-container.grid-2-1 .panel.focused { box-shadow: inset 0 2px 0 0 var(--accent); }
+
+/* In grid mode, hide resize handles (grid cells manage their own sizing) */
+.panel-container.grid-2x2 .panel-resize-handle,
+.panel-container.grid-1-2 .panel-resize-handle,
+.panel-container.grid-2-1 .panel-resize-handle { display: none; }
+
+/* Layout preset dropdown */
+.layout-preset-dropdown { position: relative; display: inline-block; }
+.layout-preset-menu {
+    position: absolute; top: 100%; left: 0; z-index: 50;
+    background: var(--bg-secondary); border: 1px solid var(--border);
+    border-radius: 4px; padding: 0.2rem 0; min-width: 140px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.layout-preset-menu button {
+    display: block; width: 100%; text-align: left; padding: 0.3rem 0.5rem;
+    border: none; background: none; color: var(--text-primary); cursor: pointer;
+    font-size: 0.7rem; font-family: inherit;
+}
+.layout-preset-menu button:hover { background: var(--accent); color: var(--bg-primary); }
 .panel-header { display: flex; align-items: center; gap: 0.2rem; padding: 0.15rem 0.3rem; background: var(--bg-tertiary); flex-shrink: 0; overflow: hidden; white-space: nowrap; cursor: pointer; }
 .panel-header .title { font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; }
 .panel-header .cmd-info { display: flex; flex-direction: column; min-width: 0; flex-shrink: 1; gap: 0; overflow: hidden; }

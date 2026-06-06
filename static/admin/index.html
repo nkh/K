@@ -197,6 +197,16 @@
                     </div>
                     <span class="shared-toolbar-sep"></span>
                     <button class="btn btn-xs" onclick="togglePanelLayout()" id="stLayoutBtn" title="Toggle horizontal/vertical layout" style="display:none;">&#x21C4;</button>
+                    <div class="layout-preset-dropdown" id="stLayoutPresetBtn" style="display:none;" title="Panel layout presets">
+                        <button class="btn btn-xs" onclick="toggleLayoutPresetMenu(event)">&#x25A3;</button>
+                        <div class="layout-preset-menu" id="layoutPresetMenu" style="display:none;">
+                            <button onclick="applyLayoutPreset('row')">Side by Side</button>
+                            <button onclick="applyLayoutPreset('column')">Stacked</button>
+                            <button onclick="applyLayoutPreset('grid-2x2')">2×2 Grid</button>
+                            <button onclick="applyLayoutPreset('grid-1-2')">1 Top + 2 Bottom</button>
+                            <button onclick="applyLayoutPreset('grid-2-1')">2 Top + 1 Bottom</button>
+                        </div>
+                    </div>
                     <button class="btn btn-xs" onclick="toggleSelectionMode(getActivePanelId())" id="stSelectBtn" title="Toggle text selection mode">Select</button>
                     <button class="btn btn-xs" onclick="copyTerminalSelection(getActivePanelId())" title="Copy selected text to clipboard">Copy</button>
                     <button class="btn btn-xs" onclick="exportTerminal(getActivePanelId())" title="Export terminal as text">&#x2913;</button>

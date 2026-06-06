@@ -3738,6 +3738,13 @@ function removePanel(id) {
     if (state.panels.length <= 1) {
         state.panelLayout = 'row';
         localStorage.setItem('vrw_panel_layout', state.panelLayout);
+    } else if (state.panelLayout.startsWith('grid-')) {
+        // Grid preset panel count no longer valid — fall back to row
+        const needed = { 'grid-2x2': 4, 'grid-1-2': 3, 'grid-2-1': 3 };
+        if (state.panels.length !== needed[state.panelLayout]) {
+            state.panelLayout = 'row';
+            localStorage.setItem('vrw_panel_layout', state.panelLayout);
+        }
     }
     // If the removed panel was focused, focus the first remaining
     if (state._focusedPanelId === id) {
@@ -3755,6 +3762,74 @@ function togglePanelLayout() {
     renderPanels();
 }
 
+/// Toggle the layout preset dropdown menu.
+function toggleLayoutPresetMenu(event) {
+    event.stopPropagation();
+    const menu = document.getElementById('layoutPresetMenu');
+    const isVisible = menu.style.display !== 'none';
+    menu.style.display = isVisible ? 'none' : 'block';
+    // Close on outside click
+    if (!isVisible) {
+        setTimeout(() => {
+            document.addEventListener('click', function closeMenu(e) {
+                document.removeEventListener('click', closeMenu);
+                menu.style.display = 'none';
+            }, { once: true });
+        }, 0);
+    }
+}
+
+/// Apply a layout preset. Creates/removes panels as needed and sets the layout.
+function applyLayoutPreset(preset) {
+    // Close the menu
+    const menu = document.getElementById('layoutPresetMenu');
+    if (menu) menu.style.display = 'none';
+
+    // Determine how many panels this preset needs
+    const panelCounts = { 'row': null, 'column': null, 'grid-2x2': 4, 'grid-1-2': 3, 'grid-2-1': 3 };
+    const neededCount = panelCounts[preset];
+    const isGrid = preset.startsWith('grid-');
+
+    // Adjust panel count for grid presets
+    if (neededCount !== null) {
+        // Remove excess panels (from the end)
+        while (state.panels.length > neededCount) {
+            const removed = state.panels.pop();
+            disconnectPanelWs(removed.id);
+            stopPanelPoll(removed.id);
+        }
+        // Add missing panels
+        while (state.panels.length < neededCount) {
+            addPanelDirect();
+        }
+    }
+
+    state.panelLayout = preset;
+    localStorage.setItem('vrw_panel_layout', state.panelLayout);
+    renderPanels();
+
+    // Focus the first panel if none is focused
+    if (state.panels.length > 0) {
+        const focused = state.panels.find(p => p.id === state._focusedPanelId);
+        if (!focused) focusPanel(state.panels[0].id);
+    }
+}
+
+/// Apply the panel layout class to the container element.
+/// Grid presets use CSS grid (class-based), row/column use flexbox (inline style).
+function _applyPanelLayoutClass(container) {
+    // Remove all layout classes first
+    container.classList.remove('grid-2x2', 'grid-1-2', 'grid-2-1');
+    if (state.panelLayout.startsWith('grid-')) {
+        // CSS grid mode: add the grid class, clear flexDirection
+        container.classList.add(state.panelLayout);
+        container.style.flexDirection = '';
+    } else {
+        // Flexbox mode: set direction, no grid class
+        container.style.flexDirection = state.panelLayout;
+    }
+}
+
 function renderPanels() {
     const container = document.getElementById('view-vtty');
     const hasMultiplePanels = state.panels.length > 1;
@@ -3766,7 +3841,7 @@ function renderPanels() {
     const structuralUnchanged = _lastRenderedPanelCount === state.panels.length && _lastRenderedPanelIds === currentPanelIds;
     if (structuralUnchanged && _lastShowingWelcome === _showingWelcome) {
         // Just update layout direction and multi-panel visibility
-        container.style.flexDirection = state.panelLayout;
+        _applyPanelLayoutClass(container);
         _updatePanelMultiUI();
         return;
     }
@@ -3792,7 +3867,7 @@ function renderPanels() {
     let html = '';
 
     // Apply panel layout direction
-    container.style.flexDirection = state.panelLayout;
+    _applyPanelLayoutClass(container);
 
     // Check if there are any commands at all for the welcome state
     let hasAnyCommands = false;
@@ -3920,10 +3995,13 @@ function renderPanels() {
 /// without rebuilding the entire panel DOM.
 function _updatePanelMultiUI() {
     const hasMultiplePanels = state.panels.length > 1;
+    const isGrid = state.panelLayout.startsWith('grid-');
     document.querySelectorAll('.drag-handle').forEach(el => el.style.display = hasMultiplePanels ? '' : 'none');
-    document.querySelectorAll('.panel-resize-handle').forEach(el => el.style.display = hasMultiplePanels ? '' : 'none');
+    document.querySelectorAll('.panel-resize-handle').forEach(el => el.style.display = (hasMultiplePanels && !isGrid) ? '' : 'none');
     const layoutBtn = document.getElementById('stLayoutBtn');
     if (layoutBtn) layoutBtn.style.display = hasMultiplePanels ? '' : 'none';
+    const presetBtn = document.getElementById('stLayoutPresetBtn');
+    if (presetBtn) presetBtn.style.display = hasMultiplePanels ? '' : 'none';
 }
 
 /// Focus a panel: update focused state, visual indicator, and shared toolbar.
