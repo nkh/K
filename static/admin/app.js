@@ -3262,6 +3262,127 @@ function _resetSpawnCompletion() {
     _spawnCompletionBase = '';
 }
 
+// ─── Spawn form command history ───
+const SPAWN_HISTORY_KEY = 'vrw_spawn_history';
+const SPAWN_HISTORY_MAX = 20;
+
+function _loadSpawnHistory() {
+    try { return JSON.parse(localStorage.getItem(SPAWN_HISTORY_KEY)) || []; } catch { return []; }
+}
+
+function _saveSpawnHistory(history) {
+    localStorage.setItem(SPAWN_HISTORY_KEY, JSON.stringify(history.slice(0, SPAWN_HISTORY_MAX)));
+}
+
+function _addSpawnHistoryEntry(cmd, args, dir, envText) {
+    let history = _loadSpawnHistory();
+    // Remove duplicate (same cmd+args+dir)
+    history = history.filter(h => !(h.cmd === cmd && h.args === args && h.dir === dir));
+    history.unshift({ cmd, args, dir, env: envText, ts: Date.now() });
+    _saveSpawnHistory(history);
+}
+
+function _renderSpawnHistoryDropdown(inputEl) {
+    // Remove existing dropdown
+    _removeSpawnHistoryDropdown();
+    const history = _loadSpawnHistory();
+    if (history.length === 0) return;
+
+    const dd = document.createElement('div');
+    dd.id = 'spawnHistoryDropdown';
+    dd.className = 'spawn-history-dropdown';
+
+    history.forEach((entry, idx) => {
+        const item = document.createElement('div');
+        item.className = 'spawn-history-item';
+        item.setAttribute('data-idx', idx);
+        const displayArgs = entry.args ? ' ' + entry.args : '';
+        const displayDir = entry.dir ? ' \n  dir: ' + entry.dir : '';
+        item.innerHTML = '<span class="spawn-history-cmd">' + escHtml(entry.cmd) + escHtml(displayArgs) + '</span>';
+        item.title = entry.cmd + (entry.args ? ' ' + entry.args : '') + (entry.dir ? '\nDir: ' + entry.dir : '');
+        item.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            _applySpawnHistoryEntry(entry);
+            _removeSpawnHistoryDropdown();
+        });
+        dd.appendChild(item);
+    });
+
+    // Clear history button
+    const clearBtn = document.createElement('div');
+    clearBtn.className = 'spawn-history-clear';
+    clearBtn.textContent = 'Clear History';
+    clearBtn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        localStorage.removeItem(SPAWN_HISTORY_KEY);
+        _removeSpawnHistoryDropdown();
+    });
+    dd.appendChild(clearBtn);
+
+    // Position below the input
+    const rect = inputEl.getBoundingClientRect();
+    dd.style.top = (rect.bottom + 2) + 'px';
+    dd.style.left = rect.left + 'px';
+    dd.style.minWidth = rect.width + 'px';
+
+    document.body.appendChild(dd);
+}
+
+function _removeSpawnHistoryDropdown() {
+    const dd = document.getElementById('spawnHistoryDropdown');
+    if (dd) dd.remove();
+}
+
+function _applySpawnHistoryEntry(entry) {
+    document.getElementById('spawnCmd').value = entry.cmd || '';
+    document.getElementById('spawnArgs').value = entry.args || '';
+    document.getElementById('spawnDir').value = entry.dir || '';
+    document.getElementById('spawnEnv').value = entry.env || '';
+}
+
+function _onSpawnCmdFocus() {
+    const inputEl = document.getElementById('spawnCmd');
+    if (inputEl && !inputEl.value.trim()) {
+        _renderSpawnHistoryDropdown(inputEl);
+    }
+}
+
+function _onSpawnCmdKeydownForHistory(e) {
+    const dd = document.getElementById('spawnHistoryDropdown');
+    if (!dd) return;
+    const items = dd.querySelectorAll('.spawn-history-item');
+    if (items.length === 0) return;
+
+    const current = dd.querySelector('.spawn-history-item.selected');
+    let idx = current ? parseInt(current.getAttribute('data-idx')) : -1;
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (current) current.classList.remove('selected');
+        idx = (idx + 1) % items.length;
+        items[idx].classList.add('selected');
+        items[idx].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (current) current.classList.remove('selected');
+        idx = idx <= 0 ? items.length - 1 : idx - 1;
+        items[idx].classList.add('selected');
+        items[idx].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter' && current) {
+        e.preventDefault();
+        const entryIdx = parseInt(current.getAttribute('data-idx'));
+        const history = _loadSpawnHistory();
+        if (history[entryIdx]) {
+            _applySpawnHistoryEntry(history[entryIdx]);
+            _removeSpawnHistoryDropdown();
+        }
+    } else if (e.key === 'Escape') {
+        _removeSpawnHistoryDropdown();
+    }
+}
+
 async function spawnCommand() {
     const cmd = document.getElementById('spawnCmd').value.trim();
     if (!cmd) return;
@@ -3308,6 +3429,8 @@ async function spawnCommand() {
         });
         const json = await res.json();
         if (json.status === 'ok') {
+            // Save to spawn history before clearing form
+            _addSpawnHistoryEntry(cmd, argsStr, dir || '', document.getElementById('spawnEnv').value);
             document.getElementById('spawnCmd').value = '';
             document.getElementById('spawnArgs').value = '';
             document.getElementById('spawnEnv').value = '';
