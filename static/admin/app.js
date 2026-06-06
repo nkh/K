@@ -1576,9 +1576,12 @@ function updatePanelCommandInfo() {
     const nameEl = panel.querySelector('.cmd-fullname');
     const argsEl = panel.querySelector('.cmd-args');
     if (nameEl && cmd) {
+        const panelObj = state.panels.find(p => p.id === panel.id);
         const fullName = cmd.name || cmd.id;
-        nameEl.textContent = fullName;
-        nameEl.title = fullName;
+        // Show custom title if set, otherwise command name
+        const displayTitle = (panelObj && panelObj.customTitle) ? panelObj.customTitle : fullName;
+        nameEl.textContent = displayTitle;
+        nameEl.title = fullName + (panelObj && panelObj.customTitle ? ' (title: ' + panelObj.customTitle + ')' : '');
         if (argsEl) {
             const argsStr = (cmd.args || []).join(' ');
             argsEl.textContent = argsStr;
@@ -1639,7 +1642,9 @@ function updatePanelCommandInfo() {
         // Update shared toolbar
         updateSharedToolbar();
     } else if (nameEl) {
-        nameEl.textContent = '';
+        // No command selected — show custom title if set
+        const panelObj = state.panels.find(p => p.id === panel.id);
+        nameEl.textContent = (panelObj && panelObj.customTitle) ? panelObj.customTitle : '';
         if (argsEl) argsEl.textContent = '';
         updateBottomBarLabel(null);
         // Hide pause button
@@ -3627,7 +3632,9 @@ function addPanelDirect() {
     const savedTheme = localStorage.getItem('vrw_panel_theme_' + id);
     // Per-panel theme: 'light', 'dark', or '' (inherit global). Default is inherit.
     const theme = (savedTheme === 'light' || savedTheme === 'dark') ? savedTheme : '';
-    const panel = { id, scrollbackOffset: 0, mouseTracking: false, mouseSgr: false, focused: false, fontSize, selectionMode, theme, selectedCmdId: null, selectedInstUrl: null,
+    // Per-panel custom title (user-editable via double-click or context menu)
+    const customTitle = localStorage.getItem('vrw_panel_title_' + id) || '';
+    const panel = { id, scrollbackOffset: 0, mouseTracking: false, mouseSgr: false, focused: false, fontSize, selectionMode, theme, customTitle, selectedCmdId: null, selectedInstUrl: null,
         // Per-panel WebSocket connection
         ws: null, wsCmdId: null, wsInstUrl: null, wsReconnectCount: 0, wsReconnectTimer: null, wsPingInterval: null, wsPingSendTime: 0, wsLatency: 0,
         // Per-panel poll timer
@@ -3992,7 +3999,7 @@ function renderPanels() {
                         <button class="btn btn-xs cmd-history-btn" id="histBack-${panel.id}" onclick="event.stopPropagation();panelHistoryBack('${panel.id}')" title="Back in command history" style="display:none;">&#x25C0;</button>
                         <button class="btn btn-xs cmd-history-btn" id="histFwd-${panel.id}" onclick="event.stopPropagation();panelHistoryForward('${panel.id}')" title="Forward in command history" style="display:none;">&#x25B6;</button>
                         <div class="cmd-info" id="cmdInfo-${panel.id}">
-                            <span class="cmd-fullname" id="cmdName-${panel.id}"></span>
+                            <span class="cmd-fullname" id="cmdName-${panel.id}" ondblclick="event.stopPropagation();startRenamePanel('${panel.id}')" title="Double-click to rename"></span>
                             <span class="cmd-args" id="cmdArgs-${panel.id}"></span>
                         </div>
                         <span class="panel-header-label" id="panelLabel-${panel.id}"></span>
@@ -5800,6 +5807,9 @@ function showPanelContextMenu(e, panelId) {
         menu.appendChild(_createCtxMenuItem('Kill', () => killCommand(instUrl, cmdId), true));
     }
 
+    // Rename Panel
+    menu.appendChild(_createCtxMenuItem('Rename Panel', () => startRenamePanel(panelId), false));
+
     // Separator
     const sep = document.createElement('div');
     sep.className = 'ctx-menu-sep';
@@ -5813,6 +5823,92 @@ function showPanelContextMenu(e, panelId) {
 
     _positionCtxMenu(menu, e.clientX, e.clientY);
     _setupCtxMenuListeners(menu);
+}
+
+// ─── Panel title rename ───
+function startRenamePanel(panelId) {
+    const panelEl = document.getElementById(panelId);
+    if (!panelEl) return;
+    const nameEl = panelEl.querySelector('.cmd-fullname');
+    if (!nameEl) return;
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj) return;
+
+    // Already editing? Do nothing
+    if (nameEl.getAttribute('contenteditable') === 'true') return;
+
+    const currentText = panelObj.customTitle || '';
+    nameEl.contentEditable = 'true';
+    nameEl.classList.add('panel-title-editing');
+    nameEl.textContent = currentText;
+    nameEl.focus();
+
+    // Select all text for easy replacement
+    const range = document.createRange();
+    range.selectNodeContents(nameEl);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+
+    // Store original value for cancel
+    nameEl._renameOriginal = currentText;
+
+    const onKeydown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            finishRenamePanel(panelId, true);
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            finishRenamePanel(panelId, false);
+        }
+    };
+    const onBlur = () => {
+        // Small delay to allow click on context menu "Rename" to not conflict
+        setTimeout(() => finishRenamePanel(panelId, true), 100);
+    };
+    const onInput = () => {
+        // Prevent multi-line
+        nameEl.textContent = nameEl.textContent.replace(/\n/g, ' ');
+    };
+
+    nameEl.addEventListener('keydown', onKeydown);
+    nameEl.addEventListener('blur', onBlur);
+    nameEl.addEventListener('input', onInput);
+    nameEl._renameHandlers = { keydown: onKeydown, blur: onBlur, input: onInput };
+}
+
+function finishRenamePanel(panelId, save) {
+    const panelEl = document.getElementById(panelId);
+    if (!panelEl) return;
+    const nameEl = panelEl.querySelector('.cmd-fullname');
+    if (!nameEl || nameEl.getAttribute('contenteditable') !== 'true') return;
+
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj) return;
+
+    // Remove event listeners
+    if (nameEl._renameHandlers) {
+        nameEl.removeEventListener('keydown', nameEl._renameHandlers.keydown);
+        nameEl.removeEventListener('blur', nameEl._renameHandlers.blur);
+        nameEl.removeEventListener('input', nameEl._renameHandlers.input);
+        delete nameEl._renameHandlers;
+    }
+
+    nameEl.contentEditable = 'false';
+    nameEl.classList.remove('panel-title-editing');
+
+    if (save) {
+        const newTitle = nameEl.textContent.trim();
+        panelObj.customTitle = newTitle;
+        if (newTitle) {
+            localStorage.setItem('vrw_panel_title_' + panelId, newTitle);
+        } else {
+            localStorage.removeItem('vrw_panel_title_' + panelId);
+        }
+    }
+
+    // Refresh display from current command data
+    updatePanelCommandInfo();
 }
 
 function copyCommandUrl(instUrl, cmdId, cmdName) {
