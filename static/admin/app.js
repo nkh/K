@@ -4385,10 +4385,11 @@ function _renderVttyContainer(panel) {
     return `<div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px;">
                         <div class="exited-banner" id="exitedBanner-${panel.id}" style="display:none;"></div>
                         <div class="search-bar" id="searchBar-${panel.id}">
-                            <input type="text" id="searchInput-${panel.id}" placeholder="Search terminal..." oninput="vttySearch('${panel.id}')">
-                            <span class="search-count" id="searchCount-${panel.id}"></span>
-                            <button onclick="vttySearchNext('${panel.id}')" title="Next match">&#x25BC;</button>
-                            <button onclick="vttySearchPrev('${panel.id}')" title="Previous match">&#x25B2;</button>
+                            <input type="text" id="searchInput-${panel.id}" placeholder="Search terminal..." oninput="vttySearch('${panel.id}')" onkeydown="if(event.key==='Enter'){event.shiftKey?vttySearchPrev('${panel.id}'):vttySearchNext('${panel.id}')}">
+                            <span class="search-count" id="searchCount-${panel.id}" title="Click to jump: Shift+Click to reverse"></span>
+                            <div class="search-progress-bar" id="searchProgress-${panel.id}"></div>
+                            <button onclick="vttySearchNext('${panel.id}')" title="Next match (Enter)">&#x25BC;</button>
+                            <button onclick="vttySearchPrev('${panel.id}')" title="Previous match (Shift+Enter)">&#x25B2;</button>
                             <button onclick="vttySearchClose('${panel.id}')" title="Close search">&#x2715;</button>
                         </div>
                         <pre style="color:#484f58;">No command selected — select a command from the sidebar to view its output</pre>
@@ -4411,10 +4412,11 @@ function _renderSplitContainer(panel) {
     const primaryVtty = `<div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" data-split-side="primary" data-panel="${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px; flex: 0 0 ${primaryWidth}%;">
                         <div class="exited-banner" id="exitedBanner-${panel.id}" style="display:none;"></div>
                         <div class="search-bar" id="searchBar-${panel.id}">
-                            <input type="text" id="searchInput-${panel.id}" placeholder="Search terminal..." oninput="vttySearch('${panel.id}')">
-                            <span class="search-count" id="searchCount-${panel.id}"></span>
-                            <button onclick="vttySearchNext('${panel.id}')" title="Next match">&#x25BC;</button>
-                            <button onclick="vttySearchPrev('${panel.id}')" title="Previous match">&#x25B2;</button>
+                            <input type="text" id="searchInput-${panel.id}" placeholder="Search terminal..." oninput="vttySearch('${panel.id}')" onkeydown="if(event.key==='Enter'){event.shiftKey?vttySearchPrev('${panel.id}'):vttySearchNext('${panel.id}')}">
+                            <span class="search-count" id="searchCount-${panel.id}" title="Click to jump: Shift+Click to reverse"></span>
+                            <div class="search-progress-bar" id="searchProgress-${panel.id}"></div>
+                            <button onclick="vttySearchNext('${panel.id}')" title="Next match (Enter)">&#x25BC;</button>
+                            <button onclick="vttySearchPrev('${panel.id}')" title="Previous match (Shift+Enter)">&#x25B2;</button>
                             <button onclick="vttySearchClose('${panel.id}')" title="Close search">&#x2715;</button>
                         </div>
                         <pre>${panel.selectedCmdId ? '' : '<span style="color:#484f58;">No command selected — select a command from the sidebar</span>'}</pre>
@@ -6051,8 +6053,10 @@ function vttySearch(panelId) {
         vttyApplyHighlights(pre, text, query);
         vttyScrollToMatch(panelId, 0);
         countEl.textContent = '1/' + vttySearchState.matches.length;
+        _updateSearchProgress(panelId, 0, vttySearchState.matches.length);
     } else {
         countEl.textContent = '0/0';
+        _updateSearchProgress(panelId, 0, 0);
     }
 }
 
@@ -6127,6 +6131,7 @@ function vttySearchNext(panelId) {
     vttyScrollToMatch(panelId, vttySearchState.matchIndex);
     const countEl = document.getElementById('searchCount-' + panelId);
     if (countEl) countEl.textContent = (vttySearchState.matchIndex + 1) + '/' + vttySearchState.matches.length;
+    _updateSearchProgress(panelId, vttySearchState.matchIndex, vttySearchState.matches.length);
 }
 
 function vttySearchPrev(panelId) {
@@ -6135,6 +6140,19 @@ function vttySearchPrev(panelId) {
     vttyScrollToMatch(panelId, vttySearchState.matchIndex);
     const countEl = document.getElementById('searchCount-' + panelId);
     if (countEl) countEl.textContent = (vttySearchState.matchIndex + 1) + '/' + vttySearchState.matches.length;
+    _updateSearchProgress(panelId, vttySearchState.matchIndex, vttySearchState.matches.length);
+}
+
+function _updateSearchProgress(panelId, currentIdx, totalMatches) {
+    const bar = document.getElementById('searchProgress-' + panelId);
+    if (!bar) return;
+    if (totalMatches <= 1) {
+        bar.style.display = 'none';
+        return;
+    }
+    bar.style.display = '';
+    const pct = ((currentIdx + 1) / totalMatches) * 100;
+    bar.style.background = `linear-gradient(to right, var(--accent) ${pct}%, var(--border) ${pct}%)`;
 }
 
 function vttySearchClose(panelId) {

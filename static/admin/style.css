@@ -182,7 +182,8 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .vtty-container .search-bar.visible { display: flex; }
 .vtty-container .search-bar input { width: 160px; font-size: 0.75rem; padding: 2px 6px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 3px; }
 .vtty-container .search-bar input:focus { outline: none; border-color: var(--accent); }
-.vtty-container .search-bar .search-count { font-size: 0.65rem; color: var(--text-muted); min-width: 30px; text-align: center; }
+.vtty-container .search-bar .search-count { font-size: 0.65rem; color: var(--text-muted); min-width: 30px; text-align: center; cursor: pointer; }
+.search-progress-bar { width: 40px; height: 3px; border-radius: 1.5px; display: none; flex-shrink: 0; }
 .vtty-container .search-bar button { padding: 1px 5px; font-size: 0.6rem; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 3px; cursor: pointer; }
 .vtty-container .search-bar button:hover { background: #30363d; }
 .vtty-search-highlight { background: rgba(210, 153, 34, 0.4); border-radius: 2px; }
