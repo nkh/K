@@ -421,7 +421,7 @@ function showCommandPicker(matches) {
 
     let items = matches.map(m => {
         const argsStr = (m.args || []).join(' ');
-        const detail = argsStr ? `${argsStr} (pid ${m.pid})` : `pid ${m.pid}`;
+        const detail = argsStr ? `${argsStr} (${m.pid})` : String(m.pid);
         const aliveBadge = m.alive
             ? '<span style="color:var(--green);font-size:0.65rem;">● running ' + formatRuntime(m.runtime_secs) + '</span>'
             : '<span style="color:var(--red);font-size:0.65rem;">● exited</span>';
@@ -429,7 +429,7 @@ function showCommandPicker(matches) {
             <div class="cmd-item-row">
                 <div style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-mono);font-size:0.75rem;color:var(--text-primary);">${escHtml(m.name)}</div>
                 ${aliveBadge}
-                <span class="pid" style="color:var(--text-muted);font-size:0.7rem;">pid ${m.pid}</span>
+                <span class="pid" style="color:var(--text-muted);font-size:0.7rem;">${escHtml(String(m.pid))}</span>
             </div>
             <div class="cmd-detail" style="font-family:var(--font-mono);font-size:0.65rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-left:1.1rem;">${escHtml(detail)}</div>
         </div>`;
@@ -1263,7 +1263,7 @@ function _buildSidebar() {
                     ? `<span class="keep-badge" title="Terminal kept after exit">&#9733;</span>`
                     : '');
             // Build detail parts as separate spans for the detail row
-            // Compact: runtime · cpu% · memM  (no PID, no labels)
+            // Compact: runtime · cpu% · memM · pid  (numeric only, no labels)
             const detailParts = [];
             if (runtimeStr) detailParts.push(escHtml(runtimeStr));
             if (frozenBadge) detailParts.push(escHtml(frozenBadge.trim()));
@@ -1272,6 +1272,8 @@ function _buildSidebar() {
                 const mb = res.memory_mb;
                 detailParts.push(mb >= 1024 ? (mb / 1024).toFixed(1) + 'G' : mb.toFixed(1) + 'M');
             }
+            if (cmd.pid) detailParts.push(escHtml(String(cmd.pid)));
+            // NOTE: cmd.pid available here because renderCmdList receives {cmd,...} objects
             const unreachableTitle = instUnreachable ? ` [disconnected]` : '';
             out += `
                 <div class="cmd-item${selected}${frozenClass}${exitedClass}${instUnreachable ? ' unreachable' : ''}" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" data-cmd-retained="${retainOnExit}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" draggable="true" ondragstart="onCmdDragStart(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" onclick="selectCommand(this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true',this.dataset.cmdRetained==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)}${unreachableTitle}" style="${dimStyle}">
@@ -1589,10 +1591,10 @@ function updateBottomBarLabel(cmd) {
         html += `<span class="cmd-label-sep">|</span><span class="cmd-label-args">${escHtml(argsStr)}</span>`;
     }
     if (pid) {
-        html += `<span class="cmd-label-sep">|</span><span class="cmd-label-pid">pid ${pid}</span>`;
+        html += `<span class="cmd-label-sep">|</span><span class="cmd-label-pid">${escHtml(pid)}</span>`;
     }
     el.innerHTML = html;
-    el.title = argsStr ? `${fullName} ${argsStr} (pid ${pid})` : `${fullName} (pid ${pid})`;
+    el.title = argsStr ? `${fullName} ${argsStr} (${pid})` : `${fullName} (${pid})`;
 }
 
 // ─── Spawn: auto-fit terminal size ───
@@ -2375,6 +2377,8 @@ function updateVttyMetadataForPanel(panelObj, panelEl, vttyEl, data) {
 }
 
 /// Per-panel version of applyVttyDiff.
+/// Handles vtty_diff messages with data.cells array (cell-level diffs).
+/// Falls back to full HTML fetch when no cell grid exists or dimensions changed.
 function applyVttyDiffForPanel(panelObj, panelEl, data) {
     const cmdId = panelObj.selectedCmdId;
     if (!cmdId) return;
@@ -2382,6 +2386,7 @@ function applyVttyDiffForPanel(panelObj, panelEl, data) {
     const pre = vttyEl ? vttyEl.querySelector('pre') : null;
     if (!pre) return;
 
+    // Skip if generation unchanged (only update cursor/dimensions/mouse metadata)
     if (data.generation !== undefined && state._lastGeneration[cmdId] === data.generation) {
         if (data.cursor || data.dimensions || data.mouse_tracking !== undefined) {
             updateVttyMetadataForPanel(panelObj, panelEl, vttyEl, data);
@@ -2392,13 +2397,75 @@ function applyVttyDiffForPanel(panelObj, panelEl, data) {
         state._lastGeneration[cmdId] = data.generation;
     }
 
-    if (data.ops && state._level3Enabled && state._cellGrids[cmdId]) {
-        applyDiffOps(pre, state._cellGrids[cmdId], data.ops, data.dimensions);
-    } else if (data.html !== undefined) {
+    // If full HTML is embedded (e.g. from vtty_dirty fallback), use it directly
+    if (data.html !== undefined) {
+        const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
+        const oldScrollHeight = vttyEl.scrollHeight;
         pre.innerHTML = data.html;
-        if (data.dimensions) {
+        if (state._level3Enabled && data.dimensions) {
             buildCellGrid(cmdId, pre, data.dimensions.rows, data.dimensions.cols);
         }
+        if (wasAtBottom) {
+            vttyEl.scrollTop = vttyEl.scrollHeight;
+        } else {
+            vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
+        }
+        updateVttyMetadataForPanel(panelObj, panelEl, vttyEl, data);
+        return;
+    }
+
+    // Level 3 cell-level incremental diff
+    if (!state._level3Enabled) {
+        // Level 1/2: no cell grid — fall back to full HTML fetch
+        scheduleVttyHttpForPanel(panelObj.id, panelObj.selectedInstUrl, cmdId, 0);
+        return;
+    }
+
+    const cg = state._cellGrids[cmdId];
+    if (!cg || !data.cells || !data.cells.length) {
+        // No grid or no cells — fall back to full HTML fetch
+        scheduleVttyHttpForPanel(panelObj.id, panelObj.selectedInstUrl, cmdId, 0);
+        return;
+    }
+
+    // Check for dimension mismatch — if dimensions changed, need full resync
+    const dims = data.dimensions || {};
+    if (dims.rows !== cg.rows || dims.cols !== cg.cols) {
+        delete state._cellGrids[cmdId];
+        scheduleVttyHttpForPanel(panelObj.id, panelObj.selectedInstUrl, cmdId, 0);
+        return;
+    }
+
+    // Save scroll position
+    const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
+    const oldScrollHeight = vttyEl.scrollHeight;
+
+    // Apply each cell diff using the cell grid
+    for (let i = 0; i < data.cells.length; i++) {
+        const c = data.cells[i];
+        if (c.row < cg.grid.length && c.col < cg.grid[c.row].length) {
+            const entry = cg.grid[c.row][c.col];
+            if (entry) {
+                if (entry.len === 1) {
+                    // Fast path: single-char span — update directly
+                    const ch = c.width === 0 ? '\u200b' : (c.ch === '\u0000' ? ' ' : c.ch);
+                    entry.span.textContent = _htmlEscapeChar(ch);
+                    entry.span.setAttribute('style', _cellStyle(c));
+                    const wCls = c.width === 0 ? 'c w0' : c.width === 2 ? 'c w2' : 'c w1';
+                    entry.span.className = wCls;
+                } else {
+                    // Slow path: split the merged span at the target position
+                    _splitAndUpdateCell(cg, c.row, c.col, c);
+                }
+            }
+        }
+    }
+
+    // Restore scroll position
+    if (wasAtBottom) {
+        vttyEl.scrollTop = vttyEl.scrollHeight;
+    } else {
+        vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
     }
 
     updateVttyMetadataForPanel(panelObj, panelEl, vttyEl, data);
@@ -5824,7 +5891,7 @@ function updateSidebarResourceText() {
                    : Math.floor(cmd.runtime_secs / 3600) + 'h ' + Math.floor((cmd.runtime_secs % 3600) / 60) + 'm')
                 : '';
             const frozenBadge = isFrozen ? 'PAUSED' : '';
-            // Compact: runtime · cpu% · memM  (no PID, no labels — must match
+            // Compact: runtime · cpu% · memM · pid  (numeric only, no labels — must match
             // the format used in renderCmdList to avoid visual flipping)
             const detailParts = [];
             if (runtimeStr) detailParts.push(runtimeStr);
@@ -5834,6 +5901,7 @@ function updateSidebarResourceText() {
                 const mb = res.memory_mb;
                 detailParts.push(mb >= 1024 ? (mb / 1024).toFixed(1) + 'G' : mb.toFixed(1) + 'M');
             }
+            if (cmd.pid) detailParts.push(String(cmd.pid));
 
             // Find or create the detail row
             let detailRow = item.querySelector('.cmd-detail-row');
