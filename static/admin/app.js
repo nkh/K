@@ -3,19 +3,27 @@
 // Load order matters: dependencies must be loaded before dependents.
 //
 // Module dependency graph (load order):
-//   state.js      ← (no deps)
-//   eventbus.js   ← (no deps)
-//   utils.js      ← (no deps)
-//   focus.js      ← (no deps)
-//   theme.js      ← state
-//   sidebar.js    ← utils, state
-//   panels.js     ← utils, state, focus
-//   commands.js    ← utils, state, panels, sidebar
-//   websocket.js  ← utils, state
-//   vtty.js       ← utils, state
-//   spawn.js      ← utils, state, commands
-//   misc.js       ← all above
-//   app.js        ← all above (initialization)
+//   state.js        ← (no deps)
+//   eventbus.js     ← (no deps)
+//   utils.js        ← (no deps)
+//   focus.js        ← (no deps)
+//   theme.js        ← state
+//   sidebar.js      ← utils, state
+//   panels.js       ← utils, state, focus
+//   commands.js     ← utils, state, panels, sidebar
+//   websocket.js    ← utils, state
+//   vtty.js         ← utils, state
+//   spawn.js        ← utils, state, commands
+//   logs.js         ← utils, state
+//   keyboard.js     ← utils, state, focus, search, onboarding
+//   search.js       ← utils, state, focus
+//   notifications.js ← utils, state, commands
+//   onboarding.js    ← utils, state, focus
+//   templates.js    ← utils, state, commands, spawn
+//   dragdrop.js     ← utils, state, panels, commands
+//   workspaces.js   ← utils, state, panels, logs, commands
+//   misc.js         ← all above
+//   app.js          ← all above (initialization)
 //
 // DO NOT reorder these script tags in index.html — the load order is significant.
 
