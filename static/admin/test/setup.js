@@ -85,8 +85,16 @@ class MockElement {
     constructor(tag) {
         this.tagName = tag ? tag.toUpperCase() : 'DIV';
         this.id = '';
-        this.className = '';
+        this._className = '';
         this._classList = new Set();
+        Object.defineProperty(this, 'className', {
+            get() { return this._className; },
+            set(val) {
+                this._className = val;
+                this._classList = new Set(val ? val.split(/\s+/).filter(Boolean) : []);
+            },
+            configurable: true,
+        });
         this.style = new Proxy({}, { get: (t, p) => {
             if (p === 'setProperty') return () => {};
             if (p === 'getProperty') return () => '';
@@ -166,13 +174,25 @@ class MockElement {
             const el = _elementRegistry.get(sel.slice(1));
             return el || null;
         }
-        // Class selector
+        // Class selector — search children first, then global registry
         if (sel.startsWith('.')) {
+            const cls = sel.slice(1);
+            for (const el of this.children) {
+                if (el._classList && el._classList.has(cls)) return el;
+                // Also search children of children (shallow depth)
+                for (const ch of el.children) {
+                    if (ch._classList && ch._classList.has(cls)) return ch;
+                }
+            }
+            // Fall back to global registry
             for (const el of _elementRegistry.values()) {
-                if (el._classList && el._classList.has(sel.slice(1))) return el;
+                if (el._classList && el._classList.has(cls)) return el;
             }
         }
-        // Tag selector
+        // Tag selector — search children first, then global registry
+        for (const el of this.children) {
+            if (el.tagName === sel.toUpperCase()) return el;
+        }
         for (const el of _elementRegistry.values()) {
             if (el.tagName === sel.toUpperCase()) return el;
         }
@@ -228,9 +248,9 @@ class MockElement {
     get classList() {
         const self = this; // capture MockElement reference
         return {
-            add(...cls) { cls.forEach(c => self._classList.add(c)); },
-            remove(...cls) { cls.forEach(c => self._classList.delete(c)); },
-            toggle(c) { if (self._classList.has(c)) { self._classList.delete(c); return false; } else { self._classList.add(c); return true; } },
+            add(...cls) { cls.forEach(c => self._classList.add(c)); self._className = [...self._classList].join(' '); },
+            remove(...cls) { cls.forEach(c => self._classList.delete(c)); self._className = [...self._classList].join(' '); },
+            toggle(c) { if (self._classList.has(c)) { self._classList.delete(c); self._className = [...self._classList].join(' '); return false; } else { self._classList.add(c); self._className = [...self._classList].join(' '); return true; } },
             contains(c) { return self._classList.has(c); },
             get length() { return self._classList.size; },
         };

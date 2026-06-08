@@ -144,4 +144,5 @@ function parseSpawnEnvVars(text) {
     window.escHtml = escHtml;
     window.parseSpawnArgs = parseSpawnArgs;
     window.parseSpawnEnvVars = parseSpawnEnvVars;
+    window._hex = _hex;
 })();

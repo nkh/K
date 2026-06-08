@@ -144,4 +144,5 @@ function closeShortcuts() {
     window.nextOnboardingStep = nextOnboardingStep;
     window.showShortcuts = showShortcuts;
     window.closeShortcuts = closeShortcuts;
+    window._onboardingSteps = ONBOARDING_STEPS;
 })();
