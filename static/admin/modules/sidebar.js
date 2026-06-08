@@ -480,6 +480,9 @@ function updateTerminalDisconnectedOverlay() {
 
     window.initBottombar = initBottombar;
     window.toggleSidebar = toggleSidebar;
+    window.toggleBottombar = toggleBottombar;
+    window.toggleLogsView = toggleLogsView;
+    window.toggleResources = toggleResources;
     window.switchSidebarTab = switchSidebarTab;
     window.updateSidebarTabsVisibility = updateSidebarTabsVisibility;
     window.updateCmdToolbarVisibility = updateCmdToolbarVisibility;

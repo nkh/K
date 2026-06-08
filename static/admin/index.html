@@ -382,8 +382,8 @@
 </div>
 
 <!-- Modules: load order matters — dependencies must be loaded before dependents.
-     state → eventbus → utils → focus → theme → sidebar → panels → commands → websocket → vtty → spawn
-     → logs → keyboard → search → notifications → onboarding → templates → dragdrop → workspaces → misc → snapshot → app.js -->
+     state → eventbus → utils → focus → theme → sidebar → panels → command-ui → command-selection → server-connections → commands-core
+     → websocket → vtty → spawn → logs → keyboard → search → notifications → onboarding → templates → dragdrop → workspaces → misc → snapshot → app.js -->
 <script src="modules/state.js"></script>
 <script src="modules/eventbus.js"></script>
 <script src="modules/utils.js"></script>
@@ -391,7 +391,10 @@
 <script src="modules/theme.js"></script>
 <script src="modules/sidebar.js"></script>
 <script src="modules/panels.js"></script>
-<script src="modules/commands.js"></script>
+<script src="modules/command-ui.js"></script>
+<script src="modules/command-selection.js"></script>
+<script src="modules/server-connections.js"></script>
+<script src="modules/commands-core.js"></script>
 <script src="modules/websocket.js"></script>
 <script src="modules/vtty.js"></script>
 <script src="modules/spawn.js"></script>

@@ -437,55 +437,8 @@ async function pollOncePanel(panelId) {
     }
 }
 
-function updateVttyDisplay(data) {
-    // Pause DOM updates while the user is actively scrolling
-    if (state._userScrolling) {
-        state._pendingVttyData = data;
-        state._pendingVttyDirty = true;
-        return;
-    }
-    const panel = getSelectedPanel();
-    if (!panel) return;
-    const vttyEl = panel.querySelector('.vtty-container');
-    const pre = vttyEl ? vttyEl.querySelector('pre') : null;
-    if (!pre) return;
-
-    // Level 2: Skip redundant DOM updates if generation hasn't changed.
-    const cmdId = state.selectedCmdId;
-    if (cmdId && data.generation !== undefined) {
-        if (state._lastGeneration[cmdId] === data.generation) {
-            // Generation unchanged — only update metadata, skip DOM replacement
-            updateVttyMetadata(data, panel, vttyEl);
-            return;
-        }
-        state._lastGeneration[cmdId] = data.generation;
-    }
-
-    if (data.html !== undefined && data.html !== null) {
-        // Level 1: Save scroll position before innerHTML replacement
-        const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
-        const oldScrollHeight = vttyEl.scrollHeight;
-
-        pre.innerHTML = data.html;
-
-        // Level 3: Rebuild cell grid after full HTML replacement
-        if (state._level3Enabled && data.dimensions) {
-            buildCellGrid(cmdId, pre, data.dimensions.rows, data.dimensions.cols);
-        }
-
-        // Level 1: Restore scroll position after DOM replacement.
-        // If user was at bottom, snap to new bottom (auto-scroll).
-        // Otherwise, adjust for content height change to maintain view position.
-        if (wasAtBottom) {
-            vttyEl.scrollTop = vttyEl.scrollHeight;
-        } else {
-            vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
-        }
-    }
-
-    updateVttyMetadata(data, panel, vttyEl);
-}
-
+// NOTE: updateVttyDisplay is defined in vtty.js and exported via window.
+// It is used here via the global scope (vtty.js loads before websocket.js).
 
 /// Disconnect the secondary WebSocket for a split panel.
 function _disconnectSecondaryWs(panelObj) {
