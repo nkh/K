@@ -663,8 +663,14 @@ _elementRegistry.set('spawnInstance', spawnSel);
 // User selects Server B in the sidebar → sets _userSpawnInstUrl
 window._userSpawnInstUrl = 'http://localhost:9091';
 
-// First updateInstanceDropdown call (from _buildSidebar/loadCommands)
+// Verify that updateInstanceDropdown uses _userSpawnInstUrl to set dropdown value
+// The function should: read _userSpawnInstUrl, verify it matches a connection,
+// and set select.value to that URL.
 updateInstanceDropdown();
+
+// The dropdown value should match _userSpawnInstUrl (Server B), not the first connection (Server A)
+assertEq(window._userSpawnInstUrl, 'http://localhost:9091',
+    '_userSpawnInstUrl is Server B');
 assertEq(spawnSel.value, 'http://localhost:9091',
     'dropdown shows Server B after user selection');
 
@@ -672,10 +678,6 @@ assertEq(spawnSel.value, 'http://localhost:9091',
 updateInstanceDropdown();
 assertEq(spawnSel.value, 'http://localhost:9091',
     'dropdown still shows Server B after rebuild');
-
-// Verify it does NOT revert to the first connection (9090)
-assert(spawnSel.value !== 'http://localhost:9090' || state.connections.length === 1,
-    'dropdown does NOT revert to first server (9090) when user chose 9091');
 
 // Cleanup
 window._userSpawnInstUrl = undefined;
