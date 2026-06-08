@@ -1,7 +1,6 @@
 use crate::config::schema::Config;
 use clap::CommandFactory;
 use clap::{FromArgMatches, Parser, Subcommand};
-use std::io::IsTerminal;
 
 // Binary name used in help text and completion generation.
 #[cfg(feature = "vrw")]
@@ -608,8 +607,7 @@ impl Cli {
     pub fn apply_overrides(&self, cfg: &mut Config) -> anyhow::Result<()> {
         // Runtime fields (not from config file)
         cfg.binary_name = BINARY_NAME.to_string();
-        // Color terminal log: enabled by -F flag, or auto-detected when stdout is a TTY
-        cfg.color_terminal_log = self.color_terminal_log || std::io::stdout().is_terminal();
+        cfg.color_terminal_log = self.color_terminal_log;
 
         // Server (vrw only)
         #[cfg(feature = "vrw")]

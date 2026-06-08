@@ -90,7 +90,7 @@ function spawnServerTemplate(index) {
     const t = getServerTemplates()[index];
     if (!t) return;
     const instSelect = document.getElementById('spawnInstance');
-    const instUrl = instSelect ? instSelect.value : getBaseUrl();
+    const instUrl = instSelect ? instSelect.value : (window._userSpawnInstUrl || getBaseUrl());
     const args = t.args ? t.args.split(/\s+/) : [];
     const body = { cmd: t.cmd, args };
     // Convert env from ["KEY=VALUE", ...] to { "KEY": "VALUE", ... }
@@ -132,7 +132,7 @@ function spawnUserTemplate(index) {
     const t = user[index];
     if (!t) return;
     const instSelect = document.getElementById('spawnInstance');
-    const instUrl = instSelect ? instSelect.value : getBaseUrl();
+    const instUrl = instSelect ? instSelect.value : (window._userSpawnInstUrl || getBaseUrl());
     const args = t.args ? t.args.split(/\s+/) : [];
     const body = { cmd: t.cmd, args };
     fetch(apiUrl('/api/commands', { url: instUrl }), {

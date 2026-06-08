@@ -1584,7 +1584,39 @@ function onPanelDragLeave(e) {
 
 function onPanelDrop(e, targetPanelId) {
     e.preventDefault();
-    if (!_draggedPanelId || _draggedPanelId === targetPanelId) {
+    e.stopPropagation();
+
+    // Check if this is a sidebar command drop (not a panel reorder)
+    if (!_draggedPanelId) {
+        try {
+            const cmdData = JSON.parse(e.dataTransfer.getData('application/x-cmd'));
+            if (cmdData && cmdData.cmdId) {
+                const panelObj = state.panels.find(p => p.id === targetPanelId);
+                if (panelObj) {
+                    _cacheTerminalForSwitch();
+                    panelObj.selectedInstUrl = cmdData.instUrl;
+                    panelObj.selectedCmdId = cmdData.cmdId;
+                    focusPanel(panelObj.id);
+                    state.selectedInstUrl = cmdData.instUrl;
+                    state.selectedCmdId = cmdData.cmdId;
+                    state._pendingVttyData = null;
+                    state._pendingVttyDirty = false;
+                    state.bufferView = 'current';
+                    _restoreCachedDom(cmdData.cmdId);
+                    updatePanelCommandInfo();
+                    updateTerminalDisconnectedOverlay();
+                    updateSidebarSelection();
+                    loadVttyHttpForPanel(panelObj.id, cmdData.instUrl, cmdData.cmdId);
+                    startPanelUpdateMode(panelObj.id);
+                }
+                document.querySelectorAll('.panel').forEach(p => p.classList.remove('drag-over-left', 'drag-over-right'));
+                return;
+            }
+        } catch (err) { /* not a command drop, fall through */ }
+        onPanelDragEnd(e);
+        return;
+    }
+    if (_draggedPanelId === targetPanelId) {
         onPanelDragEnd(e);
         return;
     }

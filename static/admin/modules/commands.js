@@ -752,8 +752,6 @@ function updateCertDropdown() {
 // manually changing the dropdown or by spawning a command), it persists
 // for the lifetime of the session — it is never silently overridden by
 // the focused panel's instance.
-let _userSpawnInstUrl = null;
-
 function updateInstanceDropdown() {
     const select = document.getElementById('spawnInstance');
     const current = select.value;
@@ -771,14 +769,15 @@ function updateInstanceDropdown() {
     // 2. The previous dropdown value, if it still exists in the list.
     // 3. Fall back to the first connection (never to the focused panel,
     //    since that would re-introduce the coupling bug).
-    if (_userSpawnInstUrl && state.connections.some(i => i.url === _userSpawnInstUrl)) {
-        select.value = _userSpawnInstUrl;
+    const userUrl = window._userSpawnInstUrl;
+    if (userUrl && state.connections.some(i => i.url === userUrl)) {
+        select.value = userUrl;
     } else if (current && state.connections.some(i => i.url === current)) {
         select.value = current;
-        _userSpawnInstUrl = current;  // remember the restored value
+        window._userSpawnInstUrl = current;  // remember the restored value
     } else if (state.connections.length > 0) {
         select.value = state.connections[0].url;
-        _userSpawnInstUrl = state.connections[0].url;
+        window._userSpawnInstUrl = state.connections[0].url;
     }
 }
 
