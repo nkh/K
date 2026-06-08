@@ -320,7 +320,6 @@ mod tests {
             daemon: false,
             display: false,
             command: None,
-            name: None,
         }
     }
 
