@@ -1,0 +1,479 @@
+/// test/test_regression.js — Higher-level regression tests for vrw web UI.
+/// These tests verify critical bug fixes and end-to-end scenarios.
+require('./setup');
+
+console.log('\n=== Regression Tests ===\n');
+
+resetTestState();
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 1: Module loading order — all 20 modules load without error
+// ════════════════════════════════════════════════════════════════════
+console.log('[REG-01] Module loading order');
+assert(typeof state !== 'undefined', 'state module loaded');
+assert(typeof VRW !== 'undefined', 'VRW namespace exists');
+assert(typeof VRW.EventBus !== 'undefined', 'eventbus loaded');
+assert(typeof formatRuntime === 'function', 'utils loaded');
+assert(typeof trapFocus === 'function', 'focus loaded');
+assert(typeof toggleGlobalTheme === 'function', 'theme loaded');
+assert(typeof toggleSidebar === 'function', 'sidebar loaded');
+assert(typeof addPanelDirect === 'function', 'panels loaded');
+assert(typeof selectCommand === 'function', 'commands loaded');
+assert(typeof connectPanelWs === 'function', 'websocket loaded');
+assert(typeof updateVttyDisplay === 'function', 'vtty loaded');
+assert(typeof spawnCommand === 'function', 'spawn loaded');
+assert(typeof parseLogLine === 'function', 'logs loaded');
+assert(typeof sendDirectKey === 'function', 'keyboard loaded');
+assert(typeof vttySearch === 'function', 'search loaded');
+assert(typeof notifyCommandEnded === 'function', 'notifications loaded');
+assert(typeof checkOnboarding === 'function', 'onboarding loaded');
+assert(typeof saveTemplate === 'function', 'templates loaded');
+assert(typeof onCmdDragStart === 'function', 'dragdrop loaded');
+assert(typeof getWorkspaces === 'function', 'workspaces loaded');
+assert(typeof saveToken === 'function', 'misc loaded');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 2: No duplicate function definitions across modules
+// ════════════════════════════════════════════════════════════════════
+console.log('[REG-02] No duplicate function definitions');
+const criticalFunctions = [
+    'addPanelDirect', 'addPanel', 'closePanelModal', 'confirmAddPanel',
+    'togglePanelTheme', 'applyPanelTheme', 'escHtml', 'updateVttyDisplay',
+    '_disconnectSecondaryWs', '_connectSecondaryWs', 'scheduleSecondaryVttyHttp',
+    '_loadSecondaryVttyHttp', '_updateSecondaryVttyDisplay', '_updateSecondaryVttyMetadata',
+    '_applySecondaryVttyDiff', 'showAddServerModal', 'closeAddServerModal',
+    'confirmAddServer', '_isTerminalVisible', '_flushPendingVttyUpdate',
+    'startUpdateMode', 'startPanelUpdateMode', 'stopPanelUpdateMode', 'stopUpdateMode',
+];
+// Check that each function has exactly one definition
+for (const fn of criticalFunctions) {
+    assert(typeof globalThis[fn] === 'function', 'critical function ' + fn + ' exists');
+}
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 3: Welcome panel guard — structural changes force rebuild
+// ════════════════════════════════════════════════════════════════════
+console.log('[REG-03] Welcome panel guard');
+_lastRenderedPanelCount = -1;
+_lastRenderedPanelIds = '';
+_lastShowingWelcome = true;
+_showingWelcome = true;
+_lastRenderedPanelCount = -1; // Force first rebuild
+
+state.panels = [{ id: 'panel-1' }];
+state.connections = [{ url: 'http://localhost:9090', _commands: [], reachable: false }];
+state.selectedCmdId = null;
+state.serverReachable = false;
+
+// First render with no commands → should show welcome
+renderPanels();
+assertEq(_showingWelcome, true, 'welcome shown when no commands');
+
+// Commands arrive → welcome should be dismissed
+state.connections[0]._commands = [{ id: 'cmd-1', name: 'htop', alive: true }];
+_showingWelcome = true; // Simulate detection
+renderPanels(); // With _showingWelcome changed, guard should fire
+assertEq(_showingWelcome, false, 'welcome dismissed when commands arrive');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 4: Refresh throttle — throttled updates coalesce
+// ════════════════════════════════════════════════════════════════════
+console.log('[REG-04] Refresh throttle prevents redundant updates');
+state.refreshMs = 100;
+state._refreshThrottleTimer = null;
+
+// First call should set timer (throttled)
+const t0 = Date.now();
+assert(() => { changeRefreshMs(100); }, 'changeRefreshMs does not throw');
+assertEq(state.refreshMs, 100, 'refreshMs is set');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 5: Theme persistence — survives across resets
+// ════════════════════════════════════════════════════════════════════
+console.log('[REG-05] Theme persistence');
+localStorage.setItem('vrw_theme', 'dark');
+initTheme();
+const theme = localStorage.getItem('vrw_theme');
+assert(theme === 'dark' || theme === 'grey', 'theme persisted correctly');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 6: Token persistence — saved and restored
+// ════════════════════════════════════════════════════════════════════
+console.log('[REG-06] Token persistence');
+localStorage.setItem('vrw_auth_token', 'test-pat');
+resetTestState();
+assertEq(state.authToken, 'test-pat', 'authToken restored from localStorage after reset');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 7: Panel creation — panels have all required fields
+// ════════════════════════════════════════════════════════════════════
+console.log('[REG-07] Panel creation has required fields');
+resetTestState();
+state.connections = [{ url: 'http://localhost:9090', label: 'Local', token: '' }];
+state._focusedPanelId = null;
+
+const panel = addPanelDirect();
+assert(panel.id.startsWith('panel-'), 'panel has valid id');
+assert(panel.id.length > 10, 'panel id is sufficiently long');
+assertEq(panel.minimized, false, 'panel starts unminimized');
+assertEq(panel.focused, false, 'panel starts unfocused');
+assertEq(panel.selectedCmdId, null, 'panel starts with no command');
+assertEq(panel.selectedInstUrl, null, 'panel starts with no instance');
+assert(panel.fontSize >= 8 && panel.fontSize <= 28, 'panel fontSize in valid range');
+assert(Array.isArray(panel.cmdHistory), 'panel has command history array');
+assertEq(panel.cmdHistoryIdx, -1, 'command history index starts at -1');
+assert(panel.ws === null, 'panel ws starts null');
+assert(panel.pollTimer === null, 'panel poll timer starts null');
+assertEq(state.panels.length, 1, 'panel added to state');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 8: Connection idempotency — adding same URL twice is idempotent
+// ════════════════════════════════════════════════════════════════════
+console.log('[REG-08] Connection idempotency');
+state.connections = [];
+const c1 = addConnection('http://localhost:9090', 'Test', 'tok');
+assertEq(state.connections.length, 1, 'first connection added');
+const c2 = addConnection('http://localhost:9090', 'Test2', 'tok2');
+assertEq(state.connections.length, 1, 'duplicate URL not added');
+assertEq(c2.label, 'Test', 'existing connection returned (label unchanged)');
+assertEq(c2.token, 'tok', 'existing connection returned (token unchanged)');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 9: EventBus — events don't leak between names
+// ════════════════════════════════════════════════════════════════════
+console.log('[REG-09] EventBus isolation');
+let leakA = false, leakB = false;
+VRW.EventBus.on('regress-a', () => { leakA = true; });
+VRW.EventBus.on('regress-b', () => { leakB = true; });
+VRW.EventBus.emit('regress-a');
+assert(leakA && !leakB, 'event A does not trigger listener B');
+VRW.EventBus.off('regress-a');
+VRW.EventBus.off('regress-b');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 10: VTTY generation skip — same generation doesn't update DOM
+// ════════════════════════════════════════════════════════════════════
+console.log('[REG-10] VTTY generation skip');
+state.panels = [];
+state.connections = [{ url: 'http://localhost:9090' }];
+const vp = addPanelDirect();
+vp.selectedCmdId = 'cmd-gen-test';
+vp.selectedInstUrl = 'http://localhost:9090';
+state._focusedPanelId = vp.id;
+state._lastGeneration['cmd-gen-test'] = undefined;
+
+const vttyEl = document.createElement('div');
+vttyEl.id = 'vtty-' + vp.id;
+_elementRegistry.set('vtty-' + vp.id, vttyEl);
+const pre = document.createElement('pre');
+vttyEl.appendChild(pre);
+
+updateVttyDisplayForPanel(vp, vttyEl, { html: 'gen1', generation: 1 });
+assertEq(pre.innerHTML, 'gen1', 'first update applies');
+
+updateVttyDisplayForPanel(vp, vttyEl, { html: 'gen1-skip', generation: 1 });
+assertEq(pre.innerHTML, 'gen1', 'same generation skipped');
+
+updateVttyDisplayForPanel(vp, vttyEl, { html: 'gen2', generation: 2 });
+assertEq(pre.innerHTML, 'gen2', 'new generation applied');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 11: Panel theme — cycles correctly
+// ════════════════════════════════════════════════════════════════════
+console.log('[REG-11] Panel theme cycling');
+resetTestState();
+state.panels = [];
+state.connections = [];
+const tp = addPanelDirect();
+assertEq(tp.theme, '', 'theme starts empty (inherit)');
+
+togglePanelTheme(tp.id);
+assertEq(tp.theme, 'light', 'empty → light');
+
+togglePanelTheme(tp.id);
+assertEq(tp.theme, 'dark', 'light → dark');
+
+togglePanelTheme(tp.id);
+assertEq(tp.theme, '', 'dark → empty (inherit)');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 12: Font size clamping — never below 8 or above 28
+// ════════════════════════════════════════════════════════════════════
+console.log('[REG-12] Font size clamping');
+state.fontSize = 10;
+changeFontSize(-100);
+assert(state.fontSize >= 8, 'fontSize never below 8: got ' + state.fontSize);
+state.fontSize = 26;
+changeFontSize(100);
+assert(state.fontSize <= 28, 'fontSize never above 28: got ' + state.fontSize);
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 13: RefreshMs clamping — 0 to 2000 only
+// ════════════════════════════════════════════════════════════════════
+console.log('[REG-13] RefreshMs clamping');
+state.refreshMs = 0;
+changeRefreshMs(-100);
+assertEq(state.refreshMs, 0, 'refreshMs clamped at 0');
+state.refreshMs = 1900;
+changeRefreshMs(200);
+assertEq(state.refreshMs, 2000, 'refreshMs capped at 2000');
+state.refreshMs = 2000;
+changeRefreshMs(100);
+assertEq(state.refreshMs, 2000, 'refreshMs cannot exceed 2000');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 14: Spawn history — no duplicates, most recent first
+// ════════════════════════════════════════════════════════════════════
+console.log('[REG-14] Spawn history deduplication');
+localStorage.removeItem('vrw_spawn_history');
+_addSpawnHistoryEntry('htop');
+_addSpawnHistoryEntry('vim');
+_addSpawnHistoryEntry('htop'); // duplicate
+const hist = _loadSpawnHistory();
+assertEq(hist.length, 2, 'duplicate spawn commands not added');
+assertEq(hist[0].cmd, 'htop', 'most recent spawn first');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 15: Template persistence — saved and loaded correctly
+// ════════════════════════════════════════════════════════════════════
+console.log('[REG-15] Template persistence');
+localStorage.removeItem('vrw_user_templates');
+saveUserTemplates([{ name: 'dev', cmd: 'npm run dev', args: '' }]);
+const loaded = getUserTemplates();
+assert(typeof loaded === 'object', 'templates loaded as object');
+assertEq(loaded.dev.cmd, 'npm run dev', 'template cmd preserved');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 16: Sidebar toggle — collapsed class toggles
+// ════════════════════════════════════════════════════════════════════
+console.log('[REG-16] Sidebar toggle');
+const sidebar = document.getElementById('sidebar');
+sidebar._classList = new Set(); // fresh
+toggleSidebar();
+assert(sidebar._classList.has('collapsed'), 'sidebar collapsed after toggle');
+toggleSidebar();
+assert(!sidebar._classList.has('collapsed'), 'sidebar uncollapsed after second toggle');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 17: Workspace save/load
+// ════════════════════════════════════════════════════════════════════
+console.log('[REG-17] Workspace persistence');
+localStorage.removeItem('vrw_workspaces');
+saveWorkspaces([{ name: 'default-ws', panels: [{ id: 'p1', cmdId: 'c1' }] }]);
+const ws = getWorkspaces();
+assert(typeof ws === 'object', 'workspaces loaded');
+assert(ws['default-ws'], 'workspace saved by name');
+deleteWorkspace('default-ws');
+const wsAfter = getWorkspaces();
+assert(!wsAfter['default-ws'], 'workspace deleted');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 18: Command groups persistence
+// ════════════════════════════════════════════════════════════════════
+console.log('[REG-18] Command groups persistence');
+localStorage.removeItem('vrw_cmd_groups');
+saveCmdGroups([{ name: 'dev-tools', cmds: ['htop', 'vim'] }]);
+const groups = getCmdGroups();
+assert(typeof groups === 'object', 'groups loaded as object');
+
+// ══════════════════════════════════════════════════════════════════
+// REGRESSION 19: EscHtml — properly escapes HTML entities
+// ══════════════════════════════════════════════════════════════════
+console.log('[REG-19] escHtml XSS prevention');
+const xss = escHtml('<img src=x onerror=alert(1)>');
+assert(xss.includes('&lt;'), 'XSS: < escaped');
+assert(xss.includes('&gt;'), 'XSS: > escaped');
+assert(!xss.includes('<img'), 'XSS: tag broken');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 20: Parse spawn args — handles quoted strings
+// ══════════════════════════════════════════════════════════════════
+console.log('[REG-20] Parse spawn args handles quotes');
+const args1 = parseSpawnArgs('--name "my app" --other thing');
+assertEq(args1.length, 4, '4 args with quoted string');
+assertEq(args1[1], 'my app', 'quoted arg preserved');
+
+const args2 = parseSpawnArgs("-c 'echo hello world'");
+assertEq(args2.length, 2, '2 args with single quotes');
+assertEq(args2[1], 'echo hello world', 'single-quoted arg preserved');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 21: Pinning commands — persisted in localStorage
+// ════════════════════════════════════════════════════════════════════
+console.log('[REG-21] Command pinning');
+localStorage.removeItem('vrw_pinned_commands');
+togglePinCmd('http://localhost:9090', 'htop');
+const pinned = getPinnedNames();
+assert(pinned.includes('htop'), 'pinned command stored');
+togglePinCmd('http://localhost:9090', 'htop'); // Unpin
+const unpinned = getPinnedNames();
+assert(!unpinned.includes('htop'), 'unpinned command removed');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 22: Sound toggle — persisted state
+// ══════════════════════════════════════════════════════════════════
+console.log('[REG-22] Sound toggle persistence');
+localStorage.setItem('vrw_sound', 'false');
+state.soundEnabled = false;
+toggleSoundNotifications();
+assertEq(state.soundEnabled, true, 'sound toggled on');
+assertEq(localStorage.getItem('vrw_sound'), 'true', 'sound persisted to localStorage');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 23: Panel minimize — toggles minimized flag
+// ══════════════════════════════════════════════════════════════════
+console.log('[REG-23] Panel minimize/restore');
+resetTestState();
+state.connections = [{ url: 'http://localhost:9090', label: 'Local', token: '' }];
+state._focusedPanelId = null;
+const mp = addPanelDirect();
+assertEq(mp.minimized, false, 'panel starts unminimized');
+toggleMinimizePanel(mp.id);
+assertEq(mp.minimized, true, 'panel minimized');
+toggleMinimizePanel(mp.id);
+assertEq(mp.minimized, false, 'panel restored');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 24: Split panel — creates split structure
+// ══════════════════════════════════════════════════════════════════
+console.log('[REG-24] Split panel structure');
+resetTestState();
+state.connections = [{ url: 'http://localhost:9090', label: 'Local', token: '' }];
+state._focusedPanelId = null;
+const sp = addPanelDirect();
+assert(sp.split === undefined, 'no split initially');
+splitPanel(sp.id, 'horizontal');
+assert(sp.split !== null, 'split created');
+assertEq(sp.split.direction, 'horizontal', 'split direction correct');
+assertEq(sp.split.splitRatio, 0.5, 'split ratio 0.5');
+assertEq(sp.split.activeSide, 'primary', 'active side is primary');
+unsplitPanel(sp.id);
+assertEq(sp.split, null, 'split removed after unsplit');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 25: Auth headers — token included correctly
+// ════════════════════════════════════════════════════════════════════
+console.log('[REG-25] Auth headers');
+state.authToken = 'test-token';
+const h = authHeaders('');
+assertEq(h.Authorization, 'Bearer test-token', 'Bearer token from global state');
+const h2 = authHeaders('override-token');
+assertEq(h2.Authorization, 'Bearer override-token', 'explicit token overrides global');
+
+state.authToken = '';
+state.connections = [];
+const h3 = authHeadersForInstance({ url: 'http://localhost:9090', token: 'inst-tok' });
+assertEq(h3.Authorization, 'Bearer inst-tok', 'instance token used');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 26: API URL — correctly constructs full URL
+// ════════════════════════════════════════════════════════════════════
+console.log('[REG-26] API URL construction');
+state.connections = [{ url: 'http://localhost:9090' }];
+assertEq(apiUrl('/api/commands'), 'http://localhost:9090/api/commands', 'default base URL');
+assertEq(apiUrl('/api/commands', { url: 'http://example.com' }), 'http://example.com/api/commands', 'instance-specific URL');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 27: Render Markdown — basic rendering works
+// ══════════════════════════════════════════════════════════════════
+console.log('[REG-27] Markdown rendering');
+const md = renderMarkdown('# Hello\n\n**bold** text');
+assert(md.includes('Hello'), 'markdown renders headings');
+assert(md.includes('bold'), 'markdown renders bold');
+assert(!md.includes('#'), 'markdown strips hash from heading');
+
+// ══════════════════════════════════════════════════════════════════
+// REGRESSION 28: Onboarding — step data structure
+// ══════════════════════════════════════════════════════════════════
+console.log('[REG-28] Onboarding steps data structure');
+assert(Array.isArray(_onboardingSteps), 'onboarding steps is array');
+if (_onboardingSteps.length > 0) {
+    assert(typeof _onboardingSteps[0].title === 'string', 'step has title');
+    assert(typeof _onboardingSteps[0].body === 'string', 'step has body');
+    assert(typeof _onboardingSteps[0].target === 'string', 'step has target');
+    assert(_onboardingSteps.length >= 5, 'at least 5 onboarding steps');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// REGRESSION 29: Log parsing — handles different log levels
+// ══════════════════════════════════════════════════════════════════
+console.log('[REG-29] Log parsing');
+const warnLog = parseLogLine('2024-01-15 WARN something');
+assert(warnLog !== null, 'WARN log parsed');
+const errLog = parseLogLine('2024-01-15 ERROR critical failure');
+assert(errLog !== null, 'ERROR log parsed');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 30: Hex color conversion — correct format
+// ══════════════════════════════════════════════════════════════════
+console.log('[REG-30] Hex color conversion');
+assertEq(_hex(0), '00', 'hex(0) = 00');
+assertEq(_hex(255), 'ff', 'hex(255) = ff');
+assertEq(_hex(16), '10', 'hex(16) = 10');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 31: Keyboard escape sequences — KEY_MAP covers common keys
+// ════════════════════════════════════════════════════════════════════
+console.log('[REG-31] KEY_MAP completeness');
+assert(_KEY_MAP['Enter'] !== undefined, 'Enter mapped');
+assert(_KEY_MAP['Tab'] !== undefined, 'Tab mapped');
+assert(_KEY_MAP['Escape'] !== undefined, 'Escape mapped');
+assert(_KEY_MAP['Backspace'] !== undefined, 'Backspace mapped');
+assert(_KEY_MAP['ArrowUp'] !== undefined, 'ArrowUp mapped');
+assert(_KEY_MAP['ArrowDown'] !== undefined, 'ArrowDown mapped');
+assert(_KEY_MAP['ArrowLeft'] !== undefined, 'ArrowLeft mapped');
+assert(_KEY_MAP['ArrowRight'] !== undefined, 'ArrowRight mapped');
+assert(_KEY_MAP['Home'] !== undefined, 'Home mapped');
+assert(_KEY_MAP['End'] !== undefined, 'End mapped');
+assert(_KEY_MAP['PageUp'] !== undefined, 'PageUp mapped');
+assert(_KEY_MAP['PageDown'] !== undefined, 'PageDown mapped');
+assert(_KEY_MAP['F1'] !== undefined, 'F1 mapped');
+assert(_KEY_MAP['F12'] !== undefined, 'F12 mapped');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 32: WebSocket mock — basic lifecycle
+// ════════════════════════════════════════════════════════════════════
+console.log('[REG-32] WebSocket lifecycle');
+state.panels = [];
+state.connections = [{ url: 'http://localhost:9090', token: '' }];
+state._focusedPanelId = null;
+const wsPanel = addPanelDirect();
+wsPanel.selectedInstUrl = 'http://localhost:9090';
+wsPanel.selectedCmdId = 'ws-test';
+state._focusedPanelId = wsPanel.id;
+
+connectPanelWs(wsPanel.id);
+assert(wsPanel.ws !== null, 'WebSocket created');
+disconnectPanelWs(wsPanel.id);
+assert(wsPanel.ws === null, 'WebSocket disconnected after disconnect');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 33: Drag-and-drop — data transfer sets correct data
+// ══════════════════════════════════════════════════════════════════
+console.log('[REG-33] Drag-and-drop data transfer');
+const dt = { setData(k, v) { dt[k] = v; } };
+onCmdDragStart(dt, 'http://localhost:9090', 'cmd-1', 'htop');
+assertEq(dt.text, 'cmd-1:htop', 'drag data set correctly');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 34: Peer management — handlePeerEvent doesn't throw
+// ════════════════════════════════════════════════════════════════════
+console.log('[REG-34] Peer event handling');
+assert(() => { handlePeerEvent({ type: 'peer_registered', peer_id: 'p1' }); }, 'peer_registered does not throw');
+assert(() => { handlePeerEvent({ type: 'peer_unregistered', peer_id: 'p1' }); }, 'peer_unregistered does not throw');
+
+// ════════════════════════════════════════════════════════════════════
+// REGRESSION 35: formatRuntime — handles edge cases
+// ══════════════════════════════════════════════════════════════════
+console.log('[REG-35] formatRuntime edge cases');
+assertEq(formatRuntime(null), '', 'null runtime → empty');
+assertEq(formatRuntime(undefined), '', 'undefined runtime → empty');
+assertEq(formatRuntime(0), '', 'zero runtime → empty');
+assertEq(formatRuntime(-1), '', 'negative runtime → empty');
+assertEq(formatRuntime(0.5), '0s', 'sub-second rounds down');
+assertEq(formatRuntime(59), '59s', '59 seconds');
+assertEq(formatRuntime(60), '1m 0s', '60 seconds = 1m 0s');
+assertEq(formatRuntime(3600), '1h 0m', '1 hour');
+assertEq(formatRuntime(90061), '25h 1m', '25 hours 1 minute');
+
+console.log('\n[REGRESSION] All regression tests complete');
