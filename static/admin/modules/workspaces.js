@@ -755,6 +755,7 @@ document.addEventListener('click', (e) => {
     // Expose to global scope
     // Docs
     window.showDocs = showDocs;
+    window.renderMarkdown = renderMarkdown;
     // Environments
     window.fetchEnvironments = fetchEnvironments;
     window.renderEnvironments = renderEnvironments;

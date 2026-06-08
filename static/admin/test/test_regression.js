@@ -453,9 +453,17 @@ assert(wsPanel.ws === null, 'WebSocket disconnected after disconnect');
 // REGRESSION 33: Drag-and-drop — data transfer sets correct data
 // ══════════════════════════════════════════════════════════════════
 console.log('[REG-33] Drag-and-drop data transfer');
-const dt = { setData(k, v) { dt[k] = v; } };
+const dt = {
+    dataTransfer: { setData(k, v) { dt.dataTransfer[k] = v; }, effectAllowed: 'copy' },
+    target: { style: { opacity: '' } },
+};
 onCmdDragStart(dt, 'http://localhost:9090', 'cmd-1', 'htop');
-assertEq(dt.text, 'cmd-1:htop', 'drag data set correctly');
+assertEq(dt.dataTransfer['text/plain'], 'cmd-1', 'drag data set correctly (text/plain)');
+assert(typeof dt.dataTransfer['application/x-cmd'] === 'string', 'drag data set correctly (application/x-cmd)');
+const cmdJson = JSON.parse(dt.dataTransfer['application/x-cmd']);
+assertEq(cmdJson.instUrl, 'http://localhost:9090', 'drag data has instUrl');
+assertEq(cmdJson.cmdId, 'cmd-1', 'drag data has cmdId');
+assertEq(cmdJson.cmdName, 'htop', 'drag data has cmdName');
 
 // ════════════════════════════════════════════════════════════════════
 // REGRESSION 34: Peer management — handlePeerEvent doesn't throw
@@ -584,3 +592,44 @@ if (typeof _buildSidebar === 'function') {
 } else {
     assert(true, '_buildSidebar not available for testing');
 }
+
+// ════════════════════════════════════════════════════════════════════
+// REG-BUG-012: onPanelDrop handles command drops from sidebar
+// ──────────────────────────────────────────────────────────────────
+console.log('[REG-BUG-012] onPanelDrop handles command drop from sidebar');
+assert(typeof onPanelDrop === 'function', 'onPanelDrop exported');
+
+// Ensure no panel drag is active (command drag scenario)
+onPanelDragEnd({});
+
+// Create a panel to receive the drop
+state.panels = [];
+const dp = addPanelDirect();
+assertEq(dp.selectedCmdId, null, 'panel starts with no command');
+
+// Simulate dropping a command from sidebar onto the panel
+const cmdDropEvt = {
+    preventDefault() {},
+    dataTransfer: {
+        getData(type) {
+            if (type === 'application/x-cmd') {
+                return JSON.stringify({ instUrl: 'http://localhost:9090', cmdId: 'cmd-drop-test', cmdName: 'htop' });
+            }
+            return null;
+        },
+    },
+};
+onPanelDrop(cmdDropEvt, dp.id);
+
+// Verify the panel now has the dropped command assigned
+assertEq(dp.selectedInstUrl, 'http://localhost:9090',
+    'command drop sets panel selectedInstUrl');
+assertEq(dp.selectedCmdId, 'cmd-drop-test',
+    'command drop sets panel selectedCmdId');
+assertEq(state.selectedInstUrl, 'http://localhost:9090',
+    'command drop syncs global selectedInstUrl');
+assertEq(state.selectedCmdId, 'cmd-drop-test',
+    'command drop syncs global selectedCmdId');
+
+// Cleanup
+onPanelDragEnd({});

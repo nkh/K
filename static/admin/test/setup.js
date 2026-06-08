@@ -369,7 +369,9 @@ const moduleDir = path.join(__dirname, '..', 'modules');
 
 const moduleOrder = [
     'state.js', 'eventbus.js', 'utils.js', 'focus.js', 'theme.js',
-    'sidebar.js', 'panels.js', 'commands.js', 'websocket.js', 'vtty.js',
+    'sidebar.js', 'panels.js',
+    'commands-core.js', 'command-selection.js', 'command-ui.js', 'server-connections.js',
+    'websocket.js', 'vtty.js',
     'spawn.js', 'logs.js', 'keyboard.js', 'search.js', 'notifications.js',
     'onboarding.js', 'templates.js', 'dragdrop.js', 'workspaces.js',
     'misc.js'
@@ -401,7 +403,7 @@ if (typeof VRW !== 'undefined') {
 // Provide stubs for cross-module dependencies so loading doesn't crash.
 // These will be overwritten by the actual module definitions.
 const _crossDeps = [
-    'updateDisconnectedUI', 'getSelectedPanel', 'loadSnapshot',
+    'updateDisconnectedUI', 'getSelectedPanel', 'getActivePanelId', 'loadSnapshot',
     'handlePeerEvent', 'notifyCommandEnded', 'connectLogWs',
     'disconnectLogWs', 'scheduleSecondaryVttyHttp', 'startRefresh',
     'loadVttyHttp', 'loadCommands', 'updatePanelCommandInfo',
@@ -437,6 +439,20 @@ const _crossDeps = [
     'screenshotPanel', 'closeContextMenu', 'showCmdContextMenu',
     'showPanelContextMenu', 'startRenamePanel', 'finishRenamePanel',
     'copyCommandUrl', 'togglePauseCmd', 'autoFitActiveTerminal',
+    'selectCommand', 'lookupAndSelectCommand', 'showCommandPicker',
+    'pickCommand', 'navigateCommand', 'parseLogLine', 'sendDirectKey',
+    'scheduleVttyHttp', 'sendMouseEvent',
+    'togglePanelTheme', 'applyPanelTheme', 'toggleSoundNotifications',
+    'changeFontSize', 'changeRefreshMs', 'showShortcuts', 'closeShortcuts',
+    'togglePauseRun', 'togglePauseRunPanel',
+    'restartCommand', 'restartCommandById',
+    'updateCertDropdown', 'updateInstanceDropdown',
+    'saveUserTemplates', 'getUserTemplates', 'saveCmdGroups', 'getCmdGroups',
+    'getWorkspaces', 'deleteWorkspace', 'saveWorkspaces',
+    'parseSpawnArgs', 'parseSpawnEnvVars',
+    'saveToken', 'loadToken', 'renderMarkdown',
+    'togglePanelLayout', 'toggleLayoutPresetMenu', 'applyLayoutPreset',
+    '_resizePanelTo', '_onboardingSteps', '_hex',
 ];
 for (const fn of _crossDeps) {
     if (typeof globalThis[fn] === 'undefined') {
