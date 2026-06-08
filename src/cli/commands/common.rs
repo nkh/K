@@ -92,17 +92,18 @@ pub fn resolve_instance(cli: &Cli, registry: &InstanceRegistry) -> Result<Instan
 pub fn format_instance_list(instances: &[InstanceInfo]) -> String {
     let mut out = String::new();
     out.push_str(&format!(
-        "{:<10} {:<8} {:<20} {:<10} {:<10} COMMAND\n",
-        "PID", "PORT", "BIND", "DAEMON", "DISPLAY"
+        "{:<10} {:<8} {:<20} {:<10} {:<10} {:<15} COMMAND\n",
+        "PID", "PORT", "BIND", "DAEMON", "DISPLAY", "NAME"
     ));
     for info in instances {
         out.push_str(&format!(
-            "{:<10} {:<8} {:<20} {:<10} {:<10} {}\n",
+            "{:<10} {:<8} {:<20} {:<10} {:<10} {:<15} {}\n",
             info.pid,
             info.port,
             info.bind,
             if info.daemon { "yes" } else { "no" },
             if info.display { "yes" } else { "no" },
+            info.name.as_deref().unwrap_or("-"),
             info.command.as_deref().unwrap_or("(idle)")
         ));
     }

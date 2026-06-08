@@ -1,6 +1,7 @@
 use crate::config::schema::Config;
 use clap::CommandFactory;
 use clap::{FromArgMatches, Parser, Subcommand};
+use std::io::IsTerminal;
 
 // Binary name used in help text and completion generation.
 #[cfg(feature = "vrw")]
@@ -35,6 +36,13 @@ pub struct Cli {
     #[cfg(feature = "vrw")]
     #[arg(short, long, value_name = "PORT")]
     pub port: Option<u16>,
+
+    /// Assign a human-readable name to this server instance.
+    /// Displayed in `vrw list`, `vrw cat`, and the web UI panel titlebar
+    /// instead of host:port. [vrw only]
+    #[cfg(feature = "vrw")]
+    #[arg(long, value_name = "NAME")]
+    pub server_name: Option<String>,
 
     /// Allow remote connections (binds to 0.0.0.0 and enables auth) [vrw only]
     #[cfg(feature = "vrw")]
@@ -600,7 +608,8 @@ impl Cli {
     pub fn apply_overrides(&self, cfg: &mut Config) -> anyhow::Result<()> {
         // Runtime fields (not from config file)
         cfg.binary_name = BINARY_NAME.to_string();
-        cfg.color_terminal_log = self.color_terminal_log;
+        // Color terminal log: enabled by -F flag, or auto-detected when stdout is a TTY
+        cfg.color_terminal_log = self.color_terminal_log || std::io::stdout().is_terminal();
 
         // Server (vrw only)
         #[cfg(feature = "vrw")]
@@ -610,6 +619,9 @@ impl Cli {
             }
             if let Some(port) = self.port {
                 cfg.server.port = port;
+            }
+            if let Some(ref name) = self.server_name {
+                cfg.server.name = Some(name.clone());
             }
             if self.remote {
                 cfg.server.bind = "0.0.0.0".to_string();

@@ -10,6 +10,10 @@ pub struct InstanceInfo {
     /// Bind address (vrw only).
     #[cfg(feature = "vrw")]
     pub bind: String,
+    /// Human-readable server name (vrw only).
+    #[cfg(feature = "vrw")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     pub start_time: DateTime<Utc>,
     pub daemon: bool,
     pub display: bool,

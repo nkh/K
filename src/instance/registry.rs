@@ -50,6 +50,7 @@ impl InstanceRegistry {
             pid,
             port: cfg.server.port,
             bind: cfg.server.bind.clone(),
+            name: cfg.server.name.clone(),
             start_time: chrono::Utc::now(),
             daemon: cfg.daemon.enabled,
             display: cfg.display.enabled,
@@ -197,17 +198,18 @@ impl InstanceRegistry {
             return;
         }
         println!(
-            "{:<10} {:<8} {:<20} {:<10} {:<10} COMMAND",
-            "PID", "PORT", "BIND", "DAEMON", "DISPLAY"
+            "{:<10} {:<8} {:<20} {:<10} {:<10} {:<15} COMMAND",
+            "PID", "PORT", "BIND", "DAEMON", "DISPLAY", "NAME"
         );
         for info in instances {
             println!(
-                "{:<10} {:<8} {:<20} {:<10} {:<10} {}",
+                "{:<10} {:<8} {:<20} {:<10} {:<10} {:<15} {}",
                 info.pid,
                 info.port,
                 info.bind,
                 if info.daemon { "yes" } else { "no" },
                 if info.display { "yes" } else { "no" },
+                info.name.as_deref().unwrap_or("-"),
                 info.command.as_deref().unwrap_or("(idle)")
             );
         }

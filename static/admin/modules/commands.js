@@ -413,10 +413,14 @@ function updatePanelCommandInfo() {
     if (nameEl && cmd) {
         const panelObj = state.panels.find(p => p.id === panel.id);
         const fullName = cmd.name || cmd.id;
-        // Show custom title if set, otherwise command name
-        const displayTitle = (panelObj && panelObj.customTitle) ? panelObj.customTitle : fullName;
+        // Append server label (name or host:port) after the command name
+        const inst = panelObj && panelObj.selectedInstUrl ? state.connections.find(i => i.url === panelObj.selectedInstUrl) : null;
+        const serverLabel = inst ? inst.label || inst.url.replace(/^https?:\/\//, '') : '';
+        const titleWithServer = serverLabel ? fullName + ' - ' + serverLabel : fullName;
+        // Show custom title if set, otherwise command name + server
+        const displayTitle = (panelObj && panelObj.customTitle) ? panelObj.customTitle : titleWithServer;
         nameEl.textContent = displayTitle;
-        nameEl.title = fullName + (panelObj && panelObj.customTitle ? ' (title: ' + panelObj.customTitle + ')' : '');
+        nameEl.title = fullName + (serverLabel ? ' (' + serverLabel + ')' : '') + (panelObj && panelObj.customTitle ? ' (title: ' + panelObj.customTitle + ')' : '');
         if (argsEl) {
             const argsStr = (cmd.args || []).join(' ');
             argsEl.textContent = argsStr;
@@ -642,6 +646,14 @@ async function fetchServerConfig() {
             }
             if (!localStorage.getItem('vrw_poll_interval')) {
                 state.pollInterval = state.serverPollMs || 500;
+            }
+        }
+        // Update connection label with server_name if available
+        if (json.status === 'ok' && json.data && json.data.server_name) {
+            const baseUrl = getBaseUrl();
+            const localConn = state.connections.find(i => i.url === baseUrl);
+            if (localConn) {
+                localConn.label = json.data.server_name;
             }
         }
         if (json.status === 'ok' && json.data && json.data.vtty) {
