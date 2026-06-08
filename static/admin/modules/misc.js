@@ -160,8 +160,7 @@ function startRefresh() {
     window.addDiscoveredPeer = addDiscoveredPeer;
     window.savePeersToStorage = savePeersToStorage;
     window.handlePeerEvent = handlePeerEvent;
-    window.addConnection = addConnection;
-    window.removeConnection = removeConnection;
+    // addConnection and removeConnection are exported by commands.js
 })();
 
 // ─── Peer Instances (registration & failover) ───

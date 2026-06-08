@@ -768,7 +768,7 @@ function startUpdateMode() {
 function startPanelUpdateMode(panelId) {
     stopPanelUpdateMode(panelId);
     const panelObj = state.panels.find(p => p.id === panelId);
-    if (!panelObj || panelObj.selectedCmdId === null || panelObj.bufferView !== 'current') return;
+    if (!panelObj || panelObj.selectedCmdId === null || state.bufferView !== 'current') return;
     if (state.updateMode === 'push') {
         connectPanelWs(panelId);
     } else {

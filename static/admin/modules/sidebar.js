@@ -88,11 +88,9 @@ function switchSidebarTab(tab, el) {
     document.getElementById('tab-servers').style.display = tab === 'servers' ? '' : 'none';
     document.getElementById('tab-spawn').style.display = tab === 'spawn' ? '' : 'none';
     document.getElementById('tab-templates').style.display = tab === 'templates' ? '' : 'none';
-    document.getElementById('tab-envs').style.display = tab === 'envs' ? '' : 'none';
     document.getElementById('tab-certs').style.display = tab === 'certs' ? '' : 'none';
     document.getElementById('tab-groups').style.display = tab === 'groups' ? '' : 'none';
     if (tab === 'templates') renderTemplates();
-    if (tab === 'envs') renderEnvironments();
     if (tab === 'groups') renderGroups();
 }
 
