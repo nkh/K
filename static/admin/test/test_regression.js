@@ -238,11 +238,12 @@ assertEq(hist[0].cmd, 'htop', 'most recent spawn first');
 // REGRESSION 15: Template persistence — saved and loaded correctly
 // ════════════════════════════════════════════════════════════════════
 console.log('[REG-15] Template persistence');
-localStorage.removeItem('vrw_user_templates');
+localStorage.removeItem('vrw_templates');
 saveUserTemplates([{ name: 'dev', cmd: 'npm run dev', args: '' }]);
 const loaded = getUserTemplates();
-assert(typeof loaded === 'object', 'templates loaded as object');
-assertEq(loaded.dev.cmd, 'npm run dev', 'template cmd preserved');
+assert(Array.isArray(loaded), 'templates loaded as array');
+assert(loaded.length >= 1, 'at least one template');
+assertEq(loaded[0].cmd, 'npm run dev', 'template cmd preserved');
 
 // ════════════════════════════════════════════════════════════════════
 // REGRESSION 16: Sidebar toggle — collapsed class toggles

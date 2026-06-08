@@ -153,6 +153,40 @@ async function loadCommands() {
         renderPanels();
     }
 
+    // ── Auto-select first command when none selected ──
+    // This handles two cases:
+    //   1. Server started after page load: loadSnapshot already failed,
+    //      _snapshotLoaded=true, so only loadCommands runs in the interval.
+    //      Without auto-select, the panel stays empty ("No command selected").
+    //   2. First load where loadSnapshot succeeded but selectedCmdId was
+    //      somehow lost (edge case with concurrent renderPanels calls).
+    if (hasAnyCommands && !state.selectedCmdId) {
+        const panelObj = state.panels[0];
+        if (panelObj && !panelObj.selectedCmdId) {
+            // Find the first alive command (or first command if none alive)
+            let targetInst = null, targetCmd = null;
+            for (const inst of state.connections) {
+                if (!inst._commands || inst._commands.length === 0) continue;
+                const alive = inst._commands.find(c => c.alive);
+                if (alive) { targetInst = inst; targetCmd = alive; break; }
+                if (!targetCmd) { targetInst = inst; targetCmd = inst._commands[0]; }
+            }
+            if (targetInst && targetCmd) {
+                panelObj.selectedInstUrl = targetInst.url;
+                panelObj.selectedCmdId = targetCmd.id;
+                state.selectedInstUrl = targetInst.url;
+                state.selectedCmdId = targetCmd.id;
+                state.bufferView = 'current';
+                // Load VTTY content and start updates
+                loadVttyHttpForPanel(panelObj.id, targetInst.url, targetCmd.id);
+                startPanelUpdateMode(panelObj.id);
+                updatePanelCommandInfo();
+                updateTerminalDisconnectedOverlay();
+                updateSidebarSelection();
+            }
+        }
+    }
+
     // Build sidebar (reuses extracted _buildSidebar for consistency)
     _buildSidebar();
 }
@@ -627,6 +661,13 @@ async function fetchServerConfig() {
         const json = await res.json();
         const wasReachable = state.serverReachable;
         state.serverReachable = !!json.status;
+        // When server transitions from unreachable → reachable, immediately
+        // load commands so the auto-select logic in loadCommands fires.
+        // Without this, the next loadCommands interval tick (up to 1s delay)
+        // is the earliest the panel gets a command.
+        if (!wasReachable && state.serverReachable) {
+            loadCommands();
+        }
         // Re-render panels if reachability changed (e.g. "not running" -> welcome)
         if (wasReachable !== state.serverReachable) {
             renderPanels();
