@@ -66,7 +66,7 @@ async function loadSnapshot() {
         const firstCmd = hasAnyCommands
             ? (commands.find(c => c.alive) || commands[0])
             : null;
-        const shouldShowWelcome = (state.panels.length === 1 && !hasAnyCommands && !state.selectedCmdId && !state.serverReachable);
+        const shouldShowWelcome = (!hasAnyCommands && !state.selectedCmdId && !state.serverReachable);
 
         if (shouldShowWelcome !== _showingWelcome) {
             _showingWelcome = shouldShowWelcome;

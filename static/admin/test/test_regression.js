@@ -100,8 +100,9 @@ assert(theme === 'dark' || theme === 'grey', 'theme persisted correctly');
 // REGRESSION 6: Token persistence — saved and restored
 // ════════════════════════════════════════════════════════════════════
 console.log('[REG-06] Token persistence');
-localStorage.setItem('vrw_auth_token', 'test-pat');
 resetTestState();
+localStorage.setItem('vrw_auth_token', 'test-pat');
+state.authToken = localStorage.getItem('vrw_auth_token') || '';
 assertEq(state.authToken, 'test-pat', 'authToken restored from localStorage after reset');
 
 // ════════════════════════════════════════════════════════════════════

@@ -139,6 +139,14 @@ function startRefresh() {
         checkForExitedCommands();
     }, 1000);
 
+    // Periodically re-check server reachability via /api/info so that
+    // state.serverReachable stays accurate even when the server starts
+    // after the page loaded.  Runs every 5 seconds (no need to be aggressive).
+    if (state._serverConfigInterval) clearInterval(state._serverConfigInterval);
+    state._serverConfigInterval = setInterval(() => {
+        fetchServerConfig();
+    }, 5000);
+
     // Start resource polling (every 2 seconds) — first poll fires immediately
     if (state._resourceInterval) clearInterval(state._resourceInterval);
     pollResources(); // immediate first poll

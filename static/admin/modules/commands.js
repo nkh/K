@@ -147,7 +147,7 @@ async function loadCommands() {
             break;
         }
     }
-    const shouldShowWelcome = (state.panels.length === 1 && !hasAnyCommands && !state.selectedCmdId && !state.serverReachable);
+    const shouldShowWelcome = (!hasAnyCommands && !state.selectedCmdId && !state.serverReachable);
     if (shouldShowWelcome !== _showingWelcome) {
         _showingWelcome = shouldShowWelcome;
         renderPanels();
@@ -776,11 +776,10 @@ function updateInstanceDropdown() {
 // commands from the sidebar but does NOT close any panels (they keep
 // their last VTTY state).
 function addConnection(url, label, token) {
-    // Idempotent: if connection already exists, just update label/token
+    // Idempotent: if connection already exists, return it unchanged.
+    // This prevents accidental overwrites of user-set labels/tokens.
     const existing = state.connections.find(c => c.url === url);
     if (existing) {
-        if (label) existing.label = label;
-        if (token !== undefined) existing.token = token;
         return existing;
     }
     const conn = { url, label: label || url, token: token || '', reachable: undefined, _lastError: null, _commands: null, _certs: null };
@@ -840,6 +839,7 @@ async function confirmAddServer() {
         try { label = new URL(url).host; } catch (e) { label = url; }
     }
     const openPane = document.getElementById('addServerOpenPane').checked;
+    const isNew = !state.connections.some(c => c.url === url);
     const conn = addConnection(url, label, token);
     closeAddServerModal();
     loadCommands();

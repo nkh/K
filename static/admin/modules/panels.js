@@ -386,6 +386,22 @@ function renderPanels() {
     const visiblePanels = state.panels.filter(p => !p.minimized);
     const hasMultiplePanels = visiblePanels.length > 1;
 
+    // Recalculate welcome state BEFORE the fast-path check.
+    // This ensures that when commands arrive (or the server becomes reachable)
+    // after the welcome screen was shown, the fast path is invalidated and
+    // the welcome screen is properly dismissed.
+    let hasAnyCommands = false;
+    for (const inst of state.connections) {
+        if (inst._commands && inst._commands.length > 0) {
+            hasAnyCommands = true;
+            break;
+        }
+    }
+    const shouldShowWelcome = (!hasAnyCommands && !state.selectedCmdId && !state.serverReachable);
+    if (shouldShowWelcome !== _showingWelcome) {
+        _showingWelcome = shouldShowWelcome;
+    }
+
     // Fast path: if panel count and IDs haven't changed, skip the full rebuild.
     // This prevents erasing terminal content when only command selection changes.
     // EXCEPTION: must rebuild when transitioning between welcome and panel views,
@@ -438,16 +454,7 @@ function renderPanels() {
     // Apply panel layout direction
     _applyPanelLayoutClass(container);
 
-    // Check if there are any commands at all for the welcome state
-    let hasAnyCommands = false;
-    for (const inst of state.connections) {
-        if (inst._commands && inst._commands.length > 0) {
-            hasAnyCommands = true;
-            break;
-        }
-    }
-
-    if (visiblePanels.length === 0 && !hasAnyCommands && !state.selectedCmdId && !state.serverReachable) {
+    if (!hasAnyCommands && !state.selectedCmdId && !state.serverReachable) {
         _showingWelcome = true;
         // Hide shared toolbar in welcome state
         const toolbar = document.getElementById('sharedToolbar');
