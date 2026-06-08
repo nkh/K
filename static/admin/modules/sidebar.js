@@ -433,6 +433,53 @@ function rearrangePinnedCommands(container) {
 
 
 
+// ─── Disconnected UI ───
+function updateDisconnectedUI() {
+    updateSidebarBanner();
+    updateSidebarTabsVisibility();
+    updateTerminalDisconnectedOverlay();
+    updateCmdToolbarVisibility();
+}
+
+function updateSidebarBanner() {
+    let banner = document.getElementById('disconnectedBanner');
+    const unreachable = state.connections.filter(i => i.reachable === false);
+    if (unreachable.length > 0) {
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'disconnectedBanner';
+            banner.className = 'disconnected-banner';
+            const content = document.getElementById('sidebarContent');
+            content.insertBefore(banner, content.firstChild);
+        }
+        const labels = unreachable.map(i => i.label).join(', ');
+        banner.innerHTML = '<span class="disconnected-icon">&#9888;</span> Server disconnected: ' +
+            escHtml(labels) + ' &mdash; output may be stale';
+    } else {
+        if (banner) banner.remove();
+    }
+}
+
+function updateTerminalDisconnectedOverlay() {
+    for (const panelObj of state.panels) {
+        const panelEl = document.getElementById(panelObj.id);
+        if (!panelEl) continue;
+        let overlay = panelEl.querySelector('.disconnected-overlay');
+        const inst = panelObj.selectedInstUrl ? state.connections.find(i => i.url === panelObj.selectedInstUrl) : null;
+        if (inst && inst.reachable === false) {
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.className = 'disconnected-overlay';
+                overlay.innerHTML = '<span>&#9888; Server unreachable &mdash; output is stale</span>';
+                const vttyEl = panelEl.querySelector('.vtty-container');
+                if (vttyEl) vttyEl.appendChild(overlay);
+            }
+        } else {
+            if (overlay) overlay.remove();
+        }
+    }
+}
+
     window.toggleSidebar = toggleSidebar;
     window.switchSidebarTab = switchSidebarTab;
     window.updateSidebarTabsVisibility = updateSidebarTabsVisibility;

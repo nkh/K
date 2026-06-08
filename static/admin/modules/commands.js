@@ -868,8 +868,8 @@ async function confirmAddServer() {
             updatePanelCommandInfo();
             updateTerminalDisconnectedOverlay();
             updateSidebarSelection();
-            loadVttyHttp(url, targetCmd.id);
-            startUpdateMode();
+            loadVttyHttpForPanel(panelObj.id, url, targetCmd.id);
+            startPanelUpdateMode(panelObj.id);
         } else {
             // No commands yet — create an empty panel focused on this server
             const panelObj = addPanelDirect();

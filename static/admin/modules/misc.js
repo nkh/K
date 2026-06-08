@@ -155,11 +155,65 @@ function startRefresh() {
     window.toggleSelectionMode = toggleSelectionMode;
     // Refresh loop
     window.startRefresh = startRefresh;
-    // Re-expose connection helpers (also defined in commands.js)
-    window.handlePeerEvent = handlePeerEvent;
+    // Peer discovery
     window.fetchPeers = fetchPeers;
     window.addDiscoveredPeer = addDiscoveredPeer;
     window.savePeersToStorage = savePeersToStorage;
+    window.handlePeerEvent = handlePeerEvent;
     window.addConnection = addConnection;
     window.removeConnection = removeConnection;
 })();
+
+// ─── Peer Instances (registration & failover) ───
+async function fetchPeers() {
+    try {
+        const res = await fetch(apiUrl('/api/peers'), { headers: authHeaders() });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json.status !== 'ok' || !Array.isArray(json.data)) return;
+
+        for (const peer of json.data) {
+            if (state.connections.some(i => i.url === peer.url)) continue;
+            addDiscoveredPeer(peer.url, peer.label || peer.url, peer.token || '');
+        }
+
+        savePeersToStorage();
+
+        if (json.data.length > 0) {
+            loadCommands();
+        }
+    } catch (e) {
+        // Not critical — peers can also be discovered via WS push
+    }
+}
+
+function addDiscoveredPeer(url, label, token) {
+    addConnection(url, label, token);
+    console.log('[vrw] Peer discovered:', label, '(' + url + ')');
+}
+
+function handlePeerEvent(msg) {
+    if (msg.type === 'peer_registered' && msg.data) {
+        const { url, label, token } = msg.data;
+        addDiscoveredPeer(url, label, token);
+        savePeersToStorage();
+    } else if (msg.type === 'peer_unregistered' && msg.data) {
+        const { url } = msg.data;
+        removeConnection(url);
+        loadCommands();
+        savePeersToStorage();
+    }
+}
+
+function savePeersToStorage() {
+    const peers = state.connections.filter(i => i.url !== window.location.origin);
+    if (peers.length > 0) {
+        try {
+            localStorage.setItem('vrw_peers', JSON.stringify(
+                peers.map(p => ({ url: p.url, label: p.label, token: p.token }))
+            ));
+        } catch (e) { /* quota exceeded — not critical */ }
+    } else {
+        localStorage.removeItem('vrw_peers');
+    }
+}

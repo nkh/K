@@ -1465,6 +1465,69 @@ async function toggleMaxFit(panelId) {
 }
 
 
+// ─── Max Font Toggle ───
+// Per-panel state: stores the previous font size before max-font was applied,
+// so toggling back restores it.
+const _maxFontState = {};  // panelId → { prevFontSize, active }
+
+/// Toggle "max font" mode: maximize the font size so the terminal rows/cols
+/// still fit in the panel container at the current dimensions.  Toggle back to
+/// restore the previous font size.
+async function toggleMaxFont(panelId) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj) return;
+
+    const panelEl = document.getElementById(panelId);
+    if (!panelEl) return;
+    const vttyEl = panelEl.querySelector('.vtty-container');
+    if (!vttyEl) return;
+
+    const st = _maxFontState[panelId];
+    const btn = document.getElementById('stMaxFontBtn') || document.getElementById('maxFontBtn-' + panelId);
+
+    // Get current terminal dimensions from the server
+    const curRows = parseInt(document.getElementById('stResizeRows')?.value || '24') || 24;
+    const curCols = parseInt(document.getElementById('stResizeCols')?.value || '80') || 80;
+
+    if (st && st.active) {
+        // Toggle back: restore previous font size
+        st.active = false;
+        if (btn) {
+            btn.textContent = '\uD83D\uDD0D';
+            btn.style.background = '';
+            btn.style.color = '';
+        }
+        panelObj.fontSize = st.prevFontSize;
+        localStorage.setItem('vrw_panel_font_' + panelId, panelObj.fontSize.toString());
+        if (vttyEl) vttyEl.style.fontSize = panelObj.fontSize + 'px';
+        const stFontSize = document.getElementById('stFontSize');
+        if (stFontSize && panelId === getActivePanelId()) stFontSize.textContent = panelObj.fontSize + 'px';
+        delete _maxFontState[panelId];
+    } else {
+        // Apply max font: calculate the largest font that fits current rows/cols
+        const rect = vttyEl.getBoundingClientRect();
+        if (rect.width < 10 || rect.height < 10) return;
+
+        // Max font = largest font where fontSize * 0.6 * cols <= width AND fontSize * 1.2 * rows <= height
+        const maxFontW = Math.floor(rect.width / (curCols * 0.6));
+        const maxFontH = Math.floor(rect.height / (curRows * 1.2));
+        const maxFont = Math.max(8, Math.min(28, Math.min(maxFontW, maxFontH)));
+
+        _maxFontState[panelId] = { prevFontSize: panelObj.fontSize, active: true };
+        if (btn) {
+            btn.textContent = 'Restore';
+            btn.style.background = 'var(--accent)';
+            btn.style.color = '#fff';
+        }
+        panelObj.fontSize = maxFont;
+        localStorage.setItem('vrw_panel_font_' + panelId, panelObj.fontSize.toString());
+        if (vttyEl) vttyEl.style.fontSize = panelObj.fontSize + 'px';
+        const stFontSize = document.getElementById('stFontSize');
+        if (stFontSize && panelId === getActivePanelId()) stFontSize.textContent = panelObj.fontSize + 'px';
+    }
+}
+
+
 // ─── Drag-and-Drop Panel Reorder ───
 let _draggedPanelId = null;
 

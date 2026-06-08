@@ -758,6 +758,34 @@ function _applySecondaryVttyDiff(panelObj, vttyEl, data) {
 
 
 
+// ─── VTTY Update Mode Start/Stop ───
+function startUpdateMode() {
+    // Legacy wrapper: start update for the focused panel
+    const panelId = getActivePanelId();
+    if (panelId) startPanelUpdateMode(panelId);
+}
+
+function startPanelUpdateMode(panelId) {
+    stopPanelUpdateMode(panelId);
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj || panelObj.selectedCmdId === null || panelObj.bufferView !== 'current') return;
+    if (state.updateMode === 'push') {
+        connectPanelWs(panelId);
+    } else {
+        startPanelPoll(panelId);
+    }
+}
+
+function stopPanelUpdateMode(panelId) {
+    disconnectPanelWs(panelId);
+    stopPanelPoll(panelId);
+}
+
+function stopUpdateMode() {
+    const panelId = getActivePanelId();
+    if (panelId) stopPanelUpdateMode(panelId);
+}
+
     window.connectVttyWs = connectVttyWs;
     window.disconnectVttyWs = disconnectVttyWs;
     window.connectPanelWs = connectPanelWs;
@@ -770,6 +798,10 @@ function _applySecondaryVttyDiff(panelObj, vttyEl, data) {
     window.stopPanelPoll = stopPanelPoll;
     window.pollOnce = pollOnce;
     window.pollOncePanel = pollOncePanel;
+    window.startUpdateMode = startUpdateMode;
+    window.startPanelUpdateMode = startPanelUpdateMode;
+    window.stopUpdateMode = stopUpdateMode;
+    window.stopPanelUpdateMode = stopPanelUpdateMode;
     window._connectSecondaryWs = _connectSecondaryWs;
     window._disconnectSecondaryWs = _disconnectSecondaryWs;
     window.scheduleSecondaryVttyHttp = scheduleSecondaryVttyHttp;

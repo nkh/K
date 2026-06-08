@@ -30,16 +30,7 @@
             <button class="btn btn-xs" id="logsBtn" onclick="toggleLogsView()" title="Toggle log viewer">Logs</button>
             <button class="btn btn-xs" id="statusBtn" onclick="toggleBottombar()" title="Toggle status bar">Status</button>
             <button class="btn btn-xs" onclick="openCmdManager()" title="Command Manager — manage all commands across servers">&#x2630; Commands</button>
-            <div class="workspace-dropdown" id="workspaceDropdown" title="Workspaces — save/restore panel configurations">
-                <button class="btn btn-xs" onclick="toggleWorkspaceDropdown(event)">&#x1F3E0; Workspaces</button>
-                <div class="workspace-menu" id="workspaceMenu" style="display:none;">
-                    <button onclick="saveCurrentWorkspace()">&#x1F4BE; Save Current</button>
-                    <div class="ctx-menu-sep"></div>
-                    <div id="workspaceList"></div>
-                    <div class="ctx-menu-sep"></div>
-                    <button onclick="openWorkspaceManage()">&#x2699; Manage</button>
-                </div>
-            </div>
+
             <div class="token-bar">
                 <label for="authToken">Token:</label>
                 <input type="password" id="authToken" placeholder="Bearer token" title="Authorization token">
@@ -403,7 +394,7 @@
 
 <!-- Modules: load order matters — dependencies must be loaded before dependents.
      state → eventbus → utils → focus → theme → sidebar → panels → commands → websocket → vtty → spawn
-     → logs → keyboard → search → notifications → onboarding → templates → dragdrop → workspaces → misc → app.js -->
+     → logs → keyboard → search → notifications → onboarding → templates → dragdrop → workspaces → misc → snapshot → app.js -->
 <script src="modules/state.js"></script>
 <script src="modules/eventbus.js"></script>
 <script src="modules/utils.js"></script>
@@ -424,6 +415,7 @@
 <script src="modules/dragdrop.js"></script>
 <script src="modules/workspaces.js"></script>
 <script src="modules/misc.js"></script>
+<script src="modules/snapshot.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
