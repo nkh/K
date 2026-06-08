@@ -191,7 +191,7 @@ function _buildSidebar() {
         html += `<span class="sidebar-sort-item${_sidebarSort === 'name' ? ' active' : ''}" onclick="_sidebarSort='name';loadCommands()">All</span>`;
         for (const inst of state.connections) {
             const active = _sidebarSort === inst.url ? ' active' : '';
-            html += `<span class="sidebar-sort-item${active}" onclick="_sidebarSort='${escHtml(inst.url)}';loadCommands()">${escHtml(inst.label)}</span>`;
+            html += `<span class="sidebar-sort-item${active}" onclick="_sidebarSort='${escHtml(inst.url)}';window._userSpawnInstUrl='${escHtml(inst.url)}';loadCommands()">${escHtml(inst.label)}</span>`;
         }
         html += '</div>';
     }
@@ -225,8 +225,11 @@ function _buildSidebar() {
 
     if (_sidebarSort === 'name') {
         // Sidebar "All" view: alphabetical by name
+        // When multiple servers exist, show a server badge to distinguish
+        // same-named commands on different servers.
+        const multiServer = state.connections.length > 1;
         allCmds.sort((a, b) => a.cmdName.localeCompare(b.cmdName));
-        html += renderCmdList(allCmds);
+        html += renderCmdList(allCmds, multiServer);
     } else {
         const targetUrl = _sidebarSort;
         const grouped = targetUrl === 'all' ? null : targetUrl;
@@ -252,7 +255,7 @@ function _buildSidebar() {
         }
     }
 
-    function renderCmdList(cmds) {
+    function renderCmdList(cmds, showServerBadge) {
         let out = '';
         for (const { inst, cmd, cmdName } of cmds) {
             const cert = cmd.certificate || '';
@@ -300,6 +303,11 @@ function _buildSidebar() {
             if (cmd.pid) detailParts.push(escHtml(String(cmd.pid)));
             // NOTE: cmd.pid available here because renderCmdList receives {cmd,...} objects
             const unreachableTitle = instUnreachable ? ` [disconnected]` : '';
+            // In "All" view with multiple servers, show a server badge to
+            // distinguish same-named commands on different servers.
+            const serverBadge = showServerBadge
+                ? `<span class="resource-badge" style="font-size:0.55rem;opacity:0.7;" title="${escHtml(inst.url)}">${escHtml(inst.label)}</span>`
+                : '';
             out += `
                 <div class="cmd-item${selected}${frozenClass}${exitedClass}${instUnreachable ? ' unreachable' : ''}" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" data-cmd-retained="${retainOnExit}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" draggable="true" ondragstart="onCmdDragStart(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" onclick="selectCommand(this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true',this.dataset.cmdRetained==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)}${unreachableTitle}" style="${dimStyle}">
                     <div class="cmd-item-row">
@@ -308,6 +316,7 @@ function _buildSidebar() {
                         <button class="pin-btn${isPinned ? ' active' : ''}" onclick="event.stopPropagation();togglePinCmd('${escHtml(cmdName)}')" title="${isPinned ? 'Unpin' : 'Pin'}">${isPinned ? '◉' : '◎'}</button>
                         <span class="cmd-grab-handle" onmousedown="_cmdReorderMouseDown(event,'${escHtml(inst.url)}','${escHtml(cmd.id)}','${escHtml(cmdName)}')" title="Drag to reorder / drop on pane to open">&#x2807;</span>
                         <span class="name">${escHtml(cmdName)}</span>
+                        ${serverBadge}
                         ${certBadge}
                         ${exitBadge}
                     </div>
@@ -321,7 +330,8 @@ function _buildSidebar() {
     container.innerHTML = html || '<div style="padding:1rem;color:var(--text-muted);text-align:center;">No running commands</div>';
     updateInstanceDropdown();
     updateCmdToolbarVisibility();
-    initPanelDropTargets();
+    // initPanelDropTargets() intentionally NOT called — panel inline handlers
+    // (onPanelDragOver/onPanelDrop) already handle command drag-and-drop from sidebar.
 
     if (state._pendingSelectId) {
         const pendingId = state._pendingSelectId;

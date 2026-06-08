@@ -633,8 +633,11 @@ function renderPanels() {
     _updatePanelMultiUI();
     // Sync shared toolbar with current state
     if (!_showingWelcome) updateSharedToolbar();
-    // Initialize drop targets for command drag-and-drop
-    initPanelDropTargets();
+    // NOTE: initPanelDropTargets() is intentionally NOT called here.
+    // Command drag-and-drop from sidebar is handled by inline ondragover/ondrop
+    // handlers on each .panel element (onPanelDragOver/onPanelDrop), which already
+    // detect command drops via the 'application/x-cmd' dataTransfer type.
+    // Calling initPanelDropTargets() would add duplicate addEventListener listeners.
 }
 
 /// Update multi-panel UI elements (drag handles, remove buttons, layout toggle)
@@ -1550,7 +1553,9 @@ function onPanelDragStart(e, panelId) {
 
 function onPanelDragOver(e) {
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
+    // Sidebar command drops use effectAllowed='copy'; panel reorders use 'move'.
+    // _draggedPanelId is set only for panel-to-panel drags.
+    e.dataTransfer.dropEffect = _draggedPanelId ? 'move' : 'copy';
     const panel = e.target.closest('.panel');
     if (!panel || panel.id === _draggedPanelId) return;
     const rect = panel.getBoundingClientRect();

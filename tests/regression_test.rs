@@ -41,6 +41,7 @@ fn test_config() -> Config {
         server: ServerConfig {
             bind: "127.0.0.1".to_string(),
             port: 0,
+            name: None,
         },
         security: SecurityConfig::default(),
         tls: TlsConfig::default(),
