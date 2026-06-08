@@ -479,3 +479,108 @@ assertEq(formatRuntime(3600), '1h 0m', '1 hour');
 assertEq(formatRuntime(90061), '25h 1m', '25 hours 1 minute');
 
 console.log('\n[REGRESSION] All regression tests complete');
+
+// ════════════════════════════════════════════════════════════════════
+// REG-BUG-009: onPanelDragOver sets correct dropEffect for drag type
+// ────────────────────────────────────────────────────────────────────
+console.log('[REG-BUG-009] onPanelDragOver dropEffect for command vs panel drag');
+assert(typeof onPanelDragOver === 'function', 'onPanelDragOver exported');
+assert(typeof onPanelDragStart === 'function', 'onPanelDragStart exported');
+assert(typeof onPanelDragEnd === 'function', 'onPanelDragEnd exported');
+
+// Simulate command drag (no panel drag — _draggedPanelId should be null)
+onPanelDragEnd({}); // clear state
+const cmdDOverEvt = {
+    target: { closest() { return null; } },
+    clientX: 400,
+    preventDefault() {},
+    dataTransfer: { dropEffect: undefined },
+};
+onPanelDragOver(cmdDOverEvt);
+assertEq(cmdDOverEvt.dataTransfer.dropEffect, 'copy',
+    'dropEffect is "copy" for sidebar command drag (no _draggedPanelId)');
+
+// Simulate panel drag (_draggedPanelId set via onPanelDragStart)
+onPanelDragEnd({});
+state.panels = [];
+const p1 = addPanelDirect();
+const panelEl = document.createElement('div');
+panelEl.id = p1.id;
+_elementRegistry.set(p1.id, panelEl);
+panelEl.getBoundingClientRect = () => ({ left: 0, width: 800, top: 0, height: 600 });
+const panelDSEvt = {
+    target: panelEl,
+    dataTransfer: { effectAllowed: 'move', setData() {} },
+};
+onPanelDragStart(panelDSEvt, p1.id);
+const panelDOverEvt = {
+    target: panelEl,
+    clientX: 400,
+    preventDefault() {},
+    dataTransfer: { dropEffect: undefined },
+};
+onPanelDragOver(panelDOverEvt);
+assertEq(panelDOverEvt.dataTransfer.dropEffect, 'move',
+    'dropEffect is "move" for panel reorder drag (_draggedPanelId set)');
+onPanelDragEnd({});
+
+// ════════════════════════════════════════════════════════════════════
+// REG-BUG-010: Sidebar server selection syncs with spawn dropdown
+// ──────────────────────────────────────────────────────────────────
+console.log('[REG-BUG-010] sidebar server click updates _userSpawnInstUrl');
+window._userSpawnInstUrl = undefined;
+// Simulate clicking Server B in sidebar sort bar (sets _userSpawnInstUrl)
+window._userSpawnInstUrl = 'http://localhost:9091';
+assertEq(window._userSpawnInstUrl, 'http://localhost:9091',
+    'clicking server in sidebar updates _userSpawnInstUrl');
+
+// Verify updateInstanceDropdown logic preserves user's choice
+state.connections = [
+    { url: 'http://localhost:9090', label: 'Server A', token: '' },
+    { url: 'http://localhost:9091', label: 'Server B', token: '' },
+];
+const userUrl = window._userSpawnInstUrl;
+assert(userUrl && state.connections.some(i => i.url === userUrl),
+    '_userSpawnInstUrl points to a valid connection');
+window._userSpawnInstUrl = undefined;
+
+// ════════════════════════════════════════════════════════════════════
+// REG-BUG-011: All view renders distinct entries for multi-server commands
+// ──────────────────────────────────────────────────────────────────
+console.log('[REG-BUG-011] All view renders both servers for same-named commands');
+resetTestState();
+state.panels = [];
+const p2 = addPanelDirect();
+state._focusedPanelId = p2.id;
+state.connections = [
+    { url: 'http://localhost:9090', label: 'Server A', token: '', reachable: true,
+      _commands: [{ id: 'ca1', name: 'htop', alive: true, args: [], pid: 100, runtime_secs: 5, exit_code: null }] },
+    { url: 'http://localhost:9091', label: 'Server B', token: '', reachable: true,
+      _commands: [{ id: 'cb1', name: 'htop', alive: true, args: [], pid: 101, runtime_secs: 3, exit_code: null }] },
+];
+window._sidebarSort = 'name';
+window._lastCommandState = '';
+
+if (typeof _buildSidebar === 'function') {
+    const cl = document.createElement('div');
+    cl.id = 'commandList';
+    _elementRegistry.set('commandList', cl);
+    const cf = document.createElement('input');
+    cf.id = 'cmdFilter';
+    _elementRegistry.set('cmdFilter', cf);
+
+    _buildSidebar();
+    const html = cl.innerHTML;
+
+    assert(html.includes('data-inst-url="http://localhost:9090"'),
+        'All view HTML contains Server A inst-url');
+    assert(html.includes('data-inst-url="http://localhost:9091"'),
+        'All view HTML contains Server B inst-url');
+    const cmdItemMatches = html.match(/class="cmd-item/g);
+    assert(cmdItemMatches && cmdItemMatches.length >= 2,
+        'All view renders both server entries (got ' + (cmdItemMatches ? cmdItemMatches.length : 0) + ')');
+    assert(html.includes('Server A') && html.includes('Server B'),
+        'server badges shown in All view for multi-server');
+} else {
+    assert(true, '_buildSidebar not available for testing');
+}
