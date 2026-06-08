@@ -114,6 +114,38 @@ function navigateCommand(direction) {
     }
 }
 
+function navigatePrevCommand() {
+    navigateCommand(-1);
+}
+
+function navigateNextCommand() {
+    navigateCommand(1);
+}
+
+function _isTerminalVisible() {
+    if (state.currentView !== 'vtty') return false;
+    if (!state.selectedCmdId) return false;
+    return true;
+}
+
+function _flushPendingVttyUpdate() {
+    if (!state._pendingVttyDirty) return;
+    state._pendingVttyDirty = false;
+    if (state._pendingVttyData) {
+        const data = state._pendingVttyData;
+        state._pendingVttyData = null;
+        if (data.cells && data.cells.length > 0) {
+            applyVttyDiff(data);
+        } else {
+            updateVttyDisplay(data);
+        }
+    } else {
+        if (state.selectedInstUrl && state.selectedCmdId) {
+            loadVttyHttp(state.selectedInstUrl, state.selectedCmdId);
+        }
+    }
+}
+
 async function loadCommands() {
     // Load commands from all instances in PARALLEL and track reachability.
     let anyReachableChanged = false;
@@ -1000,7 +1032,6 @@ async function spawnFromWelcome() {
     window.lookupAndSelectCommand = lookupAndSelectCommand;
     window.showCommandPicker = showCommandPicker;
     window.pickCommand = pickCommand;
-    window.loadSnapshot = loadSnapshot;
     window.navigateCommand = navigateCommand;
     window.navigatePrevCommand = navigatePrevCommand;
     window.navigateNextCommand = navigateNextCommand;
@@ -1019,10 +1050,7 @@ async function spawnFromWelcome() {
     window.applyPollInterval = applyPollInterval;
     window._isTerminalVisible = _isTerminalVisible;
     window._flushPendingVttyUpdate = _flushPendingVttyUpdate;
-    window.startUpdateMode = startUpdateMode;
-    window.startPanelUpdateMode = startPanelUpdateMode;
-    window.stopUpdateMode = stopUpdateMode;
-    window.stopPanelUpdateMode = stopPanelUpdateMode;
+
     window.loadCertificates = loadCertificates;
     window.updateCertDropdown = updateCertDropdown;
     window.updateInstanceDropdown = updateInstanceDropdown;

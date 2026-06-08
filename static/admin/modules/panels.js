@@ -1630,7 +1630,6 @@ function onPanelDragEnd(e) {
     window.updateSharedToolbar = updateSharedToolbar;
     window.sendKeysToPanel = sendKeysToPanel;
     window.showSpecialKeysHelp = showSpecialKeysHelp;
-    window.getSelectedPanel = getSelectedPanel;
     window.togglePanelLayout = togglePanelLayout;
     window.toggleLayoutPresetMenu = toggleLayoutPresetMenu;
     window.applyLayoutPreset = applyLayoutPreset;
@@ -1652,14 +1651,11 @@ function onPanelDragEnd(e) {
     window.onPanelDragLeave = onPanelDragLeave;
     window.onPanelDrop = onPanelDrop;
     window.onPanelDragEnd = onPanelDragEnd;
-    window.initPanelDropTargets = initPanelDropTargets;
-    window.changePanelFontSize = changePanelFontSize;
     window._renderVttyContainer = _renderVttyContainer;
     window._renderSplitContainer = _renderSplitContainer;
     window._updateSplitPanelHeader = _updateSplitPanelHeader;
     window._renderMinimizedPanels = _renderMinimizedPanels;
     window._applyPanelLayoutClass = _applyPanelLayoutClass;
     window._updatePanelMultiUI = _updatePanelMultiUI;
-    window.toggleSelectionMode = toggleSelectionMode;
 })();
 

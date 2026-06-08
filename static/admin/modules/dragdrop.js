@@ -295,6 +295,7 @@ function _openCommandInNewPane(instUrl, cmdId, cmdName) {
 }
 
     // Expose to global scope
+    window.initPanelDropTargets = initPanelDropTargets;
     window.onCmdDragStart = onCmdDragStart;
     window.getCmdOrder = getCmdOrder;
     window.setCmdOrder = setCmdOrder;

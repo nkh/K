@@ -154,6 +154,7 @@ function startRefresh() {
 }
 
     // UI Controls
+    window._syncRefreshMsUI = _syncRefreshMsUI;
     window.saveToken = saveToken;
     window.changeFontSize = changeFontSize;
     window.applyFontSize = applyFontSize;

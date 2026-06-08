@@ -478,6 +478,7 @@ function updateTerminalDisconnectedOverlay() {
     }
 }
 
+    window.initBottombar = initBottombar;
     window.toggleSidebar = toggleSidebar;
     window.switchSidebarTab = switchSidebarTab;
     window.updateSidebarTabsVisibility = updateSidebarTabsVisibility;
