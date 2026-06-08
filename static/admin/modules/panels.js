@@ -1596,7 +1596,7 @@ function onPanelDragLeave(e) {
 
 function onPanelDrop(e, targetPanelId) {
     e.preventDefault();
-    e.stopPropagation();
+    if (e.stopPropagation) e.stopPropagation();
 
     // ── Command drop from sidebar (application/x-cmd data) ──
     // This handles dragging a command from the sidebar onto a panel.
