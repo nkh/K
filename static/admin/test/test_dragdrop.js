@@ -12,6 +12,7 @@ console.log('onCmdDragStart tests');
 if (typeof onCmdDragStart === 'function') {
     const evt = {
         dataTransfer: { setData(key, val) { this[key] = val; } },
+        target: { style: { opacity: '' } },
         stopPropagation() {},
         preventDefault() {},
     };
@@ -60,6 +61,13 @@ if (typeof _openCommandInNewPane === 'function') {
     globalThis.connectPanelWs = function() {};
     globalThis.startUpdateMode = function() {};
     globalThis.focusPanel = function() {};
+    globalThis._restoreCachedDom = function() {};
+    globalThis.updatePanelCommandInfo = function() {};
+    globalThis.updateTerminalDisconnectedOverlay = function() {};
+    globalThis.updateSidebarSelection = function() {};
+    globalThis.loadVttyHttpForPanel = function() {};
+    globalThis.startPanelUpdateMode = function() {};
+    globalThis.disconnectPanelWs = function() {};
     state.connections = [{ url: 'http://localhost:9090', label: 'Local', token: '', _commands: [
         { id: 'cmd-1', name: 'htop' }
     ]}];

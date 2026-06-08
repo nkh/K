@@ -12,8 +12,8 @@ function onCmdDragStart(e, instUrl, cmdId, cmdName) {
     e.dataTransfer.effectAllowed = 'copy';
     e.dataTransfer.setData('text/plain', cmdId);
     e.dataTransfer.setData('application/x-cmd', JSON.stringify({ instUrl, cmdId, cmdName }));
-    e.target.style.opacity = '0.5';
-    setTimeout(() => { if (e.target) e.target.style.opacity = ''; }, 0);
+    if (e.target && e.target.style) e.target.style.opacity = '0.5';
+    setTimeout(() => { if (e.target && e.target.style) e.target.style.opacity = ''; }, 0);
 }
 
 // Make panels accept command drops from sidebar

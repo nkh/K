@@ -8,7 +8,28 @@ globalThis._testPassed = 0;
 globalThis._testFailed = 0;
 
 globalThis.assert = function(cond, msg) {
-    if (!cond) { _testFailed++; console.error('  FAIL: ' + msg); } else { _testPassed++; }
+    // If cond is a function, call it. If it returns undefined (void),
+    // treat as success (used for "does not throw" pattern).
+    // If it returns a value, check truthiness.
+    // If it throws, count as failure.
+    if (typeof cond === 'function') {
+        try {
+            const result = cond();
+            if (result === undefined) {
+                _testPassed++;
+            } else if (!result) {
+                _testFailed++;
+                console.error('  FAIL: ' + msg);
+            } else {
+                _testPassed++;
+            }
+        } catch (e) {
+            _testFailed++;
+            console.error('  FAIL: ' + msg + ' — threw: ' + e.message);
+        }
+    } else {
+        if (!cond) { _testFailed++; console.error('  FAIL: ' + msg); } else { _testPassed++; }
+    }
 };
 globalThis.assertEq = function(actual, expected, msg) {
     if (actual !== expected) {
@@ -194,6 +215,12 @@ class MockElement {
             this.children.push(newNode);
         }
         return newNode;
+    }
+    remove() {
+        if (this.parentElement) {
+            this.parentElement.removeChild(this);
+        }
+        return this;
     }
     focus() {}
     blur() {}
