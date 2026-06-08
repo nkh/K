@@ -1395,6 +1395,27 @@ function autoFitActiveTerminal() {
     }
 }
 
+// ─── Panel Resize Helper ───
+/// Send a resize request for a specific panel's command with exact rows/cols.
+/// Returns true on success, false on failure (no command, exited, or network error).
+async function _resizePanelTo(panelId, rows, cols) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj || !panelObj.selectedCmdId) return false;
+    const inst = panelObj.selectedInstUrl ? state.connections.find(i => i.url === panelObj.selectedInstUrl) : null;
+    const cmd = inst && inst._commands ? inst._commands.find(c => c.id === panelObj.selectedCmdId) : null;
+    if (cmd && cmd.status === 'exited') return false;
+    try {
+        const resp = await fetch(apiUrl(`/api/commands/${panelObj.selectedCmdId}/resize`, { url: panelObj.selectedInstUrl }), {
+            method: 'POST',
+            headers: authHeadersForInstance({ url: panelObj.selectedInstUrl }),
+            body: JSON.stringify({ rows, cols }),
+        });
+        return resp.ok;
+    } catch {
+        return false;
+    }
+}
+
 // ─── Max Fit Toggle ───
 // Per-panel state: stores the previous rows/cols before max-fit was applied,
 // so toggling back restores them.
@@ -1575,6 +1596,7 @@ function onPanelDragLeave(e) {
 
 function onPanelDrop(e, targetPanelId) {
     e.preventDefault();
+    e.stopPropagation();
 
     // ── Command drop from sidebar (application/x-cmd data) ──
     // This handles dragging a command from the sidebar onto a panel.
@@ -1600,6 +1622,8 @@ function onPanelDrop(e, targetPanelId) {
                     updateSidebarSelection();
                     loadVttyHttpForPanel(panelObj.id, cmdData.instUrl, cmdData.cmdId);
                     startPanelUpdateMode(panelObj.id);
+                    document.querySelectorAll('.panel').forEach(p => p.classList.remove('drag-over-left', 'drag-over-right'));
+                    return;
                 }
             }
         } catch (err) { /* ignore invalid drops */ }

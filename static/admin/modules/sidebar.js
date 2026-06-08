@@ -138,15 +138,9 @@ function _buildSidebar() {
     const filter = (document.getElementById('cmdFilter') || {}).value || '';
     const filterLower = filter.toLowerCase();
 
-    // Default sidebar sort to selected panel's instance
-    const selectedPanel = state.panels.find(p =>
-        p.id === (document.querySelector('.panel') || {}).id
-    );
-    const selectedInstUrl = selectedPanel ? selectedPanel.selectedInstUrl : state.selectedInstUrl;
-    if (!_sidebarSort || _sidebarSort === 'name') {
-        if (selectedInstUrl && state.connections.length > 1) {
-            _sidebarSort = selectedInstUrl;
-        }
+    // Initialize sidebar sort to 'name' (All) if not yet set
+    if (!_sidebarSort) {
+        _sidebarSort = 'name';
     }
 
     let fingerprint = '';

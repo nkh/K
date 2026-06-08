@@ -10,6 +10,11 @@ pub struct ServerConfig {
     pub bind: String,
     /// TCP port to listen on.
     pub port: u16,
+    /// Human-readable name for this server instance.
+    /// Displayed in `vrw list`, `vrw cat`, and the web UI panel titlebar.
+    /// Falls back to "host:port" when not set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
 }
 
 impl Default for ServerConfig {
@@ -17,6 +22,7 @@ impl Default for ServerConfig {
         Self {
             bind: "127.0.0.1".to_string(),
             port: 9090,
+            name: None,
         }
     }
 }

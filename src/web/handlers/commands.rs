@@ -388,6 +388,7 @@ pub async fn get_info(State(state): State<AppState>) -> Json<Value> {
     let cert_names: Vec<&str> = certs.iter().map(|c| c.name.as_str()).collect();
     let web_config = &state.manager.config().web;
     let vtty_config = &state.manager.config().vtty;
+    let server_config = &state.manager.config().server;
 
     Json(serde_json::json!({
         "status": "ok",
@@ -396,6 +397,7 @@ pub async fn get_info(State(state): State<AppState>) -> Json<Value> {
             "certificate_count": certs.len(),
             "certificates": cert_names,
             "auth_enabled": state.auth_token.is_some(),
+            "server_name": server_config.name,
             "web": {
                 "update_mode": web_config.update_mode,
                 "dirty_check_ms": web_config.dirty_check_ms,

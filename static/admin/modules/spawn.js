@@ -218,7 +218,7 @@ async function spawnCommand() {
     const instUrl = instSelect.value;
     // Remember the user's chosen instance so updateInstanceDropdown won't
     // overwrite it during the subsequent loadCommands() rebuild.
-    _userSpawnInstUrl = instUrl;
+    window._userSpawnInstUrl = instUrl;
 
     // Terminal size from spawn form (optional, use server defaults if empty)
     const body = { cmd, args, certificate: cert };

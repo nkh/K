@@ -79,7 +79,13 @@ pub async fn handle_cat_command(cli: &Cli, target: Option<&str>, color_always: b
             _ => {
                 let list: Vec<_> = all_commands
                     .iter()
-                    .map(|e| format!("  pid {}  {}", e.2, e.3))
+                    .map(|e| {
+                        let inst = instances.iter().find(|i| i.pid == e.0);
+                        let server = inst
+                            .map(|i| i.name.as_deref().unwrap_or(&format!("{}:{}", i.bind, i.port)))
+                            .unwrap_or("?");
+                        format!("  pid {}  {}  [{}]", e.2, e.3, server)
+                    })
                     .collect();
                 anyhow::bail!(
                     "Multiple commands running. Specify a target:\n{}",
