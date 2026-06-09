@@ -152,6 +152,20 @@ mod tests {
         let _ = super::c;
     }
 
+    #[test]
+    fn test_c_is_function_pointer() {
+        // c is a pub function pointer — verify it can be called without panic
+        let result = super::c("test", crossterm::style::Color::White, false);
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_config_check_signature() {
+        // Verify handle_config_check_command exists and has correct type
+        // (it returns Result, so we verify it's callable)
+        let _fn_ptr: fn(Option<&str>) -> Result<(), anyhow::Error> = super::handle_config_check_command;
+    }
+
     #[cfg(feature = "vrw")]
     #[test]
     fn test_vrw_re_exports_compile() {

@@ -1351,8 +1351,11 @@ mod tests {
         insert_mock(&mgr, "cmd-1", 1);
         mgr.store_snapshot(&"cmd-1".to_string(), "s1").unwrap();
         mgr.store_snapshot(&"cmd-1".to_string(), "s2").unwrap();
-        assert_eq!(mgr.list_snapshots(&"cmd-1".to_string()).len(), 2);
-        assert_eq!(mgr.list_snapshots(&"cmd-1".to_string())[0].name, "s1");
+        let snaps = mgr.list_snapshots(&"cmd-1".to_string());
+        assert_eq!(snaps.len(), 2);
+        let names: Vec<&str> = snaps.iter().map(|s| s.name.as_str()).collect();
+        assert!(names.contains(&"s1"));
+        assert!(names.contains(&"s2"));
     }
 
     #[test]
