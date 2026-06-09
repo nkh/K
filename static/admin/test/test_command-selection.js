@@ -12,7 +12,6 @@ globalThis.loadVttyHttpForPanel = function() {};
 globalThis.startPanelUpdateMode = function() {};
 globalThis.startUpdateMode = function() {};
 globalThis.updateTerminalDisconnectedOverlay = function() {};
-globalThis.updateSidebarSelection = function() {};
 globalThis.updatePanelCommandInfo = function() {};
 globalThis.updateSharedToolbar = function() {};
 globalThis.disconnectPanelWs = function() {};

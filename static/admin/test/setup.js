@@ -271,7 +271,7 @@ class MockElement {
         return {
             add(...cls) { cls.forEach(c => self._classList.add(c)); self._className = [...self._classList].join(' '); },
             remove(...cls) { cls.forEach(c => self._classList.delete(c)); self._className = [...self._classList].join(' '); },
-            toggle(c) { if (self._classList.has(c)) { self._classList.delete(c); self._className = [...self._classList].join(' '); return false; } else { self._classList.add(c); self._className = [...self._classList].join(' '); return true; } },
+            toggle(c, force) { if (force === false) { if (self._classList.has(c)) { self._classList.delete(c); self._className = [...self._classList].join(' '); } return false; } if (force === true) { if (!self._classList.has(c)) { self._classList.add(c); self._className = [...self._classList].join(' '); } return true; } if (self._classList.has(c)) { self._classList.delete(c); self._className = [...self._classList].join(' '); return false; } else { self._classList.add(c); self._className = [...self._classList].join(' '); return true; } },
             contains(c) { return self._classList.has(c); },
             get length() { return self._classList.size; },
         };
@@ -548,8 +548,39 @@ for (const file of moduleOrder.slice(1)) {
     }
 }
 
+// Save real function references so resetTestState can restore them.
+// Tests often mock these but don't restore, causing cross-file pollution.
+const _realFunctions = {};
+const _allExportedFunctions = [];
+for (const key of Object.getOwnPropertyNames(globalThis)) {
+    if (typeof globalThis[key] === 'function' && key !== 'constructor') {
+        _allExportedFunctions.push(key);
+    }
+}
+for (const fn of _allExportedFunctions) {
+    _realFunctions[fn] = globalThis[fn];
+}
+
 // Also load app.js init (but not the IIFE since it needs real DOM)
 // app.js init will be tested separately
+
+// ── Mock helper: save and restore global function mocks ──
+// Usage: const mocks = saveMock('renderPanels', 'focusPanel');
+//        globalThis.renderPanels = function() {};
+//        ... run tests ...
+//        restoreMock(mocks);
+globalThis.saveMock = function(...fns) {
+    const saved = {};
+    for (const fn of fns) {
+        saved[fn] = globalThis[fn];
+    }
+    return saved;
+};
+globalThis.restoreMock = function(saved) {
+    for (const [fn, orig] of Object.entries(saved)) {
+        if (orig !== undefined) globalThis[fn] = orig;
+    }
+};
 
 // ── Reset helper ──
 globalThis.resetTestState = function() {
@@ -562,6 +593,43 @@ globalThis.resetTestState = function() {
     _listeners.clear();
     localStorage.clear();
     sessionStorage.clear();
+    // Restore critical mocked functions to their real implementations.
+    // Tests often mock these but don't restore them, causing cross-test pollution.
+    const _fnsToRestore = [
+        'renderPanels', 'loadVttyHttp', 'loadVttyHttpForPanel',
+        'updateTerminalDisconnectedOverlay', 'updateSidebarSelection',
+        'updatePanelCommandInfo', 'updateSharedToolbar',
+        'disconnectPanelWs', 'stopPanelPoll', 'connectPanelWs', 'startPanelPoll',
+        'applyVttyDiff', 'updateVttyDisplay',
+        'loadCommands', 'focusPanel', 'selectCommand',
+        'trapFocus', 'releaseCurrentFocusTrap',
+        'startUpdateMode', 'stopUpdateMode', 'startPanelUpdateMode', 'stopPanelUpdateMode',
+        '_restoreCachedDom', '_cacheTerminalForSwitch', '_buildSidebar',
+        'updateDisconnectedUI', 'toggleSoundNotifications',
+        'escHtml', 'changeFontSize', 'changeRefreshMs',
+        'saveToken', 'parseSpawnArgs', 'parseLogLine',
+        'togglePanelTheme', 'toggleSidebar',
+        'togglePinCmd', 'getPinnedNames',
+        'saveUserTemplates', 'getUserTemplates',
+        'saveCmdGroups', 'getCmdGroups',
+        'getWorkspaces', 'deleteWorkspace', 'saveWorkspaces',
+        'renderMarkdown', 'connectLogWs', 'disconnectLogWs',
+        'notifyCommandEnded', 'pollResources', 'updateSidebarResourceText',
+        'scheduleVttyHttp', 'scheduleVttyHttpForPanel',
+        'updateVttyDisplayForPanel', 'updateVttyMetadataForPanel',
+        'applyVttyDiffForPanel',
+        'onCmdDragStart', 'handlePeerEvent',
+        'checkOnboarding', 'showShortcuts', 'closeShortcuts',
+        'updateInstanceDropdown',
+        'disconnectServer', 'disconnectAllPanelWs',
+        'addConnection', 'removeConnection',
+        'formatRuntime', 'authHeaders', 'authHeadersForInstance', 'apiUrl',
+    ];
+    for (const fn of _fnsToRestore) {
+        if (_realFunctions[fn]) {
+            globalThis[fn] = _realFunctions[fn];
+        }
+    }
     // Reset state if available
     if (typeof state !== 'undefined' && state) {
         state.panels = [];

@@ -212,7 +212,10 @@ if (typeof closeShortcuts === 'function') {
     overlay.id = 'shortcutsOverlay';
     document.body.appendChild(overlay);
     closeShortcuts();
-    assert(document.getElementById('shortcutsOverlay') === null, 'overlay removed');
+    // getElementById auto-creates stubs, so check if the element was removed from body
+    const remaining = document.getElementById('shortcutsOverlay');
+    assert(remaining.parentElement !== document.body, 'overlay removed from body');
+    _elementRegistry.delete('shortcutsOverlay'); // cleanup
 }
 
 console.log('\n[onboarding.js] Tests complete');

@@ -31,12 +31,25 @@ for (const file of files) {
     const beforePassed = globalThis._testPassed;
     const beforeFailed = globalThis._testFailed;
 
+    // Save all current global functions before each test file
+    const savedFns = {};
+    for (const key of Object.getOwnPropertyNames(globalThis)) {
+        if (typeof globalThis[key] === 'function' && key !== 'constructor') {
+            savedFns[key] = globalThis[key];
+        }
+    }
+
     try {
         require(filePath);
     } catch (e) {
         console.error('  ERROR loading ' + file + ': ' + e.message);
         fileErrors++;
         globalThis._testFailed++;
+    }
+
+    // Restore all global functions after each test file
+    for (const [key, fn] of Object.entries(savedFns)) {
+        globalThis[key] = fn;
     }
 
     const passed = globalThis._testPassed - beforePassed;
