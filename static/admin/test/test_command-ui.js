@@ -107,7 +107,7 @@ panelEl.appendChild(headerEl);
 const nameEl = document.createElement('span');
 nameEl.className = 'cmd-fullname';
 headerEl.appendChild(nameEl);
-const argsEl =.createElement('span');
+const argsEl = document.createElement('span');
 argsEl.className = 'cmd-args';
 headerEl.appendChild(argsEl);
 const bottomBarLabel = document.createElement('span');

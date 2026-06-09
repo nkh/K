@@ -202,15 +202,15 @@ if (typeof _getServerLabel === 'function') {
 
     // Without both, with URL with port
     const inst3 = { _serverName: null, label: '', url: 'http://192.168.1.1:8080' };
-    assertEq(_getServerLabel(inst3), '192.168.1.1:8080', '_getServerLabel extracts host:port');
+    assertEq(_getServerLabel(inst3, inst3.url), '192.168.1.1:8080', '_getServerLabel extracts host:port');
 
     // Default port 80
     const inst4 = { _serverName: null, label: '', url: 'http://example.com:80' };
-    assertEq(_getServerLabel(inst4, 'http://example.com:80'), 'example.com:80', '_getServerLabel shows explicit port');
+    assertEq(_getServerLabel(inst4, inst4.url), 'example.com:80', '_getServerLabel shows explicit port');
 
     // HTTPS default port
     const inst5 = { _serverName: null, label: '', url: 'https://secure.com' };
-    const label5 = _getServerLabel(inst5, 'https://secure.com');
+    const label5 = _getServerLabel(inst5, inst5.url);
     assert(label5.includes('secure.com'), '_getServerLabel handles https default port');
     assert(label5.includes('443'), '_getServerLabel shows https default port 443');
 

@@ -3,6 +3,8 @@ require('./setup');
 
 console.log('\n=== state.js Tests ===\n');
 
+resetTestState();
+
 // ── VRW namespace exists ──
 console.log('VRW namespace');
 assert(typeof VRW !== 'undefined', 'VRW namespace exists');

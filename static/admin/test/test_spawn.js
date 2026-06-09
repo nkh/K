@@ -59,8 +59,8 @@ if (typeof _removeSpawnHistoryDropdown === 'function') {
 // ── _onSpawnCmdKeydownForHistory ──
 console.log('_onSpawnCmdKeydownForHistory tests');
 if (typeof _onSpawnCmdKeydownForHistory === 'function') {
-    assert(() => { _onSpawnCmdKeydownForHistory({ key: 'ArrowDown' }); }, '_onSpawnCmdKeydownForHistory ArrowDown');
-    assert(() => { _onSpawnCmdKeydownForHistory({ key: 'ArrowUp' }); }, '_onSpawnCmdKeydownForHistory ArrowUp');
+    assert(() => { _onSpawnCmdKeydownForHistory({ key: 'ArrowDown', preventDefault(){} }); }, '_onSpawnCmdKeydownForHistory ArrowDown');
+    assert(() => { _onSpawnCmdKeydownForHistory({ key: 'ArrowUp', preventDefault(){} }); }, '_onSpawnCmdKeydownForHistory ArrowUp');
 }
 
 // ── spawnCommand ──

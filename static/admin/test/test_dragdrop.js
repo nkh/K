@@ -45,14 +45,14 @@ if (typeof setCmdOrder === 'function') {
 console.log('getOrderedCmds tests');
 if (typeof getOrderedCmds === 'function') {
     const items = [
-        { name: 'vim', id: 'c2' },
-        { name: 'htop', id: 'c1' },
-        { name: 'bash', id: 'c3' },
+        { cmd: { id: 'vim' }, cmdName: 'vim' },
+        { cmd: { id: 'htop' }, cmdName: 'htop' },
+        { cmd: { id: 'bash' }, cmdName: 'bash' },
     ];
     setCmdOrder({ 'http://localhost:9090': ['htop', 'vim', 'bash'] });
     const ordered = getOrderedCmds('http://localhost:9090', items);
-    assertEq(ordered[0].name, 'htop', 'first ordered item is htop');
-    assertEq(ordered[1].name, 'vim', 'second ordered item is vim');
+    assertEq(ordered[0].cmdName, 'htop', 'first ordered item is htop');
+    assertEq(ordered[1].cmdName, 'vim', 'second ordered item is vim');
 }
 
 // ── _openCommandInNewPane ──

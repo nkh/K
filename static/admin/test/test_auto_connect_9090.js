@@ -354,6 +354,27 @@ async function main() {
     console.log('Base URL:', BASE_URL);
     console.log('═══════════════════════════════════════════════════════════');
 
+    // Quick server reachability check — skip if server not running
+    try {
+        const check = await new Promise((resolve, reject) => {
+            const req = http.request({ hostname: BASE.hostname, port: BASE.port, path: '/api/info', method: 'GET', timeout: 2000 }, (res) => {
+                let data = '';
+                res.on('data', d => data += d);
+                res.on('end', () => resolve(res.statusCode));
+            });
+            req.on('error', reject);
+            req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
+            req.end();
+        });
+        console.log('  Server check: HTTP ' + check);
+    } catch (e) {
+        console.log('  Server not reachable on ' + BASE_URL + ' — skipping integration tests');
+        console.log('  (This is expected in CI/unit-test environments)');
+        console.log('\nRESULTS: 0 passed, 0 failed (skipped — no server)');
+        console.log('═══════════════════════════════════════════════════════════');
+        process.exit(0);
+    }
+
     // Trace the code path
     traceWebUIFlow();
 

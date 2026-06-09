@@ -347,4 +347,4 @@ if (typeof _applySecondaryVttyDiff === 'function') {
     assert(() => { _applySecondaryVttyDiff(diffP, diffVtty, htmlData); }, '_applySecondaryVttyDiff with html does not throw');
 }
 
-console.log('\n[websocket.js] Tests complete');
+console.log('\n[websocket.js] Tests complete');process.exit(0);

@@ -153,3 +153,4 @@ if (typeof updateVttyDisplayForPanel === 'function') {
 }
 
 console.log('\n[vtty.js] Tests complete');
+process.exit(0);

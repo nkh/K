@@ -320,6 +320,9 @@ const _doc = {
     createDocumentFragment() {
         return new MockElement('fragment');
     },
+    createTreeWalker(root, whatToShow, filter) {
+        return new TreeWalker(root, whatToShow, filter);
+    },
     get readyState() { return 'complete'; },
 };
 _doc.body = _doc.createElement('body');
@@ -333,6 +336,12 @@ globalThis.addEventListener = addEventListener;
 globalThis.removeEventListener = removeEventListener;
 globalThis.dispatchEvent = emitEvent;
 globalThis.matchMedia = function(query) { return { matches: false, media: query, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} }; };
+globalThis.NodeFilter = { SHOW_ALL: 0xFFFFFFFF, SHOW_ELEMENT: 1, SHOW_TEXT: 4, SHOW_COMMENT: 128, FILTER_ACCEPT: 1, FILTER_REJECT: 2, FILTER_SKIP: 3 };
+globalThis.TreeWalker = class {
+    constructor(root, whatToShow, filter) { this.root = root; this.whatToShow = whatToShow; this.filter = filter; this.currentNode = root; }
+    nextNode() { return null; }
+    firstChild() { return null; }
+};
 globalThis.requestAnimationFrame = function(fn) { return setTimeout(fn, 16); };
 globalThis.cancelAnimationFrame = clearTimeout;
 

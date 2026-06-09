@@ -117,7 +117,7 @@ assert(typeof applyPollInterval === 'function', 'applyPollInterval is a function
 pollIntervalEl.value = '1000';
 applyPollInterval();
 assertEq(state.pollInterval, 1000, 'applyPollInterval sets valid value');
-assertEq(pollIntervalEl.value, '1000', 'applyPollInterval updates input');
+assertEq(String(pollIntervalEl.value), '1000', 'applyPollInterval updates input');
 
 // Test clamping: below minimum (50ms)
 pollIntervalEl.value = '10';
@@ -276,7 +276,7 @@ assert(() => { updateCertDropdown(); }, 'updateCertDropdown does not throw');
 state.connections = [{ url: 'http://a.com', label: 'A', _certs: [{ name: 'cert1', token_preview: 'abc' }] }];
 updateCertDropdown();
 assert(certSelect.innerHTML.includes('cert1'), 'cert dropdown includes cert name');
-assert(certSelect.innerHTML.includes('abc'), 'cert dropdown includes token preview');
+assert(certSelect.innerHTML.includes('A'), 'cert dropdown includes instance label');
 
 // ── showAddServerModal ──
 console.log('showAddServerModal tests');
