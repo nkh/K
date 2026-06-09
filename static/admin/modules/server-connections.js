@@ -83,6 +83,13 @@ async function fetchServerConfig() {
                 state.pollInterval = state.serverPollMs || 500;
             }
         }
+        // Capture server name from API for display in panel headers
+        if (json.status === 'ok' && json.data && json.data.server_name) {
+            const primaryConn = state.connections.find(c => c.url === getBaseUrl());
+            if (primaryConn) {
+                primaryConn._serverName = json.data.server_name;
+            }
+        }
         if (json.status === 'ok' && json.data && json.data.vtty) {
             state.serverScreenshotFontSize = json.data.vtty.screenshot_font_size || 12;
             state.serverScreenshotFontName = json.data.vtty.screenshot_font_name || 'monospace';
@@ -226,9 +233,20 @@ function addConnection(url, label, token) {
     if (existing) {
         return existing;
     }
-    const conn = { url, label: label || url, token: token || '', reachable: undefined, _lastError: null, _commands: null, _certs: null };
+    const conn = { url, label: label || url, token: token || '', reachable: undefined, _lastError: null, _commands: null, _certs: null, _serverName: null };
     state.connections.push(conn);
     return conn;
+}
+
+/// Fetch server_name from /api/info for a non-primary connection.
+async function _fetchServerName(conn) {
+    try {
+        const res = await fetch(apiUrl('/api/info', conn), { headers: authHeadersForInstance(conn) });
+        const json = await res.json();
+        if (json.status === 'ok' && json.data && json.data.server_name) {
+            conn._serverName = json.data.server_name;
+        }
+    } catch (e) { /* ignore */ }
 }
 
 function removeConnection(url) {
@@ -286,6 +304,8 @@ async function confirmAddServer() {
     const isNew = !state.connections.some(c => c.url === url);
     const conn = addConnection(url, label, token);
     closeAddServerModal();
+    // Fetch server_name for this connection
+    _fetchServerName(conn);
     loadCommands();
     loadCertificates();
     fetchServerTemplates();
@@ -409,6 +429,7 @@ async function spawnFromWelcome() {
     window.updateCertDropdown = updateCertDropdown;
     window.updateInstanceDropdown = updateInstanceDropdown;
     window.addConnection = addConnection;
+    window._fetchServerName = _fetchServerName;
     window.removeConnection = removeConnection;
     window.disconnectServer = disconnectServer;
     window.showAddServerModal = showAddServerModal;

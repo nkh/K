@@ -198,55 +198,155 @@ function _renderVttyContainer(panel) {
                     </div>`;
 }
 
+/// Get a human-readable server label: name if available, otherwise host:port.
+function _getServerLabel(inst, instUrl) {
+    if (inst && inst._serverName) return inst._serverName;
+    if (inst && inst.label) {
+        // Use label which is typically set by user or derived from URL
+        return inst.label;
+    }
+    if (instUrl) {
+        try {
+            const u = new URL(instUrl);
+            return u.host;
+        } catch (e) { return instUrl; }
+    }
+    return '?';
+}
+
+/// Get a distinct background color for a server connection.
+/// Colors are assigned per-connection index to ensure consistency.
+const _serverColorPalette = [
+    'var(--bg-tertiary)',  // default (no special color)
+    '#2d1f3d',  // purple
+    '#1f3d2d',  // green
+    '#3d2d1f',  // brown
+    '#1f2d3d',  // blue
+    '#3d1f2d',  // red
+    '#2d3d1f',  // olive
+    '#1f3d3d',  // teal
+];
+
+function _getServerColor(inst, instUrl) {
+    if (!inst) return 'var(--bg-tertiary)';
+    const idx = state.connections.indexOf(inst);
+    if (idx <= 0) return 'var(--bg-tertiary)';
+    return _serverColorPalette[idx % _serverColorPalette.length];
+}
+
+/// Get the command name label for a panel/sub-pane.
+function _getPanelCmdLabel(cmdId, instUrl) {
+    if (!cmdId) return 'No command';
+    const inst = instUrl ? state.connections.find(i => i.url === instUrl) : null;
+    const cmd = inst && inst._commands ? inst._commands.find(c => c.id === cmdId) : null;
+    return cmd ? (cmd.name || cmd.id) : cmdId;
+}
+
+/// Update the split header labels (called after command selection changes).
+function _updateSplitHeaders(panelObj) {
+    if (!panelObj || !panelObj.split) return;
+    const panelEl = document.getElementById(panelObj.id);
+    if (!panelEl) return;
+
+    // Update primary split header
+    const primaryHeader = panelEl.querySelector('.split-header[data-split-side="primary"]');
+    if (primaryHeader) {
+        const primaryInst = panelObj.selectedInstUrl ? state.connections.find(i => i.url === panelObj.selectedInstUrl) : null;
+        primaryHeader.style.background = _getServerColor(primaryInst, panelObj.selectedInstUrl);
+        const serverLabel = primaryHeader.querySelector('.split-server-label');
+        if (serverLabel) serverLabel.textContent = _getServerLabel(primaryInst, panelObj.selectedInstUrl);
+        const cmdLabel = primaryHeader.querySelector('.split-cmd-label');
+        if (cmdLabel) cmdLabel.textContent = _getPanelCmdLabel(panelObj.selectedCmdId, panelObj.selectedInstUrl);
+    }
+
+    // Update secondary split header
+    const secondaryHeader = panelEl.querySelector('.split-header[data-split-side="secondary"]');
+    if (secondaryHeader) {
+        const secondaryInst = panelObj.split.secondaryInstUrl ? state.connections.find(i => i.url === panelObj.split.secondaryInstUrl) : null;
+        secondaryHeader.style.background = _getServerColor(secondaryInst, panelObj.split.secondaryInstUrl);
+        const serverLabel = secondaryHeader.querySelector('.split-server-label');
+        if (serverLabel) serverLabel.textContent = _getServerLabel(secondaryInst, panelObj.split.secondaryInstUrl);
+        const cmdLabel = secondaryHeader.querySelector('.split-cmd-label');
+        if (cmdLabel) cmdLabel.textContent = _getPanelCmdLabel(panelObj.split.secondaryCmdId, panelObj.split.secondaryInstUrl);
+    }
+}
+
 /// Render a split container with two vtty-panes and a draggable divider.
+/// Each sub-pane has its own header showing the server label and command name.
 function _renderSplitContainer(panel) {
     const split = panel.split;
     const dir = split.direction; // 'horizontal' or 'vertical'
     const secondaryId = panel.id + '-secondary';
     const primaryWidth = split.splitRatio ? (split.splitRatio * 100).toFixed(1) : '50';
     const secondaryWidth = (100 - parseFloat(primaryWidth)).toFixed(1);
-    const flexProp = dir === 'horizontal' ? 'width' : 'height';
 
-    // Primary pane content
-    const primaryVtty = `<div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" data-split-side="primary" data-panel="${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px; flex: 0 0 ${primaryWidth}%;">
-                        <div class="exited-banner" id="exitedBanner-${panel.id}" style="display:none;"></div>
-                        <div class="search-bar" id="searchBar-${panel.id}">
-                            <input type="text" id="searchInput-${panel.id}" placeholder="Search terminal..." oninput="vttySearch('${panel.id}')" onkeydown="if(event.key==='Enter'){event.shiftKey?vttySearchPrev('${panel.id}'):vttySearchNext('${panel.id}')}">
-                            <span class="search-count" id="searchCount-${panel.id}" title="Click to jump: Shift+Click to reverse"></span>
-                            <div class="search-progress-bar" id="searchProgress-${panel.id}"></div>
-                            <button onclick="vttySearchNext('${panel.id}')" title="Next match (Enter)">&#x25BC;</button>
-                            <button onclick="vttySearchPrev('${panel.id}')" title="Previous match (Shift+Enter)">&#x25B2;</button>
-                            <button onclick="vttySearchClose('${panel.id}')" title="Close search">&#x2715;</button>
-                        </div>
-                        <pre>${panel.selectedCmdId ? '' : '<span style="color:#484f58;">No command selected — select a command from the sidebar</span>'}</pre>
-                        <div class="cursor-indicator" style="display:none;"></div>
-                        <div class="copy-feedback" id="copyFeedback-${panel.id}">Copied!</div>
-                        <button class="scroll-bottom-btn" id="scrollBtn-${panel.id}" onclick="scrollTerminalBottom('${panel.id}')" title="Scroll to bottom">&#x25BC;</button>
-                    </div>`;
+    // Get server info for primary pane
+    const primaryInst = panel.selectedInstUrl ? state.connections.find(i => i.url === panel.selectedInstUrl) : null;
+    const primaryServerLabel = _getServerLabel(primaryInst, panel.selectedInstUrl);
+    const primaryColor = _getServerColor(primaryInst, panel.selectedInstUrl);
+    const primaryCmdLabel = _getPanelCmdLabel(panel.selectedCmdId, panel.selectedInstUrl);
 
-    // Secondary pane content
-    const hasSecondaryCmd = !!split.secondaryCmdId;
-    const secondaryVtty = `<div class="vtty-container" id="vtty-${secondaryId}" data-split-side="secondary" data-panel="${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px; flex: 0 0 ${secondaryWidth}%;">
-                        <div class="exited-banner" id="exitedBanner-${secondaryId}" style="display:none;"></div>
-                        <pre>${hasSecondaryCmd ? '' : '<span style="color:#484f58;">No command selected — select a command from the sidebar</span>'}</pre>
-                        <div class="cursor-indicator" style="display:none;"></div>
-                        <button class="scroll-bottom-btn" id="scrollBtn-${secondaryId}" onclick="scrollTerminalBottom('${secondaryId}')" title="Scroll to bottom">&#x25BC;</button>
-                    </div>`;
+    // Get server info for secondary pane
+    const secondaryInst = split.secondaryInstUrl ? state.connections.find(i => i.url === split.secondaryInstUrl) : null;
+    const secondaryServerLabel = _getServerLabel(secondaryInst, split.secondaryInstUrl);
+    const secondaryColor = _getServerColor(secondaryInst, split.secondaryInstUrl);
+    const secondaryCmdLabel = _getPanelCmdLabel(split.secondaryCmdId, split.secondaryInstUrl);
+
+    // Primary sub-pane
+    const primaryHtml = `<div class="split-pane" data-split-side="primary" data-panel="${panel.id}" style="flex: 0 0 ${primaryWidth}%; display:flex; flex-direction:column; min-width:0; min-height:0;">
+            <div class="split-header panel-header" data-panel-id="${panel.id}" data-split-side="primary" style="background:${primaryColor};">
+                <span class="split-server-label" style="font-size:0.6rem;opacity:0.8;">${escHtml(primaryServerLabel)}</span>
+                <span class="split-cmd-label" style="font-size:0.65rem;font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">${escHtml(primaryCmdLabel)}</span>
+                <button class="btn btn-xs btn-danger" onclick="event.stopPropagation();unsplitPanel('${panel.id}')" title="Close split">&#x2715;</button>
+            </div>
+            <div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" data-split-side="primary" data-panel="${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px; flex:1; min-height:0;">
+                <div class="exited-banner" id="exitedBanner-${panel.id}" style="display:none;"></div>
+                <div class="search-bar" id="searchBar-${panel.id}">
+                    <input type="text" id="searchInput-${panel.id}" placeholder="Search terminal..." oninput="vttySearch('${panel.id}')" onkeydown="if(event.key==='Enter'){event.shiftKey?vttySearchPrev('${panel.id}'):vttySearchNext('${panel.id}')}">
+                    <span class="search-count" id="searchCount-${panel.id}" title="Click to jump: Shift+Click to reverse"></span>
+                    <div class="search-progress-bar" id="searchProgress-${panel.id}"></div>
+                    <button onclick="vttySearchNext('${panel.id}')" title="Next match (Enter)">&#x25BC;</button>
+                    <button onclick="vttySearchPrev('${panel.id}')" title="Previous match (Shift+Enter)">&#x25B2;</button>
+                    <button onclick="vttySearchClose('${panel.id}')" title="Close search">&#x2715;</button>
+                </div>
+                <pre>${panel.selectedCmdId ? '' : '<span style="color:#484f58;">No command selected — select a command from the sidebar</span>'}</pre>
+                <div class="cursor-indicator" style="display:none;"></div>
+                <div class="copy-feedback" id="copyFeedback-${panel.id}">Copied!</div>
+                <button class="scroll-bottom-btn" id="scrollBtn-${panel.id}" onclick="scrollTerminalBottom('${panel.id}')" title="Scroll to bottom">&#x25BC;</button>
+            </div>
+        </div>`;
+
+    // Secondary sub-pane
+    const secondaryHtml = `<div class="split-pane" data-split-side="secondary" data-panel="${panel.id}" style="flex: 0 0 ${secondaryWidth}%; display:flex; flex-direction:column; min-width:0; min-height:0;">
+            <div class="split-header panel-header" data-panel-id="${panel.id}" data-split-side="secondary" style="background:${secondaryColor};">
+                <span class="split-server-label" style="font-size:0.6rem;opacity:0.8;">${escHtml(secondaryServerLabel)}</span>
+                <span class="split-cmd-label" style="font-size:0.65rem;font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">${escHtml(secondaryCmdLabel)}</span>
+                <button class="btn btn-xs btn-danger" onclick="event.stopPropagation();unsplitPanel('${panel.id}')" title="Close split">&#x2715;</button>
+            </div>
+            <div class="vtty-container" id="vtty-${secondaryId}" data-split-side="secondary" data-panel="${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px; flex:1; min-height:0;">
+                <div class="exited-banner" id="exitedBanner-${secondaryId}" style="display:none;"></div>
+                <pre>${split.secondaryCmdId ? '' : '<span style="color:#484f58;">No command selected — select a command from the sidebar</span>'}</pre>
+                <div class="cursor-indicator" style="display:none;"></div>
+                <button class="scroll-bottom-btn" id="scrollBtn-${secondaryId}" onclick="scrollTerminalBottom('${secondaryId}')" title="Scroll to bottom">&#x25BC;</button>
+            </div>
+        </div>`;
 
     return `<div class="split-container ${dir}" id="split-${panel.id}" data-panel="${panel.id}">
-                    ${primaryVtty}
+                    ${primaryHtml}
                     <div class="split-divider" data-panel="${panel.id}"></div>
-                    ${secondaryVtty}
+                    ${secondaryHtml}
                 </div>`;
 }
 
 /// Update the panel header for a split panel to indicate both commands.
 function _updateSplitPanelHeader(panelObj) {
     if (!panelObj || !panelObj.split) return;
+    // Also update the sub-pane headers (server labels and command names)
+    _updateSplitHeaders(panelObj);
     const panelEl = document.getElementById(panelObj.id);
     if (!panelEl) return;
-    const nameEl = panelEl.querySelector('.cmd-fullname');
-    const argsEl = panelEl.querySelector('.cmd-args');
+    const nameEl = panelEl.querySelector(':scope > .panel-header .cmd-fullname');
+    const argsEl = panelEl.querySelector(':scope > .panel-header .cmd-args');
     if (!nameEl) return;
 
     // Show the active side's command name
@@ -421,7 +521,8 @@ function renderPanels() {
     for (const panel of state.panels) {
         const el = document.getElementById(panel.id);
         if (!el) continue;
-        const vttyEl = el.querySelector('.vtty-container');
+        // Use ID-based lookup to get the correct vtty-container (primary or non-split)
+        const vttyEl = document.getElementById('vtty-' + panel.id);
         const pre = vttyEl ? vttyEl.querySelector('pre') : null;
         if (pre && pre.childNodes.length > 0 && panel.selectedCmdId) {
             const frag = document.createDocumentFragment();
@@ -505,14 +606,17 @@ function renderPanels() {
             // Skip minimized panels — they're shown in the minimized strip
             if (panel.minimized) continue;
             const conn = panel.selectedInstUrl ? state.connections.find(i => i.url === panel.selectedInstUrl) : null;
+            const serverLabel = _getServerLabel(conn, panel.selectedInstUrl);
+            const serverColor = _getServerColor(conn, panel.selectedInstUrl);
             const resizeHandle = hasMultiplePanels ? `<div class="panel-resize-handle" data-panel="${panel.id}"></div>` : '';
-            const dragHandle = hasMultiplePanels ? `<span class="drag-handle" draggable="true" ondragstart="onPanelDragStart(event,'${panel.id}')" title="Drag to reorder">&#x2840;</span>` : '';
+            const dragHandle = hasMultiplePanels ? `<span class="drag-handle" draggable="true" ondragstart="onPanelDragStart(event,'${panel.id}')" ondragend="onPanelDragEnd(event)" title="Drag to reorder">&#x2840;</span>` : '';
             const isFocused = panel.id === state._focusedPanelId;
             const mobileHidden = isMobile && hasMultiplePanels && !isFocused ? ' style="display:none;"' : '';
             html += `
-                <div class="panel${isFocused ? ' focused' : ''}" id="${panel.id}" draggable="${hasMultiplePanels}" ondragover="onPanelDragOver(event)" ondrop="onPanelDrop(event,'${panel.id}')" ondragend="onPanelDragEnd(event)" ondragleave="onPanelDragLeave(event)"${mobileHidden}>
-                    <div class="panel-header" data-panel-id="${panel.id}" oncontextmenu="showPanelContextMenu(event,'${panel.id}')" tabindex="0" role="button" aria-label="Panel: ${escHtml(panel.selectedInstUrl || 'empty')}">
+                <div class="panel${isFocused ? ' focused' : ''}" id="${panel.id}" draggable="false" ondragover="onPanelDragOver(event)" ondrop="onPanelDrop(event,'${panel.id}')" ondragleave="onPanelDragLeave(event)"${mobileHidden}>
+                    <div class="panel-header" data-panel-id="${panel.id}" oncontextmenu="showPanelContextMenu(event,'${panel.id}')" tabindex="0" role="button" aria-label="Panel: ${escHtml(panel.selectedInstUrl || 'empty')}" style="background:${serverColor};">
                         ${dragHandle}
+                        <span class="panel-server-badge" style="font-size:0.6rem;opacity:0.7;flex-shrink:0;">${escHtml(serverLabel)}</span>
                         <button class="btn btn-xs cmd-history-btn" id="histBack-${panel.id}" onclick="event.stopPropagation();panelHistoryBack('${panel.id}')" title="Back in command history" style="display:none;">&#x25C0;</button>
                         <button class="btn btn-xs cmd-history-btn" id="histFwd-${panel.id}" onclick="event.stopPropagation();panelHistoryForward('${panel.id}')" title="Forward in command history" style="display:none;">&#x25B6;</button>
                         <div class="cmd-info" id="cmdInfo-${panel.id}">
@@ -520,7 +624,7 @@ function renderPanels() {
                             <span class="cmd-args" id="cmdArgs-${panel.id}"></span>
                         </div>
                         <span class="panel-header-label" id="panelLabel-${panel.id}"></span>
-                        ${hasMultiplePanels ? `<button class="btn btn-xs btn-danger" onclick="event.stopPropagation();removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
+                        ${state.panels.length > 1 ? `<button class="btn btn-xs btn-danger" onclick="event.stopPropagation();removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
                     </div>
                     ${panel.split ? _renderSplitContainer(panel) : _renderVttyContainer(panel)}
                 </div>
@@ -570,6 +674,18 @@ function renderPanels() {
                 focusPanel(panelId);
             });
         }
+        // Click on split headers → set activeSide
+        const splitHeaders = panelEl.querySelectorAll('.split-header');
+        splitHeaders.forEach(splitHeader => {
+            splitHeader.addEventListener('mousedown', () => {
+                focusPanel(panelId);
+                const panelObj = state.panels.find(p => p.id === panelId);
+                if (panelObj && panelObj.split) {
+                    const side = splitHeader.getAttribute('data-split-side');
+                    if (side) panelObj.split.activeSide = side;
+                }
+            });
+        });
     });
 
     // Scroll-to-bottom button visibility
@@ -605,13 +721,13 @@ function renderPanels() {
                 newRatio = Math.max(0.1, Math.min(0.9, newRatio));
                 panelObj.split.splitRatio = newRatio;
 
-                // Update flex basis for both vtty-containers
-                const vttyContainers = splitContainer.querySelectorAll('.vtty-container');
-                if (vttyContainers.length === 2) {
+                // Update flex basis for both split-panes
+                const splitPanes = splitContainer.querySelectorAll('.split-pane');
+                if (splitPanes.length === 2) {
                     const pct1 = (newRatio * 100).toFixed(1);
                     const pct2 = (100 - parseFloat(pct1)).toFixed(1);
-                    vttyContainers[0].style.flex = `0 0 ${pct1}%`;
-                    vttyContainers[1].style.flex = `0 0 ${pct2}%`;
+                    splitPanes[0].style.flex = `0 0 ${pct1}%`;
+                    splitPanes[1].style.flex = `0 0 ${pct2}%`;
                 }
             };
 
@@ -1714,6 +1830,10 @@ function onPanelDragEnd(e) {
     window.onPanelDrop = onPanelDrop;
     window.onPanelDragEnd = onPanelDragEnd;
     window._renderVttyContainer = _renderVttyContainer;
+    window._getServerLabel = _getServerLabel;
+    window._getServerColor = _getServerColor;
+    window._getPanelCmdLabel = _getPanelCmdLabel;
+    window._updateSplitHeaders = _updateSplitHeaders;
     window._renderSplitContainer = _renderSplitContainer;
     window._updateSplitPanelHeader = _updateSplitPanelHeader;
     window._renderMinimizedPanels = _renderMinimizedPanels;

@@ -340,6 +340,20 @@ function _buildSidebar() {
     }
 
     if (!state.selectedCmdId) {
+        // Auto-select only from the focused panel's server (if set).
+        // This prevents assigning a command from server X to a panel
+        // that was just created for server Y (which has no commands yet).
+        const focusedPanel = state.panels.find(p => p.id === state._focusedPanelId);
+        const targetInstUrl = (focusedPanel && focusedPanel.selectedInstUrl) || state.selectedInstUrl;
+        if (targetInstUrl) {
+            const inst = state.connections.find(i => i.url === targetInstUrl);
+            if (inst && inst._commands && inst._commands.length > 0) {
+                const cmd = inst._commands[0];
+                selectCommand(inst.url, cmd.id, cmd.name || cmd.id);
+                return;
+            }
+        }
+        // Fallback: pick the first command from any server
         for (const inst of state.connections) {
             if (inst._commands && inst._commands.length > 0) {
                 const cmd = inst._commands[0];
