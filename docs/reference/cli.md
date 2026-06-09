@@ -46,6 +46,9 @@ standard help/version information.
 | `--config <path>` | `-c` | `vrc.yaml` in the current directory | Path to the configuration file. |
 | `--help` | `-h` | — | Print usage summary and exit. |
 | `--version` | `-V` | — | Print version string and exit. |
+| `--profile <name>` | `-P` | — | Apply a named configuration profile from the config file. |
+| `--working-directory <dir>` | `-w` | — | Set the working directory for spawned commands. |
+| `--pid <pid>` | `-t` | — | Target a specific instance by PID. Alias for `--target`. |
 
 The config file is resolved in this order:
 
@@ -67,6 +70,10 @@ These options control the HTTP server that vrw starts.
 | `--remote` | `false` | — | Shorthand for `--bind 0.0.0.0 --auth --tls`. Accept connections from any interface with authentication and encryption. |
 | `--cert-file <path>` | — | `tls.cert_file` | Path to a custom TLS certificate file. |
 | `--key-file <path>` | — | `tls.key_file` | Path to a custom TLS private key file. |
+| `--server-name <name>` | — | `server.name` | Assign a human-readable name to this server instance. Displayed in `vrw list`, `vrw cat`, and the web UI panel titlebar instead of host:port. |
+| `--register-with <port>` | — | — | Register this instance with another vrw server at the specified port. |
+| `--token-file <path>` | `~/.config/vrw/token` | `security.token_file` | Path to the bearer token file. If the file does not exist when auth is required, a cryptographically random 256-bit token is generated and saved. |
+| `--certificate <name:cert:key>` | — | `certificates` | Define a named certificate for the certificate pool. Repeatable. Format: `NAME:CERT:KEY`. |
 
 ---
 
@@ -541,7 +548,27 @@ vrw resize <target> --rows <n> --cols <n>
 Remove a retained (exited) command from memory.
 
 ```bash
-vrw purge [target]
+vrw purge [target] [-i, --interactive]
+```
+
+---
+
+### `keep`
+
+Tag a running command to retain its VTTY buffer after exit. Equivalent to setting `--retain-on-exit` on a command that has already started.
+
+```bash
+vrw keep [target] [-i, --interactive]
+```
+
+---
+
+### `unkeep`
+
+Remove the retain tag from a command so it will be cleaned up on exit. If the command has already exited, it is removed immediately.
+
+```bash
+vrw unkeep [target] [-i, --interactive]
 ```
 
 ---

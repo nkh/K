@@ -56,7 +56,13 @@ vrw \- virtual terminal runner and process orchestrator with web control plane
 \fBresize\fR [\fITARGET\fR] [\fB\-\-rows\fR \fIN\fR] [\fB\-\-cols\fR \fIN\fR] [\fB\-i\fR, \fB\-\-interactive\fR]
 
 .B vrw
-\fBpurge\fR [\fITARGET\fR]
+\fBpurge\fR [\fITARGET\fR] [\fB\-i\fR, \fB\-\-interactive\fR]
+
+.B vrw
+\fBkeep\fR [\fITARGET\fR] [\fB\-i\fR, \fB\-\-interactive\fR]
+
+.B vrw
+\fBunkeep\fR [\fITARGET\fR] [\fB\-i\fR, \fB\-\-interactive\fR]
 
 .B vrw
 \fBconfig-check\fR
@@ -96,6 +102,14 @@ Server bind address (default: \fB127.0.0.1\fR). Use \fB0.0.0.0\fR to accept remo
 .TP
 .BR \-p ", " "\-\-port " \fIPORT\fR
 Server TCP port (default: \fB9090\fR).
+
+.TP
+.BR "\-\-server-name " \fINAME\fR
+Assign a human-readable name to this server instance. Displayed in \fBvrw list\fR, \fBvrw cat\fR, and the web UI panel titlebar instead of host:port.
+
+.TP
+.BR "\-\-register-with " \fIPORT\fR
+Register this instance with another vrw server at the specified port.
 
 .TP
 .BR \-r ", " \-\-remote
@@ -277,6 +291,14 @@ Apply a named configuration profile from the config file. Profile fields overrid
 .BR \-t ", " "\-\-target " \fIPID\fR
 Target a specific vrw instance by PID when using spawn, freeze, thaw, or resize subcommands.
 
+.TP
+.BR "\-\-pid " \fIPID\fR
+Target a specific instance by PID. Alias for \fB\-\-target\fR.
+
+.TP
+.BR \-w ", " "\-\-working-directory " \fIDIR\fR
+Set the working directory for spawned commands.
+
 .SS Command Specification
 
 .TP
@@ -442,10 +464,32 @@ Purge a retained (exited) command from the manager. Permanently discards the VTT
 .PP
 .B Usage:
 .RS
-vrw purge [\fITARGET\fR]
+vrw purge [\fITARGET\fR] [\fB\-i\fR, \fB\-\-interactive\fR]
 .RE
 .PP
 If no target is given and exactly one exited command exists, it is purged automatically. If the target is numeric, it is treated as a command ID (first 8 chars). Otherwise it is matched against command names.
+.RE
+
+.SS keep
+Tag a running command to retain its VTTY buffer after exit. This is equivalent to setting \fB\-\-retain\-on\-exit\fR on a command that has already started.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrw keep [\fITARGET\fR] [\fB\-i\fR, \fB\-\-interactive\fR]
+.RE
+.RE
+
+.SS unkeep
+Remove the retain tag from a command so it will be cleaned up on exit. If the command has already exited, it is removed immediately.
+
+.RS
+.PP
+.B Usage:
+.RS
+vrw unkeep [\fITARGET\fR] [\fB\-i\fR, \fB\-\-interactive\fR]
+.RE
 .RE
 
 .SS stop-command
@@ -993,6 +1037,8 @@ Child command exited with a non-zero status (when running a command directly).
 .BR vrw\-cert\-show (1),
 .BR vrw\-cert\-remove (1),
 .BR vrw\-purge (1),
+.BR vrw\-keep (1),
+.BR vrw\-unkeep (1),
 .BR vrw\-resize (1),
 .BR vrw\-config\-check (1),
 .BR vrw\-cat (1),

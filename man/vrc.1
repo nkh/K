@@ -207,6 +207,71 @@ User configuration file.
 .BR ./vrc.yaml " " or " " \fIvrc.toml
 Local configuration file (overrides user config).
 
+.SH EXAMPLES
+
+.PP
+Run a command with local terminal display:
+.RS
+.PP
+.nf
+\fB$ vrc \-\-display htop\fR
+.fi
+.RE
+
+.PP
+Run a command in the background:
+.RS
+.PP
+.nf
+\fB$ vrc \-\-daemon cargo build \-\-release\fR
+.fi
+.RE
+
+.PP
+Send keystrokes to a running command:
+.RS
+.PP
+.nf
+\fB$ vrc keys 12345 ctrl-c\fR
+.fi
+.RE
+
+.PP
+View the output of a detached command:
+.RS
+.PP
+.nf
+\fB$ vrc cat 12345 | grep "ERROR"\fR
+.fi
+.RE
+
+.PP
+Spawn a new command in a running instance:
+.RS
+.PP
+.nf
+\fB$ vrc spawn-in 12345 vim /path/to/file.rs\fR
+.fi
+.RE
+
+.PP
+List all running instances:
+.RS
+.PP
+.nf
+\fB$ vrc list\fR
+.fi
+.RE
+
+.PP
+Generate shell completions:
+.RS
+.PP
+.nf
+\fB$ vrc completions bash > /etc/bash_completion.d/vrc\fR
+.fi
+.RE
+
 .SH SEE ALSO
 .BR vrc\-list (1),
 .BR vrc\-stop (1),
@@ -217,4 +282,6 @@ Local configuration file (overrides user config).
 .BR vrc\-thaw (1),
 .BR vrc\-resize (1),
 .BR vrc\-kill (1),
-.BR vrc\-stop\-command (1)
+.BR vrc\-stop\-command (1),
+.BR vrc\-config\-check (1),
+.BR vrc\-completions (1)

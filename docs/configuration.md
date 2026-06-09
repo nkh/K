@@ -21,9 +21,15 @@ Complete reference for all configuration entries, CLI flags, and their relations
    - [environment](#environment)
    - [profiles](#profiles)
    - [environments](#environments)
-4. [CLI Flag Reference](#cli-flag-reference)
-5. [Config-to-CLI Mapping](#config-to-cli-mapping)
-6. [Full Example](#full-example)
+4. [vrw-Only Configuration Sections](#vrw-only-configuration-sections)
+   - [server](#server-vrw-only)
+   - [security](#security-vrw-only)
+   - [tls](#tls-vrw-only)
+   - [certificates](#certificates-vrw-only)
+   - [web](#web-vrw-only)
+5. [CLI Flag Reference](#cli-flag-reference)
+6. [Config-to-CLI Mapping](#config-to-cli-mapping)
+7. [Full Example](#full-example)
 
 ---
 
@@ -373,6 +379,108 @@ commands = [
 ```
 
 When activated from the web UI (via the Envs tab), the `activateEnvironment()` function creates the required number of panels, adds server connections idempotently, and spawns commands sequentially on the specified instances. Multiple environments can be defined in a single configuration file.
+
+---
+
+## vrw-Only Configuration Sections
+
+The following configuration sections are available only when building with the `vrw` feature flag. They control the HTTP server, security, TLS, certificate management, and web UI behavior.
+
+### `server` *(vrw only)*
+
+Controls the embedded HTTP server.
+
+| Key | Type | Default | CLI Flag | Description |
+|-----|------|---------|----------|-------------|
+| `bind` | `string` | `"127.0.0.1"` | `--bind <ADDR>` | Server bind address. Use `"0.0.0.0"` to accept remote connections. |
+| `port` | `u16` | `9090` | `--port <N>` | TCP port for the HTTP server. |
+| `name` | `string?` | `null` | `--server-name <NAME>` | Human-readable name for this instance. Displayed in `vrw list`, `vrw cat`, and the web UI panel titlebar instead of host:port. |
+
+**Example:**
+```yaml
+server:
+  bind: "0.0.0.0"
+  port: 9090
+  name: "production"
+```
+
+### `security` *(vrw only)*
+
+Controls authentication and CORS.
+
+| Key | Type | Default | CLI Flag | Description |
+|-----|------|---------|----------|-------------|
+| `require_auth` | `bool` | `false` | `--auth` | Require bearer token authentication for all API requests. |
+| `token_file` | `string` | `~/.config/vrw/token` | `--token-file <FILE>` | Path to the bearer token file. |
+| `cors.policy` | `string` | `"any"` | — | CORS policy: `"any"`, `"none"`, or a comma-separated list of allowed origins. |
+
+**Example:**
+```yaml
+security:
+  require_auth: true
+  token_file: "~/.config/vrw/token"
+  cors:
+    policy: "https://myapp.example.com,https://admin.example.com"
+```
+
+### `tls` *(vrw only)*
+
+Controls TLS encryption.
+
+| Key | Type | Default | CLI Flag | Description |
+|-----|------|---------|----------|-------------|
+| `enabled` | `bool` | `false` | `--tls` | Enable TLS (HTTPS). Self-signed certificates are auto-generated on first use. |
+| `cert_file` | `string?` | `null` | `--cert-file <PATH>` | Path to a custom PEM-encoded TLS certificate. |
+| `key_file` | `string?` | `null` | `--key-file <PATH>` | Path to a custom PEM-encoded TLS private key. |
+
+**Example:**
+```yaml
+tls:
+  enabled: true
+```
+
+### `certificates` *(vrw only)*
+
+Manages named certificates for per-command access control. Each certificate has a derived bearer token (SHA-256 of the certificate PEM) that gates access to commands bound to that certificate.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `directory` | `string?` | `~/.config/vrw/certs/` | Directory for auto-generated certificate files. |
+| `entries` | `array` | `[]` | Named certificate definitions. |
+
+**Example:**
+```yaml
+certificates:
+  directory: "~/.config/vrw/certs"
+  entries:
+    - name: "webapp-frontend"
+      cert: "~/.config/vrw/certs/webapp-frontend.pem"
+      key: "~/.config/vrw/certs/webapp-frontend.key"
+```
+
+### `web` *(vrw only)*
+
+Controls web admin UI behavior including update modes and panel colors.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `update_mode` | `string` | `"push"` | How the web UI discovers buffer changes: `"push"` or `"poll"`. |
+| `dirty_check_ms` | `u64` | `200` | Server-side dirty-check interval in milliseconds (push mode). |
+| `default_poll_ms` | `u64` | `500` | Client-side polling interval in milliseconds (poll mode). |
+| `panel_colors` | `array` | (built-in palette) | Per-server background colors for panel headers in the web UI. Each entry defines a `background` and `text` color pair. If not specified, a built-in palette of 7 dark colors is used. |
+
+**Example:**
+```yaml
+web:
+  update_mode: "push"
+  dirty_check_ms: 200
+  default_poll_ms: 500
+  panel_colors:
+    - background: "#1a1a2e"
+      text: "#e0e0e0"
+    - background: "#16213e"
+      text: "#e0e0e0"
+```
 
 ---
 

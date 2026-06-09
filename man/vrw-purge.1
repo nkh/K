@@ -11,7 +11,7 @@ vrw\-purge \- purge a retained (exited) command from the manager
 
 .SH SYNOPSIS
 .B vrw
-\fBpurge\fR [\fITARGET\fR]
+\fBpurge\fR [\fITARGET\fR] [\fB\-i\fR, \fB\-\-interactive\fR]
 
 .SH DESCRIPTION
 Purge a retained (exited) command from the vrw command manager, permanently discarding the VTTY buffer and all associated state. Only commands that have already exited (status: not alive) can be purged. Running commands cannot be purged; use \fBvrw stop-command\fR first.
@@ -33,6 +33,14 @@ Name match: same three-round strategy as \fBstop-command\fR (exact, prefix on fu
 .TP
 .B TARGET
 Command ID (or ID prefix), command name, or full "name args" string of the exited command to purge. If omitted and exactly one exited command exists, it is purged automatically.
+
+.SH OPTIONS
+
+.TP
+.BR \-i ", " \-\-interactive
+Present a numbered list of exited commands and let the user select
+which ones to purge by typing space-separated numbers (e.g. "1 3 5").
+Requires a terminal (stdin must be a TTY).
 
 .SH EXAMPLES
 

@@ -39,6 +39,8 @@ Both binaries share the same VTTY emulator, process manager, configuration syste
 
 ## Quick Start
 
+> **Requires Rust 1.75+** (edition 2021). Install via [rustup](https://rustup.rs/) if needed.
+
 ### Building vrc (default)
 
 ```bash
@@ -188,6 +190,43 @@ man vrc
 cp man/vrw.1 /usr/local/share/man/man1/
 man vrw
 ```
+
+### Shell Completions
+
+Both `vrc` and `vrw` support tab completion for commands, options, and arguments. Completions are generated on-demand and can be installed for your shell:
+
+**Bash:**
+```bash
+vrc completions bash > /etc/bash_completion.d/vrc
+vrw completions bash > /etc/bash_completion.d/vrw
+```
+
+**Zsh:**
+```bash
+vrc completions zsh > ~/.zsh/completions/_vrc
+vrw completions zsh > ~/.zsh/completions/_vrw
+```
+
+**Fish:**
+```bash
+vrc completions fish > ~/.config/fish/completions/vrc.fish
+vrw completions fish > ~/.config/fish/completions/vrw.fish
+```
+
+**PowerShell:**
+```powershell
+vrc completions powershell > vrc.ps1
+vrw completions powershell > vrw.ps1
+# Then dot-source: . ./vrc.ps1
+```
+
+**Elvish:**
+```bash
+vrc completions elvish > ~/.config/elvish/lib/vrc.elv
+vrw completions elvish > ~/.config/elvish/lib/vrw.elv
+```
+
+After installing, restart your shell or source your configuration file to activate completions.
 
 ## Documentation
 

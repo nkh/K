@@ -32,6 +32,22 @@ vrc is dual-licensed under `GPL-3.0-or-later OR Artistic-2.0`.
 
 ---
 
+## vrw
+
+### What is vrw?
+
+vrw is the web-enabled variant of vrc. It shares all the core VTTY, process management, and display features of vrc but adds an HTTP server, WebSocket streaming, a built-in web admin dashboard, REST API, TLS encryption, and certificate-based access control. Build with `cargo build --features vrw`. Both binaries share the same configuration format and most CLI flags.
+
+### How do I access the web admin dashboard?
+
+Start vrw and navigate to `http://localhost:9090/admin` in your browser. The dashboard shows all running commands, renders their VTTY output in real-time via WebSocket, and provides controls for spawning, stopping, sending keystrokes, taking screenshots, freezing/thawing, and purging commands.
+
+### What is the difference between vrc and vrw?
+
+vrc uses Unix Domain Socket (UDS) IPC for inter-process communication and is designed for local terminal use. vrw uses HTTP/WebSocket for communication and adds a web admin dashboard, REST API, TLS support, certificate management, and remote access capabilities. Choose vrc for lightweight local process management, or vrw when you need web-based control or remote access.
+
+---
+
 ## Installation and Setup
 
 ### How do I install vrc?
@@ -319,3 +335,11 @@ Open an issue on [GitHub](https://github.com/nkh/K/issues) with:
 3. Steps to reproduce
 4. Expected vs actual behavior
 5. Relevant logs (`--log` or `--log-pty-raw` output)
+
+### Shell completions are not working after installation
+
+Ensure the completion script was installed in the correct directory for your shell. For bash, completions must be in a directory listed in `BASH_COMPLETION_USER_DIR` or `/etc/bash_completion.d/`. For zsh, the file must be in a directory in your `fpath` (commonly `~/.zsh/completions/`). For fish, completions go in `~/.config/fish/completions/`. After installing, restart your shell or run `source ~/.bashrc` (or equivalent) to reload.
+
+### My completions show vrw options when I run `vrc`
+
+This can happen if you generated completions for the wrong binary. Make sure to generate completions using the correct binary name: `vrc completions bash > ...` for vrc completions, or `vrw completions bash > ...` for vrw completions. When building with both features, the binary detects its name from argv[0] and generates the appropriate completion set.

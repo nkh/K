@@ -92,7 +92,7 @@
 |----|-------------|----------|
 | FR-36 | VTTY parameters must be read from a configuration file (YAML). | Must |
 | FR-37 | Configurable VTTY properties: rows, columns, term type, scrollback, color support, mouse forwarding. | Must |
-| FR-38 | Support both global (`~/.config/vrw/config.yaml`) and local (`./vrw.yaml`) config files. | Should |
+| FR-38 | Support both global (`~/.config/vrc/config.yaml`) and local (`./vrc.yaml`) config files. | Should |
 | FR-39 | Local config overrides global config values. | Should |
 | FR-40 | Every configuration entry must have a corresponding CLI flag for override. | Must |
 
@@ -100,7 +100,7 @@
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FR-41 | `vrw` must start an embedded HTTP server on a configurable address/port (default: `127.0.0.1:8080`). | Must |
+| FR-41 | `vrw` must start an embedded HTTP server on a configurable address/port (default: `127.0.0.1:9090`). | Must |
 | FR-42 | The server must accept both GET and POST requests. | Must |
 | FR-43 | All JSON responses must include a standard envelope: `{ "status": "ok|error", "data": ..., "error": "..." }`. | Should |
 | FR-44 | Mandatory endpoints: list commands, start command, send keys, kill command, get VTTY, get partial VTTY, shutdown instance. | Must |

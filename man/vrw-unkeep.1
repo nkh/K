@@ -1,0 +1,94 @@
+." Title: vrw-unkeep
+." Author: vrw contributors
+." Manual section: 1
+." Process this file with
+."   groff -man -Tascii vrw-unkeep.1
+
+.TH VRW\-UNKEEP 1 "2025" "vrw" "User Commands"
+
+.SH NAME
+vrw\-unkeep \- remove the retain tag from a command
+
+.SH SYNOPSIS
+.B vrw
+\fBunkeep\fR [\fITARGET\fR] [\fB\-i\fR, \fB\-\-interactive\fR]
+
+.SH DESCRIPTION
+Remove the retain-on-exit tag from a command so it will be automatically cleaned up when its child process exits. This reverses the effect of \fBvrw keep\fR or \fB\-\-retain\-on\-exit\fR. If the command has already exited, it will be immediately removed from memory.
+
+When no target is specified and exactly one kept command exists, that command is unkept automatically. If multiple kept commands exist, a target must be specified either by PID (numeric), by command name, or by command ID prefix.
+
+.SH ARGUMENTS
+
+.TP
+.B TARGET
+Command ID (or ID prefix), command name, PID (numeric), or full "name args" string of the command to unkeep. If omitted and exactly one kept command exists, it is unkept automatically.
+
+.SH OPTIONS
+
+.TP
+.BR \-i ", " \-\-interactive
+Present a numbered list of kept commands and let the user select
+which ones to unkeep by typing space-separated numbers (e.g. "1 3 5").
+Requires a terminal (stdin must be a TTY).
+
+.SH EXAMPLES
+
+.PP
+Unkeep the only retained command:
+.RS
+.PP
+.nf
+\fB$ vrw unkeep\fR
+Command htop (ID abc123) unkept
+.fi
+.RE
+
+.PP
+Unkeep a command by name:
+.RS
+.PP
+.nf
+\fB$ vrw unkeep htop\fR
+.fi
+.RE
+
+.PP
+Interactively select commands to unkeep:
+.RS
+.PP
+.nf
+\fB$ vrw unkeep \-\-interactive\fR
+  1) htop (PID 5678) - kept
+  2) cargo build (PID 5679) - kept
+Select [space-separated numbers]: 1 2
+Command htop (ID abc123) unkept
+Command cargo build (ID def456) unkept
+.fi
+.RE
+
+.PP
+Equivalent curl:
+.RS
+.PP
+.nf
+curl -s -X POST "http://localhost:9090/api/commands/abc123/unkeep"
+.fi
+.RE
+
+.SH EXIT STATUS
+
+.TP
+.B 0
+Command untagged successfully.
+
+.TP
+.B 1
+No matching kept command found, or request failed.
+
+.SH SEE ALSO
+.BR vrw (1),
+.BR vrw\-keep (1),
+.BR vrw\-purge (1),
+.BR vrw\-list\-commands (1),
+.BR vrwctrl (1)

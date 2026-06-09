@@ -1,0 +1,93 @@
+." Title: vrw-keep
+." Author: vrw contributors
+." Manual section: 1
+." Process this file with
+."   groff -man -Tascii vrw-keep.1
+
+.TH VRW\-KEEP 1 "2025" "vrw" "User Commands"
+
+.SH NAME
+vrw\-keep \- tag a running command to retain its VTTY buffer after exit
+
+.SH SYNOPSIS
+.B vrw
+\fBkeep\fR [\fITARGET\fR] [\fB\-i\fR, \fB\-\-interactive\fR]
+
+.SH DESCRIPTION
+Tag a running command so its VTTY buffer is retained in memory after the child process exits. This is equivalent to setting \fB\-\-retain\-on\-exit\fR on the command after it has already started. The command remains visible in the tab bar and web UI with an "exited" status, allowing inspection of the final output. The buffer can be manually purged via \fBvrw purge\fR once you are done inspecting it.
+
+When no target is specified and exactly one running command exists, that command is kept automatically. If multiple running commands exist, a target must be specified either by PID (numeric) or by command name.
+
+.SH ARGUMENTS
+
+.TP
+.B TARGET
+Command ID (or ID prefix), command name, PID (numeric), or full "name args" string of the running command to keep. If omitted and exactly one running command exists, it is kept automatically.
+
+.SH OPTIONS
+
+.TP
+.BR \-i ", " \-\-interactive
+Present a numbered list of running commands and let the user select
+which ones to keep by typing space-separated numbers (e.g. "1 3 5").
+Requires a terminal (stdin must be a TTY).
+
+.SH EXAMPLES
+
+.PP
+Keep the only running command:
+.RS
+.PP
+.nf
+\fB$ vrw keep\fR
+Command htop (ID abc123) marked as keep
+.fi
+.RE
+
+.PP
+Keep a command by name:
+.RS
+.PP
+.nf
+\fB$ vrw keep htop\fR
+.fi
+.RE
+
+.PP
+Interactively select commands to keep:
+.RS
+.PP
+.nf
+\fB$ vrw keep \-\-interactive\fR
+  1) htop (PID 5678) - running
+  2) cargo build (PID 5679) - running
+Select [space-separated numbers]: 1
+Command htop (ID abc123) marked as keep
+.fi
+.RE
+
+.PP
+Equivalent curl:
+.RS
+.PP
+.nf
+curl -s -X POST "http://localhost:9090/api/commands/abc123/keep"
+.fi
+.RE
+
+.SH EXIT STATUS
+
+.TP
+.B 0
+Command tagged successfully.
+
+.TP
+.B 1
+No matching running command found, or request failed.
+
+.SH SEE ALSO
+.BR vrw (1),
+.BR vrw\-unkeep (1),
+.BR vrw\-purge (1),
+.BR vrw\-list\-commands (1),
+.BR vrwctrl (1)

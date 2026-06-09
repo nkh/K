@@ -241,6 +241,18 @@ vrc run -- bash -c "echo '你好世界 Hello World'"
 vrc run -- bash -c "for i in $(seq 1 1000); do echo \"Line $i: $(head -c 60 /dev/urandom | base64)\"; done"
 ```
 
+### 7. Web UI JavaScript Tests (`static/admin/test/`)
+
+The web admin interface has a custom zero-dependency JavaScript test framework with mock DOM. Tests are located in `static/admin/test/` and are HTML files that run in a browser. Each test file loads the application modules and exercises UI components such as the sidebar, search, notifications, logs, onboarding, and spawn dialogs. To run: open the test HTML files in a browser or use a headless browser. Tests use a simple assertion framework with `assert()` and `assertEqual()` helpers.
+
+### 8. VTTY Integration Tests
+
+Integration tests that exercise the full VTTY pipeline: spawning a real PTY, writing data through the PTY, reading it back through the VTTY emulator, and verifying the terminal state. These tests validate the VT100 parser, scrollback buffer, cursor movement, ANSI color rendering, and terminal resize behavior under realistic conditions. They are part of the standard `cargo test` suite.
+
+### 9. Cookbook Test Scripts
+
+End-to-end scenario tests that verify complete user workflows. These scripts typically start a vrc/vrw instance, spawn commands, interact with them via the CLI or API, and assert on the outcomes. Cookbook tests are run manually and documented in the project's cookbook. They serve as acceptance tests that validate the system behaves correctly from a user's perspective.
+
 ## Common Issues
 
 ### Test fails with "No running commands" or "connection refused"
