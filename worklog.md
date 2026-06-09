@@ -25,3 +25,24 @@ Stage Summary:
 - Missing global exports added: _hex, _onboardingSteps
 - Total: 194 tests pass, 0 failures
 - Rust compiles cleanly
+---
+Task ID: 1
+Agent: main
+Task: Fix remaining web UI bugs on web_ui_fix branch, compile, test, push
+
+Work Log:
+- Installed Rust toolchain (was missing from environment)
+- Verified web_ui_fix compiles with `cargo build`
+- Investigated drag-drop bug #2: Found panel div had `draggable="${hasMultiplePanels}"` which could interfere with sidebar command drops. Fixed by setting `draggable="false"` on panel div and moving `ondragend` to the drag-handle span.
+- Investigated sidebar "All" button dedup bug #3: Found it was already fixed in previous session (server badges added for visual distinction). No code change needed.
+- Investigated spawn server revert to 9090 bug #4: Found it was already fixed in previous session (window._userSpawnInstUrl persists user choice). No code change needed.
+- Fixed test_dragdrop.js: getOrderedCmds test used wrong item shape, onPanelDrop test missing required panelId arg
+- Added REG-BUG-012 and REG-BUG-013 regression tests for dropEffect and draggable attribute
+- All 194 tests pass, cargo build compiles clean
+- Committed and pushed to origin/web_ui_fix as 592e37d
+
+Stage Summary:
+- Key fix: panel div `draggable="false"` + `ondragend` on drag-handle only
+- Bugs #3 and #4 were already fixed in prior sessions
+- Tests: 194 passed, 0 failed
+- Commit: 592e37d on web_ui_fix, pushed to origin

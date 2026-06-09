@@ -81,9 +81,10 @@ pub async fn handle_cat_command(cli: &Cli, target: Option<&str>, color_always: b
                     .iter()
                     .map(|e| {
                         let inst = instances.iter().find(|i| i.pid == e.0);
-                        let server = inst
-                            .map(|i| i.name.as_deref().unwrap_or(&format!("{}:{}", i.bind, i.port)))
-                            .unwrap_or("?");
+                        let server = match inst {
+                            Some(i) => i.name.clone().unwrap_or_else(|| format!("{}:{}", i.bind, i.port)),
+                            None => "?".to_string(),
+                        };
                         format!("  pid {}  {}  [{}]", e.2, e.3, server)
                     })
                     .collect();

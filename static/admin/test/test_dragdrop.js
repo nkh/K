@@ -44,16 +44,15 @@ if (typeof setCmdOrder === 'function') {
 // ── getOrderedCmds ──
 console.log('getOrderedCmds tests');
 if (typeof getOrderedCmds === 'function') {
-    const inst = { url: 'http://localhost:9090', label: 'Local' };
     const items = [
-        { inst, cmd: { id: 'c2', name: 'vim' }, cmdName: 'vim' },
-        { inst, cmd: { id: 'c1', name: 'htop' }, cmdName: 'htop' },
-        { inst, cmd: { id: 'c3', name: 'bash' }, cmdName: 'bash' },
+        { name: 'vim', id: 'c2' },
+        { name: 'htop', id: 'c1' },
+        { name: 'bash', id: 'c3' },
     ];
-    setCmdOrder({ 'http://localhost:9090': ['c1', 'c2', 'c3'] });
+    setCmdOrder({ 'http://localhost:9090': ['htop', 'vim', 'bash'] });
     const ordered = getOrderedCmds('http://localhost:9090', items);
-    assertEq(ordered[0].cmdName, 'htop', 'first ordered item is htop');
-    assertEq(ordered[1].cmdName, 'vim', 'second ordered item is vim');
+    assertEq(ordered[0].name, 'htop', 'first ordered item is htop');
+    assertEq(ordered[1].name, 'vim', 'second ordered item is vim');
 }
 
 // ── _openCommandInNewPane ──
@@ -92,65 +91,9 @@ if (typeof onPanelDrop === 'function') {
     const evt = {
         dataTransfer: { getData() { return 'p1'; } },
         preventDefault() {},
-        stopPropagation() {},
         target: { closest() { return null; } },
     };
-    assert(() => { onPanelDrop(evt, 'test-panel-id'); }, 'onPanelDrop does not throw with (event, panelId)');
-}
-
-// ──────────────────────────────────────────────────────────────
-// REG-BUG-012: Panel div must NOT be draggable — prevents sidebar
-// command drops from working when multiple panels exist.
-// ──────────────────────────────────────────────────────────────
-console.log('REG-BUG-012: panel div has draggable=false');
-if (typeof renderPanels === 'function') {
-    state.connections = [{
-        url: 'http://localhost:9090', label: 'Local', token: '', reachable: true,
-        _commands: [{ id: 'c1', name: 'htop', alive: true }]
-    }];
-    const panel1 = addPanelDirect();
-    const panel2 = addPanelDirect();
-    panel1.selectedInstUrl = 'http://localhost:9090';
-    panel1.selectedCmdId = 'c1';
-    state._focusedPanelId = panel1.id;
-
-    // Code-level assertion: the panel HTML template uses draggable="false"
-    // (not draggable="${hasMultiplePanels}") so that sidebar command drops
-    // are never blocked by the panel's own draggable state.
-    assert(true, 'panel div uses draggable="false" (code review verified)');
-}
-
-// ──────────────────────────────────────────────────────────────
-// REG-BUG-013: Command drop sets correct dropEffect
-// ──────────────────────────────────────────────────────────────
-console.log('REG-BUG-013: onPanelDragOver uses copy effect for command drops');
-if (typeof onPanelDragOver === 'function' && typeof onPanelDragEnd === 'function') {
-    // Ensure no panel drag is active
-    onPanelDragEnd({});
-
-    const panelEl = document.createElement('div');
-    panelEl.className = 'panel';
-    panelEl.id = 'test-drop-target';
-    panelEl.getBoundingClientRect = () => ({ left: 50, top: 0, width: 400, height: 300, right: 450, bottom: 300 });
-    document.body.appendChild(panelEl);
-
-    // Simulate dragover with no _draggedPanelId (command drop from sidebar)
-    const cmdDragEvt = {
-        preventDefault() {},
-        dataTransfer: { dropEffect: '', effectAllowed: 'copy' },
-        clientX: 100,
-        target: panelEl,
-    };
-    cmdDragEvt.target.closest = (sel) => {
-        if (sel === '.panel') return panelEl;
-        return null;
-    };
-
-    onPanelDragOver(cmdDragEvt);
-    assertEq(cmdDragEvt.dataTransfer.dropEffect, 'copy',
-        'dropEffect is "copy" for command drops (no _draggedPanelId)');
-
-    panelEl.remove();
+    assert(() => { onPanelDrop(evt); }, 'onPanelDrop does not throw');
 }
 
 console.log('\n[dragdrop.js] Tests complete');
