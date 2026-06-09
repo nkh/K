@@ -179,7 +179,11 @@ function updateCertDropdown() {
 // manually changing the dropdown or by spawning a command), it persists
 // for the lifetime of the session — it is never silently overridden by
 // the focused panel's instance.
-let _userSpawnInstUrl = null;
+// IMPORTANT: This MUST be a window property (not a local let/var) because
+// the sidebar sort bar and spawn dialog set window._userSpawnInstUrl
+// directly via inline onclick/onchange handlers.  A local variable in this
+// IIFE would shadow the window property, causing the dropdown to ignore
+// the user's explicit server selection.
 
 function updateInstanceDropdown() {
     const select = document.getElementById('spawnInstance');
@@ -198,14 +202,15 @@ function updateInstanceDropdown() {
     // 2. The previous dropdown value, if it still exists in the list.
     // 3. Fall back to the first connection (never to the focused panel,
     //    since that would re-introduce the coupling bug).
-    if (_userSpawnInstUrl && state.connections.some(i => i.url === _userSpawnInstUrl)) {
-        select.value = _userSpawnInstUrl;
+    const userUrl = window._userSpawnInstUrl;
+    if (userUrl && state.connections.some(i => i.url === userUrl)) {
+        select.value = userUrl;
     } else if (current && state.connections.some(i => i.url === current)) {
         select.value = current;
-        _userSpawnInstUrl = current;  // remember the restored value
+        window._userSpawnInstUrl = current;  // remember the restored value
     } else if (state.connections.length > 0) {
         select.value = state.connections[0].url;
-        _userSpawnInstUrl = state.connections[0].url;
+        window._userSpawnInstUrl = state.connections[0].url;
     }
 }
 
@@ -402,7 +407,6 @@ async function spawnFromWelcome() {
     window.applyPollInterval = applyPollInterval;
     window.loadCertificates = loadCertificates;
     window.updateCertDropdown = updateCertDropdown;
-    window._userSpawnInstUrl = _userSpawnInstUrl;
     window.updateInstanceDropdown = updateInstanceDropdown;
     window.addConnection = addConnection;
     window.removeConnection = removeConnection;
