@@ -99,16 +99,19 @@ if (typeof createCmdGroup === 'function') {
     const nameInput = document.createElement('input');
     nameInput.id = 'newGroupName';
     nameInput.value = 'test-group';
+    state.connections = [{ url: 'http://localhost:9090', label: 'Local', _commands: [] }];
     assert(() => { createCmdGroup(); }, 'createCmdGroup does not throw');
 }
 
 if (typeof deleteCmdGroup === 'function') {
+    state.connections = [{ url: 'http://localhost:9090', label: 'Local', _commands: [] }];
     assert(() => { deleteCmdGroup('test-group'); }, 'deleteCmdGroup does not throw');
 }
 
 if (typeof renderGroups === 'function') {
     const groupList = document.createElement('div');
     groupList.id = 'groupList';
+    state.connections = [{ url: 'http://localhost:9090', label: 'Local', _commands: [] }];
     assert(() => { renderGroups(); }, 'renderGroups does not throw');
 }
 

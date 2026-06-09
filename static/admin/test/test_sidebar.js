@@ -36,12 +36,21 @@ tabCerts.id = 'tab-certs';
 const tabGroups = document.createElement('div');
 tabGroups.id = 'tab-groups';
 
-assert(() => { switchSidebarTab('servers'); }, 'switchSidebarTab servers does not throw');
-assert(() => { switchSidebarTab('spawn'); }, 'switchSidebarTab spawn does not throw');
-assert(() => { switchSidebarTab('templates'); }, 'switchSidebarTab templates does not throw');
-assert(() => { switchSidebarTab('envs'); }, 'switchSidebarTab envs does not throw');
-assert(() => { switchSidebarTab('certs'); }, 'switchSidebarTab certs does not throw');
-assert(() => { switchSidebarTab('groups'); }, 'switchSidebarTab groups does not throw');
+// Create sidebar-tab elements for querySelectorAll
+const sidebarTab1 = document.createElement('div');
+sidebarTab1.classList.add('sidebar-tab');
+
+// Mock renderTemplates/renderGroups to avoid cascading errors
+globalThis.renderTemplates = function() {};
+globalThis.renderGroups = function() {};
+state.connections = [];
+
+assert(() => { switchSidebarTab('servers', sidebarTab1); }, 'switchSidebarTab servers does not throw');
+assert(() => { switchSidebarTab('spawn', sidebarTab1); }, 'switchSidebarTab spawn does not throw');
+assert(() => { switchSidebarTab('templates', sidebarTab1); }, 'switchSidebarTab templates does not throw');
+assert(() => { switchSidebarTab('envs', sidebarTab1); }, 'switchSidebarTab envs does not throw');
+assert(() => { switchSidebarTab('certs', sidebarTab1); }, 'switchSidebarTab certs does not throw');
+assert(() => { switchSidebarTab('groups', sidebarTab1); }, 'switchSidebarTab groups does not throw');
 
 // ── updateSidebarTabsVisibility ──
 console.log('updateSidebarTabsVisibility tests');

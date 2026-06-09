@@ -25,7 +25,7 @@ console.log('off tests');
 received = null;
 bus.off('test-event', handler);
 bus.emit('test-event', { msg: 'world' });
-assertEq(received, 'hello', 'removed listener does not fire (stale value)');
+assertEq(received, null, 'removed listener does not fire');
 
 // ── once ──
 console.log('once tests');
