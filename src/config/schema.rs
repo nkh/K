@@ -19,7 +19,7 @@ pub use super::security::{
 #[cfg(feature = "vrw")]
 pub use super::server::ServerConfig;
 #[cfg(feature = "vrw")]
-pub use super::web::{RateLimitConfig, WebConfig};
+pub use super::web::{PanelColorEntry, RateLimitConfig, WebConfig};
 
 /// Top-level configuration.
 ///

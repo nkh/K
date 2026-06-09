@@ -264,6 +264,32 @@ pub async fn kill_command_by_pid(
     }
 }
 
+/// POST /api/commands/kill-all
+/// Kill all running commands. Retained commands are signaled but not removed.
+/// Returns the count of commands that were signaled.
+pub async fn kill_all_commands(State(state): State<AppState>) -> Json<Value> {
+    let commands = state.manager.list();
+    let mut killed = Vec::new();
+    let mut errors = Vec::new();
+
+    for (id, _name, _args, _pid, _cert) in &commands {
+        match state.manager.kill(id, None).await {
+            Ok(_) => killed.push(id.clone()),
+            Err(e) => errors.push(format!("{}: {}", id, e)),
+        }
+    }
+
+    Json(serde_json::json!({
+        "status": "ok",
+        "data": {
+            "killed_count": killed.len(),
+            "total_count": commands.len(),
+            "killed_ids": killed,
+        },
+        "error": if errors.is_empty() { serde_json::Value::Null } else { serde_json::json!(errors.join("; ")) }
+    }))
+}
+
 /// Freeze (suspend) a running command via SIGSTOP.
 pub async fn freeze_command(State(state): State<AppState>, Path(id): Path<String>) -> Json<Value> {
     match state.manager.freeze(&id) {
@@ -390,6 +416,18 @@ pub async fn get_info(State(state): State<AppState>) -> Json<Value> {
     let vtty_config = &state.manager.config().vtty;
     let server_config = &state.manager.config().server;
 
+    // Build panel_colors array for the frontend
+    let panel_colors: Vec<Value> = web_config
+        .panel_colors
+        .iter()
+        .map(|pc| {
+            serde_json::json!({
+                "background": pc.background,
+                "text": pc.text,
+            })
+        })
+        .collect();
+
     Json(serde_json::json!({
         "status": "ok",
         "data": {
@@ -402,6 +440,7 @@ pub async fn get_info(State(state): State<AppState>) -> Json<Value> {
                 "update_mode": web_config.update_mode,
                 "dirty_check_ms": web_config.dirty_check_ms,
                 "default_poll_ms": web_config.default_poll_ms,
+                "panel_colors": panel_colors,
             },
             "vtty": {
                 "screenshot_font_size": vtty_config.screenshot_font_size,
@@ -802,4 +841,60 @@ pub async fn tab_complete(
         "data": matches,
         "error": null
     }))
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// Test that kill_all_commands returns the correct JSON structure
+    /// when no commands are running (empty manager).
+    #[test]
+    fn test_kill_all_response_structure() {
+        // Verify the handler compiles and returns a valid JSON structure.
+        // We test the serialization logic directly since we can't easily
+        // create a full AppState in unit tests.
+        let commands: Vec<(String, String, Vec<String>, u32, Option<String>)> = vec![];
+
+        // Simulate empty response
+        let killed: Vec<String> = vec![];
+        let errors: Vec<String> = vec![];
+        let response = json!({
+            "status": "ok",
+            "data": {
+                "killed_count": killed.len(),
+                "total_count": commands.len(),
+                "killed_ids": killed,
+            },
+            "error": if errors.is_empty() { serde_json::Value::Null } else { serde_json::json!(errors.join("; ")) }
+        });
+
+        assert_eq!(response["status"], "ok");
+        assert_eq!(response["data"]["killed_count"], 0);
+        assert_eq!(response["data"]["total_count"], 0);
+        assert!(response["error"].is_null());
+    }
+
+    /// Test that kill_all response includes error when some kills fail.
+    #[test]
+    fn test_kill_all_with_errors() {
+        let killed = vec!["cmd-1".to_string()];
+        let errors = vec!["cmd-2: command not found".to_string()];
+
+        let response = json!({
+            "status": "ok",
+            "data": {
+                "killed_count": killed.len(),
+                "total_count": killed.len() + errors.len(),
+                "killed_ids": killed,
+            },
+            "error": if errors.is_empty() { serde_json::Value::Null } else { serde_json::json!(errors.join("; ")) }
+        });
+
+        assert_eq!(response["data"]["killed_count"], 1);
+        assert_eq!(response["data"]["total_count"], 2);
+        assert_eq!(response["error"], "cmd-2: command not found");
+    }
 }

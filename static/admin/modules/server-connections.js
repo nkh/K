@@ -82,6 +82,10 @@ async function fetchServerConfig() {
             if (!localStorage.getItem('vrw_poll_interval')) {
                 state.pollInterval = state.serverPollMs || 500;
             }
+            // Apply server-configured panel colors if available
+            if (json.data.web.panel_colors && json.data.web.panel_colors.length > 0) {
+                state._serverPanelColors = json.data.web.panel_colors;
+            }
         }
         // Capture server name from API for display in panel headers
         if (json.status === 'ok' && json.data && json.data.server_name) {
@@ -235,7 +239,41 @@ function addConnection(url, label, token) {
     }
     const conn = { url, label: label || url, token: token || '', reachable: undefined, _lastError: null, _commands: null, _certs: null, _serverName: null };
     state.connections.push(conn);
+    // Persist connections to localStorage
+    _saveConnections();
     return conn;
+}
+
+function removeConnection(url) {
+    state.connections = state.connections.filter(c => c.url !== url);
+    _lastCommandState = ''; // force sidebar rebuild
+    _saveConnections();
+    loadCommands();
+    updateDisconnectedUI();
+}
+
+/// Save connection list to localStorage for persistence across page reloads.
+function _saveConnections() {
+    const data = state.connections.map(c => ({ url: c.url, label: c.label, token: c.token }));
+    localStorage.setItem('vrw_connections', JSON.stringify(data));
+}
+
+/// Restore connections from localStorage.
+function _restoreConnections() {
+    try {
+        const data = JSON.parse(localStorage.getItem('vrw_connections') || '[]');
+        if (!Array.isArray(data) || data.length === 0) return null;
+        // First connection is always the origin server; skip saved ones that match
+        const originUrl = window.location.origin;
+        let restored = [];
+        for (const item of data) {
+            if (item.url && item.url !== originUrl) {
+                addConnection(item.url, item.label || '', item.token || '');
+                restored.push(item.url);
+            }
+        }
+        return restored.length > 0 ? restored : null;
+    } catch (e) { return null; }
 }
 
 /// Fetch server_name from /api/info for a non-primary connection.
@@ -429,6 +467,8 @@ async function spawnFromWelcome() {
     window.updateCertDropdown = updateCertDropdown;
     window.updateInstanceDropdown = updateInstanceDropdown;
     window.addConnection = addConnection;
+    window._saveConnections = _saveConnections;
+    window._restoreConnections = _restoreConnections;
     window._fetchServerName = _fetchServerName;
     window.removeConnection = removeConnection;
     window.disconnectServer = disconnectServer;

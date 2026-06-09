@@ -276,7 +276,7 @@ function _buildSidebar() {
             const exitedClass = (!isAlive && !isFrozen) ? ' exited' : '';
             const instUnreachable = inst.reachable === false;
             const dimStyle = instUnreachable ? 'opacity:0.4;' : ((isAlive || isFrozen) ? '' : 'opacity:0.6;');
-            const killDisabled = instUnreachable ? ' disabled title="Server disconnected"' : ' title="Kill"';
+            const killDisabled = (instUnreachable && isAlive) ? ' disabled title="Server disconnected — cannot kill running commands"' : ' title="Kill"';
             const retainOnExit = cmd.exit && cmd.exit.retain_on_exit === true;
             const keepTitle = retainOnExit ? 'Unkeep (terminal will be removed on exit)' : 'Keep (retain terminal after exit)';
             const keepBtnHtml = isAlive
@@ -343,19 +343,13 @@ function _buildSidebar() {
         // Auto-select only from the focused panel's server (if set).
         // This prevents assigning a command from server X to a panel
         // that was just created for server Y (which has no commands yet).
+        // IMPORTANT: We do NOT fallback to commands from other servers.
+        // If the focused panel's server has no commands, the panel stays empty.
         const focusedPanel = state.panels.find(p => p.id === state._focusedPanelId);
         const targetInstUrl = (focusedPanel && focusedPanel.selectedInstUrl) || state.selectedInstUrl;
         if (targetInstUrl) {
             const inst = state.connections.find(i => i.url === targetInstUrl);
             if (inst && inst._commands && inst._commands.length > 0) {
-                const cmd = inst._commands[0];
-                selectCommand(inst.url, cmd.id, cmd.name || cmd.id);
-                return;
-            }
-        }
-        // Fallback: pick the first command from any server
-        for (const inst of state.connections) {
-            if (inst._commands && inst._commands.length > 0) {
                 const cmd = inst._commands[0];
                 selectCommand(inst.url, cmd.id, cmd.name || cmd.id);
                 return;

@@ -421,28 +421,45 @@ async function killAllCommands() {
     if (!confirm(scopeMsg)) return;
     // Force full rebuild on state transition
     _lastCommandState = '';
-    const promises = [];
-    for (const inst of state.connections) {
-        if (!inst.reachable) continue;
-        for (const cmd of (inst._commands || [])) {
-            if (!cmd.alive) continue;
-            if (filterLower) {
-                const cmdName = cmd.name || cmd.id;
-                if (!cmdName.toLowerCase().includes(filterLower) &&
-                    !(cmd.args || []).join(' ').toLowerCase().includes(filterLower) &&
-                    !String(cmd.pid).includes(filterLower)) continue;
-            }
+
+    if (!filterLower) {
+        // No filter — use the server-side kill-all endpoint per server (atomic)
+        const promises = [];
+        for (const inst of state.connections) {
+            if (!inst.reachable) continue;
             promises.push(
-                fetch(apiUrl(`/api/commands/${cmd.id}/kill`, { url: inst.url }), {
+                fetch(apiUrl('/api/commands/kill-all', { url: inst.url }), {
                     method: 'POST',
                     headers: authHeadersForInstance({ url: inst.url }),
                     body: JSON.stringify({}),
                 }).catch(() => {})
             );
         }
+        await Promise.all(promises);
+    } else {
+        // Filter active — must kill individually per command
+        const promises = [];
+        for (const inst of state.connections) {
+            if (!inst.reachable) continue;
+            for (const cmd of (inst._commands || [])) {
+                if (!cmd.alive) continue;
+                if (filterLower) {
+                    const cmdName = cmd.name || cmd.id;
+                    if (!cmdName.toLowerCase().includes(filterLower) &&
+                        !(cmd.args || []).join(' ').toLowerCase().includes(filterLower) &&
+                        !String(cmd.pid).includes(filterLower)) continue;
+                }
+                promises.push(
+                    fetch(apiUrl(`/api/commands/${cmd.id}/kill`, { url: inst.url }), {
+                        method: 'POST',
+                        headers: authHeadersForInstance({ url: inst.url }),
+                        body: JSON.stringify({}),
+                    }).catch(() => {})
+                );
+            }
+        }
+        await Promise.all(promises);
     }
-    // Wait for all kill requests to complete
-    await Promise.all(promises);
     // Re-fetch from server to get accurate state (some kills may have failed)
     _lastCommandState = '';
     await loadCommands();

@@ -316,6 +316,7 @@ mod tests {
             pid,
             port,
             bind: "127.0.0.1".to_string(),
+            name: None,
             start_time: chrono::Utc::now(),
             daemon: false,
             display: false,

@@ -26,11 +26,16 @@ use serde::{Deserialize, Serialize};
 /// the current buffer against the last-sent snapshot.
 ///
 /// Example YAML:
-/// ```yaml
+/// ```ignore
 /// web:
-///   update_mode: push       # or "poll"
-///   dirty_check_ms: 200     # server check interval (push mode)
-///   default_poll_ms: 500    # client poll interval (poll mode)
+///   update_mode: push
+///   dirty_check_ms: 200
+///   default_poll_ms: 500
+///   panel_colors:
+///     - background: "#2d1f3d"
+///       text: "#d4b8e8"
+///     - background: "#1f3d2d"
+///       text: "#b8e8d4"
 ///   rate_limit:
 ///     max_updates_per_sec: 30
 /// ```
@@ -51,6 +56,15 @@ pub struct WebConfig {
     /// The user can override this via the web UI controls.
     /// Default: 500 ms.
     pub default_poll_ms: u64,
+    /// Per-server background colors for panel headers in the web UI.
+    /// Each entry defines a (background, text) color pair that is
+    /// assigned to server connections by index. The first connection
+    /// (the local server) always uses the default theme colors.
+    /// Subsequent connections cycle through this palette.
+    ///
+    /// If not specified, a built-in palette of 7 dark colors is used.
+    #[serde(default)]
+    pub panel_colors: Vec<PanelColorEntry>,
     /// Rate limiting for VTTY update notifications sent to WebSocket clients.
     ///
     /// When a command produces very high output (e.g., `find /`, build logs),
@@ -68,12 +82,35 @@ pub struct WebConfig {
     pub rate_limit: RateLimitConfig,
 }
 
+/// A single color entry for panel header backgrounds.
+///
+/// Example (YAML):
+/// ```ignore
+/// web:
+///   panel_colors:
+///     - background: "#2d1f3d"
+///       text: "#d4b8e8"
+/// ```
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PanelColorEntry {
+    /// Background color for the panel header (CSS value).
+    /// Example: "#2d1f3d", "rgba(45,31,61,0.9)", or a CSS variable.
+    #[serde(default)]
+    pub background: String,
+    /// Text color for the panel header content.
+    /// Should have sufficient contrast against the background.
+    /// Example: "#d4b8e8", "#ffffff", or a CSS variable.
+    #[serde(default)]
+    pub text: String,
+}
+
 impl Default for WebConfig {
     fn default() -> Self {
         Self {
             update_mode: "push".to_string(),
             dirty_check_ms: 200,
             default_poll_ms: 500,
+            panel_colors: Vec::new(), // empty = use built-in palette
             rate_limit: RateLimitConfig::default(),
         }
     }
@@ -86,7 +123,7 @@ impl Default for WebConfig {
 ///
 /// # YAML Example
 ///
-/// ```yaml
+/// ```ignore
 /// web:
 ///   rate_limit:
 ///     max_updates_per_sec: 30
@@ -133,5 +170,62 @@ impl Default for RateLimitConfig {
         Self {
             max_updates_per_sec: default_max_updates_per_sec(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_panel_color_entry_json_deserialization() {
+        let json = r##"{"background": "#2d1f3d", "text": "#d4b8e8"}"##;
+        let entry: PanelColorEntry = serde_json::from_str(json).unwrap();
+        assert_eq!(entry.background, "#2d1f3d");
+        assert_eq!(entry.text, "#d4b8e8");
+    }
+
+    #[test]
+    fn test_panel_color_entry_default_fields() {
+        let json = r#"{}"#;
+        let entry: PanelColorEntry = serde_json::from_str(json).unwrap();
+        assert_eq!(entry.background, "");
+        assert_eq!(entry.text, "");
+    }
+
+    #[test]
+    fn test_web_config_default_panel_colors_empty() {
+        let config = WebConfig::default();
+        assert!(config.panel_colors.is_empty());
+        assert_eq!(config.update_mode, "push");
+    }
+
+    #[test]
+    fn test_web_config_with_panel_colors_json() {
+        let json = r##"{
+            "update_mode": "push",
+            "dirty_check_ms": 200,
+            "default_poll_ms": 500,
+            "panel_colors": [
+                {"background": "#2d1f3d", "text": "#d4b8e8"},
+                {"background": "#1f3d2d", "text": "#b8e8d4"}
+            ]
+        }"##;
+        let config: WebConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.panel_colors.len(), 2);
+        assert_eq!(config.panel_colors[0].background, "#2d1f3d");
+        assert_eq!(config.panel_colors[0].text, "#d4b8e8");
+        assert_eq!(config.panel_colors[1].background, "#1f3d2d");
+        assert_eq!(config.panel_colors[1].text, "#b8e8d4");
+    }
+
+    #[test]
+    fn test_web_config_without_panel_colors() {
+        let json = r#"{"update_mode": "poll", "dirty_check_ms": 300, "default_poll_ms": 1000}"#;
+        let config: WebConfig = serde_json::from_str(json).unwrap();
+        assert!(config.panel_colors.is_empty());
+        assert_eq!(config.update_mode, "poll");
+        assert_eq!(config.dirty_check_ms, 300);
+        assert_eq!(config.default_poll_ms, 1000);
     }
 }

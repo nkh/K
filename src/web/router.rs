@@ -52,6 +52,10 @@ pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
             "/api/commands/kill-pid/:pid",
             post(handlers::commands::kill_command_by_pid),
         )
+        .route(
+            "/api/commands/kill-all",
+            post(handlers::commands::kill_all_commands),
+        )
         .route("/api/commands/:id/keys", post(handlers::keys::send_keys))
         .route("/api/commands/:id/mouse", post(handlers::keys::send_mouse))
         .route(

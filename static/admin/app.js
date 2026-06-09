@@ -81,6 +81,31 @@
     addConnection(state.connections[0].url, state.connections[0].label, state.connections[0].token);
     addPanelDirect();
 
+    // Restore saved server connections from localStorage
+    const restoredConnections = _restoreConnections();
+
+    // Restore panel layout from localStorage
+    const savedLayout = localStorage.getItem('vrw_panel_layout');
+    if (savedLayout) {
+        state.panelLayout = savedLayout;
+    }
+
+    // Restore number of panels from localStorage
+    const savedPanelCount = parseInt(localStorage.getItem('vrw_panel_count'));
+    if (savedPanelCount && savedPanelCount > 1 && state.panels.length < savedPanelCount) {
+        for (let i = 1; i < savedPanelCount; i++) {
+            addPanelDirect();
+        }
+    }
+
+    // Fetch server names for restored connections
+    if (restoredConnections) {
+        for (const connUrl of restoredConnections) {
+            const conn = state.connections.find(c => c.url === connUrl);
+            if (conn) _fetchServerName(conn);
+        }
+    }
+
     // ── Scroll detection: pause VTTY DOM updates while user is scrolling ──
     document.addEventListener('scroll', (e) => {
         const vttyEl = e.target.closest ? e.target.closest('.vtty-container') : null;

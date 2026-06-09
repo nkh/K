@@ -199,6 +199,7 @@ function _renderVttyContainer(panel) {
 }
 
 /// Get a human-readable server label: name if available, otherwise host:port.
+/// Never returns '?' — always shows the port or a meaningful fallback.
 function _getServerLabel(inst, instUrl) {
     if (inst && inst._serverName) return inst._serverName;
     if (inst && inst.label) {
@@ -208,10 +209,18 @@ function _getServerLabel(inst, instUrl) {
     if (instUrl) {
         try {
             const u = new URL(instUrl);
-            return u.host;
+            // Show host:port — always include port for clarity
+            if (u.port) {
+                return u.host; // already includes port
+            }
+            // Default HTTP/HTTPS ports — show explicitly
+            const scheme = u.protocol.replace(':', '');
+            const defaultPort = scheme === 'https' ? 443 : scheme === 'http' ? 80 : 0;
+            const actualPort = parseInt(u.port || '0') || defaultPort;
+            return u.hostname + ':' + actualPort;
         } catch (e) { return instUrl; }
     }
-    return '?';
+    return 'unknown';
 }
 
 /// Get a distinct background color for a server connection.
@@ -227,11 +236,40 @@ const _serverColorPalette = [
     '#1f3d3d',  // teal
 ];
 
+/// Text colors paired with _serverColorPalette for readability.
+const _serverTextColorPalette = [
+    'var(--text-primary)',
+    '#d4b8e8',  // purple
+    '#b8e8d4',  // green
+    '#e8d4b8',  // brown
+    '#b8d4e8',  // blue
+    '#e8b8d4',  // red
+    '#d4e8b8',  // olive
+    '#b8e8e8',  // teal
+];
+
 function _getServerColor(inst, instUrl) {
     if (!inst) return 'var(--bg-tertiary)';
     const idx = state.connections.indexOf(inst);
     if (idx <= 0) return 'var(--bg-tertiary)';
+    // Use server-configured panel colors if available
+    if (state._serverPanelColors && state._serverPanelColors.length > 0) {
+        const colorIdx = (idx - 1) % state._serverPanelColors.length;
+        return state._serverPanelColors[colorIdx].background || 'var(--bg-tertiary)';
+    }
     return _serverColorPalette[idx % _serverColorPalette.length];
+}
+
+function _getServerTextColor(inst, instUrl) {
+    if (!inst) return 'var(--text-primary)';
+    const idx = state.connections.indexOf(inst);
+    if (idx <= 0) return 'var(--text-primary)';
+    // Use server-configured panel colors if available
+    if (state._serverPanelColors && state._serverPanelColors.length > 0) {
+        const colorIdx = (idx - 1) % state._serverPanelColors.length;
+        return state._serverPanelColors[colorIdx].text || 'var(--text-primary)';
+    }
+    return _serverTextColorPalette[idx % _serverTextColorPalette.length];
 }
 
 /// Get the command name label for a panel/sub-pane.
@@ -253,6 +291,7 @@ function _updateSplitHeaders(panelObj) {
     if (primaryHeader) {
         const primaryInst = panelObj.selectedInstUrl ? state.connections.find(i => i.url === panelObj.selectedInstUrl) : null;
         primaryHeader.style.background = _getServerColor(primaryInst, panelObj.selectedInstUrl);
+        primaryHeader.style.color = _getServerTextColor(primaryInst, panelObj.selectedInstUrl);
         const serverLabel = primaryHeader.querySelector('.split-server-label');
         if (serverLabel) serverLabel.textContent = _getServerLabel(primaryInst, panelObj.selectedInstUrl);
         const cmdLabel = primaryHeader.querySelector('.split-cmd-label');
@@ -264,6 +303,7 @@ function _updateSplitHeaders(panelObj) {
     if (secondaryHeader) {
         const secondaryInst = panelObj.split.secondaryInstUrl ? state.connections.find(i => i.url === panelObj.split.secondaryInstUrl) : null;
         secondaryHeader.style.background = _getServerColor(secondaryInst, panelObj.split.secondaryInstUrl);
+        secondaryHeader.style.color = _getServerTextColor(secondaryInst, panelObj.split.secondaryInstUrl);
         const serverLabel = secondaryHeader.querySelector('.split-server-label');
         if (serverLabel) serverLabel.textContent = _getServerLabel(secondaryInst, panelObj.split.secondaryInstUrl);
         const cmdLabel = secondaryHeader.querySelector('.split-cmd-label');
@@ -284,17 +324,19 @@ function _renderSplitContainer(panel) {
     const primaryInst = panel.selectedInstUrl ? state.connections.find(i => i.url === panel.selectedInstUrl) : null;
     const primaryServerLabel = _getServerLabel(primaryInst, panel.selectedInstUrl);
     const primaryColor = _getServerColor(primaryInst, panel.selectedInstUrl);
+    const primaryTextColor = _getServerTextColor(primaryInst, panel.selectedInstUrl);
     const primaryCmdLabel = _getPanelCmdLabel(panel.selectedCmdId, panel.selectedInstUrl);
 
     // Get server info for secondary pane
     const secondaryInst = split.secondaryInstUrl ? state.connections.find(i => i.url === split.secondaryInstUrl) : null;
     const secondaryServerLabel = _getServerLabel(secondaryInst, split.secondaryInstUrl);
     const secondaryColor = _getServerColor(secondaryInst, split.secondaryInstUrl);
+    const secondaryTextColor = _getServerTextColor(secondaryInst, split.secondaryInstUrl);
     const secondaryCmdLabel = _getPanelCmdLabel(split.secondaryCmdId, split.secondaryInstUrl);
 
     // Primary sub-pane
     const primaryHtml = `<div class="split-pane" data-split-side="primary" data-panel="${panel.id}" style="flex: 0 0 ${primaryWidth}%; display:flex; flex-direction:column; min-width:0; min-height:0;">
-            <div class="split-header panel-header" data-panel-id="${panel.id}" data-split-side="primary" style="background:${primaryColor};">
+            <div class="split-header panel-header" data-panel-id="${panel.id}" data-split-side="primary" style="background:${primaryColor};color:${primaryTextColor};">
                 <span class="split-server-label" style="font-size:0.6rem;opacity:0.8;">${escHtml(primaryServerLabel)}</span>
                 <span class="split-cmd-label" style="font-size:0.65rem;font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">${escHtml(primaryCmdLabel)}</span>
                 <button class="btn btn-xs btn-danger" onclick="event.stopPropagation();unsplitPanel('${panel.id}')" title="Close split">&#x2715;</button>
@@ -318,7 +360,7 @@ function _renderSplitContainer(panel) {
 
     // Secondary sub-pane
     const secondaryHtml = `<div class="split-pane" data-split-side="secondary" data-panel="${panel.id}" style="flex: 0 0 ${secondaryWidth}%; display:flex; flex-direction:column; min-width:0; min-height:0;">
-            <div class="split-header panel-header" data-panel-id="${panel.id}" data-split-side="secondary" style="background:${secondaryColor};">
+            <div class="split-header panel-header" data-panel-id="${panel.id}" data-split-side="secondary" style="background:${secondaryColor};color:${secondaryTextColor};">
                 <span class="split-server-label" style="font-size:0.6rem;opacity:0.8;">${escHtml(secondaryServerLabel)}</span>
                 <span class="split-cmd-label" style="font-size:0.65rem;font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">${escHtml(secondaryCmdLabel)}</span>
                 <button class="btn btn-xs btn-danger" onclick="event.stopPropagation();unsplitPanel('${panel.id}')" title="Close split">&#x2715;</button>
@@ -608,13 +650,14 @@ function renderPanels() {
             const conn = panel.selectedInstUrl ? state.connections.find(i => i.url === panel.selectedInstUrl) : null;
             const serverLabel = _getServerLabel(conn, panel.selectedInstUrl);
             const serverColor = _getServerColor(conn, panel.selectedInstUrl);
+            const serverTextColor = _getServerTextColor(conn, panel.selectedInstUrl);
             const resizeHandle = hasMultiplePanels ? `<div class="panel-resize-handle" data-panel="${panel.id}"></div>` : '';
             const dragHandle = hasMultiplePanels ? `<span class="drag-handle" draggable="true" ondragstart="onPanelDragStart(event,'${panel.id}')" ondragend="onPanelDragEnd(event)" title="Drag to reorder">&#x2840;</span>` : '';
             const isFocused = panel.id === state._focusedPanelId;
             const mobileHidden = isMobile && hasMultiplePanels && !isFocused ? ' style="display:none;"' : '';
             html += `
                 <div class="panel${isFocused ? ' focused' : ''}" id="${panel.id}" draggable="false" ondragover="onPanelDragOver(event)" ondrop="onPanelDrop(event,'${panel.id}')" ondragleave="onPanelDragLeave(event)"${mobileHidden}>
-                    <div class="panel-header" data-panel-id="${panel.id}" oncontextmenu="showPanelContextMenu(event,'${panel.id}')" tabindex="0" role="button" aria-label="Panel: ${escHtml(panel.selectedInstUrl || 'empty')}" style="background:${serverColor};">
+                    <div class="panel-header" data-panel-id="${panel.id}" oncontextmenu="showPanelContextMenu(event,'${panel.id}')" tabindex="0" role="button" aria-label="Panel: ${escHtml(panel.selectedInstUrl || 'empty')}" style="background:${serverColor};color:${serverTextColor};">
                         ${dragHandle}
                         <span class="panel-server-badge" style="font-size:0.6rem;opacity:0.7;flex-shrink:0;">${escHtml(serverLabel)}</span>
                         <button class="btn btn-xs cmd-history-btn" id="histBack-${panel.id}" onclick="event.stopPropagation();panelHistoryBack('${panel.id}')" title="Back in command history" style="display:none;">&#x25C0;</button>
@@ -746,6 +789,8 @@ function renderPanels() {
     _lastRenderedPanelIds = currentPanelIds;
     _lastSplitState = currentSplitState;
     _lastShowingWelcome = _showingWelcome;
+    // Persist panel count for reload
+    localStorage.setItem('vrw_panel_count', state.panels.length.toString());
     _updatePanelMultiUI();
     // Sync shared toolbar with current state
     if (!_showingWelcome) updateSharedToolbar();
@@ -1832,6 +1877,7 @@ function onPanelDragEnd(e) {
     window._renderVttyContainer = _renderVttyContainer;
     window._getServerLabel = _getServerLabel;
     window._getServerColor = _getServerColor;
+    window._getServerTextColor = _getServerTextColor;
     window._getPanelCmdLabel = _getPanelCmdLabel;
     window._updateSplitHeaders = _updateSplitHeaders;
     window._renderSplitContainer = _renderSplitContainer;
