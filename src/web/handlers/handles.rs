@@ -101,3 +101,15 @@ pub async fn add_handle(
         })),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_handler_module_compiles() {
+        // Verify the handler module compiles successfully.
+        // Handler functions require AppState which is tested separately.
+        // This test ensures the module's types and imports are valid.
+    }
+}

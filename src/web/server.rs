@@ -106,3 +106,14 @@ pub async fn start_server(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_server_module_compiles() {
+        // Server requires tokio runtime and AppState.
+        // Tested via integration tests.
+    }
+}

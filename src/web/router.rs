@@ -183,3 +183,13 @@ pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
         .layer(middleware::from_fn(error_handler))
         .with_state(state)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_router_module_compiles() {
+        // Router requires AppState and depends on all handler modules.
+    }
+}

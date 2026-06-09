@@ -791,4 +791,409 @@ mod tests {
         assert!(json.contains("\"width\":2"), "JSON should contain width:2 for wide char");
         assert!(json.contains("\"width\":0"), "JSON should contain width:0 for continuation");
     }
+
+    // ─── Additional coverage for untested functions ───
+
+    #[test]
+    fn test_buffer_get_and_get_mut() {
+        let mut b = Buffer::new(10, 5, 100);
+        // get returns Some for valid coords
+        assert!(b.get(0, 0).is_some());
+        assert_eq!(b.get(0, 0).unwrap().ch, ' ');
+        // get returns None for out of bounds
+        assert!(b.get(5, 0).is_none());
+        assert!(b.get(0, 10).is_none());
+        // get_mut
+        if let Some(cell) = b.get_mut(1, 2) {
+            cell.ch = 'Z';
+        }
+        assert_eq!(b.get(1, 2).unwrap().ch, 'Z');
+        // get_mut returns None for out of bounds
+        assert!(b.get_mut(99, 99).is_none());
+    }
+
+    #[test]
+    fn test_buffer_set_out_of_bounds_noop() {
+        let mut b = Buffer::new(10, 5, 100);
+        let gen = b.generation();
+        b.set(99, 99, Cell::new('X'));
+        assert_eq!(b.generation(), gen); // no mutation
+    }
+
+    #[test]
+    fn test_buffer_clear_line_from() {
+        let mut b = Buffer::new(10, 3, 100);
+        b.rows[1][3].ch = 'A';
+        b.rows[1][7].ch = 'B';
+        b.rows[1][0].ch = 'C'; // before col 5
+        b.clear_line_from(1, 5);
+        assert_eq!(b.rows[1][0].ch, 'C'); // untouched
+        assert_eq!(b.rows[1][3].ch, 'A'); // untouched (before col 5)
+        assert_eq!(b.rows[1][5].ch, ' ');
+        assert_eq!(b.rows[1][7].ch, ' ');
+    }
+
+    #[test]
+    fn test_buffer_clear_line_from_out_of_bounds() {
+        let mut b = Buffer::new(10, 3, 100);
+        let gen = b.generation();
+        b.clear_line_from(99, 0); // no panic, no mutation
+        assert_eq!(b.generation(), gen);
+    }
+
+    #[test]
+    fn test_buffer_clear_line_to() {
+        let mut b = Buffer::new(10, 3, 100);
+        for i in 0..10 { b.rows[1][i].ch = 'X'; }
+        b.clear_line_to(1, 4);
+        assert_eq!(b.rows[1][0].ch, ' ');
+        assert_eq!(b.rows[1][4].ch, ' ');
+        assert_eq!(b.rows[1][5].ch, 'X'); // after col 4
+    }
+
+    #[test]
+    fn test_buffer_clear_line_to_with() {
+        let mut b = Buffer::new(10, 3, 100);
+        for i in 0..10 { b.rows[1][i].ch = 'X'; }
+        let tmpl = Cell { fg: [100, 0, 0], ..Default::default() };
+        b.clear_line_to_with(1, 4, &tmpl);
+        assert_eq!(b.rows[1][0].ch, ' ');
+        assert_eq!(b.rows[1][0].fg, [100, 0, 0]);
+        assert_eq!(b.rows[1][4].ch, ' ');
+        assert_eq!(b.rows[1][5].ch, 'X'); // untouched
+    }
+
+    #[test]
+    fn test_buffer_clear_line() {
+        let mut b = Buffer::new(10, 3, 100);
+        for i in 0..10 { b.rows[2][i].ch = 'Q'; }
+        b.clear_line(2);
+        for i in 0..10 { assert_eq!(b.rows[2][i].ch, ' '); }
+    }
+
+    #[test]
+    fn test_buffer_clear_line_with() {
+        let mut b = Buffer::new(10, 3, 100);
+        for i in 0..10 { b.rows[0][i].ch = 'Q'; }
+        let tmpl = Cell { bg: [50, 50, 50], ..Default::default() };
+        b.clear_line_with(0, &tmpl);
+        assert_eq!(b.rows[0][0].ch, ' ');
+        assert_eq!(b.rows[0][5].bg, [50, 50, 50]);
+    }
+
+    #[test]
+    fn test_buffer_clear_screen_from_with() {
+        let mut b = Buffer::new(10, 4, 100);
+        for r in 0..4 { for c in 0..10 { b.rows[r][c].ch = 'Z'; } }
+        let tmpl = Cell { fg: [200, 0, 0], ..Default::default() };
+        b.clear_screen_from_with(1, 3, &tmpl);
+        assert_eq!(b.rows[0][9].ch, 'Z'); // row 0 untouched
+        assert_eq!(b.rows[1][2].ch, 'Z'); // before col 3 untouched
+        assert_eq!(b.rows[1][3].ch, ' ');
+        assert_eq!(b.rows[1][3].fg, [200, 0, 0]);
+        assert_eq!(b.rows[2][0].ch, ' ');
+        assert_eq!(b.rows[2][0].fg, [200, 0, 0]);
+        assert_eq!(b.rows[3][9].ch, ' ');
+    }
+
+    #[test]
+    fn test_buffer_clear_screen_to() {
+        let mut b = Buffer::new(10, 4, 100);
+        for r in 0..4 { for c in 0..10 { b.rows[r][c].ch = 'Z'; } }
+        b.clear_screen_to(2, 5);
+        // rows 0-1 fully cleared
+        for c in 0..10 { assert_eq!(b.rows[0][c].ch, ' '); assert_eq!(b.rows[1][c].ch, ' '); }
+        // row 2 cleared to col 5
+        for c in 0..=5 { assert_eq!(b.rows[2][c].ch, ' '); }
+        assert_eq!(b.rows[2][6].ch, 'Z'); // after col 5 untouched
+        // row 3 untouched
+        assert_eq!(b.rows[3][0].ch, 'Z');
+    }
+
+    #[test]
+    fn test_buffer_clear_screen_to_with() {
+        let mut b = Buffer::new(10, 4, 100);
+        for r in 0..4 { for c in 0..10 { b.rows[r][c].ch = 'Z'; } }
+        let tmpl = Cell { bg: [10, 10, 10], ..Default::default() };
+        b.clear_screen_to_with(2, 5, &tmpl);
+        assert_eq!(b.rows[1][5].ch, ' ');
+        assert_eq!(b.rows[1][5].bg, [10, 10, 10]);
+        assert_eq!(b.rows[2][5].ch, ' ');
+        assert_eq!(b.rows[2][5].bg, [10, 10, 10]);
+        assert_eq!(b.rows[2][6].ch, 'Z'); // untouched
+    }
+
+    #[test]
+    fn test_buffer_scroll_up_with_template() {
+        let mut b = Buffer::new(10, 3, 100);
+        b.rows[0][0].ch = 'A';
+        b.rows[1][0].ch = 'B';
+        let tmpl = Cell { bg: [77, 77, 77], ..Default::default() };
+        b.scroll_up_with(&tmpl);
+        assert_eq!(b.scrollback.len(), 1);
+        assert_eq!(b.scrollback[0][0].ch, 'A');
+        assert_eq!(b.rows[0][0].ch, 'B');
+        assert_eq!(b.rows[2][0].ch, ' ');
+        assert_eq!(b.rows[2][0].bg, [77, 77, 77]); // new blank uses template
+    }
+
+    #[test]
+    fn test_buffer_scroll_down() {
+        let mut b = Buffer::new(10, 3, 100);
+        b.rows[0][0].ch = 'A';
+        b.rows[1][0].ch = 'B';
+        b.rows[2][0].ch = 'C';
+        b.scroll_down();
+        // Top line should be blank
+        assert_eq!(b.rows[0][0].ch, ' ');
+        assert_eq!(b.rows[1][0].ch, 'A');
+        assert_eq!(b.rows[2][0].ch, 'B');
+        // 'C' is lost
+    }
+
+    #[test]
+    fn test_buffer_scroll_region_up_with_template() {
+        let mut b = Buffer::new(10, 5, 100);
+        for i in 0..5 { b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap(); }
+        let tmpl = Cell { fg: [55, 55, 55], ..Default::default() };
+        b.scroll_region_up_with(1, 3, &tmpl);
+        assert_eq!(b.rows[0][0].ch, '0'); // unchanged
+        assert_eq!(b.rows[1][0].ch, '2');
+        assert_eq!(b.rows[2][0].ch, '3');
+        assert_eq!(b.rows[3][0].ch, ' ');
+        assert_eq!(b.rows[3][0].fg, [55, 55, 55]); // template
+        assert_eq!(b.rows[4][0].ch, '4'); // unchanged
+    }
+
+    #[test]
+    fn test_buffer_scroll_region_down() {
+        let mut b = Buffer::new(10, 5, 100);
+        for i in 0..5 { b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap(); }
+        b.scroll_region_down(1, 3);
+        // Row 1 becomes blank
+        assert_eq!(b.rows[1][0].ch, ' ');
+        assert_eq!(b.rows[0][0].ch, '0'); // unchanged
+        assert_eq!(b.rows[2][0].ch, '1'); // shifted from row 1
+        assert_eq!(b.rows[3][0].ch, '2'); // shifted from row 2, '3' lost
+        assert_eq!(b.rows[4][0].ch, '4'); // unchanged
+    }
+
+    #[test]
+    fn test_buffer_scroll_region_down_with_template() {
+        let mut b = Buffer::new(10, 5, 100);
+        for i in 0..5 { b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap(); }
+        let tmpl = Cell { bg: [99, 99, 99], ..Default::default() };
+        b.scroll_region_down_with(1, 3, &tmpl);
+        assert_eq!(b.rows[1][0].ch, ' ');
+        assert_eq!(b.rows[1][0].bg, [99, 99, 99]); // template
+        assert_eq!(b.rows[2][0].ch, '1');
+    }
+
+    #[test]
+    fn test_buffer_insert_line_with_template() {
+        let mut b = Buffer::new(10, 5, 100);
+        for i in 0..5 { b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap(); }
+        let tmpl = Cell { fg: [123, 0, 0], ..Default::default() };
+        b.insert_line_with(2, None, &tmpl);
+        assert_eq!(b.rows[0][0].ch, '0');
+        assert_eq!(b.rows[1][0].ch, '1');
+        assert_eq!(b.rows[2][0].ch, ' ');
+        assert_eq!(b.rows[2][0].fg, [123, 0, 0]); // template
+        assert_eq!(b.rows[3][0].ch, '2');
+    }
+
+    #[test]
+    fn test_buffer_delete_line_with_template() {
+        let mut b = Buffer::new(10, 5, 100);
+        for i in 0..5 { b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap(); }
+        let tmpl = Cell { bg: [11, 22, 33], ..Default::default() };
+        b.delete_line_with(1, None, &tmpl);
+        assert_eq!(b.rows[0][0].ch, '0');
+        assert_eq!(b.rows[1][0].ch, '2'); // shifted up
+        assert_eq!(b.rows[2][0].ch, '3');
+        assert_eq!(b.rows[3][0].ch, '4');
+        assert_eq!(b.rows[4][0].ch, ' ');
+        assert_eq!(b.rows[4][0].bg, [11, 22, 33]); // template blank
+    }
+
+    #[test]
+    fn test_buffer_insert_cells_with_template() {
+        let mut b = Buffer::new(10, 3, 100);
+        for i in 0..10 { b.rows[0][i].ch = char::from_digit(i as u32, 10).unwrap(); }
+        let tmpl = Cell { fg: [80, 80, 80], ..Default::default() };
+        b.insert_cells_with(0, 3, 2, &tmpl);
+        // Cells shifted right from col 5 onward
+        assert_eq!(b.rows[0][0].ch, '0'); // untouched
+        assert_eq!(b.rows[0][2].ch, '2'); // untouched
+        assert_eq!(b.rows[0][3].ch, ' '); // blank with template
+        assert_eq!(b.rows[0][3].fg, [80, 80, 80]);
+        assert_eq!(b.rows[0][4].ch, ' '); // blank with template
+        assert_eq!(b.rows[0][5].ch, '3'); // shifted from col 3
+        assert_eq!(b.rows[0][7].ch, '5'); // shifted from col 5
+        assert_eq!(b.rows[0][9].ch, '7'); // shifted from col 7, col 8-9 pushed off
+    }
+
+    #[test]
+    fn test_buffer_delete_cells_with_template() {
+        let mut b = Buffer::new(10, 3, 100);
+        for i in 0..10 { b.rows[0][i].ch = char::from_digit(i as u32, 10).unwrap(); }
+        let tmpl = Cell { bg: [33, 33, 33], ..Default::default() };
+        b.delete_cells_with(0, 2, 3, &tmpl);
+        // Cells at col 2-4 deleted, rest shifted left, blanks at end
+        assert_eq!(b.rows[0][0].ch, '0');
+        assert_eq!(b.rows[0][1].ch, '1');
+        assert_eq!(b.rows[0][2].ch, '5'); // shifted from col 5
+        assert_eq!(b.rows[0][3].ch, '6'); // shifted from col 6
+        assert_eq!(b.rows[0][4].ch, '7');
+        assert_eq!(b.rows[0][7].ch, ' '); // blank with template
+        assert_eq!(b.rows[0][7].bg, [33, 33, 33]);
+        assert_eq!(b.rows[0][9].ch, ' ');
+    }
+
+    #[test]
+    fn test_buffer_get_line_scrollback() {
+        let mut b = Buffer::new(10, 3, 100);
+        b.rows[0][0].ch = 'A';
+        b.scroll_up();
+        // Now scrollback has 1 entry, rows are shifted
+        assert_eq!(b.get_line(0).unwrap()[0].ch, 'A'); // scrollback[0]
+        assert_eq!(b.get_line(1).unwrap()[0].ch, ' '); // rows[0]
+    }
+
+    #[test]
+    fn test_buffer_get_line_out_of_bounds() {
+        let b = Buffer::new(10, 3, 100);
+        assert!(b.get_line(99).is_none());
+    }
+
+    #[test]
+    fn test_buffer_get_lines_range() {
+        let mut b = Buffer::new(10, 3, 100);
+        b.rows[0][0].ch = 'A';
+        b.scroll_up();
+        let lines = b.get_lines(0, 2);
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0][0].ch, 'A'); // scrollback
+    }
+
+    #[test]
+    fn test_buffer_get_lines_clamped() {
+        let b = Buffer::new(10, 3, 100);
+        let lines = b.get_lines(0, 999);
+        assert_eq!(lines.len(), 3); // clamped to total_lines
+    }
+
+    #[test]
+    fn test_buffer_diff_no_change() {
+        let a = Buffer::new(10, 5, 100);
+        let b_buf = Buffer::new(10, 5, 100);
+        let diff = a.diff(&b_buf);
+        assert_eq!(diff.changed_count, 0);
+        assert!(diff.cells.is_empty());
+    }
+
+    #[test]
+    fn test_buffer_diff_dimension_change() {
+        let a = Buffer::new(10, 5, 100);
+        let b_buf = Buffer::new(20, 10, 100);
+        let diff = b_buf.diff(&a);
+        assert_eq!(diff.width, 20);
+        assert_eq!(diff.height, 10);
+        assert_eq!(diff.changed_count, 20 * 10);
+    }
+
+    #[test]
+    fn test_buffer_diff_cell_changes() {
+        let a = Buffer::new(5, 2, 100);
+        let mut b_buf = Buffer::new(5, 2, 100);
+        b_buf.rows[0][1].ch = 'X';
+        b_buf.rows[1][3].ch = 'Y';
+        let diff = b_buf.diff(&a);
+        assert_eq!(diff.changed_count, 2);
+        assert_eq!(diff.cells.len(), 2);
+    }
+
+    #[test]
+    fn test_buffer_scroll_region_invalid_bounds() {
+        let mut b = Buffer::new(10, 5, 100);
+        for i in 0..5 { b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap(); }
+        let gen = b.generation();
+        // top > bottom: no-op
+        b.scroll_region_up(3, 2);
+        assert_eq!(b.generation(), gen);
+        // bottom >= height: no-op
+        b.scroll_region_up(0, 99);
+        assert_eq!(b.generation(), gen);
+    }
+
+    #[test]
+    fn test_buffer_scroll_region_down_invalid_bounds() {
+        let mut b = Buffer::new(10, 5, 100);
+        let gen = b.generation();
+        b.scroll_region_down(3, 2); // top > bottom: no-op
+        assert_eq!(b.generation(), gen);
+        b.scroll_region_down(0, 99); // bottom >= height: no-op
+        assert_eq!(b.generation(), gen);
+    }
+
+    #[test]
+    fn test_buffer_insert_line_out_of_bounds() {
+        let mut b = Buffer::new(10, 3, 100);
+        let gen = b.generation();
+        b.insert_line(99, None); // no-op
+        assert_eq!(b.generation(), gen);
+    }
+
+    #[test]
+    fn test_buffer_delete_line_out_of_bounds() {
+        let mut b = Buffer::new(10, 3, 100);
+        let gen = b.generation();
+        b.delete_line(99, None); // no-op
+        assert_eq!(b.generation(), gen);
+    }
+
+    #[test]
+    fn test_buffer_insert_delete_cells_out_of_bounds() {
+        let mut b = Buffer::new(10, 3, 100);
+        let gen = b.generation();
+        b.insert_cells(99, 0, 5); // no-op
+        assert_eq!(b.generation(), gen);
+        b.delete_cells(99, 0, 5); // no-op
+        assert_eq!(b.generation(), gen);
+    }
+
+    #[test]
+    fn test_buffer_scrollback_max_limit() {
+        let mut b = Buffer::new(10, 3, 2); // max scrollback = 2
+        for i in 0..5 { b.rows[0][0].ch = char::from_digit(i as u32, 10).unwrap(); b.scroll_up(); }
+        // Only last 2 entries in scrollback
+        assert_eq!(b.scrollback.len(), 2);
+        assert_eq!(b.scrollback[0][0].ch, '3'); // oldest kept
+        assert_eq!(b.scrollback[1][0].ch, '4'); // newest
+    }
+
+    #[test]
+    fn test_buffer_scroll_region_nonzero_top_discards_line() {
+        let mut b = Buffer::new(10, 5, 100);
+        for i in 0..5 { b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap(); }
+        // top=2, the removed line (row 2) should NOT go to scrollback
+        b.scroll_region_up(2, 4);
+        assert_eq!(b.scrollback.len(), 0); // top != 0, so no scrollback
+        assert_eq!(b.rows[0][0].ch, '0'); // untouched
+        assert_eq!(b.rows[1][0].ch, '1'); // untouched
+        assert_eq!(b.rows[2][0].ch, '3'); // shifted
+        assert_eq!(b.rows[4][0].ch, ' '); // blank
+    }
+
+    #[test]
+    fn test_buffer_diff_uses_self_not_other_for_changed_cells() {
+        let a = Buffer::new(5, 1, 100);
+        let mut b_buf = Buffer::new(5, 1, 100);
+        b_buf.rows[0][0].ch = 'X';
+        b_buf.rows[0][0].fg = [255, 0, 0];
+        let diff = b_buf.diff(&a);
+        let cell = diff.cells.iter().find(|c| c.col == 0).unwrap();
+        assert_eq!(cell.ch, 'X');
+        assert_eq!(cell.fg, [255, 0, 0]); // from self (b_buf), not other
+    }
 }

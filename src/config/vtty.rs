@@ -41,3 +41,64 @@ impl Default for VttyConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_vtty_config() {
+        let cfg = VttyConfig::default();
+        assert_eq!(cfg.rows, 24);
+        assert_eq!(cfg.cols, 80);
+        assert_eq!(cfg.term, "xterm-256color");
+        assert_eq!(cfg.scrollback, 5000);
+        assert!(cfg.truecolor);
+        assert!(!cfg.mouse);
+    }
+
+    #[test]
+    fn test_vtty_config_custom() {
+        let cfg = VttyConfig {
+            rows: 50,
+            cols: 160,
+            term: "xterm-kitty".to_string(),
+            scrollback: 10000,
+            truecolor: false,
+            mouse: true,
+            #[cfg(feature = "vrw")]
+            screenshot_font_size: 18.0,
+            #[cfg(feature = "vrw")]
+            screenshot_font_name: Some("FiraCode.ttf".to_string()),
+        };
+        assert_eq!(cfg.rows, 50);
+        assert_eq!(cfg.cols, 160);
+        assert_eq!(cfg.term, "xterm-kitty");
+        assert_eq!(cfg.scrollback, 10000);
+        assert!(!cfg.truecolor);
+        assert!(cfg.mouse);
+    }
+
+    #[test]
+    fn test_vtty_config_serialization_roundtrip() {
+        let cfg = VttyConfig::default();
+        let json = serde_json::to_string(&cfg).unwrap();
+        let deserialized: VttyConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.rows, cfg.rows);
+        assert_eq!(deserialized.cols, cfg.cols);
+        assert_eq!(deserialized.term, cfg.term);
+        assert_eq!(deserialized.scrollback, cfg.scrollback);
+        assert_eq!(deserialized.truecolor, cfg.truecolor);
+        assert_eq!(deserialized.mouse, cfg.mouse);
+    }
+
+    #[test]
+    fn test_vtty_config_debug_clone() {
+        let cfg = VttyConfig::default();
+        let cloned = cfg.clone();
+        assert_eq!(cfg.rows, cloned.rows);
+        assert_eq!(cfg.cols, cloned.cols);
+        let debug_str = format!("{:?}", cfg);
+        assert!(debug_str.contains("VttyConfig"));
+    }
+}

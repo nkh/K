@@ -39,3 +39,96 @@ impl Default for Capabilities {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_capabilities() {
+        let cap = Capabilities::default();
+        assert!(cap.truecolor);
+        assert!(cap.color256);
+        assert!(cap.color16);
+        assert!(!cap.mouse);
+        assert!(cap.alternate_screen);
+        assert!(cap.bracketed_paste);
+        assert!(!cap.focus_events);
+        assert!(cap.unicode);
+        assert!(cap.cursor_style);
+        assert!(cap.window_title);
+    }
+
+    #[test]
+    fn test_capabilities_custom() {
+        let cap = Capabilities {
+            truecolor: false,
+            color256: true,
+            color16: true,
+            mouse: true,
+            alternate_screen: false,
+            bracketed_paste: false,
+            focus_events: true,
+            unicode: true,
+            cursor_style: false,
+            window_title: false,
+        };
+        assert!(!cap.truecolor);
+        assert!(cap.mouse);
+        assert!(!cap.alternate_screen);
+        assert!(cap.focus_events);
+        assert!(!cap.cursor_style);
+        assert!(!cap.window_title);
+    }
+
+    #[test]
+    fn test_capabilities_clone() {
+        let cap = Capabilities::default();
+        let cloned = cap;
+        assert_eq!(cap.truecolor, cloned.truecolor);
+        assert_eq!(cap.mouse, cloned.mouse);
+    }
+
+    #[test]
+    fn test_capabilities_copy() {
+        let cap = Capabilities::default();
+        let copied = cap;
+        // Copy trait allows assigning without move
+        let _another = copied;
+    }
+
+    #[test]
+    fn test_capabilities_debug() {
+        let cap = Capabilities::default();
+        let debug_str = format!("{:?}", cap);
+        assert!(debug_str.contains("Capabilities"));
+        assert!(debug_str.contains("truecolor"));
+        assert!(debug_str.contains("mouse"));
+    }
+
+    #[test]
+    fn test_capabilities_minimal() {
+        let cap = Capabilities {
+            truecolor: false,
+            color256: false,
+            color16: false,
+            mouse: false,
+            alternate_screen: false,
+            bracketed_paste: false,
+            focus_events: false,
+            unicode: false,
+            cursor_style: false,
+            window_title: false,
+        };
+        assert!(!cap.truecolor);
+        assert!(!cap.color256);
+        assert!(!cap.color16);
+        assert!(!cap.mouse);
+        assert!(!cap.alternate_screen);
+        assert!(!cap.bracketed_paste);
+        assert!(!cap.focus_events);
+        assert!(!cap.unicode);
+        assert!(!cap.cursor_style);
+        assert!(!cap.window_title);
+    }
+}

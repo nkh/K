@@ -461,3 +461,107 @@ pub async fn handle_list_commands_command(cli: &Cli) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_format_duration_seconds() {
+        assert_eq!(format_duration(0.0), "0s");
+        assert_eq!(format_duration(5.0), "5s");
+        assert_eq!(format_duration(59.9), "60s");
+    }
+
+    #[test]
+    fn test_format_duration_minutes() {
+        assert_eq!(format_duration(60.0), "1m 0s");
+        assert_eq!(format_duration(90.0), "1m 30s");
+        assert_eq!(format_duration(3599.0), "59m 59s");
+    }
+
+    #[test]
+    fn test_format_duration_hours() {
+        assert_eq!(format_duration(3600.0), "1h 0m");
+        assert_eq!(format_duration(3661.0), "1h 1m");
+        assert_eq!(format_duration(7325.0), "2h 2m");
+    }
+
+    #[test]
+    fn test_extract_command_display() {
+        let cmd = serde_json::json!({
+            "name": "bash",
+            "args": ["-l", "-c", "echo hello"],
+            "pid": 12345,
+            "runtime_secs": 65.5
+        });
+        let result = extract_command_display(&cmd);
+        assert!(result.is_some());
+        let (display, pid, runtime) = result.unwrap();
+        assert_eq!(display, "bash -l -c echo hello");
+        assert_eq!(pid, 12345);
+        assert_eq!(runtime, 65.5);
+    }
+
+    #[test]
+    fn test_extract_command_display_no_args() {
+        let cmd = serde_json::json!({
+            "name": "htop",
+            "args": [],
+            "pid": 42,
+            "runtime_secs": 10.0
+        });
+        let result = extract_command_display(&cmd);
+        assert!(result.is_some());
+        let (display, pid, runtime) = result.unwrap();
+        assert_eq!(display, "htop");
+        assert_eq!(pid, 42);
+        assert_eq!(runtime, 10.0);
+    }
+
+    #[test]
+    fn test_extract_command_display_truncation() {
+        let long_name = "a".repeat(35);
+        let cmd = serde_json::json!({
+            "name": &long_name,
+            "args": [],
+            "pid": 1,
+            "runtime_secs": 1.0
+        });
+        let result = extract_command_display(&cmd);
+        assert!(result.is_some());
+        let (display, _, _) = result.unwrap();
+        assert!(display.len() <= 33);
+        assert!(display.ends_with("..."));
+    }
+
+    #[test]
+    fn test_extract_command_display_missing_fields() {
+        let cmd = serde_json::json!({"name": "test"});
+        let result = extract_command_display(&cmd);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_format_instance_header() {
+        let info = crate::instance::info::InstanceInfo {
+            pid: 12345,
+            #[cfg(feature = "vrw")]
+            port: 9090,
+            #[cfg(feature = "vrw")]
+            bind: "127.0.0.1".to_string(),
+            #[cfg(feature = "vrw")]
+            name: None,
+            start_time: chrono::Utc::now(),
+            daemon: false,
+            display: true,
+            #[cfg(feature = "vrw")]
+            command: None,
+        };
+        let header = format_instance_header(&info);
+        assert!(header.contains("INSTANCE"));
+        assert!(header.contains("12345"));
+        assert!(header.contains("PID:"));
+        assert!(header.contains("UP:"));
+    }
+}

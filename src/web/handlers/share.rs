@@ -119,3 +119,53 @@ pub async fn get_share(State(state): State<AppState>, Path(token): Path<String>)
         "error": null
     }))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::web::state::ShareToken;
+
+    #[test]
+    fn test_share_token_fields() {
+        let token = ShareToken {
+            cmd_id: "test-cmd".to_string(),
+            keyboard: true,
+            expires_at: None,
+        };
+        assert_eq!(token.cmd_id, "test-cmd");
+        assert!(token.keyboard);
+        assert!(token.expires_at.is_none());
+    }
+
+    #[test]
+    fn test_share_token_clone() {
+        let token = ShareToken {
+            cmd_id: "test-cmd".to_string(),
+            keyboard: false,
+            expires_at: Some(std::time::Instant::now()),
+        };
+        let cloned = token.clone();
+        assert_eq!(cloned.cmd_id, token.cmd_id);
+        assert_eq!(cloned.keyboard, token.keyboard);
+    }
+
+    #[test]
+    fn test_share_token_expired() {
+        let token = ShareToken {
+            cmd_id: "test".to_string(),
+            keyboard: false,
+            expires_at: Some(std::time::Instant::now() - std::time::Duration::from_secs(1)),
+        };
+        assert!(token.expires_at.unwrap() <= std::time::Instant::now());
+    }
+
+    #[test]
+    fn test_share_token_not_expired() {
+        let token = ShareToken {
+            cmd_id: "test".to_string(),
+            keyboard: false,
+            expires_at: Some(std::time::Instant::now() + std::time::Duration::from_secs(3600)),
+        };
+        assert!(token.expires_at.unwrap() > std::time::Instant::now());
+    }
+}

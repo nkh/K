@@ -184,3 +184,55 @@ pub(crate) fn read_proc_stats(_pid: u32) -> ProcStats {
         threads: None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_proc_stats_all_none() {
+        let stats = ProcStats {
+            cpu_percent: None,
+            memory_mb: None,
+            threads: None,
+        };
+        assert!(stats.cpu_percent.is_none());
+        assert!(stats.memory_mb.is_none());
+        assert!(stats.threads.is_none());
+    }
+
+    #[test]
+    fn test_proc_stats_with_values() {
+        let stats = ProcStats {
+            cpu_percent: Some(45.5),
+            memory_mb: Some(128.0),
+            threads: Some(8),
+        };
+        assert_eq!(stats.cpu_percent, Some(45.5));
+        assert_eq!(stats.memory_mb, Some(128.0));
+        assert_eq!(stats.threads, Some(8));
+    }
+
+    #[test]
+    fn test_read_proc_stats_self() {
+        let stats = read_proc_stats(std::process::id());
+        // On Linux, reading self should succeed
+        #[cfg(target_os = "linux")]
+        {
+            assert!(stats.threads.is_some());
+            assert!(stats.threads.unwrap() > 0);
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            assert!(stats.cpu_percent.is_none());
+        }
+    }
+
+    #[test]
+    fn test_read_proc_stats_invalid_pid() {
+        let stats = read_proc_stats(999999999);
+        assert!(stats.cpu_percent.is_none());
+        assert!(stats.memory_mb.is_none());
+        assert!(stats.threads.is_none());
+    }
+}

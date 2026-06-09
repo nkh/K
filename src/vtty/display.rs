@@ -336,3 +336,34 @@ impl TerminalDisplay {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_cell_is_default() {
+        let cell = DEFAULT_CELL;
+        assert_eq!(cell.ch, ' ');
+        assert_eq!(cell.fg, [204, 204, 204]);
+        assert_eq!(cell.bg, [0, 0, 0]);
+        assert!(!cell.bold);
+        assert!(!cell.italic);
+        assert!(!cell.underline);
+        assert!(!cell.blink);
+        assert!(!cell.reverse);
+        assert!(!cell.invisible);
+        assert!(!cell.strikethrough);
+        assert_eq!(cell.width, 1);
+    }
+
+    #[test]
+    fn test_default_fg_constant() {
+        assert_eq!(DEFAULT_FG, [204, 204, 204]);
+    }
+
+    #[test]
+    fn test_default_bg_constant() {
+        assert_eq!(DEFAULT_BG, [0, 0, 0]);
+    }
+}

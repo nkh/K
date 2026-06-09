@@ -166,3 +166,14 @@ pub async fn error_handler(req: Request, next: Next) -> Response {
 
     response
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_middleware_module_compiles() {
+        // Middleware functions are tested via integration tests
+        // since they require Axum request/response types.
+    }
+}

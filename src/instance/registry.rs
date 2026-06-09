@@ -252,3 +252,71 @@ impl InstanceRegistry {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_registry_with_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let reg = InstanceRegistry::with_dir(dir.path().to_path_buf()).unwrap();
+        // Should be empty — no instances running
+        let instances = reg.list_instances();
+        assert!(instances.is_empty());
+    }
+
+    #[test]
+    fn test_registry_scan_pid_files_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let reg = InstanceRegistry::with_dir(dir.path().to_path_buf()).unwrap();
+        let entries = reg.scan_pid_files();
+        assert!(entries.is_empty());
+    }
+
+    #[test]
+    fn test_registry_scan_pid_files_with_stale_file() {
+        let dir = tempfile::tempdir().unwrap();
+        // Create a fake PID file for a process that doesn't exist
+        let pid = 999999999u32;
+        let info_json = serde_json::json!({"pid": pid, "start_time": chrono::Utc::now(), "daemon": false, "display": false});
+        std::fs::write(dir.path().join(format!("{}.json", pid)), info_json.to_string()).unwrap();
+
+        let reg = InstanceRegistry::with_dir(dir.path().to_path_buf()).unwrap();
+        let entries = reg.scan_pid_files();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].0, pid);
+
+        // list_instances should filter out stale files
+        let instances = reg.list_instances();
+        assert!(instances.is_empty());
+
+        // Stale file should be cleaned up
+        assert!(!dir.path().join(format!("{}.json", pid)).exists());
+    }
+
+    #[test]
+    fn test_registry_scan_pid_files_with_invalid_filename() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("not-a-pid.txt"), "garbage").unwrap();
+        std::fs::write(dir.path().join("abc.json"), "{}").unwrap();
+
+        let reg = InstanceRegistry::with_dir(dir.path().to_path_buf()).unwrap();
+        let entries = reg.scan_pid_files();
+        assert!(entries.is_empty());
+    }
+
+    #[test]
+    fn test_socket_path_for_pid() {
+        let path = crate::ipc::socket_path_for_pid(12345);
+        assert!(path.to_string_lossy().contains("12345"));
+        assert!(path.to_string_lossy().contains("control-"));
+        assert!(path.to_string_lossy().contains(".sock"));
+    }
+
+    #[test]
+    fn test_socket_path_for_pid_zero() {
+        let path = crate::ipc::socket_path_for_pid(0);
+        assert!(path.to_string_lossy().contains("control-0"));
+    }
+}

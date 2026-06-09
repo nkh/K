@@ -166,3 +166,40 @@ impl TlsManager {
         Ok((cert_pem, key_pem))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tls_manager_default_paths() {
+        let (cert, key) = TlsManager::default_paths();
+        assert!(cert.to_string_lossy().contains("vrw"));
+        assert!(key.to_string_lossy().contains("vrw"));
+        assert!(cert.to_string_lossy().ends_with("cert.pem"));
+        assert!(key.to_string_lossy().ends_with("key.pem"));
+    }
+
+    #[test]
+    fn test_tls_manager_generate_certificate() {
+        let (cert_pem, key_pem) = TlsManager::generate_certificate().unwrap();
+        assert!(cert_pem.contains("BEGIN CERTIFICATE"));
+        assert!(key_pem.contains("BEGIN PRIVATE KEY"));
+    }
+
+    #[test]
+    fn test_tls_manager_load_or_generate() {
+        let dir = tempfile::tempdir().unwrap();
+        let cert_path = dir.path().join("cert.pem");
+        let key_path = dir.path().join("key.pem");
+        let (cert_pem, key_pem) = TlsManager::load_or_generate(
+            Some(cert_path.to_str().unwrap()),
+            Some(key_path.to_str().unwrap()),
+        ).unwrap();
+        assert!(!cert_pem.is_empty());
+        assert!(!key_pem.is_empty());
+        // Files should have been created
+        assert!(cert_path.exists());
+        assert!(key_path.exists());
+    }
+}

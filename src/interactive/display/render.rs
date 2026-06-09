@@ -704,3 +704,90 @@ pub fn render_log_overlay(
     );
     let _ = stdout.flush();
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_cell_sgr_default() {
+        use crate::vtty::cell::Cell;
+        let cell = Cell {
+            ch: ' ',
+            fg: [204, 204, 204],
+            bg: [0, 0, 0],
+            bold: false, italic: false, underline: false,
+            blink: false, reverse: false, invisible: false, strikethrough: false,
+            width: 1,
+        };
+        let sgr = build_cell_sgr(&cell);
+        assert!(!sgr.contains("[38;2;"));
+        assert!(!sgr.contains("[48;2;"));
+    }
+
+    #[test]
+    fn test_build_cell_sgr_custom_fg() {
+        use crate::vtty::cell::Cell;
+        let cell = Cell {
+            ch: 'A',
+            fg: [255, 0, 0],
+            bg: [0, 0, 0],
+            bold: false, italic: false, underline: false,
+            blink: false, reverse: false, invisible: false, strikethrough: false,
+            width: 1,
+        };
+        let sgr = build_cell_sgr(&cell);
+        assert!(sgr.contains("38;2;255;0;0"));
+    }
+
+    #[test]
+    fn test_build_cell_sgr_custom_bg() {
+        use crate::vtty::cell::Cell;
+        let cell = Cell {
+            ch: 'A',
+            fg: [204, 204, 204],
+            bg: [0, 0, 255],
+            bold: false, italic: false, underline: false,
+            blink: false, reverse: false, invisible: false, strikethrough: false,
+            width: 1,
+        };
+        let sgr = build_cell_sgr(&cell);
+        assert!(sgr.contains("48;2;0;0;255"));
+    }
+
+    #[test]
+    fn test_build_cell_sgr_bold() {
+        use crate::vtty::cell::Cell;
+        let cell = Cell {
+            ch: 'A',
+            fg: [204, 204, 204],
+            bg: [0, 0, 0],
+            bold: true, italic: false, underline: false,
+            blink: false, reverse: false, invisible: false, strikethrough: false,
+            width: 1,
+        };
+        let sgr = build_cell_sgr(&cell);
+        assert!(sgr.contains("1m"));
+    }
+
+    #[test]
+    fn test_build_cell_sgr_all_attributes() {
+        use crate::vtty::cell::Cell;
+        let cell = Cell {
+            ch: 'X',
+            fg: [128, 128, 128],
+            bg: [64, 64, 64],
+            bold: true, italic: true, underline: true,
+            blink: true, reverse: true, invisible: false, strikethrough: true,
+            width: 1,
+        };
+        let sgr = build_cell_sgr(&cell);
+        assert!(sgr.contains("38;2;128;128;128"));
+        assert!(sgr.contains("48;2;64;64;64"));
+        assert!(sgr.contains("1m"));  // bold
+        assert!(sgr.contains("3m"));  // italic
+        assert!(sgr.contains("4m"));  // underline
+        assert!(sgr.contains("7m"));  // reverse
+        // Note: blink, invisible, strikethrough are not rendered by build_cell_sgr
+    }
+}

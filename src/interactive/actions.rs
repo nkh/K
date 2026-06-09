@@ -233,3 +233,99 @@ pub fn restore_raw_mode() -> bool {
     }
     true
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::interactive::keybinding::{Action, Binding};
+
+    fn sample_bindings() -> Vec<Binding> {
+        vec![]
+    }
+
+    #[test]
+    fn test_execute_next_command_single() {
+        let effect = execute_action(&Action::NextCommand, false, 1, &sample_bindings());
+        assert_eq!(effect, ActionEffect::None);
+    }
+
+    #[test]
+    fn test_execute_next_command_multiple() {
+        let effect = execute_action(&Action::NextCommand, false, 3, &sample_bindings());
+        assert_eq!(effect, ActionEffect::NextCommand);
+    }
+
+    #[test]
+    fn test_execute_prev_command_single() {
+        let effect = execute_action(&Action::PrevCommand, false, 1, &sample_bindings());
+        assert_eq!(effect, ActionEffect::None);
+    }
+
+    #[test]
+    fn test_execute_prev_command_multiple() {
+        let effect = execute_action(&Action::PrevCommand, false, 5, &sample_bindings());
+        assert_eq!(effect, ActionEffect::PrevCommand);
+    }
+
+    #[test]
+    fn test_execute_toggle_log_off() {
+        let effect = execute_action(&Action::ToggleLog, false, 1, &sample_bindings());
+        assert_eq!(effect, ActionEffect::ToggleLog(true));
+    }
+
+    #[test]
+    fn test_execute_toggle_log_on() {
+        let effect = execute_action(&Action::ToggleLog, true, 1, &sample_bindings());
+        assert_eq!(effect, ActionEffect::ToggleLog(false));
+    }
+
+    #[test]
+    fn test_execute_spawn_command() {
+        let effect = execute_action(&Action::SpawnCommand, false, 1, &sample_bindings());
+        assert_eq!(effect, ActionEffect::None);
+    }
+
+    #[test]
+    fn test_execute_show_help() {
+        let effect = execute_action(&Action::ShowHelp, false, 1, &sample_bindings());
+        assert_eq!(effect, ActionEffect::ShowHelp);
+    }
+
+    #[test]
+    fn test_execute_kill_command() {
+        let effect = execute_action(&Action::KillCommand, false, 1, &sample_bindings());
+        assert_eq!(effect, ActionEffect::KillCommand);
+    }
+
+    #[test]
+    fn test_execute_toggle_pause() {
+        let effect = execute_action(&Action::TogglePause, false, 1, &sample_bindings());
+        assert_eq!(effect, ActionEffect::TogglePause);
+    }
+
+    #[test]
+    fn test_execute_quit() {
+        let effect = execute_action(&Action::Quit, false, 1, &sample_bindings());
+        assert_eq!(effect, ActionEffect::Quit);
+    }
+
+    #[test]
+    fn test_action_effect_equality() {
+        assert_eq!(ActionEffect::None, ActionEffect::None);
+        assert_eq!(ActionEffect::Quit, ActionEffect::Quit);
+        assert_ne!(ActionEffect::NextCommand, ActionEffect::PrevCommand);
+    }
+
+    #[test]
+    fn test_action_effect_clone() {
+        let e = ActionEffect::ToggleLog(true);
+        assert_eq!(e.clone(), ActionEffect::ToggleLog(true));
+    }
+
+    #[test]
+    fn test_action_effect_debug() {
+        let e = ActionEffect::Quit;
+        let debug_str = format!("{:?}", e);
+        assert!(debug_str.contains("Quit"));
+    }
+}

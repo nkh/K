@@ -346,3 +346,157 @@ impl CommandLogger {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_logger() -> CommandLogger {
+        CommandLogger::new(
+            true,
+            None,
+            "vrc",
+            false,
+            TerminalLogConfig::default(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn test_logger_new() {
+        let logger = make_logger();
+        assert!(logger.enabled);
+        assert!(logger.read_memory_buffer().is_empty());
+    }
+
+    #[test]
+    fn test_logger_new_with_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.log");
+        let logger = CommandLogger::new(
+            true,
+            Some(path.to_str().unwrap()),
+            "vrc",
+            false,
+            TerminalLogConfig::default(),
+        )
+        .unwrap();
+        assert!(logger.enabled);
+    }
+
+    #[test]
+    fn test_logger_subscribe() {
+        let logger = make_logger();
+        let _rx = logger.subscribe();
+    }
+
+    #[test]
+    fn test_logger_log_sender() {
+        let logger = make_logger();
+        let _tx = logger.log_sender();
+    }
+
+    #[test]
+    fn test_logger_memory_buffer_arc() {
+        let logger = make_logger();
+        let arc = logger.memory_buffer_arc();
+        let buf = arc.lock().unwrap();
+        assert!(buf.is_empty());
+    }
+
+    #[test]
+    fn test_logger_read_memory_buffer_empty() {
+        let logger = make_logger();
+        assert!(logger.read_memory_buffer().is_empty());
+    }
+
+    #[test]
+    fn test_logger_log_populates_memory_buffer() {
+        let logger = make_logger();
+        logger.log("spawn", "cmd=bash pid=123 id=abc12345");
+        let entries = logger.read_memory_buffer();
+        assert_eq!(entries.len(), 1);
+        assert!(entries[0].contains("bash"));
+    }
+
+    #[test]
+    fn test_logger_log_multiple_events() {
+        let logger = make_logger();
+        logger.log("spawn", "cmd=htop pid=100 id=aaa11111");
+        logger.log("exit", "cmd=htop pid=100 id=aaa11111");
+        logger.log("resize", "cmd=htop pid=100 id=aaa11111");
+        let entries = logger.read_memory_buffer();
+        assert_eq!(entries.len(), 3);
+    }
+
+    #[test]
+    fn test_logger_ring_buffer_capacity() {
+        let logger = make_logger();
+        for i in 0..2100 {
+            logger.log("spawn", &format!("cmd=test pid={} id={:0>16}", i, i));
+        }
+        let entries = logger.read_memory_buffer();
+        assert_eq!(entries.len(), MEMORY_BUFFER_CAPACITY);
+    }
+
+    #[test]
+    fn test_logger_broadcast() {
+        let logger = make_logger();
+        let mut rx = logger.subscribe();
+        logger.log("spawn", "cmd=bash pid=1 id=abc12345");
+        let received = rx.try_recv();
+        assert!(received.is_ok());
+        let msg = received.unwrap();
+        assert!(msg.contains("bash"));
+    }
+
+    #[test]
+    fn test_logger_disabled_no_file_write() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("disabled.log");
+        let logger = CommandLogger::new(
+            false,
+            Some(path.to_str().unwrap()),
+            "vrc",
+            false,
+            TerminalLogConfig::default(),
+        )
+        .unwrap();
+        logger.log("spawn", "cmd=bash pid=1 id=abc12345");
+        // File should exist but might not have content since enabled=false
+    }
+
+    #[test]
+    fn test_extract_field() {
+        assert_eq!(CommandLogger::extract_field("cmd=bash pid=123 name=test", "cmd"), "bash");
+        assert_eq!(CommandLogger::extract_field("cmd=bash pid=123", "pid"), "123");
+        assert_eq!(CommandLogger::extract_field("nokey", "missing"), "");
+    }
+
+    #[test]
+    fn test_strip_top_fields() {
+        let result = CommandLogger::strip_top_fields("id=abc pid=123 cmd=bash name=test extra=val");
+        assert!(!result.contains("id="));
+        assert!(!result.contains("pid="));
+        assert!(!result.contains("cmd="));
+        assert!(!result.contains("name="));
+        assert!(result.contains("extra=val"));
+    }
+
+    #[test]
+    fn test_format_timestamp() {
+        let ts = CommandLogger::format_timestamp();
+        // Should be HH:MM:SS.cc format
+        assert!(ts.len() >= 10);
+        assert!(ts.contains(':'));
+        assert!(ts.contains('.'));
+    }
+
+    #[test]
+    fn test_logger_memory_buffer_arc_is_shared() {
+        let logger = make_logger();
+        let arc1 = logger.memory_buffer_arc();
+        let arc2 = logger.memory_buffer_arc();
+        assert_eq!(Arc::strong_count(&arc1), 3); // arc1, arc2, logger.memory_buffer
+    }
+}

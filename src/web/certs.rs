@@ -281,4 +281,203 @@ mod tests {
         let result = CertificateStore::resolve_path("my-app/cert.pem", &base);
         assert_eq!(result, PathBuf::from("/tmp/vrw/certs/my-app/cert.pem"));
     }
+
+    #[test]
+    fn test_certificate_store_new() {
+        let store = CertificateStore::new();
+        assert!(store.entries.is_empty());
+        assert!(store.token_to_name.is_empty());
+        assert!(store.list().is_empty());
+        assert!(store.certs_dir().to_string_lossy().contains("certs"));
+    }
+
+    #[test]
+    fn test_certificate_store_default() {
+        let store = CertificateStore::default();
+        assert!(store.list().is_empty());
+    }
+
+    #[test]
+    fn test_certificate_store_generate() {
+        let dir = tempfile::tempdir().unwrap();
+        let cert_path = dir.path().join("cert.pem");
+        let key_path = dir.path().join("key.pem");
+        CertificateStore::generate_named_certificate("test-cert", &cert_path, &key_path).unwrap();
+        assert!(cert_path.exists());
+        assert!(key_path.exists());
+    }
+
+    #[test]
+    fn test_certificate_entry_derive_token() {
+        let dir = tempfile::tempdir().unwrap();
+        let cert_path = dir.path().join("cert.pem");
+        let key_path = dir.path().join("key.pem");
+        CertificateStore::generate_named_certificate("tok-test", &cert_path, &key_path).unwrap();
+        let entry = CertificateEntry {
+            name: "tok-test".to_string(),
+            cert_file: cert_path.to_string_lossy().to_string(),
+            key_file: key_path.to_string_lossy().to_string(),
+        };
+        let token = entry.derive_token().unwrap();
+        // SHA-256 hex is always 64 chars
+        assert_eq!(token.len(), 64);
+        // All hex chars
+        assert!(token.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn test_certificate_entry_derive_token_missing_file() {
+        let entry = CertificateEntry {
+            name: "missing".to_string(),
+            cert_file: "/nonexistent/cert.pem".to_string(),
+            key_file: "/nonexistent/key.pem".to_string(),
+ };
+        assert!(entry.derive_token().is_err());
+    }
+
+    #[test]
+    fn test_certificate_store_generate_and_list() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = CertificateStore {
+            entries: HashMap::new(),
+            token_to_name: HashMap::new(),
+            certs_dir: dir.path().to_path_buf(),
+        };
+        let entry = store.generate("my-cert").unwrap();
+        assert_eq!(entry.name, "my-cert");
+        assert!(entry.cert_file.contains("my-cert"));
+        assert!(entry.key_file.contains("my-cert"));
+        assert_eq!(store.list().len(), 1);
+        assert_eq!(store.get("my-cert").unwrap().name, "my-cert");
+        assert!(store.exists("my-cert"));
+    }
+
+    #[test]
+    fn test_certificate_store_generate_duplicate() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = CertificateStore {
+            entries: HashMap::new(),
+            token_to_name: HashMap::new(),
+            certs_dir: dir.path().to_path_buf(),
+        };
+        store.generate("dup").unwrap();
+        assert!(store.generate("dup").is_err());
+    }
+
+    #[test]
+    fn test_certificate_store_get_missing() {
+        let store = CertificateStore::new();
+        assert!(store.get("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_certificate_store_validate_token() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = CertificateStore {
+            entries: HashMap::new(),
+            token_to_name: HashMap::new(),
+            certs_dir: dir.path().to_path_buf(),
+        };
+        store.generate("auth-test").unwrap();
+        let token = store.get("auth-test").unwrap().derive_token().unwrap();
+        assert_eq!(store.validate_token(&token), Some("auth-test"));
+        assert!(store.validate_token("invalid").is_none());
+    }
+
+    #[test]
+    fn test_certificate_store_validate_empty_token() {
+        let store = CertificateStore::new();
+        assert!(store.validate_token("").is_none());
+    }
+
+    #[test]
+    fn test_certificate_store_exists() {
+        let store = CertificateStore::new();
+        assert!(!store.exists("nope"));
+    }
+
+    #[test]
+    fn test_certificate_store_remove() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = CertificateStore {
+            entries: HashMap::new(),
+            token_to_name: HashMap::new(),
+            certs_dir: dir.path().to_path_buf(),
+        };
+        store.generate("removable").unwrap();
+        assert!(store.exists("removable"));
+        let removed = store.remove("removable").unwrap();
+        assert_eq!(removed.name, "removable");
+        assert!(!store.exists("removable"));
+ }
+
+    #[test]
+ fn test_certificate_store_remove_missing() {
+        let mut store = CertificateStore::new();
+        assert!(store.remove("ghost").is_none());
+ }
+
+    #[test]
+ fn test_certificate_entry_serde_roundtrip() {
+        let entry = CertificateEntry {
+            name: "test".to_string(),
+            cert_file: "/certs/test.pem".to_string(),
+            key_file: "/certs/test.key".to_string(),
+ };
+        let json = serde_json::to_string(&entry).unwrap();
+        let parsed: CertificateEntry = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.name, entry.name);
+        assert_eq!(parsed.cert_file, entry.cert_file);
+        assert_eq!(parsed.key_file, entry.key_file);
+    }
+
+    #[test]
+ fn test_load_or_generate_missing_auto_creates() {
+        let dir = tempfile::tempdir().unwrap();
+        let entries = vec![CertificateEntry {
+            name: "auto-gen".to_string(),
+            cert_file: dir.path().join("certs").join("cert.pem").to_string_lossy().to_string(),
+            key_file: dir.path().join("certs").join("key.pem").to_string_lossy().to_string(),
+ }];
+        let store = CertificateStore::load_or_generate(entries).unwrap();
+        assert!(store.exists("auto-gen"));
+        let entry = store.get("auto-gen").unwrap();
+        assert!(std::path::PathBuf::from(&entry.cert_file).exists());
+        assert!(std::path::PathBuf::from(&entry.key_file).exists());
+ }
+
+    #[test]
+ fn test_load_or_generate_with_existing_files() {
+        let dir = tempfile::tempdir().unwrap();
+        // Pre-generate the cert/key
+        let cert_path = dir.path().join("pre.pem");
+        let key_path = dir.path().join("pre.key");
+        CertificateStore::generate_named_certificate("pre", &cert_path, &key_path).unwrap();
+        let entries = vec![CertificateEntry {
+            name: "pre".to_string(),
+            cert_file: cert_path.to_string_lossy().to_string(),
+            key_file: key_path.to_string_lossy().to_string(),
+ }];
+        let store = CertificateStore::load_or_generate(entries).unwrap();
+        assert!(store.exists("pre"));
+ }
+
+    #[test]
+ fn test_list_returns_all() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = CertificateStore {
+            entries: HashMap::new(),
+            token_to_name: HashMap::new(),
+            certs_dir: dir.path().to_path_buf(),
+        };
+        store.generate("a").unwrap();
+        store.generate("b").unwrap();
+        store.generate("c").unwrap();
+        let list = store.list();
+        assert_eq!(list.len(), 3);
+        let names: Vec<&str> = list.iter().map(|e| e.name.as_str()).collect();
+        assert!(names.contains(&"a"));
+        assert!(names.contains(&"b"));
+        assert!(names.contains(&"c"));
+ }
 }

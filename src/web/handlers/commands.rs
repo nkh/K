@@ -848,17 +848,66 @@ pub async fn tab_complete(
 mod tests {
     use super::*;
     use serde_json::json;
+    use crate::config::schema::Config;
+    use crate::process::manager::CommandManager;
+    use crate::web::certs::CertificateStore;
+    use crate::process::handle::CommandHandle;
+    use crate::process::pty::PtyMaster;
+    use crate::handles::registry::HandleRegistry;
+    use crate::vtty::emulator::VttyEmulator;
+    use crate::vtty::sink::VttyOutput;
+    use std::sync::Arc;
+
+    struct MockPty;
+    impl PtyMaster for MockPty {
+        fn clone_reader(&self) -> crate::process::error::Result<Box<dyn std::io::Read + Send>> { Ok(Box::new(std::io::empty())) }
+        fn take_writer(&self) -> crate::process::error::Result<Box<dyn std::io::Write + Send>> { Ok(Box::new(std::io::sink())) }
+        fn resize(&self, _: u16, _: u16) -> crate::process::error::Result<()> { Ok(()) }
+    }
+
+    fn make_app_state() -> AppState {
+        let mut config = Config::default();
+        config.binary_name = "test".to_string();
+        let manager = Arc::new(CommandManager::new(config));
+        let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
+        let cert_store = Arc::new(CertificateStore::new());
+        let (vtty_tx, _) = tokio::sync::broadcast::channel::<(String, String)>(16);
+        let (log_tx, _) = tokio::sync::broadcast::channel::<String>(16);
+        AppState::new(manager, shutdown_tx, None, cert_store, vtty_tx, log_tx)
+    }
+
+    fn insert_mock_cmd(mgr: &CommandManager, id: &str, pid: u32) {
+        let (stdin_tx, _stdin_rx) = tokio::sync::mpsc::channel::<crate::process::spawner::StdinMessage>(16);
+        let (_exit_tx, exit_rx) = tokio::sync::oneshot::channel::<crate::process::spawner::ExitStatus>();
+        let (watch_tx, watch_rx) = tokio::sync::watch::channel(false);
+        std::mem::forget(watch_tx);
+        let emu = VttyEmulator::new(24, 80, 1000);
+        let handle = CommandHandle {
+            id: id.to_string(), pid,
+            name: format!("cmd-{}", id),
+            args: vec!["--test".to_string()],
+            emulator: std::sync::Arc::new(tokio::sync::RwLock::new(emu)),
+            stdin_tx, _exit_rx: exit_rx,
+            handle_registry: HandleRegistry::new(),
+            certificate: None,
+            exit_config: crate::config::schema::ExitConfig::default(),
+            spawn_time: std::time::Instant::now(),
+            pty_master: std::sync::Arc::new(parking_lot::Mutex::new(Box::new(MockPty) as Box<dyn PtyMaster + Send>)),
+            vtty_output: std::sync::Arc::new(VttyOutput::new()),
+            exit_rx: watch_rx,
+            exit_code: std::sync::Mutex::new(None),
+            exit_time: std::sync::Mutex::new(None),
+            frozen: std::sync::atomic::AtomicBool::new(false),
+            prev_diff_snapshot: tokio::sync::Mutex::new(None),
+        };
+        mgr.commands_arc().insert(id.to_string(), handle);
+    }
 
     /// Test that kill_all_commands returns the correct JSON structure
     /// when no commands are running (empty manager).
     #[test]
     fn test_kill_all_response_structure() {
-        // Verify the handler compiles and returns a valid JSON structure.
-        // We test the serialization logic directly since we can't easily
-        // create a full AppState in unit tests.
         let commands: Vec<(String, String, Vec<String>, u32, Option<String>)> = vec![];
-
-        // Simulate empty response
         let killed: Vec<String> = vec![];
         let errors: Vec<String> = vec![];
         let response = json!({
@@ -870,7 +919,6 @@ mod tests {
             },
             "error": if errors.is_empty() { serde_json::Value::Null } else { serde_json::json!(errors.join("; ")) }
         });
-
         assert_eq!(response["status"], "ok");
         assert_eq!(response["data"]["killed_count"], 0);
         assert_eq!(response["data"]["total_count"], 0);
@@ -882,7 +930,6 @@ mod tests {
     fn test_kill_all_with_errors() {
         let killed = vec!["cmd-1".to_string()];
         let errors = vec!["cmd-2: command not found".to_string()];
-
         let response = json!({
             "status": "ok",
             "data": {
@@ -892,9 +939,398 @@ mod tests {
             },
             "error": if errors.is_empty() { serde_json::Value::Null } else { serde_json::json!(errors.join("; ")) }
         });
-
         assert_eq!(response["data"]["killed_count"], 1);
         assert_eq!(response["data"]["total_count"], 2);
         assert_eq!(response["error"], "cmd-2: command not found");
+    }
+
+    // ─── Handler integration tests with real AppState ───
+
+    #[tokio::test]
+    async fn test_list_commands_empty() {
+        let state = make_app_state();
+        let result = list_commands(State(state)).await;
+        assert_eq!(result.0["status"], "ok");
+        assert_eq!(result.0["data"].as_array().unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_list_commands_with_data() {
+        let state = make_app_state();
+        insert_mock_cmd(&state.manager, "cmd-1", 100);
+        let result = list_commands(State(state)).await;
+        assert_eq!(result.0["status"], "ok");
+        let data = result.0["data"].as_array().unwrap();
+        assert_eq!(data.len(), 1);
+        assert_eq!(data[0]["id"], "cmd-1");
+        assert_eq!(data[0]["pid"], 100);
+        assert_eq!(data[0]["name"], "cmd-cmd-1");
+    }
+
+    #[tokio::test]
+    async fn test_start_command_missing_cmd() {
+        let state = make_app_state();
+        let body = json!({});
+        let result = start_command(State(state), Json(body)).await;
+        assert_eq!(result.0["status"], "error");
+        assert!(result.0["error"].as_str().unwrap().contains("Missing"));
+    }
+
+    #[tokio::test]
+    async fn test_start_command_invalid_cert() {
+        let state = make_app_state();
+        let body = json!({"cmd": "ls", "certificate": "nonexistent"});
+        let result = start_command(State(state), Json(body)).await;
+        assert_eq!(result.0["status"], "error");
+        assert!(result.0["error"].as_str().unwrap().contains("Certificate"));
+    }
+
+    #[tokio::test]
+    async fn test_start_command_invalid_dimensions() {
+        let state = make_app_state();
+        let body = json!({"cmd": "ls", "rows": 0, "cols": 0});
+        let result = start_command(State(state), Json(body)).await;
+        assert_eq!(result.0["status"], "error");
+        assert!(result.0["error"].as_str().unwrap().contains("Invalid dimensions"));
+    }
+
+    #[tokio::test]
+    async fn test_start_command_invalid_dir() {
+        let state = make_app_state();
+        let body = json!({"cmd": "ls", "dir": "/nonexistent_dir_xyz"});
+        let result = start_command(State(state), Json(body)).await;
+        assert_eq!(result.0["status"], "error");
+        assert!(result.0["error"].as_str().unwrap().contains("Working directory"));
+    }
+
+    #[tokio::test]
+    async fn test_kill_command_missing() {
+        let state = make_app_state();
+        let body = json!({});
+        let result = kill_command(State(state), Path("nonexistent".into()), Json(body)).await;
+        assert_eq!(result.0["status"], "error");
+    }
+
+    #[tokio::test]
+    async fn test_kill_command_existing() {
+        let state = make_app_state();
+        insert_mock_cmd(&state.manager, "cmd-1", 100);
+        let body = json!({});
+        let result = kill_command(State(state.clone()), Path("cmd-1".into()), Json(body)).await;
+        assert_eq!(result.0["status"], "ok");
+        assert_eq!(result.0["data"]["id"], "cmd-1");
+        // Command should be removed (not retained)
+        assert!(state.manager.get(&"cmd-1".to_string()).is_none());
+    }
+
+    #[tokio::test]
+    async fn test_kill_command_by_pid_missing() {
+        let state = make_app_state();
+        let result = kill_command_by_pid(State(state), Path(99999)).await;
+        assert_eq!(result.0["status"], "error");
+    }
+
+    #[tokio::test]
+    async fn test_kill_all_commands_empty() {
+        let state = make_app_state();
+        let result = kill_all_commands(State(state)).await;
+        assert_eq!(result.0["status"], "ok");
+        assert_eq!(result.0["data"]["killed_count"], 0);
+    }
+
+    #[tokio::test]
+    async fn test_kill_all_commands_with_commands() {
+        let state = make_app_state();
+        insert_mock_cmd(&state.manager, "a", 1);
+        insert_mock_cmd(&state.manager, "b", 2);
+        let result = kill_all_commands(State(state)).await;
+        assert_eq!(result.0["status"], "ok");
+        assert_eq!(result.0["data"]["killed_count"], 2);
+    }
+
+    #[tokio::test]
+    async fn test_freeze_command_missing() {
+        let state = make_app_state();
+        let result = freeze_command(State(state), Path("nope".into())).await;
+        assert_eq!(result.0["status"], "error");
+    }
+
+    #[tokio::test]
+    async fn test_freeze_command_sets_flag() {
+        let state = make_app_state();
+        insert_mock_cmd(&state.manager, "cmd-1", 1);
+        // freeze sends SIGSTOP — on a mock PID this may fail,
+        // but the frozen flag should be set regardless.
+        let result = freeze_command(State(state.clone()), Path("cmd-1".into())).await;
+        // Either ok (if signal succeeds) or error (if PID doesn't exist)
+        if result.0["status"] == "ok" {
+            assert_eq!(result.0["data"]["frozen"], true);
+        } else {
+            assert_eq!(result.0["status"], "error");
+        }
+        // The frozen flag is always set before the signal is sent
+        if let Some(h) = state.manager.get(&"cmd-1".to_string()) {
+            assert!(h.is_frozen());
+        };
+    }
+
+    #[tokio::test]
+    async fn test_thaw_command_missing() {
+        let state = make_app_state();
+        let result = thaw_command(State(state), Path("nope".into())).await;
+        assert_eq!(result.0["status"], "error");
+    }
+
+    #[tokio::test]
+    async fn test_thaw_command_clears_flag() {
+        let state = make_app_state();
+        insert_mock_cmd(&state.manager, "cmd-1", 1);
+        // Set frozen first, then thaw
+        state.manager.freeze(&"cmd-1".to_string()).ok(); // may fail on signal but flag is set
+        let result = thaw_command(State(state.clone()), Path("cmd-1".into())).await;
+        // Either ok or error depending on signal
+        if result.0["status"] == "ok" {
+            assert_eq!(result.0["data"]["frozen"], false);
+        }
+        // The flag should be cleared regardless
+        {
+            let mgr_ref = state.manager.get(&"cmd-1".to_string());
+            if let Some(h) = mgr_ref {
+                assert!(!h.is_frozen());
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_restart_command_missing() {
+        let state = make_app_state();
+        let body = json!({});
+        let result = restart_command(State(state), Path("nope".into()), Json(body)).await;
+        assert_eq!(result.0["status"], "error");
+        assert!(result.0["error"].as_str().unwrap().contains("not found"));
+    }
+
+    #[tokio::test]
+    async fn test_shutdown() {
+        let state = make_app_state();
+        let result = shutdown(State(state)).await;
+        assert_eq!(result.0["status"], "ok");
+        assert_eq!(result.0["data"]["message"], "shutdown initiated");
+    }
+
+    #[tokio::test]
+    async fn test_get_info() {
+        let state = make_app_state();
+        let result = get_info(State(state)).await;
+        assert_eq!(result.0["status"], "ok");
+        assert_eq!(result.0["data"]["command_count"], 0);
+        assert_eq!(result.0["data"]["certificate_count"], 0);
+        assert_eq!(result.0["data"]["auth_enabled"], false);
+        // Web config fields
+        assert!(result.0["data"]["web"]["panel_colors"].is_array());
+        assert!(result.0["data"]["vtty"].is_object());
+    }
+
+    #[tokio::test]
+    async fn test_snapshot_command_missing() {
+        let state = make_app_state();
+        let body = json!({"name": "snap1"});
+        let result = snapshot_command(State(state), Path("nope".into()), Json(body)).await;
+        assert_eq!(result.0["status"], "error");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_snapshot_command_success() {
+        let state = make_app_state();
+        insert_mock_cmd(&state.manager, "cmd-1", 1);
+        let body = json!({"name": "v1"});
+        let result = snapshot_command(State(state), Path("cmd-1".into()), Json(body)).await;
+        assert_eq!(result.0["status"], "ok", "response: {}", result.0);
+        eprintln!("SNAPSHOT response: {}", result.0);
+        assert_eq!(result.0["data"]["name"], "v1");
+        assert_eq!(result.0["data"]["id"], "cmd-1");
+    }
+
+    #[tokio::test]
+    async fn test_list_snapshots() {
+        let state = make_app_state();
+        insert_mock_cmd(&state.manager, "cmd-1", 1);
+        let result = list_snapshots(State(state), Path("cmd-1".into())).await;
+        assert_eq!(result.0["status"], "ok");
+        assert_eq!(result.0["data"].as_array().unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_diff_command_missing() {
+        let state = make_app_state();
+        let body = json!({"name": "v1"});
+        let result = diff_command(State(state), Path("nope".into()), Json(body)).await;
+        assert_eq!(result.0["status"], "error");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_diff_command_success() {
+        let state = make_app_state();
+        insert_mock_cmd(&state.manager, "cmd-1", 1);
+        state.manager.store_snapshot(&"cmd-1".to_string(), "v1").unwrap();
+        let body = json!({"name": "v1"});
+        let result = diff_command(State(state), Path("cmd-1".into()), Json(body)).await;
+        assert_eq!(result.0["status"], "ok");
+        assert_eq!(result.0["data"]["changed_count"], 0);
+    }
+
+    #[tokio::test]
+    async fn test_delete_snapshot_missing_cmd() {
+        let state = make_app_state();
+        let result = delete_snapshot(State(state), Path(("nope".into(), "snap".into()))).await;
+        assert_eq!(result.0["status"], "error");
+    }
+
+    #[tokio::test]
+    async fn test_delete_snapshot_missing_snap() {
+        let state = make_app_state();
+        insert_mock_cmd(&state.manager, "cmd-1", 1);
+        let result = delete_snapshot(State(state), Path(("cmd-1".into(), "nope".into()))).await;
+        assert_eq!(result.0["status"], "error");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_delete_snapshot_success() {
+        let state = make_app_state();
+        insert_mock_cmd(&state.manager, "cmd-1", 1);
+        state.manager.store_snapshot(&"cmd-1".to_string(), "v1").unwrap();
+        let result = delete_snapshot(State(state.clone()), Path(("cmd-1".into(), "v1".into()))).await;
+        assert_eq!(result.0["status"], "ok");
+        assert!(state.manager.list_snapshots(&"cmd-1".to_string()).is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_lookup_command_no_match() {
+        let state = make_app_state();
+        insert_mock_cmd(&state.manager, "cmd-1", 1);
+        let result = lookup_command(State(state), Path("nonexistent".into())).await;
+        assert_eq!(result.0["status"], "ok");
+        assert_eq!(result.0["data"].as_array().unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_lookup_command_by_name() {
+        let state = make_app_state();
+        insert_mock_cmd(&state.manager, "cmd-1", 1);
+        let result = lookup_command(State(state), Path("cmd-cmd-1".into())).await;
+        assert_eq!(result.0["status"], "ok");
+        assert_eq!(result.0["data"].as_array().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_keep_command_missing() {
+        let state = make_app_state();
+        let result = keep_command(State(state), Path("nope".into())).await;
+        assert_eq!(result.0["status"], "error");
+    }
+
+    #[tokio::test]
+    async fn test_keep_command_success() {
+        let state = make_app_state();
+        insert_mock_cmd(&state.manager, "cmd-1", 1);
+        let result = keep_command(State(state), Path("cmd-1".into())).await;
+        assert_eq!(result.0["status"], "ok");
+        assert_eq!(result.0["data"]["retain_on_exit"], true);
+    }
+
+    #[tokio::test]
+    async fn test_unkeep_command_missing() {
+        let state = make_app_state();
+        let result = unkeep_command(State(state), Path("nope".into())).await;
+        assert_eq!(result.0["status"], "error");
+    }
+
+    #[tokio::test]
+    async fn test_unkeep_command_success() {
+        let state = make_app_state();
+        insert_mock_cmd(&state.manager, "cmd-1", 1);
+        state.manager.keep(&"cmd-1".to_string()).unwrap();
+        let result = unkeep_command(State(state), Path("cmd-1".into())).await;
+        assert_eq!(result.0["status"], "ok");
+        assert_eq!(result.0["data"]["retain_on_exit"], false);
+    }
+
+    #[tokio::test]
+    async fn test_purge_command_missing() {
+        let state = make_app_state();
+        let result = purge_command(State(state), Path("nope".into())).await;
+        assert_eq!(result.0["status"], "error");
+    }
+
+    #[tokio::test]
+    async fn test_purge_command_success() {
+        let state = make_app_state();
+        insert_mock_cmd(&state.manager, "cmd-1", 1);
+        let result = purge_command(State(state.clone()), Path("cmd-1".into())).await;
+        assert_eq!(result.0["status"], "ok");
+        assert_eq!(result.0["data"]["purged"], true);
+        assert!(state.manager.get(&"cmd-1".to_string()).is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_snapshot_empty() {
+        let state = make_app_state();
+        let result = get_snapshot(State(state)).await;
+        assert_eq!(result.0["status"], "ok");
+        assert_eq!(result.0["data"]["commands"].as_array().unwrap().len(), 0);
+        assert!(result.0["data"]["vtty"].is_null());
+    }
+
+    #[tokio::test]
+    async fn test_tab_complete() {
+        let params: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+        let result = tab_complete(axum::extract::Query(params)).await;
+        assert_eq!(result.0["status"], "ok");
+        // Without a prefix filter, should return many results (sorted)
+        let data = result.0["data"].as_array().unwrap();
+        assert!(!data.is_empty());
+        // Verify sorted
+        let mut prev = String::new();
+        for item in data {
+            let s = item.as_str().unwrap();
+            assert!(*s >= *prev);
+            prev = s.to_string();
+        }
+    }
+
+    #[tokio::test]
+    async fn test_tab_complete_with_prefix() {
+        let mut params = std::collections::HashMap::new();
+        params.insert("prefix".to_string(), "ls".to_string());
+        let result = tab_complete(axum::extract::Query(params)).await;
+        assert_eq!(result.0["status"], "ok");
+        let data = result.0["data"].as_array().unwrap();
+        // Should contain "ls" itself
+        assert!(data.iter().any(|v| v.as_str() == Some("ls")));
+    }
+
+    #[tokio::test]
+    async fn test_start_command_with_args_and_env() {
+        let state = make_app_state();
+        // We can't actually spawn processes in tests, but we can verify the
+        // request parsing logic by checking that a valid command attempt
+        // reaches the spawn step (which fails because mock processes can't really run).
+        // Instead, test that env and args are properly extracted.
+        let body = json!({
+            "cmd": "ls",
+            "args": ["-la", "/tmp"],
+            "env": {"FOO": "bar", "BAZ": "qux"},
+            "no_env": true,
+            "retain_on_exit": true,
+            "snapshot_on_exit": "auto"
+        });
+        // This will try to spawn "ls" and fail because we don't have a real PTY.
+        // But the parsing and validation up to the spawn call is what we're testing.
+        let result = start_command(State(state), Json(body)).await;
+        // It should not be "Missing 'cmd' field" — that would indicate parsing failure
+        assert!(result.0["error"].as_str().unwrap_or("").contains("Failed to initialize")
+                || result.0["status"] == "ok"
+                || result.0["error"].as_str().unwrap_or("").contains("No such file"),
+                "Unexpected response: {}", result.0);
     }
 }

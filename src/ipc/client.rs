@@ -77,3 +77,37 @@ pub async fn ping(pid: u32) -> anyhow::Result<serde_json::Value> {
         ControlResponse::Error { error } => anyhow::bail!("{}", error),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ipc::protocol::{ControlCommand, ControlResponse};
+
+    #[test]
+    fn test_socket_path_for_pid_function() {
+        let path = socket_path_for_pid(12345);
+        assert!(path.to_string_lossy().contains("12345"));
+    }
+
+    #[tokio::test]
+    async fn test_send_command_to_nonexistent_socket() {
+        let result = send_command(999999999, ControlCommand::Ping).await;
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("No control socket") || err_msg.contains("Failed to connect"));
+    }
+
+    #[tokio::test]
+    async fn test_send_command_to_invalid_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nonexistent.sock");
+        let result = send_command_to_path(&path, ControlCommand::Ping).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_ping_nonexistent_instance() {
+        let result = ping(999999999).await;
+        assert!(result.is_err());
+    }
+}

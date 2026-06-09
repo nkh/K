@@ -69,3 +69,47 @@ impl AuthManager {
         Ok(token)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_auth_manager_load_from_existing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("token");
+        std::fs::write(&path, "my-secret-token").unwrap();
+        let token = AuthManager::load_or_generate(path.to_str().unwrap()).unwrap();
+        assert_eq!(token, "my-secret-token");
+    }
+
+    #[test]
+    fn test_auth_manager_generate_new() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("new-token");
+        let token = AuthManager::load_or_generate(path.to_str().unwrap()).unwrap();
+        assert!(!token.is_empty());
+        assert_eq!(token.len(), 64); // 256-bit hex = 64 chars
+        // Verify it was saved
+        let saved = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(saved.trim(), token);
+    }
+
+    #[test]
+    fn test_auth_manager_empty_file_generates_new() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("empty-token");
+        std::fs::write(&path, "").unwrap();
+        let token = AuthManager::load_or_generate(path.to_str().unwrap()).unwrap();
+        assert!(!token.is_empty());
+    }
+
+    #[test]
+    fn test_auth_manager_whitespace_file_generates_new() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("ws-token");
+        std::fs::write(&path, "  \n").unwrap();
+        let token = AuthManager::load_or_generate(path.to_str().unwrap()).unwrap();
+        assert!(!token.is_empty());
+    }
+}

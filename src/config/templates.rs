@@ -83,3 +83,93 @@ impl TemplatesConfig {
         self.0.is_empty()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_template(name: &str, cmd: &str) -> TemplateConfig {
+        TemplateConfig {
+            name: name.to_string(),
+            cmd: cmd.to_string(),
+            args: Some("arg1 arg2".to_string()),
+            env: Some(vec!["KEY=VAL".to_string()]),
+            workdir: Some("/tmp".to_string()),
+            certificate: Some("cert1".to_string()),
+            rows: Some(40),
+            cols: Some(120),
+        }
+    }
+
+    #[test]
+    fn test_templates_config_default_empty() {
+        let cfg = TemplatesConfig::default();
+        assert!(cfg.is_empty());
+        assert_eq!(cfg.len(), 0);
+        assert_eq!(cfg.iter().count(), 0);
+    }
+
+    #[test]
+    fn test_templates_config_iter() {
+        let cfg = TemplatesConfig(vec![
+            make_template("Dev", "npm"),
+            make_template("Prod", "cargo"),
+        ]);
+        assert_eq!(cfg.len(), 2);
+        assert!(!cfg.is_empty());
+        assert_eq!(cfg.iter().count(), 2);
+    }
+
+    #[test]
+    fn test_template_config_fields() {
+        let t = make_template("Dev Server", "npm");
+        assert_eq!(t.name, "Dev Server");
+        assert_eq!(t.cmd, "npm");
+        assert_eq!(t.args, Some("arg1 arg2".to_string()));
+        assert_eq!(t.env, Some(vec!["KEY=VAL".to_string()]));
+        assert_eq!(t.workdir, Some("/tmp".to_string()));
+        assert_eq!(t.certificate, Some("cert1".to_string()));
+        assert_eq!(t.rows, Some(40));
+        assert_eq!(t.cols, Some(120));
+    }
+
+    #[test]
+    fn test_template_config_minimal() {
+        let t = TemplateConfig {
+            name: "htop".to_string(),
+            cmd: "htop".to_string(),
+            args: None,
+            env: None,
+            workdir: None,
+            certificate: None,
+            rows: None,
+            cols: None,
+        };
+        assert!(t.args.is_none());
+        assert!(t.env.is_none());
+        assert!(t.workdir.is_none());
+        assert!(t.certificate.is_none());
+        assert!(t.rows.is_none());
+        assert!(t.cols.is_none());
+    }
+
+    #[test]
+    fn test_template_config_serialization_roundtrip() {
+        let t = make_template("Dev", "npm");
+        let json = serde_json::to_string(&t).unwrap();
+        let deserialized: TemplateConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.name, t.name);
+        assert_eq!(deserialized.cmd, t.cmd);
+        assert_eq!(deserialized.args, t.args);
+        assert_eq!(deserialized.env, t.env);
+    }
+
+    #[test]
+    fn test_templates_config_serialization() {
+        let cfg = TemplatesConfig(vec![make_template("Dev", "npm")]);
+        let json = serde_json::to_string(&cfg).unwrap();
+        let deserialized: TemplatesConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.len(), 1);
+        assert_eq!(deserialized.0[0].name, "Dev");
+    }
+}

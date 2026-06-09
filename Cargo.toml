@@ -90,6 +90,7 @@ fontdue = { version = "0.9", optional = true }
 
 [dev-dependencies]
 tokio-test = "0.4"
+tempfile = "3"
 
 [profile.release]
 strip = "symbols"

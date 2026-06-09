@@ -135,3 +135,70 @@ fn encode_mouse_event(event: &str, button: u8, x: u16, y: u16, sgr: bool) -> Str
         format!("\x1b[{}{}{}", cb, cx_enc as char, cy_enc as char)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_encode_mouse_down_left_sgr() {
+        let seq = encode_mouse_event("down", 0, 10, 20, true);
+        assert_eq!(seq, "\x1b[32;10;20M");
+    }
+
+    #[test]
+    fn test_encode_mouse_down_right_sgr() {
+        let seq = encode_mouse_event("down", 2, 5, 3, true);
+        assert_eq!(seq, "\x1b[34;5;3M");
+    }
+
+    #[test]
+    fn test_encode_mouse_up_sgr() {
+        let seq = encode_mouse_event("up", 0, 10, 20, true);
+        assert_eq!(seq, "\x1b[35;10;20m");
+    }
+
+    #[test]
+    fn test_encode_mouse_move_sgr() {
+        let seq = encode_mouse_event("move", 0, 50, 30, true);
+        assert_eq!(seq, "\x1b[64;50;30M");
+    }
+
+    #[test]
+    fn test_encode_mouse_wheel_up_sgr() {
+        let seq = encode_mouse_event("wheel_up", 0, 10, 20, true);
+        assert_eq!(seq, "\x1b[96;10;20M");
+    }
+
+    #[test]
+    fn test_encode_mouse_wheel_down_sgr() {
+        let seq = encode_mouse_event("wheel_down", 0, 10, 20, true);
+        assert_eq!(seq, "\x1b[97;10;20M");
+    }
+
+    #[test]
+    fn test_encode_mouse_down_left_legacy() {
+        let seq = encode_mouse_event("down", 0, 10, 20, false);
+        assert!(seq.starts_with("\x1b[32"));
+        assert!(seq.ends_with('M'));
+    }
+
+    #[test]
+    fn test_encode_mouse_down_middle_legacy() {
+        let seq = encode_mouse_event("down", 1, 10, 20, false);
+        assert!(seq.starts_with("\x1b[33"));
+    }
+
+    #[test]
+    fn test_encode_mouse_unknown_event() {
+        let seq = encode_mouse_event("unknown", 0, 10, 20, true);
+        assert!(seq.is_empty());
+    }
+
+    #[test]
+    fn test_encode_mouse_legacy_clamp_large_values() {
+        let seq = encode_mouse_event("down", 0, 200, 300, false);
+        // Values > 95 should be clamped
+        assert!(seq.starts_with("\x1b[32"));
+    }
+}

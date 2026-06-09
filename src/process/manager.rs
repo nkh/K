@@ -1039,4 +1039,627 @@ mod tests {
         let no_cert: CommandEntry = ("id2".to_string(), "name2".to_string(), vec![], 0, None);
         assert!(no_cert.4.is_none());
     }
+
+    // ─── SnapshotMeta serde ───
+
+    #[test]
+    fn test_snapshot_meta_serde_roundtrip() {
+        let meta = SnapshotMeta {
+            name: "snap1".to_string(),
+            command_id: "cmd-123".to_string(),
+            command_name: "bash".to_string(),
+            command_args: vec!["-l".to_string()],
+            pid: 1234,
+            timestamp: chrono::Utc::now(),
+            runtime_secs: 42.5,
+        };
+        let json = serde_json::to_string(&meta).unwrap();
+        let parsed: SnapshotMeta = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.name, "snap1");
+        assert_eq!(parsed.command_id, "cmd-123");
+        assert_eq!(parsed.command_name, "bash");
+        assert_eq!(parsed.command_args, vec!["-l"]);
+        assert_eq!(parsed.pid, 1234);
+        assert_eq!(parsed.runtime_secs, 42.5);
+    }
+
+    // ─── encode_special_key edge cases ───
+
+    #[test]
+    fn test_encode_all_function_keys() {
+        assert_eq!(encode_keys("<F1>"), vec![0x1b, b'[', b'1', b'1', b'~']);
+        assert_eq!(encode_keys("<F12>"), vec![0x1b, b'[', b'2', b'4', b'~']);
+    }
+
+    #[test]
+    fn test_encode_ctrl_special_chars() {
+        assert_eq!(encode_keys("<C-@>"), vec![0x00]);
+        assert_eq!(encode_keys("<C-[>"), vec![0x1b]);
+        assert_eq!(encode_keys("<C-\\>"), vec![0x1c]);
+        assert_eq!(encode_keys("<C-]>"), vec![0x1d]);
+        assert_eq!(encode_keys("<C-^>"), vec![0x1e]);
+        assert_eq!(encode_keys("<C-_>"), vec![0x1f]);
+        assert_eq!(encode_keys("<C-?>"), vec![0x7f]);
+    }
+
+    #[test]
+    fn test_encode_unknown_special() {
+        let result = encode_keys("<FooBar>");
+        assert_eq!(result, b"FooBar");
+    }
+
+    #[test]
+    fn test_encode_unclosed_angle_bracket() {
+        let result = encode_keys("hello<world");
+        assert_eq!(result, b"hello<world");
+    }
+
+    #[test]
+    fn test_encode_empty_string() {
+        assert!(encode_keys("").is_empty());
+    }
+
+    #[test]
+    fn test_encode_tab_backspace_insert_home_end_pageup_pagedown() {
+        assert_eq!(encode_keys("<Tab>"), vec![0x09]);
+        assert_eq!(encode_keys("<Backspace>"), vec![0x7f]);
+        assert_eq!(encode_keys("<Insert>"), vec![0x1b, b'[', b'2', b'~']);
+        assert_eq!(encode_keys("<Home>"), vec![0x1b, b'[', b'H']);
+        assert_eq!(encode_keys("<End>"), vec![0x1b, b'[', b'F']);
+        assert_eq!(encode_keys("<PageUp>"), vec![0x1b, b'[', b'5', b'~']);
+        assert_eq!(encode_keys("<PageDown>"), vec![0x1b, b'[', b'6', b'~']);
+    }
+
+    // ─── Helper infrastructure for CommandManager tests ───
+
+    use crate::process::handle::CommandHandle;
+    use crate::process::pty::PtyMaster;
+    use crate::handles::registry::HandleRegistry;
+    use crate::vtty::emulator::VttyEmulator;
+    use crate::vtty::sink::VttyOutput;
+    use std::io::{Read, Write};
+
+    struct MockPtyMaster;
+
+    impl PtyMaster for MockPtyMaster {
+        fn clone_reader(&self) -> Result<Box<dyn Read + Send>> { Ok(Box::new(std::io::empty())) }
+        fn take_writer(&self) -> Result<Box<dyn Write + Send>> { Ok(Box::new(std::io::sink())) }
+        fn resize(&self, _rows: u16, _cols: u16) -> Result<()> { Ok(()) }
+    }
+
+    fn make_manager() -> CommandManager {
+        let mut config = Config::default();
+        config.binary_name = "test".to_string();
+        CommandManager::new(config)
+    }
+
+    fn make_mock_handle(id: &str, pid: u32) -> (CommandHandle, tokio::sync::mpsc::Receiver<super::super::spawner::StdinMessage>) {
+        let (stdin_tx, stdin_rx) = tokio::sync::mpsc::channel::<super::super::spawner::StdinMessage>(16);
+        let (_exit_tx, exit_rx) = tokio::sync::oneshot::channel::<super::super::spawner::ExitStatus>();
+        let (watch_tx, watch_rx) = tokio::sync::watch::channel(false);
+        let emu = VttyEmulator::new(24, 80, 1000);
+        std::mem::forget(watch_tx);
+        let handle = CommandHandle {
+            id: id.to_string(), pid,
+            name: format!("cmd-{}", id),
+            args: vec!["--test".to_string()],
+            emulator: std::sync::Arc::new(tokio::sync::RwLock::new(emu)),
+            stdin_tx, _exit_rx: exit_rx,
+            handle_registry: HandleRegistry::new(),
+            certificate: None,
+            exit_config: crate::config::schema::ExitConfig::default(),
+            spawn_time: std::time::Instant::now(),
+            pty_master: std::sync::Arc::new(parking_lot::Mutex::new(Box::new(MockPtyMaster) as Box<dyn PtyMaster + Send>)),
+            vtty_output: std::sync::Arc::new(VttyOutput::new()),
+            exit_rx: watch_rx,
+            exit_code: std::sync::Mutex::new(None),
+            exit_time: std::sync::Mutex::new(None),
+            frozen: std::sync::atomic::AtomicBool::new(false),
+            prev_diff_snapshot: tokio::sync::Mutex::new(None),
+        };
+        (handle, stdin_rx)
+    }
+
+    fn insert_mock(mgr: &CommandManager, id: &str, pid: u32) -> tokio::sync::mpsc::Receiver<super::super::spawner::StdinMessage> {
+        let (handle, rx) = make_mock_handle(id, pid);
+        mgr.commands_arc().insert(id.to_string(), handle);
+        rx
+    }
+
+    // ─── CommandManager::new ───
+
+    #[test]
+    fn test_manager_new() {
+        let mgr = make_manager();
+        assert!(mgr.list().is_empty());
+        assert!(mgr.list_all_snapshots().is_empty());
+    }
+
+    // ─── get ───
+
+    #[test]
+    fn test_get_missing() {
+        let mgr = make_manager();
+        assert!(mgr.get(&"none".to_string()).is_none());
+    }
+
+    #[test]
+    fn test_get_existing() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 100);
+        assert!(mgr.get(&"cmd-1".to_string()).is_some());
+        assert_eq!(mgr.get(&"cmd-1".to_string()).unwrap().pid, 100);
+    }
+
+    // ─── get_certificate ───
+
+    #[test]
+    fn test_get_certificate_none() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 100);
+        assert!(mgr.get_certificate(&"cmd-1".to_string()).is_none());
+    }
+
+    #[test]
+    fn test_get_certificate_some() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 100);
+        if let Some(mut h) = mgr.commands_arc().get_mut("cmd-1") {
+            h.certificate = Some("my-cert".to_string());
+        }
+        assert_eq!(mgr.get_certificate(&"cmd-1".to_string()).as_deref(), Some("my-cert"));
+    }
+
+    #[test]
+    fn test_get_certificate_missing_cmd() {
+        let mgr = make_manager();
+        assert!(mgr.get_certificate(&"none".to_string()).is_none());
+    }
+
+    // ─── list / find_by_pid ───
+
+    #[test]
+    fn test_list_empty() {
+        let mgr = make_manager();
+        assert!(mgr.list().is_empty());
+    }
+
+    #[test]
+    fn test_list_with_commands() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "a", 100);
+        insert_mock(&mgr, "b", 200);
+        assert_eq!(mgr.list().len(), 2);
+    }
+
+    #[test]
+    fn test_find_by_pid_found() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "x", 42);
+        assert_eq!(mgr.find_by_pid(42).as_deref(), Some("x"));
+    }
+
+    #[test]
+    fn test_find_by_pid_missing() {
+        let mgr = make_manager();
+        assert!(mgr.find_by_pid(99999).is_none());
+    }
+
+    // ─── freeze / thaw ───
+
+    #[test]
+    fn test_freeze_missing() {
+        let mgr = make_manager();
+        assert!(mgr.freeze(&"none".to_string()).is_err());
+    }
+
+    #[test]
+    fn test_freeze_sets_flag() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 1);
+        let _ = mgr.freeze(&"cmd-1".to_string());
+        if let Some(h) = mgr.commands_arc().get("cmd-1") {
+            assert!(h.frozen.load(std::sync::atomic::Ordering::Relaxed));
+        }
+    }
+
+    #[test]
+    fn test_thaw_missing() {
+        let mgr = make_manager();
+        assert!(mgr.thaw(&"none".to_string()).is_err());
+    }
+
+    #[test]
+    fn test_thaw_clears_flag() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 1);
+        if let Some(h) = mgr.commands_arc().get_mut("cmd-1") {
+            h.frozen.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        let _ = mgr.thaw(&"cmd-1".to_string());
+        if let Some(h) = mgr.commands_arc().get("cmd-1") {
+            assert!(!h.frozen.load(std::sync::atomic::Ordering::Relaxed));
+        }
+    }
+
+    // ─── keep / unkeep ───
+
+    #[test]
+    fn test_keep_missing() {
+        let mgr = make_manager();
+        assert!(mgr.keep(&"none".to_string()).is_err());
+    }
+
+    #[test]
+    fn test_keep_sets_retain() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 1);
+        mgr.keep(&"cmd-1".to_string()).unwrap();
+        if let Some(h) = mgr.commands_arc().get("cmd-1") {
+            assert!(h.exit_config.retain_on_exit);
+        }
+    }
+
+    #[test]
+    fn test_unkeep_missing() {
+        let mgr = make_manager();
+        assert!(mgr.unkeep(&"none".to_string()).is_err());
+    }
+
+    #[test]
+    fn test_unkeep_clears_retain() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 1);
+        mgr.keep(&"cmd-1".to_string()).unwrap();
+        mgr.unkeep(&"cmd-1".to_string()).unwrap();
+        if let Some(h) = mgr.commands_arc().get("cmd-1") {
+            assert!(!h.exit_config.retain_on_exit);
+        }
+    }
+
+    // ─── purge ───
+
+    #[test]
+    fn test_purge_missing() {
+        let mgr = make_manager();
+        assert!(mgr.purge(&"none".to_string()).is_err());
+    }
+
+    #[test]
+    fn test_purge_removes_command() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 1);
+        assert!(mgr.get(&"cmd-1".to_string()).is_some());
+        mgr.purge(&"cmd-1".to_string()).unwrap();
+        assert!(mgr.get(&"cmd-1".to_string()).is_none());
+    }
+
+    // ─── snapshots ───
+
+    #[test]
+    fn test_store_snapshot_missing_cmd() {
+        let mgr = make_manager();
+        assert!(mgr.store_snapshot(&"none".to_string(), "snap1").is_err());
+    }
+
+    #[test]
+    fn test_store_and_list_snapshots() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 1);
+        mgr.store_snapshot(&"cmd-1".to_string(), "s1").unwrap();
+        mgr.store_snapshot(&"cmd-1".to_string(), "s2").unwrap();
+        assert_eq!(mgr.list_snapshots(&"cmd-1".to_string()).len(), 2);
+        assert_eq!(mgr.list_snapshots(&"cmd-1".to_string())[0].name, "s1");
+    }
+
+    #[test]
+    fn test_list_snapshots_missing_cmd() {
+        let mgr = make_manager();
+        assert!(mgr.list_snapshots(&"none".to_string()).is_empty());
+    }
+
+    #[test]
+    fn test_list_all_snapshots_empty() {
+        let mgr = make_manager();
+        assert!(mgr.list_all_snapshots().is_empty());
+    }
+
+    #[test]
+    fn test_list_all_snapshots_across_commands() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 1);
+        insert_mock(&mgr, "cmd-2", 2);
+        mgr.store_snapshot(&"cmd-1".to_string(), "a").unwrap();
+        mgr.store_snapshot(&"cmd-2".to_string(), "b").unwrap();
+        assert_eq!(mgr.list_all_snapshots().len(), 2);
+    }
+
+    #[test]
+    fn test_diff_snapshot_missing_cmd() {
+        let mgr = make_manager();
+        assert!(mgr.diff_snapshot(&"none".to_string(), "snap").is_err());
+    }
+
+    #[test]
+    fn test_diff_snapshot_missing_snap() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 1);
+        assert!(mgr.diff_snapshot(&"cmd-1".to_string(), "none").is_err());
+    }
+
+    #[test]
+    fn test_diff_snapshot_no_change() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 1);
+        mgr.store_snapshot(&"cmd-1".to_string(), "v1").unwrap();
+        let diff = mgr.diff_snapshot(&"cmd-1".to_string(), "v1").unwrap();
+        assert_eq!(diff.changed_count, 0);
+    }
+
+    #[test]
+    fn test_diff_snapshot_with_change() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 1);
+        mgr.store_snapshot(&"cmd-1".to_string(), "v1").unwrap();
+        if let Some(h) = mgr.commands_arc().get("cmd-1") {
+            let mut emu = h.emulator.blocking_write();
+            emu.feed_str("X");
+        }
+        let diff = mgr.diff_snapshot(&"cmd-1".to_string(), "v1").unwrap();
+        assert!(diff.changed_count > 0);
+    }
+
+    #[test]
+    fn test_delete_snapshot_missing_cmd() {
+        let mgr = make_manager();
+        assert!(mgr.delete_snapshot(&"none".to_string(), "s").is_err());
+    }
+
+    #[test]
+    fn test_delete_snapshot_missing_snap() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 1);
+        assert!(mgr.delete_snapshot(&"cmd-1".to_string(), "none").is_err());
+    }
+
+    #[test]
+    fn test_delete_snapshot_success() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 1);
+        mgr.store_snapshot(&"cmd-1".to_string(), "s1").unwrap();
+        assert_eq!(mgr.list_snapshots(&"cmd-1".to_string()).len(), 1);
+        mgr.delete_snapshot(&"cmd-1".to_string(), "s1").unwrap();
+        assert!(mgr.list_snapshots(&"cmd-1".to_string()).is_empty());
+    }
+
+    // ─── subscribe_vtty / vtty_change_sender / logger / config / commands_arc ───
+
+    #[test]
+    fn test_subscribe_vtty() {
+        let mgr = make_manager();
+        let _rx = mgr.subscribe_vtty();
+    }
+
+    #[test]
+    fn test_vtty_change_sender() {
+        let mgr = make_manager();
+        let tx = mgr.vtty_change_sender();
+        assert!(tx.send(("test".to_string(), "{}".to_string())).is_ok());
+    }
+
+    #[test]
+    fn test_logger_clone() {
+        let mgr = make_manager();
+        let _logger = mgr.logger();
+    }
+
+    #[test]
+    fn test_config_ref() {
+        let mgr = make_manager();
+        let _cfg = mgr.config();
+    }
+
+    #[test]
+    fn test_commands_arc_empty() {
+        let mgr = make_manager();
+        assert!(mgr.commands_arc().is_empty());
+    }
+
+    // ─── has_changed ───
+
+    #[test]
+    fn test_has_changed_missing() {
+        let mgr = make_manager();
+        assert!(mgr.has_changed(&"none".to_string()).is_err());
+    }
+
+    #[test]
+    fn test_has_changed_first_check() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 1);
+        assert!(mgr.has_changed(&"cmd-1".to_string()).unwrap());
+    }
+
+    #[test]
+    fn test_has_changed_no_mutation() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 1);
+        mgr.has_changed(&"cmd-1".to_string()).unwrap();
+        assert!(!mgr.has_changed(&"cmd-1".to_string()).unwrap());
+    }
+
+    // ─── send_keys ───
+
+    #[tokio::test]
+    async fn test_send_keys_missing() {
+        let mgr = make_manager();
+        assert!(mgr.send_keys(&"none".to_string(), "hi").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_send_keys_success() {
+        let mgr = make_manager();
+        let mut rx = insert_mock(&mgr, "cmd-1", 1);
+        mgr.send_keys(&"cmd-1".to_string(), "AB").await.unwrap();
+        let msg = rx.recv().await.unwrap();
+        match msg {
+            super::super::spawner::StdinMessage::Bytes(data) => assert_eq!(data, b"AB"),
+            _ => panic!("expected Bytes"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_send_keys_with_special() {
+        let mgr = make_manager();
+        let mut rx = insert_mock(&mgr, "cmd-1", 1);
+        mgr.send_keys(&"cmd-1".to_string(), "<C-c>").await.unwrap();
+        let msg = rx.recv().await.unwrap();
+        match msg {
+            super::super::spawner::StdinMessage::Bytes(data) => assert_eq!(data, vec![0x03]),
+            _ => panic!("expected Bytes"),
+        }
+    }
+
+    // ─── add_handle ───
+
+    #[tokio::test]
+    async fn test_add_handle_success() {
+        let mgr = make_manager();
+        let (handle, _rx) = make_mock_handle("new-cmd", 999);
+        let result = mgr.add_handle(handle, Some("cert".to_string()));
+        assert!(result.is_ok());
+        assert!(mgr.get(&"new-cmd".to_string()).is_some());
+    }
+
+    #[tokio::test]
+    async fn test_add_handle_duplicate() {
+        let mgr = make_manager();
+        let (h1, _r1) = make_mock_handle("dup", 1);
+        let (h2, _r2) = make_mock_handle("dup", 2);
+        mgr.add_handle(h1, None).unwrap();
+        assert!(mgr.add_handle(h2, None).is_err());
+    }
+
+    // ─── register_sink ───
+
+    #[test]
+    fn test_register_sink_missing_cmd() {
+        let mgr = make_manager();
+        assert!(mgr.register_sink(&"none".to_string(), "s1".into(), "null", None).is_err());
+    }
+
+    #[test]
+    fn test_register_null_sink() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 1);
+        mgr.register_sink(&"cmd-1".to_string(), "ns".into(), "null", None).unwrap();
+        if let Some(h) = mgr.commands_arc().get("cmd-1") {
+            assert!(h.handle_registry.list().contains(&"ns".to_string()));
+        }
+    }
+
+    #[test]
+    fn test_register_vtty_sink() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 1);
+        mgr.register_sink(&"cmd-1".to_string(), "vs".into(), "vtty", None).unwrap();
+        if let Some(h) = mgr.commands_arc().get("cmd-1") {
+            assert!(h.handle_registry.list().contains(&"vs".to_string()));
+        }
+    }
+
+    #[test]
+    fn test_register_file_sink() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("out.log").to_string_lossy().to_string();
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 1);
+        mgr.register_sink(&"cmd-1".to_string(), "fs".into(), "file", Some(&path)).unwrap();
+        if let Some(h) = mgr.commands_arc().get("cmd-1") {
+            assert!(h.handle_registry.list().contains(&"fs".to_string()));
+        }
+    }
+
+    #[test]
+    fn test_register_unknown_sink_type() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 1);
+        assert!(mgr.register_sink(&"cmd-1".to_string(), "bad".into(), "bad_type", None).is_err());
+    }
+
+    #[test]
+    fn test_register_duplicate_sink_name() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 1);
+        mgr.register_sink(&"cmd-1".to_string(), "dup".into(), "null", None).unwrap();
+        assert!(mgr.register_sink(&"cmd-1".to_string(), "dup".into(), "null", None).is_err());
+    }
+
+    // ─── kill ───
+
+    #[tokio::test]
+    async fn test_kill_missing() {
+        let mgr = make_manager();
+        assert!(mgr.kill(&"none".to_string(), None).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_kill_removes_command() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 1);
+        mgr.kill(&"cmd-1".to_string(), None).await.unwrap();
+        assert!(mgr.get(&"cmd-1".to_string()).is_none());
+    }
+
+    #[tokio::test]
+    async fn test_kill_retained_keeps_command() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 1);
+        mgr.keep(&"cmd-1".to_string()).unwrap();
+        mgr.kill(&"cmd-1".to_string(), None).await.unwrap();
+        assert!(mgr.get(&"cmd-1".to_string()).is_some());
+    }
+
+    #[tokio::test]
+    async fn test_kill_by_pid_missing() {
+        let mgr = make_manager();
+        assert!(mgr.kill_by_pid(99999).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_kill_by_pid_found() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 42);
+        let result = mgr.kill_by_pid(42).await;
+        assert!(result.is_ok());
+        assert!(mgr.get(&"cmd-1".to_string()).is_none());
+    }
+
+    // ─── purge removes snapshots ───
+
+    #[test]
+    fn test_purge_removes_snapshots() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 1);
+        mgr.store_snapshot(&"cmd-1".to_string(), "s1").unwrap();
+        mgr.store_snapshot(&"cmd-1".to_string(), "s2").unwrap();
+        mgr.purge(&"cmd-1".to_string()).unwrap();
+        assert!(mgr.list_snapshots(&"cmd-1".to_string()).is_empty());
+    }
+
+    // ─── Integration: snapshot lifecycle ───
+
+    #[test]
+    fn test_snapshot_lifecycle() {
+        let mgr = make_manager();
+        insert_mock(&mgr, "cmd-1", 1);
+        let meta = mgr.store_snapshot(&"cmd-1".to_string(), "v1").unwrap();
+        assert_eq!(meta.name, "v1");
+        assert_eq!(meta.command_id, "cmd-1");
+        assert_eq!(mgr.list_snapshots(&"cmd-1".to_string()).len(), 1);
+        let diff = mgr.diff_snapshot(&"cmd-1".to_string(), "v1").unwrap();
+        assert_eq!(diff.changed_count, 0);
+        mgr.delete_snapshot(&"cmd-1".to_string(), "v1").unwrap();
+        assert!(mgr.list_snapshots(&"cmd-1".to_string()).is_empty());
+    }
 }
