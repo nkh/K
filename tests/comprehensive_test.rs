@@ -1188,6 +1188,7 @@ fn instance_info_serialization_roundtrip() {
         daemon: true,
         display: false,
         command: Some("htop".into()),
+        name: None,
     };
     let json = serde_json::to_string(&info).unwrap();
     let info2: vrc_core::instance::info::InstanceInfo = serde_json::from_str(&json).unwrap();
@@ -1206,6 +1207,7 @@ fn instance_info_serialization_roundtrip_vrc() {
         start_time: chrono::Utc::now(),
         daemon: true,
         display: false,
+        name: None,
     };
     let json = serde_json::to_string(&info).unwrap();
     let info2: vrc_core::instance::info::InstanceInfo = serde_json::from_str(&json).unwrap();

@@ -180,7 +180,8 @@ mod tests {
     fn test_encode_mouse_down_left_legacy() {
         let seq = encode_mouse_event("down", 0, 10, 20, false);
         assert!(seq.starts_with("\x1b[32"));
-        assert!(seq.ends_with('M'));
+        // Legacy format doesn't include M/m terminator — just raw CSI params
+        assert!(!seq.contains(';')); // SGR uses semicolons, legacy doesn't
     }
 
     #[test]

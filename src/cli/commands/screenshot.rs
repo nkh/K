@@ -263,6 +263,7 @@ pub async fn handle_screenshot_command(
 
 #[cfg(test)]
 mod tests {
+    use clap::Parser;
     use super::*;
     use crate::cli::commands::common::http_client;
 

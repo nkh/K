@@ -213,6 +213,7 @@ pub async fn handle_resize_by_pid(
 
 #[cfg(test)]
 mod tests {
+    use clap::Parser;
     use super::*;
     use crate::cli::commands::common::http_client;
 
@@ -234,7 +235,7 @@ mod tests {
     #[tokio::test]
     async fn test_resize_command_by_id_connection_refused() {
         let client = http_client();
-        let result = resize_command_by_id(&client, "http://127.0.0.1:1", "fake-id", 100, 200, 200, 50, 80).await;
+        let result = resize_command_by_id(&client, "http://127.0.0.1:1", "fake-id", 100, 200, 50, 80).await;
         assert!(result.is_err(), "connection refused should error");
     }
 

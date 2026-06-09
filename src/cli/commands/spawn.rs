@@ -293,6 +293,7 @@ pub async fn handle_thaw_command(cli: &Cli, pid: Option<u32>, interactive: bool)
 
 #[cfg(test)]
 mod tests {
+    use clap::Parser;
     use super::*;
     use crate::cli::commands::common::http_client;
 

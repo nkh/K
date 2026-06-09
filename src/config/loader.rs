@@ -183,7 +183,7 @@ mod tests {
         let config_path = dir.join("test.yaml");
         std::fs::write(
             &config_path,
-            "vtty:\n  rows: 50\n  cols: 200\n  term: \"xterm-256color\"\n  scrollback: 10000\n  truecolor: true\n  mouse: false\n",
+            "vtty:\n  rows: 50\n  cols: 200\n  term: \"xterm-256color\"\n  scrollback: 10000\n  truecolor: true\n  mouse: false\n  screenshot_font_size: 14.0\n",
         )
         .unwrap();
 
@@ -205,7 +205,7 @@ mod tests {
         let config_path = dir.join("test.toml");
         std::fs::write(
             &config_path,
-            "[vtty]\nrows = 30\ncols = 120\nterm = \"xterm-256color\"\nscrollback = 2000\ntruecolor = true\nmouse = false\n",
+            "[vtty]\nrows = 30\ncols = 120\nterm = \"xterm-256color\"\nscrollback = 2000\ntruecolor = true\nmouse = false\nscreenshot_font_size = 14.0\n",
         )
         .unwrap();
 
@@ -224,7 +224,7 @@ mod tests {
         let config_path = dir.join("test.json");
         std::fs::write(
             &config_path,
-            r#"{"vtty": {"rows": 80, "cols": 240, "term": "xterm-256color", "scrollback": 5000, "truecolor": true, "mouse": false}}"#,
+            r#"{"vtty": {"rows": 80, "cols": 240, "term": "xterm-256color", "scrollback": 5000, "truecolor": true, "mouse": false, "screenshot_font_size": 14.0}}"#,
         )
         .unwrap();
 
@@ -263,7 +263,7 @@ mod tests {
         let dir = std::env::temp_dir().join("vrc_test_partial_config");
         std::fs::create_dir_all(&dir).unwrap();
         let config_path = dir.join("partial.yaml");
-        std::fs::write(&config_path, "vtty:\n  rows: 100\n  cols: 80\n  term: \"xterm-256color\"\n  scrollback: 5000\n  truecolor: true\n  mouse: false\n").unwrap();
+        std::fs::write(&config_path, "vtty:\n  rows: 100\n  cols: 80\n  term: \"xterm-256color\"\n  scrollback: 5000\n  truecolor: true\n  mouse: false\n  screenshot_font_size: 14.0\n").unwrap();
 
         let config = load_config(Some(config_path.to_str().unwrap())).unwrap();
         assert_eq!(config.vtty.rows, 100);

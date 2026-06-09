@@ -307,6 +307,7 @@ pub async fn handle_stop_command_by_pid_on_instances(
 
 #[cfg(test)]
 mod tests {
+    use clap::Parser;
     use super::*;
 
     /// Helper to create an InstanceInfo for testing.

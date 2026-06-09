@@ -230,6 +230,7 @@ pub(crate) async fn purge_command_by_id(
 
 #[cfg(test)]
 mod tests {
+    use clap::Parser;
     use super::*;
     use crate::cli::commands::common::http_client;
 
