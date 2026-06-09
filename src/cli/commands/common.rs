@@ -228,6 +228,7 @@ mod tests {
 #[cfg(feature = "vrw")]
 mod vrw_tests {
     use super::*;
+    use crate::cli::args::BINARY_NAME;
 
     #[test]
     fn test_build_full_display_string_with_args() {
@@ -320,6 +321,208 @@ mod vrw_tests {
     fn test_resolve_target_command_none_errors_on_empty() {
         let cmds: Vec<CommandTarget> = vec![];
         assert!(resolve_target_command(None, &cmds, "test").is_err());
+    }
+
+    #[test]
+    fn test_resolve_target_command_exact_full_match() {
+        let cmds: Vec<CommandTarget> = vec![
+            (100, "id-aaa".into(), 1234, "vim".into(), "vim file.txt".into()),
+            (100, "id-bbb".into(), 5678, "vim".into(), "vim other.rs".into()),
+        ];
+        // Exact full match disambiguates when name is ambiguous
+        let result = resolve_target_command(Some("vim file.txt"), &cmds, "test").unwrap();
+        assert_eq!(result.1, "id-aaa");
+    }
+
+    #[test]
+    fn test_resolve_target_command_prefix_full_match() {
+        let cmds: Vec<CommandTarget> = vec![
+            (100, "id-aaa".into(), 1234, "vim".into(), "vim file.txt".into()),
+            (100, "id-bbb".into(), 5678, "htop".into(), "htop".into()),
+        ];
+        let result = resolve_target_command(Some("vim f"), &cmds, "test").unwrap();
+        assert_eq!(result.1, "id-aaa");
+    }
+
+    #[test]
+    fn test_resolve_target_command_prefix_name_match() {
+        let cmds: Vec<CommandTarget> = vec![
+            (100, "id-aaa".into(), 1234, "btop".into(), "btop".into()),
+            (100, "id-bbb".into(), 5678, "htop".into(), "htop".into()),
+        ];
+        let result = resolve_target_command(Some("bto"), &cmds, "test").unwrap();
+        assert_eq!(result.1, "id-aaa");
+    }
+
+    #[test]
+    fn test_resolve_target_command_no_match() {
+        let cmds: Vec<CommandTarget> = vec![
+            (100, "id-aaa".into(), 1234, "vim".into(), "vim file.txt".into()),
+        ];
+        assert!(resolve_target_command(Some("nonexistent"), &cmds, "No command").is_err());
+    }
+
+    #[test]
+    fn test_http_client_builds() {
+        let client = http_client();
+        // Verify the client can be built (no panic)
+        assert_eq!(client.timeout().unwrap_or_default().as_secs(), 10);
+    }
+
+    #[test]
+    fn test_instance_url_standard_port() {
+        let info = InstanceInfo {
+            pid: 1234,
+            port: 9090,
+            bind: "127.0.0.1".to_string(),
+            name: Some("test".to_string()),
+            start_time: chrono::Utc::now(),
+            daemon: false,
+            display: false,
+            command: None,
+        };
+        let url = instance_url(&info, &None);
+        assert_eq!(url, "http://127.0.0.1:9090");
+    }
+
+    #[test]
+    fn test_instance_url_https_port_always_http() {
+        // Per code comment, always uses HTTP (TLS instances will reject)
+        let info = InstanceInfo {
+            pid: 1234,
+            port: 443,
+            bind: "0.0.0.0".to_string(),
+            name: None,
+            start_time: chrono::Utc::now(),
+            daemon: false,
+            display: false,
+            command: None,
+        };
+        let url = instance_url(&info, &None);
+        assert_eq!(url, "http://0.0.0.0:443");
+    }
+
+    #[test]
+    fn test_format_instance_list_empty() {
+        let instances: Vec<InstanceInfo> = vec![];
+        let output = format_instance_list(&instances);
+        // Header should be present
+        assert!(output.contains("PID"));
+        assert!(output.contains("PORT"));
+        assert!(output.contains("COMMAND"));
+    }
+
+    #[test]
+    fn test_format_instance_list_single() {
+        let info = InstanceInfo {
+            pid: 1234,
+            port: 9090,
+            bind: "127.0.0.1".to_string(),
+            name: Some("main".to_string()),
+            start_time: chrono::Utc::now(),
+            daemon: false,
+            display: true,
+            command: Some("htop".to_string()),
+        };
+        let output = format_instance_list(&[info]);
+        assert!(output.contains("1234"));
+        assert!(output.contains("9090"));
+        assert!(output.contains("127.0.0.1"));
+        assert!(output.contains("main"));
+        assert!(output.contains("htop"));
+    }
+
+    #[test]
+    fn test_format_instance_list_multiple() {
+        let a = InstanceInfo {
+            pid: 100,
+            port: 9090,
+            bind: "127.0.0.1".to_string(),
+            name: None,
+            start_time: chrono::Utc::now(),
+            daemon: true,
+            display: false,
+            command: None,
+        };
+        let b = InstanceInfo {
+            pid: 200,
+            port: 9091,
+            bind: "0.0.0.0".to_string(),
+            name: Some("web".to_string()),
+            start_time: chrono::Utc::now(),
+            daemon: false,
+            display: true,
+            command: Some("vim".to_string()),
+        };
+        let output = format_instance_list(&[a, b]);
+        assert!(output.contains("100"));
+        assert!(output.contains("200"));
+        assert!(output.contains("web"));
+    }
+
+    #[test]
+    fn test_format_instance_list_defaults() {
+        let info = InstanceInfo {
+            pid: 1,
+            port: 8080,
+            bind: "localhost".to_string(),
+            name: None,
+            start_time: chrono::Utc::now(),
+            daemon: false,
+            display: false,
+            command: None,
+        };
+        let output = format_instance_list(&[info]);
+        // Name defaults to "-", command defaults to "(idle)"
+        assert!(output.contains("-") && output.contains("(idle)"));
+    }
+
+    #[test]
+    fn test_resolve_targeted_instances_no_pid_returns_all() {
+        let instances = vec![make_test_instance(100, 9090), make_test_instance(200, 9091)];
+        let cli = crate::cli::args::Cli::try_parse_from([BINARY_NAME]).unwrap();
+        let result = resolve_targeted_instances(&cli, &instances).unwrap();
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_resolve_targeted_instances_matching_pid() {
+        let instances = vec![make_test_instance(100, 9090), make_test_instance(200, 9091)];
+        let cli = crate::cli::args::Cli::try_parse_from([BINARY_NAME, "--pid", "200"]).unwrap();
+        let result = resolve_targeted_instances(&cli, &instances).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].pid, 200);
+    }
+
+    #[test]
+    fn test_resolve_targeted_instances_nonexistent_pid_errors() {
+        let instances = vec![make_test_instance(100, 9090)];
+        let cli = crate::cli::args::Cli::try_parse_from([BINARY_NAME, "--pid", "999"]).unwrap();
+        let result = resolve_targeted_instances(&cli, &instances);
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("999"));
+    }
+
+    #[test]
+    fn test_resolve_targeted_instances_no_instances_errors() {
+        let instances: Vec<InstanceInfo> = vec![];
+        let cli = crate::cli::args::Cli::try_parse_from([BINARY_NAME, "--pid", "1"]).unwrap();
+        let result = resolve_targeted_instances(&cli, &instances);
+        assert!(result.is_err());
+    }
+
+    fn make_test_instance(pid: u32, port: u16) -> InstanceInfo {
+        InstanceInfo {
+            pid,
+            port,
+            bind: "127.0.0.1".to_string(),
+            name: None,
+            start_time: chrono::Utc::now(),
+            daemon: false,
+            display: false,
+            command: None,
+        }
     }
 }
 

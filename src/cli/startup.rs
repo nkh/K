@@ -205,3 +205,133 @@ pub fn spawn_signal_handler(shutdown_tx: tokio::sync::broadcast::Sender<()>) {
         }
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cli::args::BINARY_NAME;
+    use clap::Parser;
+
+    /// Helper: create a Cli with no args and no subcommand.
+    fn make_cli(args: &[&str]) -> crate::cli::args::Cli {
+        crate::cli::args::Cli::try_parse_from(args).unwrap()
+    }
+
+    /// Helper: create a default Config.
+    fn default_config() -> crate::config::schema::Config {
+        crate::config::schema::Config::default()
+    }
+
+    #[test]
+    fn test_apply_detected_terminal_size_display_disabled() {
+        // When display is disabled, config should not be modified
+        let cli = make_cli(&[BINARY_NAME]);
+        let mut cfg = default_config();
+        cfg.display.enabled = false;
+        let original_rows = cfg.vtty.rows;
+        let original_cols = cfg.vtty.cols;
+
+        apply_detected_terminal_size(&cli, &mut cfg);
+
+        assert_eq!(cfg.vtty.rows, original_rows, "rows should not change when display disabled");
+        assert_eq!(cfg.vtty.cols, original_cols, "cols should not change when display disabled");
+    }
+
+    #[test]
+    fn test_apply_detected_terminal_size_with_explicit_rows_cols() {
+        // When CLI provides explicit rows/cols, those should not be overridden
+        let cli = make_cli(&[BINARY_NAME, "--vtty-rows", "100", "--vtty-cols", "200"]);
+        let mut cfg = default_config();
+        cfg.display.enabled = true;
+        cfg.vtty.rows = 24;
+        cfg.vtty.cols = 80;
+
+        apply_detected_terminal_size(&cli, &mut cfg);
+
+        // CLI overrides should prevent detection from overriding
+        assert!(cli.vtty_rows.is_some(), "cli should have explicit rows");
+        assert!(cli.vtty_cols.is_some(), "cli should have explicit cols");
+        // The function only sets rows/cols when cli.vtty_rows/cols is None
+        // Since we set them explicitly, they shouldn't change from the initial values
+        // that apply_overrides already set. But apply_detected_terminal_size doesn't
+        // call apply_overrides — it checks cli.vtty_rows.is_none().
+        // Since cli has explicit rows, cfg rows should stay at 24 (the value before detection)
+        assert_eq!(cfg.vtty.rows, 24);
+        assert_eq!(cfg.vtty.cols, 80);
+    }
+
+    #[test]
+    fn test_apply_detected_terminal_size_display_enabled_no_cli_override() {
+        // When display is enabled and no CLI overrides, detection may or may not
+        // work in test environment (no TTY). The function should not panic.
+        let cli = make_cli(&[BINARY_NAME, "--display"]);
+        let mut cfg = default_config();
+        cfg.display.enabled = true;
+
+        // Should not panic even without a real terminal
+        apply_detected_terminal_size(&cli, &mut cfg);
+    }
+
+    #[test]
+    fn test_apply_detected_terminal_size_with_tabs() {
+        // When tabs is enabled, one row should be subtracted from detected size
+        let cli = make_cli(&[BINARY_NAME, "--tabs"]);
+        let mut cfg = default_config();
+        cfg.display.enabled = true;
+
+        // Should not panic — in test env detection may return None
+        apply_detected_terminal_size(&cli, &mut cfg);
+        // If detection worked, rows should be at least 1 less than detected
+        // (saturating_sub(1)). We just verify it doesn't panic and tabs flag is read.
+        assert!(cli.tabs);
+    }
+
+    #[tokio::test]
+    async fn test_spawn_signal_handler_shutdown_propagation() {
+        let (tx, mut rx) = tokio::sync::broadcast::channel::<()>(2);
+        spawn_signal_handler(tx.clone());
+
+        // Send shutdown from another sender
+        tx.send(()).unwrap();
+
+        // The handler task should exit cleanly without hanging.
+        // We can't easily verify it received the signal, but we verify
+        // the broadcast channel works.
+        let result = tokio::time::timeout(
+            std::time::Duration::from_millis(500),
+            rx.recv()
+        ).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_spawn_initial_command_no_cmd_args() {
+        // When no cmd_args, should return None
+        let cli = make_cli(&[BINARY_NAME]);
+        let cfg = default_config();
+        let manager = std::sync::Arc::new(crate::process::manager::CommandManager::new(cfg.clone()));
+
+        let result = spawn_initial_command(&cli, &manager, &cfg).await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none(), "no cmd_args should return None");
+    }
+
+    #[tokio::test]
+    async fn test_spawn_initial_command_empty_cmd_args() {
+        // Empty cmd_args should return None
+        let cli = crate::cli::args::Cli::try_parse_from([BINARY_NAME, "--"]).unwrap();
+        let cfg = default_config();
+        let manager = std::sync::Arc::new(crate::process::manager::CommandManager::new(cfg.clone()));
+
+        let result = spawn_initial_command(&cli, &manager, &cfg).await;
+        assert!(result.is_ok());
+        // cli.cmd_args may be None or empty — either way should return None
+        match result.unwrap() {
+            None => {} // expected
+            Some(_) => {
+                // May actually spawn if "—" counts as an arg — that's OK, just verify no error
+            }
+        }
+    }
+}
+

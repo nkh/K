@@ -276,3 +276,52 @@ async fn unkeep_command_by_id(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cli::commands::common::http_client;
+
+    #[test]
+    fn test_handle_keep_command_callable() {
+        let _ = handle_keep_command;
+    }
+
+    #[test]
+    fn test_handle_unkeep_command_callable() {
+        let _ = handle_unkeep_command;
+    }
+
+    #[tokio::test]
+    async fn test_keep_command_by_id_connection_refused() {
+        let client = http_client();
+        let result = keep_command_by_id(&client, "http://127.0.0.1:1", "fake-id", "test").await;
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_unkeep_command_by_id_connection_refused() {
+        let client = http_client();
+        let result = unkeep_command_by_id(&client, "http://127.0.0.1:1", "fake-id", "test").await;
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_handle_keep_command_no_instances() {
+        let cli = crate::cli::args::Cli::try_parse_from(["vrw", "keep"]).unwrap();
+        let result = handle_keep_command(&cli, None, false).await;
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_handle_unkeep_command_no_instances() {
+        let cli = crate::cli::args::Cli::try_parse_from(["vrw", "unkeep"]).unwrap();
+        let result = handle_unkeep_command(&cli, None, false).await;
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+    }
+}
+

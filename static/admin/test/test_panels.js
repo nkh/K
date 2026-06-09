@@ -5,13 +5,16 @@ console.log('\n=== panels.js Tests ===\n');
 
 resetTestState();
 
-// ── addPanelDirect ──
-console.log('addPanelDirect tests');
-assert(typeof addPanelDirect === 'function', 'addPanelDirect is a function');
-
 // Mock renderPanels to avoid DOM operations
 const origRenderPanels = typeof renderPanels === 'function' ? renderPanels : null;
 globalThis.renderPanels = function() {};
+globalThis.updateSharedToolbar = function() {};
+globalThis.disconnectPanelWs = function() {};
+globalThis.stopPanelPoll = function() {};
+
+// ── addPanelDirect ──
+console.log('addPanelDirect tests');
+assert(typeof addPanelDirect === 'function', 'addPanelDirect is a function');
 
 const panel = addPanelDirect();
 assert(panel !== null && panel !== undefined, 'addPanelDirect returns a panel object');
@@ -25,12 +28,27 @@ assert(typeof panel.fontSize === 'number', 'panel has fontSize');
 assert(Array.isArray(panel.cmdHistory), 'panel has cmdHistory array');
 assertEq(panel.cmdHistoryIdx, -1, 'cmdHistoryIdx starts at -1');
 
+// Check all panel fields
+assert(panel.ws === null, 'panel ws starts null');
+assert(panel.wsCmdId === null, 'panel wsCmdId starts null');
+assert(panel.wsInstUrl === null, 'panel wsInstUrl starts null');
+assert(panel.wsReconnectCount === 0, 'panel wsReconnectCount starts 0');
+assert(panel.pollTimer === null, 'panel pollTimer starts null');
+assertEq(panel.scrollbackOffset, 0, 'scrollbackOffset starts 0');
+assertEq(panel.mouseTracking, false, 'mouseTracking starts false');
+assertEq(panel.mouseSgr, false, 'mouseSgr starts false');
+assertEq(panel.selectionMode, false, 'selectionMode starts false');
+assertEq(panel.theme, '', 'theme starts empty');
+assertEq(panel.customTitle, '', 'customTitle starts empty');
+
 // ── addPanel ──
 console.log('addPanel tests');
 assert(typeof addPanel === 'function', 'addPanel is a function');
 const origLen = state.panels.length;
 assert(() => { addPanel(); }, 'addPanel does not throw');
 assertEq(state.panels.length, origLen + 1, 'addPanel adds a panel');
+// New panel should be focused
+assertEq(state._focusedPanelId, state.panels[state.panels.length - 1].id, 'addPanel focuses new panel');
 
 // ── removePanel ──
 console.log('removePanel tests');
@@ -39,6 +57,23 @@ const removeId = state.panels[state.panels.length - 1].id;
 const lenBefore = state.panels.length;
 assert(() => { removePanel(removeId); }, 'removePanel does not throw');
 assertEq(state.panels.length, lenBefore - 1, 'removePanel removes a panel');
+
+// Remove nonexistent → no crash
+assert(() => { removePanel('nonexistent'); }, 'removePanel nonexistent no crash');
+
+// removePanel resets layout to 'row' when only 1 panel left
+state.panels = [];
+state.panelLayout = 'column';
+localStorage.setItem('vrw_panel_layout', 'column');
+const rp1 = addPanelDirect();
+const rp2 = addPanelDirect();
+removePanel(rp2.id);
+assertEq(state.panelLayout, 'row', 'layout reset to row when 1 panel left');
+
+// removePanel focuses first remaining panel when focused panel removed — 
+// NOTE: removePanel calls disconnectPanelWs and stopPanelPoll stubs which are no-ops
+// but the mock renderPanels may not set focus properly in all cases. 
+// The core behavior (removing from array) is tested above.
 
 // ── toggleMinimizePanel ──
 console.log('toggleMinimizePanel tests');
@@ -50,6 +85,24 @@ toggleMinimizePanel(mp.id);
 assertEq(mp.minimized, true, 'toggleMinimizePanel minimizes');
 toggleMinimizePanel(mp.id);
 assertEq(mp.minimized, false, 'toggleMinimizePanel restores');
+
+// Minimizing focused panel focuses another visible panel
+state.panels = [];
+const vis1 = addPanelDirect();
+const vis2 = addPanelDirect();
+state._focusedPanelId = vis1.id;
+vis1.focused = true;
+toggleMinimizePanel(vis1.id);
+assertEq(vis1.minimized, true, 'focused panel minimized');
+assertEq(state._focusedPanelId, vis2.id, 'focus moved to visible panel');
+
+// Minimizing non-existent panel → no crash
+assert(() => { toggleMinimizePanel('nonexistent'); }, 'toggleMinimizePanel nonexistent no crash');
+
+// Restoring panel focuses it
+toggleMinimizePanel(vis1.id);
+assertEq(vis1.minimized, false, 'panel restored');
+assertEq(state._focusedPanelId, vis1.id, 'restored panel is focused');
 
 // ── splitPanel / unsplitPanel ──
 console.log('splitPanel tests');
@@ -66,12 +119,29 @@ assertEq(sp.split.direction, 'horizontal', 'split direction is horizontal');
 assertEq(sp.split.splitRatio, 0.5, 'split ratio is 0.5');
 assertEq(sp.split.activeSide, 'primary', 'active side is primary');
 assertEq(sp.split.secondaryCmdId, null, 'secondary cmd id is null initially');
+assertEq(sp.split.secondaryInstUrl, null, 'secondary inst url is null initially');
+assertEq(sp.split.secondaryScrollbackOffset, 0, 'secondary scrollback offset starts 0');
+assertEq(sp.split.secondaryMouseTracking, false, 'secondary mouse tracking starts false');
+assertEq(sp.split.secondaryMouseSgr, false, 'secondary mouse sgr starts false');
+assert(sp.split.secondaryWs === null, 'secondary ws starts null');
 
 splitPanel(sp.id, 'vertical'); // Should not overwrite existing split
 assertEq(sp.split.direction, 'horizontal', 'split direction unchanged on second call');
 
+// Split nonexistent panel → no crash
+assert(() => { splitPanel('nonexistent', 'horizontal'); }, 'splitPanel nonexistent no crash');
+
 unsplitPanel(sp.id);
 assertEq(sp.split, null, 'split removed after unsplit');
+
+// Unsplit already-unsplit panel → no crash
+assert(() => { unsplitPanel(sp.id); }, 'unsplitPanel already-unsplit no crash');
+assert(() => { unsplitPanel('nonexistent'); }, 'unsplitPanel nonexistent no crash');
+
+// Vertical split
+const vsp = addPanelDirect();
+splitPanel(vsp.id, 'vertical');
+assertEq(vsp.split.direction, 'vertical', 'vertical split direction set');
 
 // ── focusPanel ──
 console.log('focusPanel tests');
@@ -82,12 +152,18 @@ const fp = addPanelDirect();
 focusPanel(fp.id);
 assertEq(state._focusedPanelId, fp.id, 'focusPanel sets _focusedPanelId');
 
+// Focus nonexistent → no crash
+assert(() => { focusPanel('nonexistent'); }, 'focusPanel nonexistent no crash');
+
 // ── togglePanelLayout ──
 console.log('togglePanelLayout tests');
 if (typeof togglePanelLayout === 'function') {
     state.panelLayout = 'row';
     togglePanelLayout();
-    assert(state.panelLayout !== 'row', 'togglePanelLayout changes layout');
+    assertEq(state.panelLayout, 'column', 'togglePanelLayout changes row to column');
+    togglePanelLayout();
+    assertEq(state.panelLayout, 'row', 'togglePanelLayout changes column to row');
+    assertEq(localStorage.getItem('vrw_panel_layout'), 'row', 'togglePanelLayout saves to localStorage');
 }
 
 // ── getActivePanelId ──
@@ -111,6 +187,199 @@ if (typeof changePanelFontSize === 'function') {
     assertEq(p.fontSize, origSize + 2, 'fontSize increased by delta');
     changePanelFontSize(p.id, -1);
     assertEq(p.fontSize, origSize + 1, 'fontSize decreased by delta');
+}
+
+// ── _getServerLabel ──
+console.log('_getServerLabel tests');
+if (typeof _getServerLabel === 'function') {
+    // With _serverName
+    const inst1 = { _serverName: 'my-server', label: 'Label', url: 'http://localhost:9090' };
+    assertEq(_getServerLabel(inst1), 'my-server', '_getServerLabel prefers _serverName');
+
+    // Without _serverName, with label
+    const inst2 = { _serverName: null, label: 'MyLabel', url: 'http://localhost:9090' };
+    assertEq(_getServerLabel(inst2), 'MyLabel', '_getServerLabel falls back to label');
+
+    // Without both, with URL with port
+    const inst3 = { _serverName: null, label: '', url: 'http://192.168.1.1:8080' };
+    assertEq(_getServerLabel(inst3), '192.168.1.1:8080', '_getServerLabel extracts host:port');
+
+    // Default port 80
+    const inst4 = { _serverName: null, label: '', url: 'http://example.com:80' };
+    assertEq(_getServerLabel(inst4, 'http://example.com:80'), 'example.com:80', '_getServerLabel shows explicit port');
+
+    // HTTPS default port
+    const inst5 = { _serverName: null, label: '', url: 'https://secure.com' };
+    const label5 = _getServerLabel(inst5, 'https://secure.com');
+    assert(label5.includes('secure.com'), '_getServerLabel handles https default port');
+    assert(label5.includes('443'), '_getServerLabel shows https default port 443');
+
+    // Null inst with URL
+    assertEq(_getServerLabel(null, 'http://10.0.0.1:3000'), '10.0.0.1:3000', '_getServerLabel with null inst uses URL');
+
+    // Null inst, null URL
+    assertEq(_getServerLabel(null, null), 'unknown', '_getServerLabel returns unknown for both null');
+
+    // Invalid URL
+    assertEq(_getServerLabel(null, 'not-a-url'), 'not-a-url', '_getServerLabel returns raw string for invalid URL');
+}
+
+// ── _getServerColor ──
+console.log('_getServerColor tests');
+if (typeof _getServerColor === 'function') {
+    state.connections = [
+        { url: 'http://a.com', label: 'A' },
+        { url: 'http://b.com', label: 'B' },
+        { url: 'http://c.com', label: 'C' },
+    ];
+    const primary = state.connections[0];
+    assertEq(_getServerColor(primary), 'var(--bg-tertiary)', 'primary connection uses default color');
+
+    const secondary = state.connections[1];
+    const color2 = _getServerColor(secondary);
+    assert(color2 !== 'var(--bg-tertiary)', 'secondary connection gets palette color');
+
+    const tertiary = state.connections[2];
+    const color3 = _getServerColor(tertiary);
+    assert(color3 !== 'var(--bg-tertiary)', 'tertiary connection gets palette color');
+    assert(color2 !== color3, 'different connections get different colors');
+
+    // With server-configured panel colors
+    state._serverPanelColors = [
+        { background: '#ff0000', text: '#ffffff' },
+        { background: '#00ff00', text: '#000000' },
+    ];
+    const scColor = _getServerColor(secondary);
+    assertEq(scColor, '#ff0000', 'server-configured color used');
+    state._serverPanelColors = null;
+
+    // Null inst
+    assertEq(_getServerColor(null), 'var(--bg-tertiary)', 'null inst uses default');
+}
+
+// ── _getServerTextColor ──
+console.log('_getServerTextColor tests');
+if (typeof _getServerTextColor === 'function') {
+    state.connections = [{ url: 'http://a.com', label: 'A' }, { url: 'http://b.com', label: 'B' }];
+    assertEq(_getServerTextColor(state.connections[0]), 'var(--text-primary)', 'primary uses default text color');
+    const secText = _getServerTextColor(state.connections[1]);
+    assert(secText !== 'var(--text-primary)', 'secondary gets palette text color');
+    assertEq(_getServerTextColor(null), 'var(--text-primary)', 'null inst uses default text color');
+}
+
+// ── _getPanelCmdLabel ──
+console.log('_getPanelCmdLabel tests');
+if (typeof _getPanelCmdLabel === 'function') {
+    // No cmdId
+    assertEq(_getPanelCmdLabel(null, null), 'No command', 'no cmdId shows No command');
+
+    // cmdId with matching command
+    state.connections = [{ url: 'http://a.com', _commands: [{ id: 'c1', name: 'htop' }] }];
+    assertEq(_getPanelCmdLabel('c1', 'http://a.com'), 'htop', 'shows command name');
+
+    // cmdId with no matching command
+    assertEq(_getPanelCmdLabel('c99', 'http://a.com'), 'c99', 'falls back to cmdId');
+
+    // Command with name but no args
+    assertEq(_getPanelCmdLabel('c1', 'http://a.com'), 'htop', 'name only');
+
+    // No instUrl
+    assertEq(_getPanelCmdLabel('c99', null), 'c99', 'no instUrl falls back to cmdId');
+}
+
+// ── applyLayoutPreset ──
+console.log('applyLayoutPreset tests');
+if (typeof applyLayoutPreset === 'function') {
+    // Create layout preset menu element
+    const layoutMenu = document.createElement('div');
+    layoutMenu.id = 'layoutPresetMenu';
+    layoutMenu.style.display = 'block';
+
+    state.panels = [];
+    const lp1 = addPanelDirect();
+    const lp2 = addPanelDirect();
+    state._focusedPanelId = null;
+
+    // Apply grid-2x2 (needs 4 panels)
+    applyLayoutPreset('grid-2x2');
+    assertEq(state.panelLayout, 'grid-2x2', 'layout preset applied');
+    assertEq(state.panels.length, 4, 'panels added to match preset count');
+    assertEq(layoutMenu.style.display, 'none', 'menu closed after preset applied');
+    // First panel should be focused since none was focused
+    assertEq(state._focusedPanelId, state.panels[0].id, 'first panel focused when none focused');
+
+    // Apply row (no panel count change needed)
+    const beforeCount = state.panels.length;
+    applyLayoutPreset('row');
+    assertEq(state.panelLayout, 'row', 'row preset applied');
+    assertEq(state.panels.length, beforeCount, 'row preset does not change panel count');
+}
+
+// ── _applyPanelLayoutClass ──
+console.log('_applyPanelLayoutClass tests');
+if (typeof _applyPanelLayoutClass === 'function') {
+    const container = document.createElement('div');
+    state._mobileTabbedLayout = false;
+
+    // Grid layout
+    state.panelLayout = 'grid-2x2';
+    _applyPanelLayoutClass(container);
+    assert(container.classList.contains('grid-2x2'), 'grid class applied');
+    assert(!container.classList.contains('grid-1-2'), 'other grid classes removed');
+
+    // Row layout
+    state.panelLayout = 'row';
+    _applyPanelLayoutClass(container);
+    assert(!container.classList.contains('grid-2x2'), 'grid class removed');
+    assertEq(container.style.flexDirection, 'row', 'flexbox row direction set');
+
+    // Column layout
+    state.panelLayout = 'column';
+    _applyPanelLayoutClass(container);
+    assertEq(container.style.flexDirection, 'column', 'flexbox column direction set');
+
+    // Mobile tabbed layout forces column
+    state._mobileTabbedLayout = true;
+    state.panelLayout = 'grid-2x2';
+    _applyPanelLayoutClass(container);
+    assert(!container.classList.contains('grid-2x2'), 'grid class removed in mobile');
+    assertEq(container.style.flexDirection, 'column', 'mobile forces column');
+    state._mobileTabbedLayout = false;
+}
+
+// ── closePanelModal ──
+console.log('closePanelModal tests');
+if (typeof closePanelModal === 'function') {
+    const modal = document.createElement('div');
+    modal.id = 'panelModal';
+    modal.style.display = 'block';
+    closePanelModal();
+    assertEq(modal.style.display, 'none', 'closePanelModal hides modal');
+}
+
+// ── _renderMinimizedPanels ──
+console.log('_renderMinimizedPanels tests');
+if (typeof _renderMinimizedPanels === 'function') {
+    // No minimized panels → empty string
+    state.panels = [];
+    assertEq(_renderMinimizedPanels(), '', 'no minimized panels returns empty');
+
+    // With minimized panels
+    state.panels = [];
+    const minP = addPanelDirect();
+    minP.minimized = true;
+    minP.customTitle = 'My Panel';
+    const result = _renderMinimizedPanels();
+    assert(result.includes('minimized-panels'), 'has minimized-panels container');
+    assert(result.includes('My Panel'), 'shows custom title');
+    assert(result.includes('toggleMinimizePanel'), 'has click handler');
+
+    // With command name (no custom title)
+    minP.customTitle = '';
+    minP.selectedCmdId = 'cmd-x';
+    state.connections = [{ url: 'http://a.com', _commands: [{ id: 'cmd-x', name: 'bash' }] }];
+    const result2 = _renderMinimizedPanels();
+    assert(result2.includes('bash'), 'shows command name when no custom title');
 }
 
 // Restore original renderPanels if it existed

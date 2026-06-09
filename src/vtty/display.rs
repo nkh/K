@@ -366,4 +366,78 @@ mod tests {
     fn test_default_bg_constant() {
         assert_eq!(DEFAULT_BG, [0, 0, 0]);
     }
+
+    // ─── CursorStyle enum tests ───
+
+    #[test]
+    fn test_cursor_style_variants() {
+        let block_blink = CursorStyle::Block(true);
+        let block_steady = CursorStyle::Block(false);
+        let underline_blink = CursorStyle::Underline(true);
+        let underline_steady = CursorStyle::Underline(false);
+        let bar_blink = CursorStyle::Bar(true);
+        let bar_steady = CursorStyle::Bar(false);
+
+        assert_eq!(block_blink, CursorStyle::Block(true));
+        assert_ne!(block_blink, block_steady);
+        assert_eq!(underline_blink, CursorStyle::Underline(true));
+        assert_eq!(bar_steady, CursorStyle::Bar(false));
+    }
+
+    #[test]
+    fn test_cursor_style_debug() {
+        let s = format!("{:?}", CursorStyle::Block(true));
+        assert!(s.contains("Block"));
+        let s = format!("{:?}", CursorStyle::Bar(false));
+        assert!(s.contains("Bar"));
+    }
+
+    // ─── TerminalDisplay struct compile tests ───
+
+    #[test]
+    fn test_terminal_display_struct_exists() {
+        // Verify TerminalDisplay is a unit struct
+        let _ = std::any::type_name::<TerminalDisplay>();
+    }
+
+    /// Test render compiles with a Buffer. May fail at runtime if no
+    /// terminal is attached (crossterm::terminal::size() can error).
+    #[test]
+    fn test_render_compiles_with_buffer() {
+        let buf = Buffer::new(80, 24, 100);
+        // Don't actually call render — it writes to stdout and may panic
+        // without a terminal. Just verify the types work together.
+        let _: fn(&Buffer, u16, usize) -> io::Result<()> = TerminalDisplay::render;
+    }
+
+    /// Test clear function signature.
+    #[test]
+    fn test_clear_function_signature() {
+        let _: fn() -> io::Result<()> = TerminalDisplay::clear;
+    }
+
+    /// Test hide_cursor function signature.
+    #[test]
+    fn test_hide_cursor_function_signature() {
+        let _: fn() -> io::Result<()> = TerminalDisplay::hide_cursor;
+    }
+
+    /// Test show_cursor_at function signature.
+    #[test]
+    fn test_show_cursor_at_function_signature() {
+        let _: fn(usize, usize) -> io::Result<()> = TerminalDisplay::show_cursor_at;
+    }
+
+    /// Test show_cursor function signature.
+    #[test]
+    fn test_show_cursor_function_signature() {
+        let _: fn() -> io::Result<()> = TerminalDisplay::show_cursor;
+    }
+
+    /// Test show_cursor_with_style function signature.
+    #[test]
+    fn test_show_cursor_with_style_function_signature() {
+        let _: fn(usize, usize, CursorStyle) -> io::Result<()> =
+            TerminalDisplay::show_cursor_with_style;
+    }
 }

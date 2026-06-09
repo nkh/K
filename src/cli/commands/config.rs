@@ -45,3 +45,64 @@ pub fn handle_config_check_command(config_path: Option<&str>) -> Result<()> {
     println!("\nConfig is valid (with {} warning(s)).", warnings.len());
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_check_valid_empty_config() {
+        // An empty config file should validate without errors
+        let dir = std::env::temp_dir().join("vrc_test_config_check_valid");
+        std::fs::create_dir_all(&dir).unwrap();
+        let config_path = dir.join("valid.yaml");
+        std::fs::write(&config_path, "").unwrap();
+
+        let result = handle_config_check_command(Some(config_path.to_str().unwrap()));
+        assert!(result.is_ok(), "valid config should pass: {:?}", result.err());
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn config_check_missing_file_errors() {
+        let result = handle_config_check_command(Some("/nonexistent/path/config.yaml"));
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("Config file not found"), "unexpected error: {}", msg);
+    }
+
+    #[test]
+    fn config_check_default_config_valid() {
+        // With no config path, load_config uses defaults
+        // This may pick up local config, so we just check it doesn't panic.
+        // We can't assert Ok because local config may cause warnings/errors.
+        let _ = handle_config_check_command(None);
+    }
+
+    #[test]
+    fn config_check_explicit_valid_toml() {
+        let dir = std::env::temp_dir().join("vrc_test_config_check_toml");
+        std::fs::create_dir_all(&dir).unwrap();
+        let config_path = dir.join("valid.toml");
+        std::fs::write(&config_path, "").unwrap();
+
+        let result = handle_config_check_command(Some(config_path.to_str().unwrap()));
+        assert!(result.is_ok(), "valid TOML config should pass: {:?}", result.err());
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn config_check_partial_config() {
+        let dir = std::env::temp_dir().join("vrc_test_config_check_partial");
+        std::fs::create_dir_all(&dir).unwrap();
+        let config_path = dir.join("partial.yaml");
+        std::fs::write(&config_path, "").unwrap();
+
+        let result = handle_config_check_command(Some(config_path.to_str().unwrap()));
+        assert!(result.is_ok(), "partial config should pass: {:?}", result.err());
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}

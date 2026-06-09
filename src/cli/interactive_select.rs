@@ -137,4 +137,79 @@ mod tests {
         let result = select_items(&items, "Select");
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_select_items_non_tty_errors() {
+        // In test environment, stdin is not a TTY
+        let items = vec![
+            SelectItem { label: "item1".to_string(), id: "1".to_string() },
+            SelectItem { label: "item2".to_string(), id: "2".to_string() },
+        ];
+        let result = select_items(&items, "Select");
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("stdin is not a TTY") || msg.contains("No selection made"));
+    }
+
+    #[test]
+    fn test_filter_items_all_match() {
+        let items = vec![
+            SelectItem { label: "cmd-a".to_string(), id: "1".to_string() },
+            SelectItem { label: "cmd-b".to_string(), id: "2".to_string() },
+            SelectItem { label: "cmd-c".to_string(), id: "3".to_string() },
+        ];
+        let result = filter_items(&items, |_| true);
+        assert_eq!(result.len(), 3);
+    }
+
+    #[test]
+    fn test_filter_items_none_match() {
+        let items = vec![
+            SelectItem { label: "cmd-a".to_string(), id: "1".to_string() },
+        ];
+        let result = filter_items(&items, |_| false);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_filter_items_by_id() {
+        let items = vec![
+            SelectItem { label: "first".to_string(), id: "aaa".to_string() },
+            SelectItem { label: "second".to_string(), id: "bbb".to_string() },
+        ];
+        let result = filter_items(&items, |i| i.id == "aaa");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].id, "aaa");
+    }
+
+    #[test]
+    fn test_print_items_does_not_panic() {
+        let items = vec![
+            SelectItem { label: "test-item".to_string(), id: "id-1".to_string() },
+        ];
+        // Should not panic
+        print_items(&items);
+    }
+
+    #[test]
+    fn test_print_items_empty_does_not_panic() {
+        let items: Vec<SelectItem> = vec![];
+        print_items(&items);
+    }
+
+    #[test]
+    fn test_select_item_clone() {
+        let item = SelectItem { label: "test".to_string(), id: "123".to_string() };
+        let cloned = item.clone();
+        assert_eq!(cloned.label, item.label);
+        assert_eq!(cloned.id, item.id);
+    }
+
+    #[test]
+    fn test_select_item_debug() {
+        let item = SelectItem { label: "test".to_string(), id: "123".to_string() };
+        let debug = format!("{:?}", item);
+        assert!(debug.contains("test"));
+        assert!(debug.contains("123"));
+    }
 }

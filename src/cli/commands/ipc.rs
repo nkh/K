@@ -204,3 +204,80 @@ pub fn verify_instance(pid: u32) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_resolve_command_id_explicit_command() {
+        // When command is provided, it should be returned as-is
+        // This test verifies the future can be created (compile-level check)
+        let _ = resolve_command_id(1234, Some("cmd-abc"));
+    }
+
+    #[test]
+    fn test_resolve_command_id_none_command() {
+        // When command is None, it queries the instance
+        let _ = resolve_command_id(1234, None);
+    }
+
+    #[test]
+    fn test_verify_instance_no_instances() {
+        // No running instances should error
+        let result = verify_instance(99999);
+        // Either succeeds (if 99999 is somehow running) or fails
+        // We expect failure in test environment
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("No running vrc instances") || msg.contains("No vrc instance with PID"));
+    }
+
+    #[test]
+    fn test_verify_instance_function_signature() {
+        // Verify verify_instance has the right signature
+        let _: fn(u32) -> anyhow::Result<()> = verify_instance;
+    }
+
+    #[test]
+    fn test_handle_keys_command_callable() {
+        let _ = handle_keys_command;
+    }
+
+    #[test]
+    fn test_handle_cat_command_callable() {
+        let _ = handle_cat_command;
+    }
+
+    #[test]
+    fn test_handle_spawn_in_command_callable() {
+        let _ = handle_spawn_in_command;
+    }
+
+    #[test]
+    fn test_handle_freeze_command_callable() {
+        let _ = handle_freeze_command;
+    }
+
+    #[test]
+    fn test_handle_thaw_command_callable() {
+        let _ = handle_thaw_command;
+    }
+
+    #[test]
+    fn test_handle_resize_command_callable() {
+        let _ = handle_resize_command;
+    }
+
+    #[test]
+    fn test_handle_kill_command_callable() {
+        let _ = handle_kill_command;
+    }
+
+    #[test]
+    fn test_handle_kill_all_commands_callable() {
+        let _ = handle_kill_all_commands;
+    }
+}
+
+

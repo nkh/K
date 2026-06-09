@@ -365,4 +365,67 @@ mod tests {
         let instances = vec![make_instance(1111), make_instance(2222)];
         assert_eq!(resolve_stop_target(Some(5000), &instances), 5000);
     }
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn test_stop_command_by_id_callable() {
+        let _ = stop_command_by_id;
+    }
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn test_handle_stop_command_by_pid_on_instances_callable() {
+        let _ = handle_stop_command_by_pid_on_instances;
+    }
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn test_handle_stop_command_callable() {
+        let _ = handle_stop_command;
+    }
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn test_handle_stop_all_commands_callable() {
+        let _ = handle_stop_all_commands;
+    }
+
+    #[cfg(feature = "vrw")]
+    #[tokio::test]
+    async fn test_stop_command_by_id_connection_refused() {
+        use super::super::common::http_client;
+        let client = http_client();
+        let result = stop_command_by_id(&client, "http://127.0.0.1:1", "fake-id", 100, 200).await;
+        assert!(result.is_ok());
+        assert!(!result.unwrap(), "connection refused should return false");
+    }
+
+    #[cfg(feature = "vrw")]
+    #[tokio::test]
+    async fn test_handle_stop_all_commands_no_instances() {
+        let cli = crate::cli::args::Cli::try_parse_from(["vrw", "stop-command", "--all"]).unwrap();
+        let result = handle_stop_all_commands(&cli).await;
+        assert!(result.is_ok());
+        assert!(!result.unwrap(), "no instances should return false");
+    }
+
+    #[cfg(feature = "vrw")]
+    #[tokio::test]
+    async fn test_handle_stop_command_no_instances() {
+        let cli = crate::cli::args::Cli::try_parse_from(["vrw", "stop-command"]).unwrap();
+        let result = handle_stop_command(&cli, None, false).await;
+        assert!(result.is_ok());
+        assert!(!result.unwrap(), "no instances should return false");
+    }
+
+    #[cfg(feature = "vrw")]
+    #[tokio::test]
+    async fn test_handle_stop_command_by_pid_on_instances_empty() {
+        use super::super::common::http_client;
+        let client = http_client();
+        let instances: Vec<InstanceInfo> = vec![];
+        let result = handle_stop_command_by_pid_on_instances(&client, &instances, 9999).await;
+        assert!(result.is_ok());
+        assert!(!result.unwrap(), "empty instances should return false");
+    }
 }

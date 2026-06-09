@@ -290,3 +290,52 @@ pub async fn handle_thaw_command(cli: &Cli, pid: Option<u32>, interactive: bool)
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cli::commands::common::http_client;
+
+    #[test]
+    fn test_handle_spawn_command_callable() {
+        let _ = handle_spawn_command;
+    }
+
+    #[test]
+    fn test_handle_freeze_command_callable() {
+        let _ = handle_freeze_command;
+    }
+
+    #[test]
+    fn test_handle_thaw_command_callable() {
+        let _ = handle_thaw_command;
+    }
+
+    #[tokio::test]
+    async fn test_handle_spawn_command_no_instances() {
+        let cli = crate::cli::args::Cli::try_parse_from(["vrw", "spawn", "htop"]).unwrap();
+        let result = handle_spawn_command(&cli, "htop", &[], None, None, false).await;
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("No running vrw instances"), "unexpected: {}", msg);
+    }
+
+    #[tokio::test]
+    async fn test_handle_freeze_command_no_instances() {
+        let cli = crate::cli::args::Cli::try_parse_from(["vrw", "freeze"]).unwrap();
+        let result = handle_freeze_command(&cli, None, false).await;
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("No running vrw instances"), "unexpected: {}", msg);
+    }
+
+    #[tokio::test]
+    async fn test_handle_thaw_command_no_instances() {
+        let cli = crate::cli::args::Cli::try_parse_from(["vrw", "thaw"]).unwrap();
+        let result = handle_thaw_command(&cli, None, false).await;
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("No running vrw instances"), "unexpected: {}", msg);
+    }
+}
+

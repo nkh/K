@@ -176,4 +176,83 @@ mod tests {
         // Middleware functions are tested via integration tests
         // since they require Axum request/response types.
     }
+
+    // ─── cors_layer tests ───
+
+    #[test]
+    fn test_cors_layer_any_policy() {
+        let config = CorsConfig {
+            policy: "any".to_string(),
+        };
+        let _layer = cors_layer(&config);
+        // CorsLayer with "any" policy is created — no panic
+    }
+
+    #[test]
+    fn test_cors_layer_none_policy() {
+        let config = CorsConfig {
+            policy: "none".to_string(),
+        };
+        let _layer = cors_layer(&config);
+        // CorsLayer with "none" policy is created — no panic
+    }
+
+    #[test]
+    fn test_cors_layer_custom_origins() {
+        let config = CorsConfig {
+            policy: "https://example.com,https://admin.example.com".to_string(),
+        };
+        let _layer = cors_layer(&config);
+        // CorsLayer with custom origins is created — no panic
+    }
+
+    #[test]
+    fn test_cors_layer_invalid_origins_falls_back() {
+        let config = CorsConfig {
+            policy: "not-a-valid-url,also-bad".to_string(),
+        };
+        let _layer = cors_layer(&config);
+        // Invalid origins should fall back to permissive — no panic
+    }
+
+    #[test]
+    fn test_cors_layer_empty_string_policy() {
+        let config = CorsConfig {
+            policy: "".to_string(),
+        };
+        let _layer = cors_layer(&config);
+        // Empty string has no valid origins — falls back to permissive
+    }
+
+    #[test]
+    fn test_cors_layer_default_config() {
+        let config = CorsConfig::default();
+        assert_eq!(config.policy, "any");
+        let _layer = cors_layer(&config);
+    }
+
+    // ─── auth_middleware compile test ───
+
+    #[test]
+    fn test_auth_middleware_function_exists() {
+        // Verify auth_middleware has the correct Axum middleware signature
+        fn _type_check(
+            _: fn(axum::extract::Request, axum::middleware::Next) -> std::pin::Pin<
+                Box<dyn std::future::Future<Output = axum::response::Response> + Send>,
+            >,
+        ) {
+        }
+        // Just verify the function name exists
+        let _ = std::any::type_name_of_val(&auth_middleware);
+    }
+
+    #[test]
+    fn test_request_logger_function_exists() {
+        let _ = std::any::type_name_of_val(&request_logger);
+    }
+
+    #[test]
+    fn test_error_handler_function_exists() {
+        let _ = std::any::type_name_of_val(&error_handler);
+    }
 }

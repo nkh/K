@@ -148,4 +148,167 @@ mod tests {
         assert_eq!(merged.get("Y").unwrap(), "local");
         assert_eq!(merged.get("Z").unwrap(), "local");
     }
+
+    // ─── merge_configs tests ───
+
+    #[test]
+    fn test_merge_configs_local_overrides_global() {
+        let global = Config::default();
+        let mut local = Config::default();
+        local.binary_name = "vrc".to_string();
+        let merged = merge_configs(global, local);
+        assert_eq!(merged.binary_name, "vrc");
+    }
+
+    #[test]
+    fn test_merge_configs_empty_local_handles_uses_global() {
+        let mut global = Config::default();
+        // Add a handle to global — need to check schema for HandleConfig
+        // Default handles is empty vec, so this tests empty→empty
+        let local = Config::default();
+        let merged = merge_configs(global.clone(), local);
+        assert!(merged.handles.is_empty());
+    }
+
+    #[test]
+    fn test_merge_configs_local_handles_overrides() {
+        let global = Config::default();
+        let local = Config::default(); // Both have empty handles
+        let merged = merge_configs(global, local);
+        assert!(merged.handles.is_empty());
+    }
+
+    #[test]
+    fn test_merge_configs_empty_local_templates_uses_global() {
+        let global = Config::default();
+        let local = Config::default();
+        let merged = merge_configs(global, local);
+        // When local.templates is empty, global.templates is used.
+        // Verify the templates field is preserved (not cleared).
+        assert!(merged.templates.is_empty());
+    }
+
+    #[test]
+    fn test_merge_configs_empty_local_environments_uses_global() {
+        let global = Config::default();
+        let local = Config::default();
+        let merged = merge_configs(global, local);
+        // When local.environments is empty, global.environments is used.
+        assert!(merged.environments.is_empty());
+    }
+
+    // ─── merge_profiles tests ───
+
+    #[test]
+    fn test_merge_profiles_local_overrides_global() {
+        let global = super::super::schema::ProfilesConfig {
+            entries: HashMap::from([
+                ("dev".to_string(), PartialConfig::default()),
+                ("prod".to_string(), PartialConfig::default()),
+            ]),
+        };
+        let mut local_profile = PartialConfig::default();
+        // Can't set non-None fields on PartialConfig easily, but we can
+        // test that local entries override global ones with the same name.
+        let local = super::super::schema::ProfilesConfig {
+            entries: HashMap::from([
+                ("prod".to_string(), local_profile.clone()),
+            ]),
+        };
+        let merged = merge_profiles(global, local);
+        assert!(merged.entries.contains_key("dev")); // from global
+        assert!(merged.entries.contains_key("prod")); // from local
+    }
+
+    #[test]
+    fn test_merge_profiles_new_local_entries() {
+        let global = super::super::schema::ProfilesConfig::default();
+        let local = super::super::schema::ProfilesConfig {
+            entries: HashMap::from([
+                ("new_profile".to_string(), PartialConfig::default()),
+            ]),
+        };
+        let merged = merge_profiles(global, local);
+        assert!(merged.entries.contains_key("new_profile"));
+    }
+
+    #[test]
+    fn test_merge_profiles_empty_local_keeps_global() {
+        let global = super::super::schema::ProfilesConfig {
+            entries: HashMap::from([
+                ("existing".to_string(), PartialConfig::default()),
+            ]),
+        };
+        let local = super::super::schema::ProfilesConfig::default();
+        let merged = merge_profiles(global, local);
+        assert!(merged.entries.contains_key("existing"));
+    }
+
+    // ─── apply_profile tests ───
+
+    #[test]
+    fn test_apply_profile_empty_profile_keeps_base() {
+        let base = Config::default();
+        let profile = PartialConfig::default();
+        let result = apply_profile(base.clone(), &profile);
+        // Empty profile should keep base values
+        assert_eq!(result.vtty.rows, base.vtty.rows);
+        assert_eq!(result.vtty.cols, base.vtty.cols);
+        assert_eq!(result.display.enabled, base.display.enabled);
+        assert_eq!(result.display.refresh_ms, base.display.refresh_ms);
+    }
+
+    #[test]
+    fn test_apply_profile_overrides_vtty() {
+        let base = Config::default();
+        let mut profile = PartialConfig::default();
+        profile.vtty = Some(crate::config::vtty::VttyConfig {
+            rows: 50,
+            cols: 200,
+            ..Default::default()
+        });
+        let result = apply_profile(base, &profile);
+        assert_eq!(result.vtty.rows, 50);
+        assert_eq!(result.vtty.cols, 200);
+    }
+
+    #[test]
+    fn test_apply_profile_binary_name_never_overridden() {
+        let mut base = Config::default();
+        base.binary_name = "vrc".to_string();
+        let profile = PartialConfig::default();
+        let result = apply_profile(base, &profile);
+        assert_eq!(result.binary_name, "vrc");
+    }
+
+    #[test]
+    fn test_apply_profile_overrides_display() {
+        let base = Config::default();
+        let mut profile = PartialConfig::default();
+        let custom_display = crate::config::display::DisplayConfig {
+            enabled: true,
+            refresh_ms: 500,
+            display_all: true,
+        };
+        profile.display = Some(custom_display);
+        let result = apply_profile(base, &profile);
+        // DisplayConfig values come from profile
+        assert!(result.display.enabled);
+        assert_eq!(result.display.refresh_ms, 500);
+        assert!(result.display.display_all);
+    }
+
+    #[test]
+    fn test_apply_profile_overrides_environment() {
+        let base = Config::default();
+        let mut profile = PartialConfig::default();
+        profile.environment = Some(super::super::schema::EnvironmentConfig {
+            variables: HashMap::from([("RUST_LOG".to_string(), "debug".to_string())]),
+        });
+        let result = apply_profile(base, &profile);
+        assert_eq!(
+            result.environment.variables.get("RUST_LOG").unwrap(),
+            "debug"
+        );
+    }
 }

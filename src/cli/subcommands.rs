@@ -135,3 +135,64 @@ pub async fn handle_kill_command_interactive(pid: u32) -> anyhow::Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    // subcommands.rs is primarily a re-export module with IPC-dependent handlers.
+    // We verify the re-exports compile and have correct signatures.
+
+    #[test]
+    fn test_handle_config_check_command_callable() {
+        // handle_config_check_command is always available (shared)
+        let _ = super::handle_config_check_command;
+    }
+
+    #[test]
+    fn test_c_callable() {
+        let _ = super::c;
+    }
+
+    #[cfg(feature = "vrw")]
+    #[test]
+    fn test_vrw_re_exports_compile() {
+        // Verify all vrw re-exports are accessible
+        let _ = super::http_client;
+        let _ = super::format_command;
+        let _ = super::format_instance_header;
+        let _ = super::handle_cert_command;
+        let _ = super::handle_keep_command;
+        let _ = super::handle_unkeep_command;
+        let _ = super::handle_purge_command;
+        let _ = super::handle_resize_command;
+        let _ = super::handle_screenshot_command;
+        let _ = super::handle_cat_command_http;
+        let _ = super::handle_spawn_command;
+        let _ = super::handle_list_command;
+        let _ = super::handle_list_vrw_command;
+        let _ = super::handle_list_commands_command;
+        let _ = super::handle_stop_command;
+        let _ = super::handle_stop_all_commands;
+        let _ = super::resolve_stop_target;
+    }
+
+    #[cfg(not(feature = "vrw"))]
+    #[test]
+    fn test_vrc_re_exports_compile() {
+        // Verify all vrc re-exports are accessible
+        let _ = super::format_command;
+        let _ = super::format_instance_header;
+        let _ = super::handle_cat_command;
+        let _ = super::handle_freeze_command;
+        let _ = super::handle_kill_command;
+        let _ = super::handle_keys_command;
+        let _ = super::handle_resize_command;
+        let _ = super::handle_spawn_in_command;
+        let _ = super::handle_thaw_command;
+        let _ = super::handle_list_command;
+        let _ = super::handle_stop_command;
+        let _ = super::resolve_stop_target;
+    }
+}
+
+
+

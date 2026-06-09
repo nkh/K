@@ -227,3 +227,37 @@ pub(crate) async fn purge_command_by_id(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cli::commands::common::http_client;
+
+    #[test]
+    fn test_purge_command_by_id_callable() {
+        let _ = purge_command_by_id;
+    }
+
+    #[test]
+    fn test_handle_purge_command_callable() {
+        let _ = handle_purge_command;
+    }
+
+    #[tokio::test]
+    async fn test_purge_command_by_id_connection_refused() {
+        let client = http_client();
+        // Connecting to a non-existent server should return Ok(false)
+        let result = purge_command_by_id(&client, "http://127.0.0.1:1", "fake-id", "test-label").await;
+        assert!(result.is_ok());
+        assert!(!result.unwrap(), "connection refused should return false");
+    }
+
+    #[tokio::test]
+    async fn test_handle_purge_command_no_instances() {
+        let cli = crate::cli::args::Cli::try_parse_from(["vrw", "purge"]).unwrap();
+        let result = handle_purge_command(&cli, None, false).await;
+        assert!(result.is_ok());
+        assert!(!result.unwrap(), "no instances should return false");
+    }
+}
+

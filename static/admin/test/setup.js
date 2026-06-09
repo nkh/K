@@ -84,7 +84,15 @@ function emitEvent(type, detail) {
 class MockElement {
     constructor(tag) {
         this.tagName = tag ? tag.toUpperCase() : 'DIV';
-        this.id = '';
+        const _idVal = { v: '' };
+        Object.defineProperty(this, 'id', {
+            get() { return _idVal.v; },
+            set(val) {
+                _idVal.v = val;
+                if (val) _elementRegistry.set(val, this);
+            },
+            configurable: true,
+        });
         this._className = '';
         this._classList = new Set();
         Object.defineProperty(this, 'className', {
@@ -174,27 +182,37 @@ class MockElement {
             const el = _elementRegistry.get(sel.slice(1));
             return el || null;
         }
-        // Class selector — search children first, then global registry
-        if (sel.startsWith('.')) {
-            const cls = sel.slice(1);
-            for (const el of this.children) {
-                if (el._classList && el._classList.has(cls)) return el;
-                // Also search children of children (shallow depth)
-                for (const ch of el.children) {
-                    if (ch._classList && ch._classList.has(cls)) return ch;
-                }
+        // Recursive DFS through children for matching
+        const _matches = (el, s) => {
+            // Class match
+            if (s.startsWith('.') && el._classList && el._classList.has(s.slice(1))) return true;
+            // Tag match
+            if (!s.startsWith('.') && !s.startsWith('[') && el.tagName === s.toUpperCase()) return true;
+            // Attribute starts-with: [id^="prefix"]
+            const attrMatch = s.match(/^\[([^\]=]+)\^="([^"]+)"\]$/);
+            if (attrMatch && el.getAttribute(attrMatch[1]) !== null && el.getAttribute(attrMatch[1]).startsWith(attrMatch[2])) return true;
+            // Attribute exact: [id="val"]
+            const attrExact = s.match(/^\[([^\]=]+)="([^"]+)"\]$/);
+            if (attrExact && el.getAttribute(attrExact[1]) === attrExact[2]) return true;
+            // Attribute presence: [id]
+            const attrPres = s.match(/^\[([^\]=]+)\]$/);
+            if (attrPres && el.hasAttribute(attrPres[1])) return true;
+            return false;
+        };
+        const _search = (node) => {
+            for (const child of node.children) {
+                if (_matches(child, sel)) return child;
+                const found = _search(child);
+                if (found) return found;
             }
-            // Fall back to global registry
-            for (const el of _elementRegistry.values()) {
-                if (el._classList && el._classList.has(cls)) return el;
-            }
-        }
-        // Tag selector — search children first, then global registry
-        for (const el of this.children) {
-            if (el.tagName === sel.toUpperCase()) return el;
-        }
+            return null;
+        };
+        // Search children recursively, then global registry
+        const found = _search(this);
+        if (found) return found;
+        // Fall back to global registry
         for (const el of _elementRegistry.values()) {
-            if (el.tagName === sel.toUpperCase()) return el;
+            if (_matches(el, sel)) return el;
         }
         return null;
     }
@@ -241,6 +259,9 @@ class MockElement {
             this.parentElement.removeChild(this);
         }
         return this;
+    }
+    getBoundingClientRect() {
+        return { left: this.offsetLeft, top: this.offsetTop, width: this.offsetWidth, height: this.offsetHeight, right: this.offsetLeft + this.offsetWidth, bottom: this.offsetTop + this.offsetHeight, x: this.offsetLeft, y: this.offsetTop };
     }
     focus() {}
     blur() {}
@@ -349,6 +370,7 @@ class MockWebSocket {
     close() { this.readyState = 3; if (this.onclose) this.onclose({ type: 'close' }); }
 }
 globalThis.WebSocket = MockWebSocket;
+globalThis.MockWebSocket = MockWebSocket;
 
 // ── Notification mock ──
 globalThis.Notification = class {

@@ -210,3 +210,51 @@ pub async fn handle_resize_by_pid(
         pid
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cli::commands::common::http_client;
+
+    #[test]
+    fn test_resize_command_by_id_callable() {
+        let _ = resize_command_by_id;
+    }
+
+    #[test]
+    fn test_handle_resize_command_callable() {
+        let _ = handle_resize_command;
+    }
+
+    #[test]
+    fn test_handle_resize_by_pid_callable() {
+        let _ = handle_resize_by_pid;
+    }
+
+    #[tokio::test]
+    async fn test_resize_command_by_id_connection_refused() {
+        let client = http_client();
+        let result = resize_command_by_id(&client, "http://127.0.0.1:1", "fake-id", 100, 200, 200, 50, 80).await;
+        assert!(result.is_err(), "connection refused should error");
+    }
+
+    #[tokio::test]
+    async fn test_handle_resize_command_no_instances() {
+        let cli = crate::cli::args::Cli::try_parse_from(["vrw", "resize"]).unwrap();
+        let result = handle_resize_command(&cli, None, 0, 0, false).await;
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("No running vrw instances"), "unexpected error: {}", msg);
+    }
+
+    #[tokio::test]
+    async fn test_handle_resize_by_pid_no_match() {
+        let client = http_client();
+        let instances: Vec<crate::instance::info::InstanceInfo> = vec![];
+        let result = handle_resize_by_pid(&client, &instances, 9999, 24, 80).await;
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("No command found with PID 9999"), "unexpected: {}", msg);
+    }
+}
+

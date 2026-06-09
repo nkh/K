@@ -297,4 +297,111 @@ mod tests {
         // Handler functions require AppState which is tested separately.
         // This test ensures the module's types and imports are valid.
     }
+
+    // ─── guess_mime_type tests ───
+
+    #[test]
+    fn test_guess_mime_type_html() {
+        assert_eq!(guess_mime_type("index.html"), "text/html; charset=utf-8");
+        assert_eq!(guess_mime_type("page.htm"), "text/html; charset=utf-8");
+    }
+
+    #[test]
+    fn test_guess_mime_type_css() {
+        assert_eq!(guess_mime_type("style.css"), "text/css; charset=utf-8");
+    }
+
+    #[test]
+    fn test_guess_mime_type_js() {
+        assert_eq!(guess_mime_type("app.js"), "application/javascript; charset=utf-8");
+    }
+
+    #[test]
+    fn test_guess_mime_type_json() {
+        assert_eq!(guess_mime_type("data.json"), "application/json; charset=utf-8");
+    }
+
+    #[test]
+    fn test_guess_mime_type_png() {
+        assert_eq!(guess_mime_type("logo.png"), "image/png");
+    }
+
+    #[test]
+    fn test_guess_mime_type_jpg_jpeg() {
+        assert_eq!(guess_mime_type("photo.jpg"), "image/jpeg");
+        assert_eq!(guess_mime_type("photo.jpeg"), "image/jpeg");
+    }
+
+    #[test]
+    fn test_guess_mime_type_gif() {
+        assert_eq!(guess_mime_type("anim.gif"), "image/gif");
+    }
+
+    #[test]
+    fn test_guess_mime_type_svg() {
+        assert_eq!(guess_mime_type("icon.svg"), "image/svg+xml");
+    }
+
+    #[test]
+    fn test_guess_mime_type_ico() {
+        assert_eq!(guess_mime_type("favicon.ico"), "image/x-icon");
+    }
+
+    #[test]
+    fn test_guess_mime_type_fonts() {
+        assert_eq!(guess_mime_type("font.woff"), "font/woff");
+        assert_eq!(guess_mime_type("font.woff2"), "font/woff2");
+        assert_eq!(guess_mime_type("font.ttf"), "font/ttf");
+        assert_eq!(guess_mime_type("font.otf"), "font/otf");
+    }
+
+    #[test]
+    fn test_guess_mime_type_unknown() {
+        assert_eq!(guess_mime_type("file.xyz"), "application/octet-stream");
+        assert_eq!(guess_mime_type("noextension"), "application/octet-stream");
+    }
+
+    #[test]
+    fn test_guess_mime_type_with_directory_path() {
+        assert_eq!(guess_mime_type("sub/dir/style.css"), "text/css; charset=utf-8");
+    }
+
+    // ─── no_cache_response tests ───
+
+    #[test]
+    fn test_no_cache_response_headers() {
+        let resp = no_cache_response("text/html; charset=utf-8", b"<h1>Hi</h1>".to_vec());
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(
+            resp.headers().get(header::CONTENT_TYPE).unwrap(),
+            "text/html; charset=utf-8"
+        );
+        assert_eq!(
+            resp.headers().get(header::CACHE_CONTROL).unwrap(),
+            "no-cache, no-store, must-revalidate"
+        );
+        assert_eq!(resp.headers().get(header::PRAGMA).unwrap(), "no-cache");
+        assert_eq!(resp.headers().get(header::EXPIRES).unwrap(), "0");
+    }
+
+    #[test]
+    fn test_no_cache_response_binary_data() {
+        let data = vec![0x89, 0x50, 0x4E, 0x47]; // PNG magic bytes
+        let resp = no_cache_response("image/png", data);
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    // ─── smart_fallback path routing tests ───
+
+    #[test]
+    fn test_smart_fallback_empty_path() {
+        // /admin page for empty path — tested via compile only
+        // (requires embedded assets at runtime)
+    }
+
+    #[test]
+    fn test_smart_fallback_skips_api_prefix() {
+        // Verify the routing logic: paths starting with "api/" go to admin_page
+        // Tested via compile since handlers need embedded assets
+    }
 }

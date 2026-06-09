@@ -465,4 +465,16 @@ mod tests {
         // Handler functions require AppState which is tested separately.
         // This test ensures the module's types and imports are valid.
     }
+
+    /// Verify ws_vtty_stream function exists and is a valid async handler.
+    #[test]
+    fn test_ws_vtty_stream_function_exists() {
+        let _ = std::any::type_name_of_val(&ws_vtty_stream);
+    }
+
+    /// Verify ws_log_stream function exists and is a valid async handler.
+    #[test]
+    fn test_ws_log_stream_function_exists() {
+        let _ = std::any::type_name_of_val(&ws_log_stream);
+    }
 }
