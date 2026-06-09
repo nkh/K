@@ -362,9 +362,15 @@ fn spawn_emulator_writer(
                 drop(emu);
                 // Send any pending emulator responses back to the child PTY
                 // (e.g., DA1 replies, focus event reports).
+                // Wrap in catch_unwind because portable-pty internally asserts
+                // that writes succeed; when the child has exited and the PTY
+                // slave is closed, a write to the master will panic.
                 if !responses.is_empty() {
-                    let _ = writer.lock().write_all(&responses);
-                    let _ = writer.lock().flush();
+                    let mut output = writer.lock();
+                    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        let _ = output.write_all(&responses);
+                        let _ = output.flush();
+                    }));
                 }
                 vtty_output.notify_sinks(&snapshot);
             }
@@ -385,9 +391,14 @@ fn spawn_emulator_writer(
                                 let snapshot = emu.snapshot();
                                 drop(emu);
                                 // Send any pending emulator responses back
+                                // Wrap in catch_unwind for the same reason as the
+                                // non-rate-limited path above.
                                 if !responses.is_empty() {
-                                    let _ = writer.lock().write_all(&responses);
-                                    let _ = writer.lock().flush();
+                                    let mut output = writer.lock();
+                                    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                        let _ = output.write_all(&responses);
+                                        let _ = output.flush();
+                                    }));
                                 }
 
                                 if rate_limiter.allow() {

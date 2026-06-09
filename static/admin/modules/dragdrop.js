@@ -16,19 +16,22 @@ function onCmdDragStart(e, instUrl, cmdId, cmdName) {
     setTimeout(() => { if (e.target && e.target.style) e.target.style.opacity = ''; }, 0);
 }
 
-// Make panels accept command drops from sidebar
+// Make panels accept command drops from sidebar (drop target is the panel header only)
 function initPanelDropTargets() {
-    document.querySelectorAll('.panel').forEach(panelEl => {
-        panelEl.addEventListener('dragover', (e) => {
+    document.querySelectorAll('.panel-header').forEach(headerEl => {
+        const panelEl = headerEl.closest('.panel');
+        if (!panelEl) return;
+        headerEl.addEventListener('dragover', (e) => {
             e.preventDefault();
             e.dataTransfer.dropEffect = 'copy';
             panelEl.classList.add('drag-over-left');
         });
-        panelEl.addEventListener('dragleave', (e) => {
+        headerEl.addEventListener('dragleave', (e) => {
             panelEl.classList.remove('drag-over-left');
         });
-        panelEl.addEventListener('drop', (e) => {
+        headerEl.addEventListener('drop', (e) => {
             e.preventDefault();
+            e.stopPropagation();
             panelEl.classList.remove('drag-over-left');
             try {
                 const data = JSON.parse(e.dataTransfer.getData('application/x-cmd'));

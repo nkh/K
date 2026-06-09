@@ -607,6 +607,15 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .spawn-history-clear { padding: 0.25rem 0.5rem; text-align: center; color: var(--text-muted); cursor: pointer; border-top: 1px solid var(--border, #333); }
 .spawn-history-clear:hover { color: var(--text-danger, #e55); background: var(--bg-tertiary, #2a2a3a); }
 
+/* Only panel header should be a drag-drop target for commands */
+.panel-header {
+    -webkit-user-drag: auto;
+}
+.panel:not(:has(.panel-header.drag-over-left)) .drag-over-left,
+.panel-header.drag-over-left {
+    border-left: 3px solid var(--accent) !important;
+}
+
 /* Auto-restart indicator */
 .auto-restart-indicator { position: fixed; bottom: 2.5rem; left: 50%; transform: translateX(-50%); z-index: 100; background: var(--bg-secondary); border: 1px solid var(--accent); color: var(--accent); font-size: 0.7rem; padding: 0.2rem 0.8rem; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); pointer-events: none; }
 

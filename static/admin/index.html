@@ -70,11 +70,7 @@
                         </div>
                         <div class="field">
                             <label>Command</label>
-                            <input type="text" id="spawnCmd" placeholder="/usr/bin/htop" autocomplete="off" onfocus="_onSpawnCmdFocus()" onblur="setTimeout(_removeSpawnHistoryDropdown,150)" onkeydown="if(event.key==='Enter'&&document.getElementById('spawnHistoryDropdown')&&document.getElementById('spawnHistoryDropdown').querySelector('.spawn-history-item.selected')){_onSpawnCmdKeydownForHistory(event)}else if(event.key==='ArrowDown'||event.key==='ArrowUp'){_onSpawnCmdKeydownForHistory(event)}else if(event.key==='Enter'){event.preventDefault();spawnCommand()}else if(event.key==='Tab'){event.preventDefault();spawnCmdTabComplete(event)}else if(event.key==='Escape'){_resetSpawnCompletion();_removeSpawnHistoryDropdown()}" oninput="_resetSpawnCompletion()">
-                        </div>
-                        <div class="field">
-                            <label>Arguments (space-separated; supports quoted strings)</label>
-                            <input type="text" id="spawnArgs" placeholder='--flag value  or  -c "echo hello"  or  --name '\''my value'\''' onkeydown="if(event.key==='Enter'){event.preventDefault();spawnCommand()}">
+                            <input type="text" id="spawnCmd" placeholder="e.g. bash -i, htop, /usr/bin/htop --flag" autocomplete="off" onfocus="_onSpawnCmdFocus()" onblur="setTimeout(_removeSpawnHistoryDropdown,150)" onkeydown="if(event.key==='Enter'&&document.getElementById('spawnHistoryDropdown')&&document.getElementById('spawnHistoryDropdown').querySelector('.spawn-history-item.selected')){_onSpawnCmdKeydownForHistory(event)}else if(event.key==='ArrowDown'||event.key==='ArrowUp'){_onSpawnCmdKeydownForHistory(event)}else if(event.key==='Enter'){event.preventDefault();spawnCommand()}else if(event.key==='Tab'){event.preventDefault();spawnCmdTabComplete(event)}else if(event.key==='Escape'){_resetSpawnCompletion();_removeSpawnHistoryDropdown()}" oninput="_resetSpawnCompletion()">
                         </div>
                         <div class="field">
                             <label>Environment Variables</label>

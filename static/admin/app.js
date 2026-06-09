@@ -48,7 +48,11 @@
         if (killBtn) {
             e.stopPropagation();
             if (killBtn.disabled) return; // don't kill commands on unreachable instances
-            killCommand(killBtn.dataset.instUrl, killBtn.dataset.cmdId);
+            if (killBtn.dataset.cmdRetained === 'true' && killBtn.dataset.cmdAlive !== 'true') {
+                purgeKeptCommand(killBtn.dataset.instUrl, killBtn.dataset.cmdId, '');
+            } else {
+                killCommand(killBtn.dataset.instUrl, killBtn.dataset.cmdId);
+            }
         }
     });
 

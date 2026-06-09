@@ -161,7 +161,7 @@ function _removeSpawnHistoryDropdown() {
 
 function _applySpawnHistoryEntry(entry) {
     document.getElementById('spawnCmd').value = entry.cmd || '';
-    document.getElementById('spawnArgs').value = entry.args || '';
+    // spawnArgs field no longer exists; all args are in the single field
     document.getElementById('spawnDir').value = entry.dir || '';
     document.getElementById('spawnEnv').value = entry.env || '';
 }
@@ -208,9 +208,11 @@ function _onSpawnCmdKeydownForHistory(e) {
 }
 
 async function spawnCommand() {
-    const cmd = document.getElementById('spawnCmd').value.trim();
-    if (!cmd) return;
-    const argsStr = document.getElementById('spawnArgs').value.trim();
+    const fullCmd = document.getElementById('spawnCmd').value.trim();
+    if (!fullCmd) return;
+    const spaceIdx = fullCmd.indexOf(' ');
+    const cmd = spaceIdx === -1 ? fullCmd : fullCmd.substring(0, spaceIdx);
+    const argsStr = spaceIdx === -1 ? '' : fullCmd.substring(spaceIdx + 1).trim();
     // Parse arguments with support for quoted strings (double and single quotes)
     const args = parseSpawnArgs(argsStr);
     const cert = document.getElementById('spawnCert').value || null;
@@ -254,9 +256,8 @@ async function spawnCommand() {
         const json = await res.json();
         if (json.status === 'ok') {
             // Save to spawn history before clearing form
-            _addSpawnHistoryEntry(cmd, argsStr, dir || '', document.getElementById('spawnEnv').value);
+            _addSpawnHistoryEntry(fullCmd, '', dir || '', document.getElementById('spawnEnv').value);
             document.getElementById('spawnCmd').value = '';
-            document.getElementById('spawnArgs').value = '';
             document.getElementById('spawnEnv').value = '';
             document.getElementById('spawnDir').value = '';
             document.getElementById('spawnRows').value = '';
@@ -361,6 +362,34 @@ async function purgeCommand(instUrl, cmdId, cmdName) {
     } catch (e) {
         alert('Purge failed: ' + e.message);
     }
+}
+
+async function purgeKeptCommand(instUrl, cmdId, cmdName) {
+    // Same as purgeCommand but skips the "are you sure" dialog for kept commands
+    try {
+        const res = await fetch(apiUrl(`/api/commands/${cmdId}`, { url: instUrl }), {
+            method: 'DELETE',
+            headers: authHeadersForInstance({ url: instUrl }),
+        });
+        const json = await res.json();
+        if (json.status === 'ok') {
+            if (state.selectedInstUrl === instUrl && state.selectedCmdId === cmdId) {
+                state.selectedInstUrl = null;
+                state.selectedCmdId = null;
+            }
+            const panel = getSelectedPanel();
+            if (panel) {
+                const pre = panel.querySelector('.vtty-container pre');
+                if (pre) pre.innerHTML = '';
+                const nameEl = panel.querySelector('.cmd-fullname');
+                if (nameEl) nameEl.textContent = '';
+                const argsEl = panel.querySelector('.cmd-args');
+                if (argsEl) argsEl.textContent = '';
+            }
+            _lastCommandState = '';
+            loadCommands();
+        }
+    } catch (e) { /* ignore */ }
 }
 
 async function killAllCommands() {
@@ -502,6 +531,7 @@ function switchBufferPanel(panelId, view) {
     window.toggleKeepCmd = toggleKeepCmd;
     window.killCommand = killCommand;
     window.purgeCommand = purgeCommand;
+    window.purgeKeptCommand = purgeKeptCommand;
     window.killAllCommands = killAllCommands;
     window.sendKeys = sendKeys;
     window.resizeTerminal = resizeTerminal;
