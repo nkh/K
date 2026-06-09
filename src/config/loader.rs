@@ -91,3 +91,185 @@ pub fn load_config(cli_path: Option<&str>) -> Result<Config> {
 
     Ok(global)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detect_format_yaml() {
+        assert_eq!(
+            detect_format(Path::new("config.yaml")),
+            Some(FileFormat::Yaml)
+        );
+    }
+
+    #[test]
+    fn detect_format_yml() {
+        assert_eq!(
+            detect_format(Path::new("config.yml")),
+            Some(FileFormat::Yaml)
+        );
+    }
+
+    #[test]
+    fn detect_format_toml() {
+        assert_eq!(
+            detect_format(Path::new("config.toml")),
+            Some(FileFormat::Toml)
+        );
+    }
+
+    #[test]
+    fn detect_format_json() {
+        assert_eq!(
+            detect_format(Path::new("config.json")),
+            Some(FileFormat::Json)
+        );
+    }
+
+    #[test]
+    fn detect_format_unknown_extension() {
+        assert_eq!(detect_format(Path::new("config.xml")), None);
+    }
+
+    #[test]
+    fn detect_format_no_extension() {
+        assert_eq!(detect_format(Path::new("config")), None);
+    }
+
+    #[test]
+    fn detect_format_hidden_file_no_ext() {
+        assert_eq!(detect_format(Path::new(".config")), None);
+    }
+
+    #[test]
+    fn detect_format_empty_string() {
+        assert_eq!(detect_format(Path::new("")), None);
+    }
+
+    #[test]
+    fn detect_format_case_insensitive() {
+        assert_eq!(
+            detect_format(Path::new("CONFIG.YAML")),
+            Some(FileFormat::Yaml)
+        );
+        assert_eq!(
+            detect_format(Path::new("CONFIG.TOML")),
+            Some(FileFormat::Toml)
+        );
+        assert_eq!(
+            detect_format(Path::new("CONFIG.JSON")),
+            Some(FileFormat::Json)
+        );
+    }
+
+    #[test]
+    fn detect_format_with_directory_path() {
+        assert_eq!(
+            detect_format(Path::new("/home/user/.config/vrc/config.yaml")),
+            Some(FileFormat::Yaml)
+        );
+        assert_eq!(
+            detect_format(Path::new("/etc/vrc/config.toml")),
+            Some(FileFormat::Toml)
+        );
+    }
+
+    #[test]
+    fn load_config_with_explicit_valid_yaml() {
+        let dir = std::env::temp_dir().join("vrc_test_load_yaml");
+        std::fs::create_dir_all(&dir).unwrap();
+        let config_path = dir.join("test.yaml");
+        std::fs::write(
+            &config_path,
+            "vtty:\n  rows: 50\n  cols: 200\n  term: \"xterm-256color\"\n  scrollback: 10000\n  truecolor: true\n  mouse: false\n",
+        )
+        .unwrap();
+
+        let config = load_config(Some(config_path.to_str().unwrap())).unwrap();
+        assert_eq!(config.vtty.rows, 50);
+        assert_eq!(config.vtty.cols, 200);
+        assert_eq!(config.vtty.term, "xterm-256color");
+        assert_eq!(config.vtty.scrollback, 10000);
+        assert!(config.vtty.truecolor);
+        assert!(!config.vtty.mouse);
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn load_config_with_explicit_valid_toml() {
+        let dir = std::env::temp_dir().join("vrc_test_load_toml");
+        std::fs::create_dir_all(&dir).unwrap();
+        let config_path = dir.join("test.toml");
+        std::fs::write(
+            &config_path,
+            "[vtty]\nrows = 30\ncols = 120\nterm = \"xterm-256color\"\nscrollback = 2000\ntruecolor = true\nmouse = false\n",
+        )
+        .unwrap();
+
+        let config = load_config(Some(config_path.to_str().unwrap())).unwrap();
+        assert_eq!(config.vtty.rows, 30);
+        assert_eq!(config.vtty.cols, 120);
+        assert_eq!(config.vtty.scrollback, 2000);
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn load_config_with_explicit_valid_json() {
+        let dir = std::env::temp_dir().join("vrc_test_load_json");
+        std::fs::create_dir_all(&dir).unwrap();
+        let config_path = dir.join("test.json");
+        std::fs::write(
+            &config_path,
+            r#"{"vtty": {"rows": 80, "cols": 240, "term": "xterm-256color", "scrollback": 5000, "truecolor": true, "mouse": false}}"#,
+        )
+        .unwrap();
+
+        let config = load_config(Some(config_path.to_str().unwrap())).unwrap();
+        assert_eq!(config.vtty.rows, 80);
+        assert_eq!(config.vtty.cols, 240);
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn load_config_missing_explicit_path_errors() {
+        let result = load_config(Some("/nonexistent/path/config.yaml"));
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Config file not found"));
+    }
+
+    #[test]
+    fn load_config_with_empty_config_file_uses_defaults() {
+        let dir = std::env::temp_dir().join("vrc_test_empty_config");
+        std::fs::create_dir_all(&dir).unwrap();
+        let config_path = dir.join("empty.yaml");
+        std::fs::write(&config_path, "").unwrap();
+
+        let config = load_config(Some(config_path.to_str().unwrap())).unwrap();
+        // Should have built-in defaults
+        assert_eq!(config.vtty.rows, 24);
+        assert_eq!(config.vtty.cols, 80);
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn load_config_with_partial_config_uses_partial_defaults() {
+        let dir = std::env::temp_dir().join("vrc_test_partial_config");
+        std::fs::create_dir_all(&dir).unwrap();
+        let config_path = dir.join("partial.yaml");
+        std::fs::write(&config_path, "vtty:\n  rows: 100\n  cols: 80\n  term: \"xterm-256color\"\n  scrollback: 5000\n  truecolor: true\n  mouse: false\n").unwrap();
+
+        let config = load_config(Some(config_path.to_str().unwrap())).unwrap();
+        assert_eq!(config.vtty.rows, 100);
+        // cols should still be what we set (same as default)
+        assert_eq!(config.vtty.cols, 80);
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}
