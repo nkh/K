@@ -31,9 +31,7 @@ function updatePanelCommandInfo() {
 
         if (nameEl && cmd) {
             const fullName = cmd.name || cmd.id;
-            const sLabel = _getServerLabel(inst, panelObj.selectedInstUrl);
-            const titleWithServer = sLabel ? fullName + ' ' + sLabel : fullName;
-            const displayTitle = panelObj.customTitle || titleWithServer;
+            const displayTitle = panelObj.customTitle || fullName;
             nameEl.textContent = displayTitle;
             nameEl.title = fullName + (sLabel ? ' (' + sLabel + ')' : '') + (panelObj.customTitle ? ' (title: ' + panelObj.customTitle + ')' : '');
             if (argsEl) {

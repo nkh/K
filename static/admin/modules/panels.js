@@ -209,15 +209,13 @@ function _getServerLabel(inst, instUrl) {
     if (instUrl) {
         try {
             const u = new URL(instUrl);
-            // Show host:port — always include port for clarity
+            // Show only the port number for compactness
             if (u.port) {
-                return u.host; // already includes port
+                return u.port;
             }
-            // Default HTTP/HTTPS ports — show explicitly
             const scheme = u.protocol.replace(':', '');
             const defaultPort = scheme === 'https' ? 443 : scheme === 'http' ? 80 : 0;
-            const actualPort = parseInt(u.port || '0') || defaultPort;
-            return u.hostname + ':' + actualPort;
+            return String(parseInt(u.port || '0') || defaultPort);
         } catch (e) { return instUrl; }
     }
     return '';
@@ -659,6 +657,7 @@ function renderPanels() {
                 <div class="panel${isFocused ? ' focused' : ''}" id="${panel.id}" draggable="false" ondragover="onPanelDragOver(event)" ondrop="onPanelDrop(event,'${panel.id}')" ondragleave="onPanelDragLeave(event)"${mobileHidden}>
                     <div class="panel-header" data-panel-id="${panel.id}" oncontextmenu="showPanelContextMenu(event,'${panel.id}')" tabindex="0" role="button" aria-label="Panel: ${escHtml(panel.selectedInstUrl || 'empty')}" style="background:${serverColor};color:${serverTextColor};">
                         ${dragHandle}
+                        <button class="btn btn-xs panel-close-btn" onclick="event.stopPropagation();closePanelContent('${panel.id}')" title="Clear command">&#x2715;</button>
                         <span class="panel-server-badge" style="font-size:0.6rem;opacity:0.7;flex-shrink:0;">${escHtml(serverLabel)}</span>
                         <button class="btn btn-xs cmd-history-btn" id="histBack-${panel.id}" onclick="event.stopPropagation();panelHistoryBack('${panel.id}')" title="Back in command history" style="display:none;">&#x25C0;</button>
                         <button class="btn btn-xs cmd-history-btn" id="histFwd-${panel.id}" onclick="event.stopPropagation();panelHistoryForward('${panel.id}')" title="Forward in command history" style="display:none;">&#x25B6;</button>
@@ -667,7 +666,6 @@ function renderPanels() {
                             <span class="cmd-args" id="cmdArgs-${panel.id}"></span>
                         </div>
                         <span class="panel-header-label" id="panelLabel-${panel.id}"></span>
-                        <button class="btn btn-xs panel-close-btn" onclick="event.stopPropagation();closePanelContent('${panel.id}')" title="Clear command">&#x2715;</button>
                     </div>
                     ${panel.split ? _renderSplitContainer(panel) : _renderVttyContainer(panel)}
                 </div>
