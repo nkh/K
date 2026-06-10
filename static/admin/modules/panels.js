@@ -1846,6 +1846,37 @@ function onPanelDrop(e, targetPanelId) {
     onPanelDragEnd(e);
 }
 
+// ─── Drop on empty panel area (no existing panels) ───
+function onPanelAreaDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+}
+
+function onPanelAreaDrop(e) {
+    e.preventDefault();
+    try {
+        const cmdData = JSON.parse(e.dataTransfer.getData('application/x-cmd'));
+        if (cmdData && cmdData.cmdId) {
+            const newPanel = addPanelDirect();
+            if (newPanel) {
+                focusPanel(newPanel.id);
+                newPanel.selectedInstUrl = cmdData.instUrl;
+                newPanel.selectedCmdId = cmdData.cmdId;
+                state.selectedInstUrl = cmdData.instUrl;
+                state.selectedCmdId = cmdData.cmdId;
+                state._pendingVttyData = null;
+                state._pendingVttyDirty = false;
+                state.bufferView = 'current';
+                updatePanelCommandInfo();
+                updateTerminalDisconnectedOverlay();
+                updateSidebarSelection();
+                loadVttyHttpForPanel(newPanel.id, cmdData.instUrl, cmdData.cmdId);
+                startPanelUpdateMode(newPanel.id);
+            }
+        }
+    } catch (err) { /* not a command drop */ }
+}
+
 function onPanelDragEnd(e) {
     _draggedPanelId = null;
     document.querySelectorAll('.panel').forEach(p => {
@@ -1895,6 +1926,8 @@ function closePanelContent(panelId) {
     window.onPanelDragLeave = onPanelDragLeave;
     window.onPanelDrop = onPanelDrop;
     window.onPanelDragEnd = onPanelDragEnd;
+    window.onPanelAreaDragOver = onPanelAreaDragOver;
+    window.onPanelAreaDrop = onPanelAreaDrop;
     window._renderVttyContainer = _renderVttyContainer;
     window._getServerLabel = _getServerLabel;
     window._getServerColor = _getServerColor;

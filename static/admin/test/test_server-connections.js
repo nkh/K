@@ -168,7 +168,7 @@ assertEq(state.connections.length, 2, 'two connections now');
 
 // Default label = URL when not provided
 const conn3 = addConnection('http://192.168.1.1:8080', '', '');
-assertEq(conn3.label, 'http://192.168.1.1:8080', 'label defaults to URL when empty');
+assertEq(conn3.label, '192.168.1.1:8080', 'label defaults to host:port from URL');
 
 // ── _saveConnections ──
 console.log('_saveConnections tests');

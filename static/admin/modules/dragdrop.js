@@ -162,8 +162,9 @@ function _cmdReorderMouseMove(e) {
 
     // Check if hovering over the pane area (for drop-to-open feature)
     const overPanel = underEl ? underEl.closest('.panel') : null;
+    const overPanelArea = underEl ? underEl.closest('#view-vtty') : null;
     const wasOverPane = _reorderState.overPane;
-    _reorderState.overPane = !!overPanel;
+    _reorderState.overPane = !!(overPanel || (overPanelArea && !underEl.closest('#sidebar')));
 
     // Toggle pane drop indicator
     if (_reorderState.overPane && !wasOverPane) {

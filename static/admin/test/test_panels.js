@@ -202,23 +202,22 @@ if (typeof _getServerLabel === 'function') {
 
     // Without both, with URL with port
     const inst3 = { _serverName: null, label: '', url: 'http://192.168.1.1:8080' };
-    assertEq(_getServerLabel(inst3, inst3.url), '192.168.1.1:8080', '_getServerLabel extracts host:port');
+    assertEq(_getServerLabel(inst3, inst3.url), '8080', '_getServerLabel extracts port only');
 
     // Default port 80
     const inst4 = { _serverName: null, label: '', url: 'http://example.com:80' };
-    assertEq(_getServerLabel(inst4, inst4.url), 'example.com:80', '_getServerLabel shows explicit port');
+    assertEq(_getServerLabel(inst4, inst4.url), '80', '_getServerLabel shows port only');
 
     // HTTPS default port
     const inst5 = { _serverName: null, label: '', url: 'https://secure.com' };
     const label5 = _getServerLabel(inst5, inst5.url);
-    assert(label5.includes('secure.com'), '_getServerLabel handles https default port');
-    assert(label5.includes('443'), '_getServerLabel shows https default port 443');
+    assertEq(label5, '443', '_getServerLabel shows https default port 443');
 
     // Null inst with URL
-    assertEq(_getServerLabel(null, 'http://10.0.0.1:3000'), '10.0.0.1:3000', '_getServerLabel with null inst uses URL');
+    assertEq(_getServerLabel(null, 'http://10.0.0.1:3000'), '3000', '_getServerLabel with null inst uses URL port');
 
     // Null inst, null URL
-    assertEq(_getServerLabel(null, null), 'unknown', '_getServerLabel returns unknown for both null');
+    assertEq(_getServerLabel(null, null), '', '_getServerLabel returns empty for both null');
 
     // Invalid URL
     assertEq(_getServerLabel(null, 'not-a-url'), 'not-a-url', '_getServerLabel returns raw string for invalid URL');

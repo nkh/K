@@ -56,8 +56,8 @@
                     <div style="padding:0.2rem 0.3rem;display:flex;gap:0.2rem;align-items:center;">
                         <input type="text" id="cmdFilter" placeholder="Filter commands..." oninput="loadCommands()" style="flex:1;min-width:0;font-size:0.65rem;padding:0.1rem 0.3rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:2px;">
                         <button class="btn btn-xs" onclick="showAddServerModal()" title="Add server connection">+ Server</button>
-                        <button class="btn btn-xs btn-danger" id="killAllBtn" onclick="killAllCommands()" title="Kill all running commands" style="display:none;">Kill All</button>
-                        <button class="btn btn-xs" id="freezeAllBtn" onclick="freezeAllCommands()" title="Freeze/thaw all running commands" style="display:none;">&#x23F8; All</button>
+                        <button class="btn btn-xs btn-danger" id="killAllBtn" onclick="killAllCommands()" title="Kill all running commands" style="display:none;">&#x2715; All</button>
+                        <button class="btn btn-xs" id="freezeAllBtn" onclick="freezeAllCommands()" title="Freeze/thaw all running commands" style="display:none;color:var(--yellow);border-color:var(--yellow);">&#x23F8; All</button>
                     </div>
                     <div id="commandList"></div>
                 </div>
@@ -166,21 +166,19 @@
                     <span class="shared-toolbar-sep"></span>
                     <span class="panel-font-size-ctrl">
                         <button class="btn btn-xs" onclick="changePanelFontSize(getActivePanelId(), -1)" title="Decrease font size">A-</button>
-                        <span class="panel-font-size" id="stFontSize">10px</span>
                         <button class="btn btn-xs" onclick="changePanelFontSize(getActivePanelId(), 1)" title="Increase font size">A+</button>
                     </span>
-                    <span class="shared-toolbar-sep"></span>
                     <span class="panel-resize-controls" id="stResizeControls">
-                        <label>Rows</label>
                         <input type="number" id="stResizeRows" value="24" min="1" max="10000" title="Terminal rows">
-                        <label>Cols</label>
+                        <span style="color:var(--text-muted);font-size:0.65rem;">×</span>
                         <input type="number" id="stResizeCols" value="80" min="1" max="1000" title="Terminal columns">
-                        <button class="btn btn-xs" id="stResizeBtn" onclick="resizeTerminalPanel(getActivePanelId())">Resize</button>
+                        <button class="btn btn-xs" id="stResizeBtn" onclick="resizeTerminalPanel(getActivePanelId())" title="Resize">&#x2194;</button>
                         <button class="btn btn-xs" id="stMaxFitBtn" onclick="toggleMaxFit(getActivePanelId())" title="Resize terminal to fill the panel (toggle)">&#x26F6;</button>
                         <button class="btn btn-xs" id="stMaxFontBtn" onclick="toggleMaxFont(getActivePanelId())" title="Maximize font size to fit terminal in pane (toggle)">&#x1F50D;</button>
                     </span>
                     <span class="shared-toolbar-sep"></span>
-                    <select id="stBufferSelect" class="select-xs" onchange="switchBufferPanel(getActivePanelId(), this.value)" title="Which terminal buffer to view">
+                    <button class="btn btn-xs" id="stBufferBtn" onclick="document.getElementById('stBufferSelect').style.display=document.getElementById('stBufferSelect').style.display==='none'?'':'none'" title="Terminal buffer">&#x2630;</button>
+                    <select id="stBufferSelect" class="select-xs" onchange="switchBufferPanel(getActivePanelId(), this.value)" title="Which terminal buffer to view" style="display:none;">
                         <option value="current">Current</option>
                         <option value="main">Main</option>
                         <option value="alt">Alt</option>
@@ -217,7 +215,7 @@
                 </div>
             </div>
             <!-- Terminal view -->
-            <div id="view-vtty" class="panel-container">
+            <div id="view-vtty" class="panel-container" ondragover="onPanelAreaDragOver(event)" ondrop="onPanelAreaDrop(event)">
                 <!-- Panels are dynamically added here -->
             </div>
 
