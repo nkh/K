@@ -1855,28 +1855,9 @@ function onPanelDragEnd(e) {
 
 
     // Expose all public functions to global scope
-    /// Clear the command from a panel (disconnect WS/poll, clear selection)
-/// but keep the panel itself. If only one panel, this gives an empty panel.
-/// If multiple panels, also offers to remove the panel entirely.
+    /// Close a panel entirely — always removes it.
 function closePanelContent(panelId) {
-    const panelObj = state.panels.find(p => p.id === panelId);
-    if (!panelObj) return;
-    // If multiple panels, remove entirely; otherwise just clear
-    if (state.panels.length > 1) {
-        removePanel(panelId);
-    } else {
-        disconnectPanelWs(panelId);
-        stopPanelPoll(panelId);
-        panelObj.selectedCmdId = null;
-        panelObj.selectedInstUrl = null;
-        panelObj.customTitle = '';
-        state.selectedCmdId = null;
-        state.selectedInstUrl = null;
-        // Force full rebuild to show empty panel
-        _lastRenderedPanelCount = -1;
-        renderPanels();
-        updateSharedToolbar();
-    }
+    removePanel(panelId);
 }
 
     window.addPanelDirect = addPanelDirect;

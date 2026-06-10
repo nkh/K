@@ -275,14 +275,6 @@ function _cmdReorderMouseUp(e) {
 
 // ─── Open command in a new pane (used by grab-handle drop-to-pane) ───
 function _openCommandInNewPane(instUrl, cmdId, cmdName) {
-    // Check if this command is already displayed in any existing panel.
-    // If so, focus that panel instead of creating a duplicate.
-    const existingPanel = state.panels.find(p => p.selectedInstUrl === instUrl && p.selectedCmdId === cmdId);
-    if (existingPanel) {
-        focusPanel(existingPanel.id);
-        return;
-    }
-
     // Create a new empty panel
     const newPanel = addPanelDirect();
     if (!newPanel) return;
