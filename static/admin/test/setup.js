@@ -480,7 +480,11 @@ if (typeof VRW !== 'undefined') {
 // Some modules reference functions from other modules that are loaded later.
 // Provide stubs for cross-module dependencies so loading doesn't crash.
 // These will be overwritten by the actual module definitions.
-const _crossDeps = [
+// Deduplicated cross-dependency stubs (unique function names only).
+// These are stubbed as no-ops during module loading and overwritten
+// by the actual implementations as each module is evaluated.
+const _crossDeps = (() => {
+    const names = new Set([
     'updateDisconnectedUI', 'getSelectedPanel', 'getActivePanelId', 'loadSnapshot',
     'handlePeerEvent', 'notifyCommandEnded', 'connectLogWs',
     'disconnectLogWs', 'scheduleSecondaryVttyHttp', 'startRefresh',
@@ -488,7 +492,8 @@ const _crossDeps = [
     'updateTerminalDisconnectedOverlay', 'updateSidebarSelection',
     'updateSharedToolbar', 'updateCmdToolbarVisibility',
     'renderPanels', 'focusPanel', 'connectPanelWs', 'disconnectPanelWs',
-    'startPanelPoll', 'stopPanelPoll', 'startUpdateMode', 'stopUpdateMode',
+    'disconnectAllPanelWs', 'startPanelPoll', 'stopPanelPoll',
+    'startUpdateMode', 'stopUpdateMode', 'startPanelUpdateMode', 'stopPanelUpdateMode',
     'renderWorkspaceList', 'showSpecialKeysHelp', 'applyVttyDiff',
     'updateVttyDisplay', 'playExitSound', 'fetchServerTemplates',
     'loadCertificates', 'fetchEnvironments', 'fetchServerConfig',
@@ -499,24 +504,21 @@ const _crossDeps = [
     'vttyScrollToMatch', '_updateSearchProgress',
     'updateSidebarBanner', 'initPanelDropTargets', 'addDiscoveredPeer',
     'navigatePrevCommand', 'navigateNextCommand', 'updateSidebarResourceText',
-    'onCmdDragStart', 'openGlobalSearch', 'closeGlobalSearch', 'executeGlobalSearch',
+    'pollResources', 'onCmdDragStart', 'openGlobalSearch', 'closeGlobalSearch', 'executeGlobalSearch',
     'onSearchResultClick', 'updateFrozenIndicator', 'cmdManagerKillAll',
     'openCmdManagerSpawn', 'renderCmdManagerList',
     'changePanelFontSize', '_isTerminalVisible', 'savePeersToStorage',
     'disconnectServer', 'closePanelModal', 'confirmAddServer',
     'renderGroups', 'renderTemplates', 'addConnection', 'removeConnection',
-    '_flushPendingVttyUpdate', 'toggleSelectionMode', 'startPanelUpdateMode',
-    'stopPanelUpdateMode', 'stopPanelPoll', 'startPanelPoll',
-    'connectPanelWs', 'disconnectPanelWs', 'disconnectAllPanelWs',
+    '_flushPendingVttyUpdate', 'toggleSelectionMode',
     'updateVttyDisplayForPanel', 'updateVttyMetadataForPanel', 'applyVttyDiffForPanel',
     'scheduleVttyHttpForPanel', 'loadVttyHttpForPanel',
     'updateVttyMetadataFromHttp', 'switchBuffer', 'buildCellGrid',
-    'notifyCommandEnded', 'pollResources', 'updateSidebarResourceText',
     'pollOncePanel', 'pollOnce', '_maxFontState', '_maxFitState',
     '_openCommandInNewPane', 'copyTerminalSelection', 'exportTerminal',
     'screenshotPanel', 'closeContextMenu', 'showCmdContextMenu',
     'showPanelContextMenu', 'startRenamePanel', 'finishRenamePanel',
-    'copyCommandUrl', 'togglePauseCmd', 'autoFitActiveTerminal',
+    'copyCommandUrl', 'togglePauseCmd',
     'selectCommand', 'lookupAndSelectCommand', 'showCommandPicker',
     'pickCommand', 'navigateCommand', 'parseLogLine', 'sendDirectKey',
     'scheduleVttyHttp', 'sendMouseEvent',
@@ -531,7 +533,11 @@ const _crossDeps = [
     'saveToken', 'loadToken', 'renderMarkdown',
     'togglePanelLayout', 'toggleLayoutPresetMenu', 'applyLayoutPreset',
     '_resizePanelTo', '_onboardingSteps', '_hex',
-];
+    // Common mocks used by individual test files (consolidated here)
+    'startRefresh',
+    ]);
+    return [...names];
+})();
 for (const fn of _crossDeps) {
     if (typeof globalThis[fn] === 'undefined') {
         globalThis[fn] = function() {};
@@ -593,40 +599,10 @@ globalThis.resetTestState = function() {
     _listeners.clear();
     localStorage.clear();
     sessionStorage.clear();
-    // Restore critical mocked functions to their real implementations.
-    // Tests often mock these but don't restore them, causing cross-test pollution.
-    const _fnsToRestore = [
-        'renderPanels', 'loadVttyHttp', 'loadVttyHttpForPanel',
-        'updateTerminalDisconnectedOverlay', 'updateSidebarSelection',
-        'updatePanelCommandInfo', 'updateSharedToolbar',
-        'disconnectPanelWs', 'stopPanelPoll', 'connectPanelWs', 'startPanelPoll',
-        'applyVttyDiff', 'updateVttyDisplay',
-        'loadCommands', 'focusPanel', 'selectCommand',
-        'trapFocus', 'releaseCurrentFocusTrap',
-        'startUpdateMode', 'stopUpdateMode', 'startPanelUpdateMode', 'stopPanelUpdateMode',
-        '_restoreCachedDom', '_cacheTerminalForSwitch', '_buildSidebar',
-        'updateDisconnectedUI', 'toggleSoundNotifications',
-        'escHtml', 'changeFontSize', 'changeRefreshMs',
-        'saveToken', 'parseSpawnArgs', 'parseLogLine',
-        'togglePanelTheme', 'toggleSidebar',
-        'togglePinCmd', 'getPinnedNames',
-        'saveUserTemplates', 'getUserTemplates',
-        'saveCmdGroups', 'getCmdGroups',
-        'getWorkspaces', 'deleteWorkspace', 'saveWorkspaces',
-        'renderMarkdown', 'connectLogWs', 'disconnectLogWs',
-        'notifyCommandEnded', 'pollResources', 'updateSidebarResourceText',
-        'scheduleVttyHttp', 'scheduleVttyHttpForPanel',
-        'updateVttyDisplayForPanel', 'updateVttyMetadataForPanel',
-        'applyVttyDiffForPanel',
-        'onCmdDragStart', 'handlePeerEvent',
-        'checkOnboarding', 'showShortcuts', 'closeShortcuts',
-        'updateInstanceDropdown',
-        'disconnectServer', 'disconnectAllPanelWs',
-        'addConnection', 'removeConnection',
-        'formatRuntime', 'authHeaders', 'authHeadersForInstance', 'apiUrl',
-    ];
-    for (const fn of _fnsToRestore) {
-        if (_realFunctions[fn]) {
+    // Restore ALL mocked functions to their real implementations.
+    // Uses the saved references from _realFunctions to avoid manual list maintenance.
+    for (const fn of _allExportedFunctions) {
+        if (_realFunctions[fn] && typeof _realFunctions[fn] === 'function') {
             globalThis[fn] = _realFunctions[fn];
         }
     }

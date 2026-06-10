@@ -25,7 +25,7 @@ vrw's certificate system provides **per-command isolation** within a single inst
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  vrw instance (port 8080)                               │
+│  vrw instance (port 9090)                               │
 │                                                              │
 │  Certificate Pool:                                           │
 │  ┌──────────────────┐  ┌──────────────────┐                  │
@@ -187,7 +187,7 @@ When starting a command via the API, specify the `certificate` field to bind it:
 
 ```bash
 # Start htop, bound to the "webapp-frontend" certificate
-curl -X POST http://localhost:8080/api/commands \
+curl -X POST http://localhost:9090/api/commands \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <cert-token>" \
   -d '{
@@ -219,7 +219,7 @@ After binding, only clients that provide the `webapp-frontend` certificate's der
 Omit the `certificate` field to start an unbound command. Unbound commands are accessible to any authenticated client (using the instance-level token or no auth in localhost mode):
 
 ```bash
-curl -X POST http://localhost:8080/api/commands \
+curl -X POST http://localhost:9090/api/commands \
   -H "Content-Type: application/json" \
   -d '{
     "cmd": "python",
@@ -246,17 +246,17 @@ TOKEN="a3f8c1e2b7d9400123456789abcdef0123456789abcdef0123456789abcdef01"
 
 # View VTTY
 curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8080/api/commands/<id>/vtty
+  http://localhost:9090/api/commands/<id>/vtty
 
 # Send keystrokes
 curl -X POST -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"keys": "q"}' \
-  http://localhost:8080/api/commands/<id>/keys
+  http://localhost:9090/api/commands/<id>/keys
 
 # Kill the command
 curl -X POST -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8080/api/commands/<id>/kill
+  http://localhost:9090/api/commands/<id>/kill
 ```
 
 ### 3. Use with curl and TLS
@@ -264,7 +264,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 ```bash
 curl --cacert ~/.config/vrw/cert.pem \
      -H "Authorization: Bearer $CERT_TOKEN" \
-     https://localhost:8080/api/commands
+     https://localhost:9090/api/commands
 ```
 
 ---
@@ -273,7 +273,7 @@ curl --cacert ~/.config/vrw/cert.pem \
 
 Different vrw instances can use completely different certificates. Each instance has its own config, its own certificate pool, and its own TLS server certificate.
 
-### Instance A (port 8080) — Development
+### Instance A (port 9090) — Development
 
 ```yaml
 # /home/user/.config/vrw/config.yaml
@@ -288,7 +288,7 @@ certificates:
 ```
 
 ```bash
-vrw --port 8080 -- htop
+vrw --port 9090 -- htop
 ```
 
 ### Instance B (port 9090) — Staging
@@ -325,7 +325,7 @@ A server runs three web applications, each managed by a different team. Each tea
 # vrw.yaml
 server:
   bind: "0.0.0.0"
-  port: 8080
+  port: 9090
 
 security:
   require_auth: true
@@ -352,13 +352,13 @@ Each team starts their application with their certificate:
 # Team Alpha starts their app
 vrw cert generate team-alpha
 
-curl -X POST https://server:8080/api/commands \
+curl -X POST https://server:9090/api/commands \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <alpha-token>" \
   -d '{"cmd": "npm", "args": ["run", "start:alpha"], "certificate": "team-alpha"}'
 
 # Team Beta starts their app
-curl -X POST https://server:8080/api/commands \
+curl -X POST https://server:9090/api/commands \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <beta-token>" \
   -d '{"cmd": "npm", "args": ["run", "start:beta"], "certificate": "team-beta"}'
@@ -380,7 +380,7 @@ vrw --remote --tls -- daemon
 # CI script starts a build job
 TOKEN=$(vrw cert show ci-pipeline | grep Token | awk '{print $2}')
 
-JOB_ID=$(curl -s -X POST https://localhost:8080/api/commands \
+JOB_ID=$(curl -s -X POST https://localhost:9090/api/commands \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"cmd": "./build.sh", "args": ["--release"], "certificate": "ci-pipeline"}' \
@@ -388,7 +388,7 @@ JOB_ID=$(curl -s -X POST https://localhost:8080/api/commands \
 
 # Monitor the build output
 curl -s -H "Authorization: Bearer $TOKEN" \
-  "https://localhost:8080/api/commands/$JOB_ID/vtty"
+  "https://localhost:9090/api/commands/$JOB_ID/vtty"
 ```
 
 ### Example 3: Localhost with Certificate-Bound Commands
@@ -404,22 +404,22 @@ vrw cert generate project-a
 vrw cert generate project-b
 
 # Start project A's server, bound to its cert
-curl -X POST http://localhost:8080/api/commands \
+curl -X POST http://localhost:9090/api/commands \
   -H "Content-Type: application/json" \
   -d '{"cmd": "node", "args": ["server.js"], "certificate": "project-a"}'
 
 # Start project B's server, bound to its cert
-curl -X POST http://localhost:8080/api/commands \
+curl -X POST http://localhost:9090/api/commands \
   -H "Content-Type: application/json" \
   -d '{"cmd": "python", "args": ["-m", "http.server", "3000"], "certificate": "project-b"}'
 
 # List all commands (no auth needed on localhost)
-curl http://localhost:8080/api/commands
+curl http://localhost:9090/api/commands
 # → Returns both commands with their certificate names
 
 # Only project-a cert holder can interact with project A
 curl -H "Authorization: Bearer <project-a-token>" \
-  http://localhost:8080/api/commands/<id>/vtty
+  http://localhost:9090/api/commands/<id>/vtty
 ```
 
 ### Example 4: Mixed Bound and Unbound Commands
@@ -428,11 +428,11 @@ You can mix certificate-bound and unbound commands in the same instance:
 
 ```bash
 # Unbound command (anyone with instance auth can access)
-curl -X POST http://localhost:8080/api/commands \
+curl -X POST http://localhost:9090/api/commands \
   -d '{"cmd": "htop", "args": []}'
 
 # Certificate-bound command (only cert holder can access)
-curl -X POST http://localhost:8080/api/commands \
+curl -X POST http://localhost:9090/api/commands \
   -d '{"cmd": "vim", "args": ["notes.txt"], "certificate": "my-notes"}'
 ```
 

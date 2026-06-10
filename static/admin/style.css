@@ -149,7 +149,7 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .layout-preset-menu button:hover { background: var(--accent); color: var(--bg-primary); }
 .cmd-history-btn { padding: 0 0.25rem; font-size: 0.6rem; opacity: 0.7; }
 .cmd-history-btn:hover { opacity: 1; }
-.panel-header { display: flex; align-items: center; gap: 0.15rem; padding: 0.1rem 0.2rem; background: var(--bg-tertiary); flex-shrink: 0; overflow: hidden; white-space: nowrap; cursor: pointer; border: none; }
+.panel-header { display: flex; align-items: center; gap: 0.15rem; padding: 0.1rem 0.2rem; background: var(--bg-tertiary); flex-shrink: 0; overflow: hidden; white-space: nowrap; cursor: pointer; border: none; -webkit-user-drag: auto; }
 .panel-header .panel-server-badge { font-family: var(--font-mono); color: var(--text-secondary); }
 .panel-header .split-server-label { color: var(--text-secondary); }
 .panel-header .split-cmd-label { color: var(--text-primary); }
@@ -623,10 +623,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .spawn-history-clear { padding: 0.25rem 0.5rem; text-align: center; color: var(--text-muted); cursor: pointer; border-top: 1px solid var(--border, #333); }
 .spawn-history-clear:hover { color: var(--text-danger, #e55); background: var(--bg-tertiary, #2a2a3a); }
 
-/* Only panel header should be a drag-drop target for commands */
-.panel-header {
-    -webkit-user-drag: auto;
-}
+/* Panel header drag-drop visual indicators */
 .panel:not(:has(.panel-header.drag-over-left)) .drag-over-left,
 .panel-header.drag-over-left {
     border-left: 3px solid var(--accent) !important;

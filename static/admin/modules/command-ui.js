@@ -21,10 +21,14 @@ function updatePanelCommandInfo() {
     if (nameEl && cmd) {
         const panelObj = state.panels.find(p => p.id === panel.id);
         const fullName = cmd.name || cmd.id;
-        // Show custom title if set, otherwise command name
-        const displayTitle = (panelObj && panelObj.customTitle) ? panelObj.customTitle : fullName;
+        // Append server label (name or host:port) after the command name
+        const inst = panelObj && panelObj.selectedInstUrl ? state.connections.find(i => i.url === panelObj.selectedInstUrl) : null;
+        const serverLabel = inst ? inst.label || inst.url.replace(/^https?:\/\//, '') : '';
+        const titleWithServer = serverLabel ? fullName + ' - ' + serverLabel : fullName;
+        // Show custom title if set, otherwise command name + server
+        const displayTitle = (panelObj && panelObj.customTitle) ? panelObj.customTitle : titleWithServer;
         nameEl.textContent = displayTitle;
-        nameEl.title = fullName + (panelObj && panelObj.customTitle ? ' (title: ' + panelObj.customTitle + ')' : '');
+        nameEl.title = fullName + (serverLabel ? ' (' + serverLabel + ')' : '') + (panelObj && panelObj.customTitle ? ' (title: ' + panelObj.customTitle + ')' : '');
         if (argsEl) {
             const argsStr = (cmd.args || []).join(' ');
             argsEl.textContent = argsStr;

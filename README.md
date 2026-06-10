@@ -251,7 +251,7 @@ Documentation is organized using the [Diataxis framework](https://diataxis.fr/) 
 
 ## Architecture
 
-Both binaries are built from the `vrc_core` library crate. The `vrc` feature is the default and compiles only the UDS IPC path. The `vrw` feature additionally pulls in the HTTP stack (Axium, reqwest, rustls, rust-embed) and the embedded web admin UI.
+Both binaries are built from the `vrc_core` library crate. The `vrc` feature is the default and compiles only the UDS IPC path. The `vrw` feature additionally pulls in the HTTP stack (Axum, reqwest, rustls, rust-embed) and the embedded web admin UI.
 
 Shared modules (available to both binaries): `cli/`, `config/`, `daemon/`, `handles/`, `hooks/`, `instance/`, `interactive/`, `ipc/`, `logging/`, `process/`, `vtty/`.
 

@@ -1,6 +1,6 @@
 # vrw Web UI — Architecture Document
 
-> **Version:** Post-refactor (20 modules + entry point)
+> **Version:** Post-refactor (25 modules + entry point)
 > **Date:** 2025
 > **Author:** Automated analysis of source code
 

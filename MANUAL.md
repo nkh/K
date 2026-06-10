@@ -103,7 +103,7 @@ vrc is a single statically-linked binary with no runtime dependencies beyond the
 
 ### What makes vrc / vrw different?
 
-vrc is **web-first by design**. While it supports local terminal display, its primary interface is the HTTP API and the admin dashboard. This means you can run vrc on a headless server and interact with it entirely from a browser. The embedded admin UI requires no separate build step or asset pipeline — it ships inside the binary.
+vrw is **web-first by design**. While it supports local terminal display, its primary interface is the HTTP API and the admin dashboard. This means you can run vrc on a headless server and interact with it entirely from a browser. The embedded admin UI requires no separate build step or asset pipeline — it ships inside the binary.
 
 ## 1.2 vrc vs vrw — Choosing the Right Binary
 

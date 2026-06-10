@@ -76,7 +76,7 @@ All controllers communicate with the same vrc instance. The CLI subcommands (`li
 Build from source using Cargo:
 
 ```bash
-git clone https://github.com/yourusername/vrc.git
+git clone https://github.com/nkh/K
 cd vrc
 cargo build --release
 # Binary is at target/release/vrc
@@ -99,7 +99,7 @@ vrc
 This starts an HTTP server on `http://127.0.0.1:9090`. No commands are running yet; the instance is ready to receive API requests or web UI connections. You can verify it is working by listing commands:
 
 ```bash
-curl http://127.0.0.1:8080/api/commands
+curl http://127.0.0.1:9090/api/commands
 ```
 
 Response:
@@ -119,7 +119,7 @@ Run a command immediately and start the web server alongside it:
 vrc -- htop
 ```
 
-vrc spawns `htop` inside a virtual TTY, starts the HTTP server, and waits. You can open the web admin at `http://127.0.0.1:8080/admin` to see htop's terminal output, or use curl to interact with it programmatically.
+vrc spawns `htop` inside a virtual TTY, starts the HTTP server, and waits. You can open the web admin at `http://127.0.0.1:9090/admin` to see htop's terminal output, or use curl to interact with it programmatically.
 
 ### Getting Help
 
@@ -166,7 +166,7 @@ The command runs inside a virtual TTY with full terminal capabilities. Programs 
 
 ### Spawning Commands via the Web UI
 
-1. Open `http://127.0.0.1:8080/admin` in your browser.
+1. Open `http://127.0.0.1:9090/admin` in your browser.
 2. Use the command spawn interface to enter a command and optional arguments.
 3. The command starts inside a new VTTY, and its ID appears in the running commands list.
 4. Click on the command to view its terminal output.
@@ -177,22 +177,22 @@ Use `POST /api/commands` to spawn a new command:
 
 ```bash
 # Start a simple command
-curl -X POST http://127.0.0.1:8080/api/commands \
+curl -X POST http://127.0.0.1:9090/api/commands \
   -H "Content-Type: application/json" \
   -d '{"cmd": "htop", "args": []}'
 
 # Start a command with arguments
-curl -X POST http://127.0.0.1:8080/api/commands \
+curl -X POST http://127.0.0.1:9090/api/commands \
   -H "Content-Type: application/json" \
   -d '{"cmd": "python", "args": ["-m", "http.server", "8000"]}'
 
 # Start a command bound to a certificate
-curl -X POST http://127.0.0.1:8080/api/commands \
+curl -X POST http://127.0.0.1:9090/api/commands \
   -H "Content-Type: application/json" \
   -d '{"cmd": "node", "args": ["server.js"], "certificate": "my-app"}'
 
 # Start a command with exit handlers and custom timeout
-curl -X POST http://127.0.0.1:8080/api/commands \
+curl -X POST http://127.0.0.1:9090/api/commands \
   -H "Content-Type: application/json" \
   -d '{
     "cmd": "cargo",
@@ -220,7 +220,7 @@ Save the returned `id` — you need it to interact with the command later.
 
 ```bash
 # Run a shell command pipeline
-curl -s -X POST http://127.0.0.1:8080/api/commands \
+curl -s -X POST http://127.0.0.1:9090/api/commands \
   -H "Content-Type: application/json" \
   -d '{"cmd": "bash", "args": ["-c", "for i in 1 2 3 4 5; do echo $i; sleep 1; done"]}'
 
@@ -285,7 +285,7 @@ The web admin interface is available at `/admin` (or any unrecognised path, whic
 
 #### Direct Command URLs
 
-Navigate directly to a command's terminal using its name: `http://localhost:8080/<command_name>`. For example, `/htop` opens the VTTY viewer for a command named `htop`. If multiple running commands share the same name, a picker list is displayed showing each instance with its arguments so you can choose the right one. Running commands are highlighted with their elapsed uptime.
+Navigate directly to a command's terminal using its name: `http://localhost:9090/<command_name>`. For example, `/htop` opens the VTTY viewer for a command named `htop`. If multiple running commands share the same name, a picker list is displayed showing each instance with its arguments so you can choose the right one. Running commands are highlighted with their elapsed uptime.
 
 #### Top Bar Layout
 
@@ -360,7 +360,7 @@ Three endpoints provide VTTY content at different levels of detail:
 #### Full ANSI Content
 
 ```bash
-curl http://127.0.0.1:8080/api/commands/550e8400-e29b-41d4-a716-446655440000/vtty
+curl http://127.0.0.1:9090/api/commands/550e8400-e29b-41d4-a716-446655440000/vtty
 ```
 
 Response:
@@ -380,7 +380,7 @@ The `content` field contains raw ANSI escape sequences. This is useful for termi
 #### HTML-Rendered Content
 
 ```bash
-curl http://127.0.0.1:8080/api/commands/550e8400-e29b-41d4-a716-446655440000/vtty/html
+curl http://127.0.0.1:9090/api/commands/550e8400-e29b-41d4-a716-446655440000/vtty/html
 ```
 
 Response:
@@ -412,10 +412,10 @@ Fetch a subset of VTTY content for efficient polling of large outputs:
 
 ```bash
 # Get 50 lines starting at offset 0
-curl "http://127.0.0.1:8080/api/commands/550e8400-e29b-41d4-a716-446655440000/vtty/partial?offset=0&limit=50"
+curl "http://127.0.0.1:9090/api/commands/550e8400-e29b-41d4-a716-446655440000/vtty/partial?offset=0&limit=50"
 
 # Get 20 lines starting at line 100
-curl "http://127.0.0.1:8080/api/commands/550e8400-e29b-41d4-a716-446655440000/vtty/partial?offset=100&limit=20"
+curl "http://127.0.0.1:9090/api/commands/550e8400-e29b-41d4-a716-446655440000/vtty/partial?offset=100&limit=20"
 ```
 
 Response:
@@ -444,7 +444,7 @@ Connect to this endpoint to receive push-based VTTY updates for a specific comma
 
 **Connection example (JavaScript):**
 ```javascript
-const ws = new WebSocket('ws://127.0.0.1:8080/api/commands/550e8400.../ws');
+const ws = new WebSocket('ws://127.0.0.1:9090/api/commands/550e8400.../ws');
 
 ws.onmessage = (event) => {
   const msg = JSON.parse(event.data);
@@ -498,7 +498,7 @@ Connect to this endpoint to receive real-time log entries as they are recorded. 
 
 **Connection example (JavaScript):**
 ```javascript
-const ws = new WebSocket('ws://127.0.0.1:8080/api/ws/logs');
+const ws = new WebSocket('ws://127.0.0.1:9090/api/ws/logs');
 
 ws.onmessage = (event) => {
   const msg = JSON.parse(event.data);
@@ -510,12 +510,12 @@ ws.onmessage = (event) => {
 
 **WebSocket with TLS:** When vrc is running with `--tls`, use `wss://` instead of `ws://`:
 ```javascript
-const ws = new WebSocket('wss://127.0.0.1:8080/api/commands/.../ws');
+const ws = new WebSocket('wss://127.0.0.1:9090/api/commands/.../ws');
 ```
 
 **WebSocket with auth:** When authentication is enabled, pass the bearer token as a query parameter or in the initial HTTP upgrade headers:
 ```javascript
-const ws = new WebSocket('wss://host:8080/api/commands/.../ws?token=YOUR_TOKEN');
+const ws = new WebSocket('wss://host:9090/api/commands/.../ws?token=YOUR_TOKEN');
 ```
 
 ### Incremental VTTY Diff Protocol
@@ -584,17 +584,17 @@ Send keyboard input to a running command through the API:
 
 ```bash
 # Send a single key
-curl -X POST http://127.0.0.1:8080/api/commands/550e8400-e29b-41d4-a716-446655440000/keys \
+curl -X POST http://127.0.0.1:9090/api/commands/550e8400-e29b-41d4-a716-446655440000/keys \
   -H "Content-Type: application/json" \
   -d '{"keys": "q"}'
 
 # Send text input
-curl -X POST http://127.0.0.1:8080/api/commands/550e8400-e29b-41d4-a716-446655440000/keys \
+curl -X POST http://127.0.0.1:9090/api/commands/550e8400-e29b-41d4-a716-446655440000/keys \
   -H "Content-Type: application/json" \
   -d '{"keys": "hello world"}'
 
 # Send special keys using escape sequences
-curl -X POST http://127.0.0.1:8080/api/commands/550e8400-e29b-41d4-a716-446655440000/keys \
+curl -X POST http://127.0.0.1:9090/api/commands/550e8400-e29b-41d4-a716-446655440000/keys \
   -H "Content-Type: application/json" \
   -d '{"keys": "\x03"}'
 ```
@@ -617,22 +617,22 @@ Common escape sequences:
 ID="550e8400-e29b-41d4-a716-446655440000"
 
 # Quit htop
-curl -s -X POST "http://127.0.0.1:8080/api/commands/$ID/keys" \
+curl -s -X POST "http://127.0.0.1:9090/api/commands/$ID/keys" \
   -H "Content-Type: application/json" \
   -d '{"keys": "q"}'
 
 # Type a command in a shell and press Enter
-curl -s -X POST "http://127.0.0.1:8080/api/commands/$ID/keys" \
+curl -s -X POST "http://127.0.0.1:9090/api/commands/$ID/keys" \
   -H "Content-Type: application/json" \
   -d '{"keys": "ls -la\r"}'
 
 # Send Ctrl+C to interrupt a running process
-curl -s -X POST "http://127.0.0.1:8080/api/commands/$ID/keys" \
+curl -s -X POST "http://127.0.0.1:9090/api/commands/$ID/keys" \
   -H "Content-Type: application/json" \
   -d '{"keys": "\x03"}'
 
 # Quit vim by typing :q! and Enter
-curl -s -X POST "http://127.0.0.1:8080/api/commands/$ID/keys" \
+curl -s -X POST "http://127.0.0.1:9090/api/commands/$ID/keys" \
   -H "Content-Type: application/json" \
   -d '{"keys": "\x1b:q!\r"}'
 ```
@@ -655,7 +655,7 @@ This queries all running vrc instances and contacts each one via HTTP to retriev
 
 ```bash
 # List all running commands on this instance
-curl http://127.0.0.1:8080/api/commands
+curl http://127.0.0.1:9090/api/commands
 ```
 
 Response:
@@ -710,10 +710,10 @@ vrc --target 12345 freeze 550e8400-e29b-41d4-a716-446655440000
 ```bash
 # Freeze
 ID="550e8400-e29b-41d4-a716-446655440000"
-curl -X POST http://127.0.0.1:8080/api/commands/$ID/freeze
+curl -X POST http://127.0.0.1:9090/api/commands/$ID/freeze
 
 # Thaw
-curl -X POST http://127.0.0.1:8080/api/commands/$ID/thaw
+curl -X POST http://127.0.0.1:9090/api/commands/$ID/thaw
 ```
 
 Freeze sends SIGSTOP to the child process, which causes the OS to stop scheduling it. Thaw sends SIGCONT to resume execution. This is useful for temporarily freeing CPU resources or for debugging — you can freeze a process, inspect its VTTY output, then resume it. Note that freeze/thaw is only supported on Unix-like systems.
@@ -724,12 +724,12 @@ Freeze sends SIGSTOP to the child process, which causes the OS to stop schedulin
 
 ```bash
 # Kill with default signal (SIGTERM)
-curl -X POST http://127.0.0.1:8080/api/commands/550e8400-e29b-41d4-a716-446655440000/kill \
+curl -X POST http://127.0.0.1:9090/api/commands/550e8400-e29b-41d4-a716-446655440000/kill \
   -H "Content-Type: application/json" \
   -d '{}'
 
 # Kill with a specific signal
-curl -X POST http://127.0.0.1:8080/api/commands/550e8400-e29b-41d4-a716-446655440000/kill \
+curl -X POST http://127.0.0.1:9090/api/commands/550e8400-e29b-41d4-a716-446655440000/kill \
   -H "Content-Type: application/json" \
   -d '{"signal": "SIGKILL"}'
 ```
@@ -753,7 +753,7 @@ You can kill individual commands by their OS process ID without stopping the ent
 
 ```bash
 # Kill a command by its OS PID
-curl -X POST http://127.0.0.1:8080/api/commands/kill-pid/12345
+curl -X POST http://127.0.0.1:9090/api/commands/kill-pid/12345
 
 # From the CLI (queries all instances)
 vrc stop 12345
@@ -788,7 +788,7 @@ When `--rows` and `--cols` are omitted (or set to 0), vrc auto-detects your term
 ID="550e8400-e29b-41d4-a716-446655440000"
 
 # Resize to 40 rows by 120 columns
-curl -X POST http://127.0.0.1:8080/api/commands/$ID/resize \
+curl -X POST http://127.0.0.1:9090/api/commands/$ID/resize \
   -H "Content-Type: application/json" \
   -d '{"rows": 40, "cols": 120}'
 ```
@@ -813,7 +813,7 @@ vrc spawn --rows 30 --cols 160 vim file.txt
 
 **Via API:**
 ```bash
-curl -X POST http://127.0.0.1:8080/api/commands \
+curl -X POST http://127.0.0.1:9090/api/commands \
   -H "Content-Type: application/json" \
   -d '{"cmd": "vim", "args": ["file.txt"], "rows": 30, "cols": 160}'
 ```
@@ -834,7 +834,7 @@ Create a named snapshot of a command's current VTTY buffer:
 ID="550e8400-e29b-41d4-a716-446655440000"
 
 # Store a snapshot with a custom name
-curl -X POST http://127.0.0.1:8080/api/commands/$ID/snapshot \
+curl -X POST http://127.0.0.1:9090/api/commands/$ID/snapshot \
   -H "Content-Type: application/json" \
   -d '{"name": "after-build"}'
 ```
@@ -863,7 +863,7 @@ Each snapshot records the command name, arguments, PID, timestamp, and wall-cloc
 List all snapshots stored for a command:
 
 ```bash
-curl http://127.0.0.1:8080/api/commands/$ID/snapshots
+curl http://127.0.0.1:9090/api/commands/$ID/snapshots
 ```
 
 Response:
@@ -899,7 +899,7 @@ Response:
 Compare the current VTTY buffer against a stored snapshot. The diff is computed cell-by-cell, comparing character value, foreground/background RGB colors, and text attributes (bold, italic, underline, etc.):
 
 ```bash
-curl -X POST http://127.0.0.1:8080/api/commands/$ID/diff \
+curl -X POST http://127.0.0.1:9090/api/commands/$ID/diff \
   -H "Content-Type: application/json" \
   -d '{"name": "after-build"}'
 ```
@@ -931,7 +931,7 @@ The `changed_count` field tells you how many cells differ. The `cells` array con
 Remove a stored snapshot:
 
 ```bash
-curl -X DELETE http://127.0.0.1:8080/api/commands/$ID/snapshots/after-build
+curl -X DELETE http://127.0.0.1:9090/api/commands/$ID/snapshots/after-build
 ```
 
 Response:
@@ -955,7 +955,7 @@ When spawning a command via `POST /api/commands`, you can specify `on_exit`, `on
 
 ```bash
 # Run tests with notifications on success or failure
-curl -s -X POST http://127.0.0.1:8080/api/commands \
+curl -s -X POST http://127.0.0.1:9090/api/commands \
   -H "Content-Type: application/json" \
   -d '{
     "cmd": "cargo",
@@ -966,7 +966,7 @@ curl -s -X POST http://127.0.0.1:8080/api/commands \
   }'
 
 # Run a build script that triggers cleanup on any exit
-curl -s -X POST http://127.0.0.1:8080/api/commands \
+curl -s -X POST http://127.0.0.1:9090/api/commands \
   -H "Content-Type: application/json" \
   -d '{
     "cmd": "./build.sh",
@@ -977,7 +977,7 @@ curl -s -X POST http://127.0.0.1:8080/api/commands \
   }'
 
 # Run with only an error handler (no action on clean exit)
-curl -s -X POST http://127.0.0.1:8080/api/commands \
+curl -s -X POST http://127.0.0.1:9090/api/commands \
   -H "Content-Type: application/json" \
   -d '{
     "cmd": "./deploy.sh",
@@ -1077,16 +1077,16 @@ vrc --log --log-file /var/log/vrc.log -- my-command
 
 ```bash
 # Get all log entries (up to 200 by default)
-curl http://127.0.0.1:8080/api/log
+curl http://127.0.0.1:9090/api/log
 
 # Get log entries with search filter
-curl "http://127.0.0.1:8080/api/log?search=spawn"
+curl "http://127.0.0.1:9090/api/log?search=spawn"
 
 # Get log entries with pagination
-curl "http://127.0.0.1:8080/api/log?offset=0&limit=50&search=kill"
+curl "http://127.0.0.1:9090/api/log?offset=0&limit=50&search=kill"
 
 # Get more results
-curl "http://127.0.0.1:8080/api/log?offset=50&limit=50&search=kill"
+curl "http://127.0.0.1:9090/api/log?offset=50&limit=50&search=kill"
 ```
 
 Response:
@@ -1164,7 +1164,7 @@ vrc --env RUST_LOG=debug -- ./my-app
 
 **Via API "env" field:**
 ```bash
-curl -s -X POST http://127.0.0.1:8080/api/commands \
+curl -s -X POST http://127.0.0.1:9090/api/commands \
   -H "Content-Type: application/json" \
   -d '{
     "cmd": "cargo",
@@ -1185,7 +1185,7 @@ The `--no-env` flag tells vrc to ignore all environment variables from the confi
 vrc spawn --no-env --env PATH=/usr/bin -- ./my-script.sh
 
 # Via API
-curl -s -X POST http://127.0.0.1:8080/api/commands \
+curl -s -X POST http://127.0.0.1:9090/api/commands \
   -H "Content-Type: application/json" \
   -d '{"cmd": "./my-script.sh", "no_env": true, "env": {"PATH": "/usr/bin"}}'
 ```
@@ -1264,7 +1264,7 @@ vrc --profile production --port 8443 -- ./my-server
 
 **Via API (spawn request):**
 ```bash
-curl -s -X POST http://127.0.0.1:8080/api/commands \
+curl -s -X POST http://127.0.0.1:9090/api/commands \
   -H "Content-Type: application/json" \
   -d '{"cmd": "./my-app", "profile": "development"}'
 ```
@@ -1307,7 +1307,7 @@ vrc cert generate my-application
 vrc cert list
 
 # Via API
-curl http://127.0.0.1:8080/api/certificates
+curl http://127.0.0.1:9090/api/certificates
 ```
 
 ### Using a Certificate Token
@@ -1319,7 +1319,7 @@ vrc cert show my-application
 # Use the token in API requests
 TOKEN=$(vrc cert show my-application | grep -oP 'Token:\s*\K\S+')
 curl -H "Authorization: Bearer $TOKEN" \
-  http://127.0.0.1:8080/api/commands/$ID/vtty
+  http://127.0.0.1:9090/api/commands/$ID/vtty
 ```
 
 For the complete certificate management guide with advanced examples, see [docs/certificates.md](certificates.md).
@@ -1345,7 +1345,7 @@ This single flag does the following:
 
 1. **Start the server:**
    ```bash
-   vrc --bind 0.0.0.0 --port 8080 --auth --tls -- some-command
+   vrc --bind 0.0.0.0 --port 9090 --auth --tls -- some-command
    ```
 
 2. **Get the authentication token:**
@@ -1363,7 +1363,7 @@ This single flag does the following:
    # Copy cert.pem to the remote machine, then:
    curl --cacert /path/to/cert.pem \
         -H "Authorization: Bearer <token-from-step-2>" \
-        https://server-hostname:8080/api/commands
+        https://server-hostname:9090/api/commands
    ```
 
 ### Remote Access with curl — Complete Examples
@@ -1371,7 +1371,7 @@ This single flag does the following:
 ```bash
 TOKEN="your-token-here"
 CERT="/path/to/cert.pem"
-HOST="https://server.example.com:8080"
+HOST="https://server.example.com:9090"
 
 # List commands on a remote server
 curl --cacert $CERT -H "Authorization: Bearer $TOKEN" "$HOST/api/commands"
@@ -1427,7 +1427,7 @@ Or in a config file:
 ```yaml
 server:
   bind: "0.0.0.0"
-  port: 8080
+  port: 9090
 
 security:
   require_auth: true
@@ -1470,7 +1470,7 @@ vrc list
 vrc stop <pid>
 
 # Or send API commands (the HTTP server is still running)
-curl http://127.0.0.1:8080/api/commands
+curl http://127.0.0.1:9090/api/commands
 ```
 
 ---
@@ -1564,8 +1564,8 @@ Multiple vrc instances can run simultaneously on different ports. This is useful
 ### Starting Multiple Instances
 
 ```bash
-# Instance 1: Development server on port 8080
-vrc --port 8080 -- daemon
+# Instance 1: Development server on port 9090
+vrc --port 9090 -- daemon
 
 # Instance 2: Staging server on port 9090 with TLS
 vrc --port 9090 --tls -- daemon
@@ -1587,7 +1587,7 @@ The enhanced `vrc list` command contacts each running instance via HTTP to retri
 
 ```
 PID        PORT     BIND                 DAEMON     DISPLAY    COMMAND
-12345      8080     127.0.0.1            yes        no         (idle) -> htop [80x24]
+12345      9090     127.0.0.1            yes        no         (idle) -> htop [80x24]
 12346      9090     127.0.0.1            yes        no         (no commands)
 12347      3000     127.0.0.1            no         no         (idle) -> cargo test ["--release"] [my-app]
 ```
@@ -1610,7 +1610,7 @@ Each instance can load a different configuration file:
 
 ```bash
 # Dev instance
-vrc -c ./configs/dev.yaml --port 8080 -- daemon
+vrc -c ./configs/dev.yaml --port 9090 -- daemon
 
 # Staging instance
 vrc -c ./configs/staging.yaml --port 9090 -- daemon
@@ -1686,7 +1686,7 @@ Built-in defaults → Global config → Local config → Explicit config file �
 # vrc.yaml
 server:
   bind: "127.0.0.1"
-  port: 8080
+  port: 9090
 
 security:
   require_auth: false
@@ -1725,7 +1725,7 @@ handles: []
 # vrc.toml
 [server]
 bind = "127.0.0.1"
-port = 8080
+port = 9090
 
 [security]
 require_auth = false
@@ -1761,7 +1761,7 @@ stderr_file = "/tmp/vrc.err"
 {
   "server": {
     "bind": "127.0.0.1",
-    "port": 8080
+    "port": 9090
   },
   "security": {
     "require_auth": false,
@@ -1808,25 +1808,25 @@ Run multiple development servers in a single vrc instance, each in its own VTTY,
 vrc --daemon --log --log-file /tmp/vrc.log
 
 # Spawn frontend dev server
-curl -s -X POST http://127.0.0.1:8080/api/commands \
+curl -s -X POST http://127.0.0.1:9090/api/commands \
   -H "Content-Type: application/json" \
   -d '{"cmd": "npm", "args": ["run", "dev:frontend"]}'
 
 # Spawn backend API server
-curl -s -X POST http://127.0.0.1:8080/api/commands \
+curl -s -X POST http://127.0.0.1:9090/api/commands \
   -H "Content-Type: application/json" \
   -d '{"cmd": "cargo", "args": ["run"]}'
 
 # Spawn database migration watcher
-curl -s -X POST http://127.0.0.1:8080/api/commands \
+curl -s -X POST http://127.0.0.1:9090/api/commands \
   -H "Content-Type: application/json" \
   -d '{"cmd": "npm", "args": ["run", "watch:db"]}'
 
 # View all running commands
-curl http://127.0.0.1:8080/api/commands
+curl http://127.0.0.1:9090/api/commands
 
 # Open the web admin to monitor all three in one dashboard
-# http://127.0.0.1:8080/admin
+# http://127.0.0.1:9090/admin
 ```
 
 ### CI/CD Pipeline Runner
@@ -1835,12 +1835,12 @@ Use vrc to run CI jobs with full terminal access for debugging failed builds:
 
 ```bash
 # Start a secure vrc instance on the CI server
-vrc --remote --tls --port 8080 --daemon --log-file /var/log/vrc-ci.log
+vrc --remote --tls --port 9090 --daemon --log-file /var/log/vrc-ci.log
 
 # CI pipeline script spawns a build job
 TOKEN=$(cat ~/.config/vrc/token)
 
-JOB_ID=$(curl -s -X POST https://localhost:8080/api/commands \
+JOB_ID=$(curl -s -X POST https://localhost:9090/api/commands \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"cmd": "./run-tests.sh", "args": ["--verbose", "--release"]}' \
@@ -1849,7 +1849,7 @@ JOB_ID=$(curl -s -X POST https://localhost:8080/api/commands \
 # Poll for build completion and capture output
 while true; do
   STATUS=$(curl -s -H "Authorization: Bearer $TOKEN" \
-    "https://localhost:8080/api/commands" \
+    "https://localhost:9090/api/commands" \
     | jq -r ".data[] | select(.id == \"$JOB_ID\") | .status")
   [ "$STATUS" != "running" ] && break
   sleep 5
@@ -1857,7 +1857,7 @@ done
 
 # Retrieve the full build log
 curl -s -H "Authorization: Bearer $TOKEN" \
-  "https://localhost:8080/api/commands/$JOB_ID/vtty" \
+  "https://localhost:9090/api/commands/$JOB_ID/vtty" \
   | jq -r '.data.content'
 ```
 
@@ -1907,10 +1907,10 @@ Share a terminal session between multiple developers via the web interface:
 
 ```bash
 # Developer 1 starts vrc with a shared session
-vrc --port 8080 --daemon
+vrc --port 9090 --daemon
 
 # Developer 1 starts vim in a shared VTTY
-SHARED_ID=$(curl -s -X POST http://localhost:8080/api/commands \
+SHARED_ID=$(curl -s -X POST http://localhost:9090/api/commands \
   -H "Content-Type: application/json" \
   -d '{"cmd": "vim", "args": ["shared-notes.txt"]}' \
   | jq -r '.data.id')
@@ -1918,15 +1918,15 @@ SHARED_ID=$(curl -s -X POST http://localhost:8080/api/commands \
 # Share the command ID and server address with Developer 2
 
 # Developer 2 opens the web admin and views the shared session
-# http://localhost:8080/admin → click on the vim command
+# http://localhost:9090/admin → click on the vim command
 
 # Developer 1 sends keystrokes remotely
-curl -s -X POST http://localhost:8080/api/commands/$SHARED_ID/keys \
+curl -s -X POST http://localhost:9090/api/commands/$SHARED_ID/keys \
   -H "Content-Type: application/json" \
   -d '{"keys": "iHello from Developer 1\x1b:wq\r"}'
 
 # Developer 2 can also send keystrokes
-curl -s -X POST http://localhost:8080/api/commands/$SHARED_ID/keys \
+curl -s -X POST http://localhost:9090/api/commands/$SHARED_ID/keys \
   -H "Content-Type: application/json" \
   -d '{"keys": "iHello from Developer 2\x1b:wq\r"}'
 ```
@@ -1937,9 +1937,9 @@ Run tasks that need to outlast your SSH session without screen or tmux:
 
 ```bash
 # Start a long data processing job via vrc
-vrc --port 8080 --daemon
+vrc --port 9090 --daemon
 
-JOB_ID=$(curl -s -X POST http://localhost:8080/api/commands \
+JOB_ID=$(curl -s -X POST http://localhost:9090/api/commands \
   -H "Content-Type: application/json" \
   -d '{"cmd": "python", "args": ["process_large_dataset.py", "--input", "data.csv"]}' \
   | jq -r '.data.id')
@@ -1947,7 +1947,7 @@ JOB_ID=$(curl -s -X POST http://localhost:8080/api/commands \
 # Disconnect from SSH — the job keeps running because vrc is a daemon
 
 # Reconnect later and check progress
-curl -s "http://localhost:8080/api/commands/$JOB_ID/vtty/partial?offset=0&limit=20" \
+curl -s "http://localhost:9090/api/commands/$JOB_ID/vtty/partial?offset=0&limit=20" \
   | jq -r '.data.content'
 ```
 
@@ -1960,9 +1960,9 @@ curl -s "http://localhost:8080/api/commands/$JOB_ID/vtty/partial?offset=0&limit=
 Check that the port is not already in use:
 
 ```bash
-# Check what is using port 8080
-lsof -i :8080
-ss -tlnp | grep 8080
+# Check what is using port 9090
+lsof -i :9090
+ss -tlnp | grep 9090
 
 # Use a different port
 vrc --port 9090
@@ -1986,10 +1986,10 @@ When using self-signed certificates, clients must trust the certificate explicit
 
 ```bash
 # With curl, use --cacert
-curl --cacert ~/.config/vrc/cert.pem https://localhost:8080/api/commands
+curl --cacert ~/.config/vrc/cert.pem https://localhost:9090/api/commands
 
 # To bypass certificate verification (not recommended for production)
-curl -k https://localhost:8080/api/commands
+curl -k https://localhost:9090/api/commands
 ```
 
 ### Authentication failures
@@ -2002,7 +2002,7 @@ cat ~/.config/vrc/token
 
 # Use it in requests
 TOKEN=$(cat ~/.config/vrc/token)
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/commands
+curl -H "Authorization: Bearer $TOKEN" http://localhost:9090/api/commands
 ```
 
 ### Command exits immediately
@@ -2023,13 +2023,13 @@ The command may not have produced output yet, or the output may be in the scroll
 
 ```bash
 # Try the HTML endpoint for rendered output
-curl http://localhost:8080/api/commands/$ID/vtty/html | jq '.data'
+curl http://localhost:9090/api/commands/$ID/vtty/html | jq '.data'
 
 # Check the scrollback line count
-curl http://localhost:8080/api/commands/$ID/vtty/html | jq '.data.scrollback_lines'
+curl http://localhost:9090/api/commands/$ID/vtty/html | jq '.data.scrollback_lines'
 
 # Try fetching partial content
-curl "http://localhost:8080/api/commands/$ID/vtty/partial?offset=0&limit=100"
+curl "http://localhost:9090/api/commands/$ID/vtty/partial?offset=0&limit=100"
 ```
 
 ### Log file not found via API
@@ -2044,10 +2044,10 @@ vrc supports **HTTP, HTTPS (TLS), WebSocket (ws://), and secure WebSocket (wss:/
 
 | Mode | CLI Flag | Description |
 |------|----------|-------------|
-| HTTP (localhost) | *(default)* | Plain HTTP on `127.0.0.1:8080`, no auth required |
-| HTTP (remote) | `--remote` | Plain HTTP on `0.0.0.0:8080`, auth required |
-| HTTPS (localhost) | `--tls` | HTTPS on `127.0.0.1:8080`, auto-generated self-signed cert |
-| HTTPS (remote) | `--remote --tls` | HTTPS on `0.0.0.0:8080`, auth required, self-signed cert |
+| HTTP (localhost) | *(default)* | Plain HTTP on `127.0.0.1:9090`, no auth required |
+| HTTP (remote) | `--remote` | Plain HTTP on `0.0.0.0:9090`, auth required |
+| HTTPS (localhost) | `--tls` | HTTPS on `127.0.0.1:9090`, auto-generated self-signed cert |
+| HTTPS (remote) | `--remote --tls` | HTTPS on `0.0.0.0:9090`, auth required, self-signed cert |
 | HTTPS (custom cert) | `--tls --cert-file X --key-file Y` | HTTPS with your own certificate and key |
 | WebSocket | *(auto-upgrade)* | `ws://host:port/api/commands/{id}/ws` for VTTY streaming |
 | Secure WebSocket | `--tls` + wss:// | `wss://host:port/api/commands/{id}/ws` for encrypted streaming |

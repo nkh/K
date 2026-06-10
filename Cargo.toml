@@ -22,7 +22,7 @@ path = "src/bin/vrw.rs"
 required-features = ["vrw"]
 
 [features]
-default = []
+default = ["vrc"]
 vrc = []
 vrw = [
     "dep:axum",

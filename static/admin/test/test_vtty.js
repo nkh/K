@@ -8,27 +8,11 @@ resetTestState();
 globalThis.renderPanels = function() {};
 globalThis.scheduleVttyHttpForPanel = function() {};
 
-// ── _hex ──
-console.log('_hex tests (from vtty.js)');
-if (typeof _hex === 'function') {
-    assertEq(_hex(0), '00', '_hex(0)');
-    assertEq(_hex(1), '01', '_hex(1)');
-    assertEq(_hex(10), '0a', '_hex(10)');
-    assertEq(_hex(15), '0f', '_hex(15)');
-    assertEq(_hex(16), '10', '_hex(16)');
-    assertEq(_hex(255), 'ff', '_hex(255)');
-}
+// ── _hex is tested in test_utils.js (defined in utils.js, NOT duplicated in vtty.js) ──
+console.log('_hex tests (skipped — see test_utils.js)');
 
-// ── _htmlEscapeChar ──
-console.log('_htmlEscapeChar tests (from vtty.js)');
-if (typeof _htmlEscapeChar === 'function') {
-    assertEq(_htmlEscapeChar('&'), '&amp;', 'escape &');
-    assertEq(_htmlEscapeChar('<'), '&lt;', 'escape <');
-    assertEq(_htmlEscapeChar('>'), '&gt;', 'escape >');
-    assertEq(_htmlEscapeChar('"'), '&quot;', 'escape "');
-    assertEq(_htmlEscapeChar('a'), 'a', 'normal char');
-    assertEq(_htmlEscapeChar(' '), ' ', 'space');
-}
+// ── _htmlEscapeChar is tested in test_utils.js (defined in utils.js, NOT duplicated in vtty.js) ──
+console.log('_htmlEscapeChar tests (skipped — see test_utils.js)');
 
 // ── buildCellGrid ──
 console.log('buildCellGrid tests');

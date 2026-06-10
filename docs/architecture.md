@@ -1,3 +1,5 @@
+> **NOTE**: This document is outdated and covers only the vrc binary. See [docs/explanation/architecture.md](explanation/architecture.md) for the current comprehensive architecture documentation covering both vrc and vrw.
+
 # vrc Architecture Overview
 
 This document describes the high-level architecture of **vrc**, a Rust-based virtual terminal runner with UDS (Unix Domain Socket) IPC, daemon mode, and instance registry.
@@ -57,9 +59,9 @@ This document describes the high-level architecture of **vrc**, a Rust-based vir
 
 ## 3. Module Breakdown
 
-### 3.1 CLI Entry Point (`src/main.rs` + `src/cli/`)
+### 3.1 CLI Entry Point (`src/bin/vrc.rs` / `src/bin/vrw.rs` + `src/cli/`)
 
-`main.rs` is a thin binary wrapper that parses CLI arguments, loads configuration, optionally daemonizes, and delegates to the library crate. `src/lib.rs` is the single source of truth for all `mod` declarations.
+`src/bin/vrc.rs` and `src/bin/vrw.rs` are thin binary wrappers that parse CLI arguments, load configuration, optionally daemonizes, and delegate to the library crate. `src/lib.rs` is the single source of truth for all `mod` declarations.
 
 Uses `clap` with derive macros. Supports:
 - Options before `--` (vrc flags)

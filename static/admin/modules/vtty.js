@@ -395,22 +395,8 @@ function _cellStyle(diff) {
     return style;
 }
 
-/// Convert a byte (0-255) to a 2-digit lowercase hex string.
-function _hex(b) {
-    return (b < 16 ? '0' : '') + b.toString(16);
-}
-
-// HTML-escape a character, matching the server's html_escape() function.
-function _htmlEscapeChar(ch) {
-    switch (ch) {
-        case '&': return '&amp;';
-        case '<': return '&lt;';
-        case '>': return '&gt;';
-        case "'": return '&#39;';
-        case '"': return '&quot;';
-        default: return ch;
-    }
-}
+// NOTE: _hex() and _htmlEscapeChar() are defined in utils.js and exported via window.
+// They are intentionally NOT redefined here to avoid duplication.
 
 // Apply an incremental diff from the server directly to the DOM.
 // This updates only the changed cells, avoiding a full innerHTML replacement.

@@ -210,7 +210,7 @@ After starting vrw with a command, verify the following in the web dashboard:
 
 ```bash
 # vrc binary (UDS IPC)
-vrc run htop
+vrc -- htop
 vrc screenshot
 # Expected: prints absolute path like /home/user/vrc_YYYYMMDD_HHMMSS_80x24_htop.png
 
@@ -229,16 +229,16 @@ These are verified visually by running commands with known output patterns:
 
 ```bash
 # Color test — should show 256-color palette with correct alignment
-vrc run -- bash -c "for c in {0..255}; do echo -en \"\e[38;5;${c}m█\e[0m\"; done; echo"
+vrc -- -- bash -c "for c in {0..255}; do echo -en \"\e[38;5;${c}m█\e[0m\"; done; echo"
 
 # Box drawing — should render continuous lines, no gaps
-vrc run -- bash -c "echo '┌────┬────┐'; echo '│ ab │ cd │'; echo '├────┼────┤'; echo '│ ef │ gh │'; echo '└────┴────┘'"
+vrc -- -- bash -c "echo '┌────┬────┐'; echo '│ ab │ cd │'; echo '├────┼────┤'; echo '│ ef │ gh │'; echo '└────┴────┘'"
 
 # Wide characters — CJK characters should occupy exactly 2 columns
-vrc run -- bash -c "echo '你好世界 Hello World'"
+vrc -- -- bash -c "echo '你好世界 Hello World'"
 
 # Scrolling — rapid output should display smoothly without visible lag
-vrc run -- bash -c "for i in $(seq 1 1000); do echo \"Line $i: $(head -c 60 /dev/urandom | base64)\"; done"
+vrc -- -- bash -c "for i in $(seq 1 1000); do echo \"Line $i: $(head -c 60 /dev/urandom | base64)\"; done"
 ```
 
 ### 7. Web UI JavaScript Tests (`static/admin/test/`)
