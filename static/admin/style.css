@@ -238,10 +238,10 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .cmd-item .cmd-detail-row { display: flex; align-items: center; gap: 0.35rem; padding-left: 2rem; font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cmd-item .cmd-detail-row:empty { display: none; }
 .sidebar-wide .cmd-detail-row { display: none; }
-.sidebar-wide .cmd-detail-inline { display: inline !important; }
+.sidebar-wide .cmd-detail-inline { display: inline !important; flex: 0 0 auto !important; min-width: 0; }
 .sidebar-wide .cmd-item-row { flex-wrap: wrap; }
 .cmd-item .cmd-detail-row .detail-sep { color: var(--border); }
-.cmd-freeze-btn { font-size: 0.65rem; padding: 0 0.15rem; cursor: pointer; opacity: 0.8; background: none; border: 1px solid transparent; border-radius: 2px; flex-shrink: 0; color: var(--text-secondary); }
+.cmd-freeze-btn { font-size: 0.65rem; padding: 0 0.15rem; cursor: pointer; opacity: 0.8; background: none; border: 1px solid transparent; border-radius: 2px; flex-shrink: 0; color: var(--text-primary); }
 .cmd-freeze-btn:hover { opacity: 1; border-color: var(--border); }
 .cmd-freeze-btn.active { opacity: 1; border-color: var(--accent); color: var(--accent); }
 .cmd-item .cmd-detail-inline { font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 0%; min-width: 0; }
