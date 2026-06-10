@@ -47,7 +47,7 @@
         const killBtn = e.target.closest('.cmd-kill-btn');
         if (killBtn) {
             e.stopPropagation();
-            if (killBtn.disabled) return; // don't kill commands on unreachable instances
+            if (killBtn.disabled) return; // still respect disabled attribute as a last resort
             if (killBtn.dataset.cmdRetained === 'true' && killBtn.dataset.cmdAlive !== 'true') {
                 purgeKeptCommand(killBtn.dataset.instUrl, killBtn.dataset.cmdId, '');
             } else {
@@ -83,6 +83,10 @@
 
     // Restore saved server connections from localStorage
     const restoredConnections = _restoreConnections();
+
+    // Health-check restored connections: remove ones that don't respond
+    // after 5 retries at 500ms intervals
+    healthCheckConnections(restoredConnections);
 
     // Restore panel layout from localStorage
     const savedLayout = localStorage.getItem('vrw_panel_layout');

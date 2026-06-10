@@ -463,6 +463,27 @@ async function killAllCommands() {
     // Re-fetch from server to get accurate state (some kills may have failed)
     _lastCommandState = '';
     await loadCommands();
+
+    // Clear commands for servers that are unreachable (they can't have been killed
+    // by the API, so their stale command list would remain otherwise).
+    for (const inst of state.connections) {
+        if (inst.reachable === false) {
+            inst._commands = [];
+        }
+    }
+    // Clear panel selectedCmdId for panels pointing to servers with no commands
+    for (const panel of state.panels) {
+        if (panel.selectedInstUrl) {
+            const inst = state.connections.find(i => i.url === panel.selectedInstUrl);
+            if (inst && (!inst._commands || inst._commands.length === 0)) {
+                panel.selectedCmdId = null;
+                panel.selectedInstUrl = null;
+            }
+        }
+    }
+    _lastCommandState = '';
+    _buildSidebar();
+    updateSharedToolbar();
 }
 
 async function sendKeys() {

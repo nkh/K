@@ -276,6 +276,46 @@ function _restoreConnections() {
     } catch (e) { return null; }
 }
 
+/// Health-check restored connections: try each URL up to 5 times at 500ms intervals.
+/// If a connection never responds, remove it from state.connections and localStorage.
+/// This prevents stale connections from persisting across page reloads when the
+/// remote server is no longer running.
+function healthCheckConnections(restoredUrls) {
+    if (!restoredUrls || restoredUrls.length === 0) return;
+    const MAX_RETRIES = 5;
+    const RETRY_INTERVAL_MS = 500;
+    const retryCounts = {};
+    for (const url of restoredUrls) {
+        retryCounts[url] = 0;
+    }
+
+    function attemptCheck() {
+        let anyPending = false;
+        for (const url of restoredUrls) {
+            // Already removed or already reachable (loadCommands will set that)
+            const conn = state.connections.find(c => c.url === url);
+            if (!conn) continue;
+            if (conn.reachable === true) continue; // successful — keep it
+
+            retryCounts[url] = (retryCounts[url] || 0) + 1;
+            if (retryCounts[url] > MAX_RETRIES) {
+                // Give up — remove this connection
+                removeConnection(url);
+                continue;
+            }
+            anyPending = true;
+        }
+        if (anyPending) {
+            // loadCommands() already runs every 1s and sets conn.reachable.
+            // We just need to wait and check again.
+            setTimeout(attemptCheck, RETRY_INTERVAL_MS);
+        }
+    }
+
+    // Start checking after loadCommands has had a chance to run once
+    setTimeout(attemptCheck, RETRY_INTERVAL_MS);
+}
+
 /// Fetch server_name from /api/info for a non-primary connection.
 async function _fetchServerName(conn) {
     try {
@@ -285,13 +325,6 @@ async function _fetchServerName(conn) {
             conn._serverName = json.data.server_name;
         }
     } catch (e) { /* ignore */ }
-}
-
-function removeConnection(url) {
-    state.connections = state.connections.filter(c => c.url !== url);
-    _lastCommandState = ''; // force sidebar rebuild
-    loadCommands();
-    updateDisconnectedUI();
 }
 
 function disconnectServer(url) {
@@ -469,6 +502,7 @@ async function spawnFromWelcome() {
     window.addConnection = addConnection;
     window._saveConnections = _saveConnections;
     window._restoreConnections = _restoreConnections;
+    window.healthCheckConnections = healthCheckConnections;
     window._fetchServerName = _fetchServerName;
     window.removeConnection = removeConnection;
     window.disconnectServer = disconnectServer;

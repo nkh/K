@@ -69,6 +69,12 @@ console.log('navigateCommand tests');
 assert(typeof navigateCommand === 'function', 'navigateCommand is a function');
 // navigateCommand uses module-scoped n (navCommands) which is minified.
 // With empty nav list, it returns immediately.
+// Clear _navCommands first (may be polluted by previous tests that called _buildSidebar)
+if (typeof VRW !== 'undefined' && VRW._navCommands) VRW._navCommands.length = 0;
+state.selectedCmdId = null;
+state.selectedInstUrl = null;
+// Also clear via state.js reference in case VRW._navCommands is a snapshot
+const navRef = VRW._navCommands;
 const origSel = state.selectedCmdId;
 navigateCommand('next');
 assertEq(state.selectedCmdId, origSel, 'navigateCommand no-op with empty nav list');

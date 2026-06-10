@@ -180,6 +180,23 @@ function _buildSidebar() {
     const container = document.getElementById('commandList');
     let html = '';
 
+    // Server connections bar: show reach indicator + label + close button for
+    // each non-origin server.  Always visible when multiple connections exist.
+    const originUrl = window.location.origin;
+    const nonOriginConns = state.connections.filter(c => c.url !== originUrl);
+    if (nonOriginConns.length > 0) {
+        html += '<div class="server-connections-bar">';
+        for (const inst of nonOriginConns) {
+            const reachClass = inst.reachable === true ? 'reachable' : inst.reachable === false ? 'unreachable' : 'unknown';
+            html += `<div class="server-conn-item" title="${escHtml(inst.url)} — ${inst.reachable === true ? 'connected' : inst.reachable === false ? 'unreachable' : 'checking...'}">`;
+            html += `<span class="server-reach-dot ${reachClass}"></span>`;
+            html += `<span class="server-conn-label">${escHtml(inst.label)}</span>`;
+            html += `<button class="server-conn-close-btn" onclick="event.stopPropagation();disconnectServer('${escHtml(inst.url)}')" title="Disconnect from ${escHtml(inst.label)}">&#x2715;</button>`;
+            html += '</div>';
+        }
+        html += '</div>';
+    }
+
     if (state.connections.length > 1) {
         html += '<div class="sidebar-sort-bar">';
         html += `<span class="sidebar-sort-item${_sidebarSort === 'name' ? ' active' : ''}" onclick="_sidebarSort='name';loadCommands()">All</span>`;
@@ -276,7 +293,7 @@ function _buildSidebar() {
             const exitedClass = (!isAlive && !isFrozen) ? ' exited' : '';
             const instUnreachable = inst.reachable === false;
             const dimStyle = instUnreachable ? 'opacity:0.4;' : ((isAlive || isFrozen) ? '' : 'opacity:0.6;');
-            const killDisabled = (instUnreachable && isAlive) ? ' disabled title="Server disconnected — cannot kill running commands"' : ' title="Kill"';
+            const killDisabled = ''; // Kill buttons always active — let the server-side API return an error if the kill can't succeed
             const retainOnExit = cmd.exit && cmd.exit.retain_on_exit === true;
             const keepTitle = retainOnExit ? 'Unkeep (terminal will be removed on exit)' : 'Keep (retain terminal after exit)';
             const keepBtnHtml = isAlive
