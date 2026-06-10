@@ -486,6 +486,31 @@ async function killAllCommands() {
     updateSharedToolbar();
 }
 
+async function freezeAllCommands() {
+    // Toggle: if any alive command is not frozen → freeze all; otherwise thaw all
+    const cmds = [];
+    for (const inst of state.connections) {
+        if (!inst.reachable) continue;
+        for (const cmd of (inst._commands || [])) {
+            if (cmd.alive === false) continue;
+            cmds.push({ inst, cmd });
+        }
+    }
+    if (cmds.length === 0) return;
+    const anyRunning = cmds.some(c => c.cmd.frozen !== true);
+    const endpoint = anyRunning ? 'freeze' : 'thaw';
+    const promises = cmds.map(({ inst, cmd }) =>
+        fetch(apiUrl(`/api/commands/${cmd.id}/${endpoint}`, { url: inst.url }), {
+            method: 'POST',
+            headers: authHeadersForInstance({ url: inst.url }),
+            body: JSON.stringify({}),
+        }).catch(() => {})
+    );
+    await Promise.all(promises);
+    _lastCommandState = '';
+    await loadCommands();
+}
+
 async function sendKeys() {
     // Delegate to the per-panel sendKeysToPanel using the selected panel
     const panel = getSelectedPanel();
@@ -571,6 +596,7 @@ function switchBufferPanel(panelId, view) {
     window.purgeCommand = purgeCommand;
     window.purgeKeptCommand = purgeKeptCommand;
     window.killAllCommands = killAllCommands;
+    window.freezeAllCommands = freezeAllCommands;
     window.sendKeys = sendKeys;
     window.resizeTerminal = resizeTerminal;
     window.resizeTerminalPanel = resizeTerminalPanel;

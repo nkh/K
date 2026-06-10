@@ -130,6 +130,8 @@ function updateCmdToolbarVisibility() {
         i => i._commands && i._commands.length > 0
     );
     killAllBtn.style.display = (anyReachable && anyCommands) ? '' : 'none';
+    const freezeAllBtn = document.getElementById('freezeAllBtn');
+    if (freezeAllBtn) freezeAllBtn.style.display = (anyReachable && anyCommands) ? '' : 'none';
 }
 
 /// Extract sidebar-building logic into a reusable function so both
@@ -331,6 +333,7 @@ function _buildSidebar() {
                         <button class="pin-btn${isPinned ? ' active' : ''}" onclick="event.stopPropagation();togglePinCmd('${escHtml(cmdName)}')" title="${isPinned ? 'Unpin' : 'Pin'}">${isPinned ? '◉' : '◎'}</button>
                         <span class="cmd-grab-handle" onmousedown="_cmdReorderMouseDown(event,'${escHtml(inst.url)}','${escHtml(cmd.id)}','${escHtml(cmdName)}')" title="Drag to reorder / drop on pane to open">&#x2807;</span>
                         <span class="name">${escHtml(cmdName)}</span>
+                        <span class="cmd-detail-inline">${detailParts.map(p => escHtml(p)).join(' · ')}</span>
                         ${serverBadge}
                         ${certBadge}
                         ${exitBadge}
