@@ -301,6 +301,10 @@ function _buildSidebar() {
                 : (retainOnExit
                     ? `<span class="keep-badge" title="Terminal kept after exit">&#9733;</span>`
                     : '');
+            // Freeze/thaw button for alive commands
+            const freezeBtnHtml = isAlive
+                ? `<button class="cmd-freeze-btn${isFrozen ? ' active' : ''}" onclick="event.stopPropagation();togglePauseRunPanelByIdx('${escHtml(inst.url)}','${escHtml(cmd.id)}')" title="${isFrozen ? 'Thaw' : 'Freeze'}">${isFrozen ? '&#9654;' : '&#9646;&#9646;'}</button>`
+                : '';
             // Build detail parts as separate spans for the detail row
             // Compact: runtime · cpu% · memM · pid  (numeric only, no labels)
             const detailParts = [];
@@ -330,6 +334,7 @@ function _buildSidebar() {
                         ${serverBadge}
                         ${certBadge}
                         ${exitBadge}
+                        ${freezeBtnHtml}
                     </div>
                     ${detailParts.length > 0 ? `<div class="cmd-detail-row">${detailParts.join(' · ')}</div>` : ''}
                 </div>`;
@@ -523,4 +528,17 @@ function updateTerminalDisconnectedOverlay() {
     window.setPinnedNames = setPinnedNames;
     window.togglePinCmd = togglePinCmd;
     window.rearrangePinnedCommands = rearrangePinnedCommands;
+    window.togglePauseRunPanelByIdx = function(instUrl, cmdId) {
+        // Like togglePauseRunPanel but without touching focus/selection state
+        const inst = state.connections.find(i => i.url === instUrl);
+        if (!inst || !inst._commands) return;
+        const cmd = inst._commands.find(c => c.id === cmdId);
+        const isFrozen = cmd && cmd.frozen;
+        const endpoint = isFrozen ? 'thaw' : 'freeze';
+        fetch(apiUrl(`/api/commands/${cmdId}/${endpoint}`, { url: instUrl }), {
+            method: 'POST',
+            headers: authHeadersForInstance({ url: instUrl }),
+            body: JSON.stringify({}),
+        }).then(() => loadCommands()).catch(() => {});
+    };
 })();

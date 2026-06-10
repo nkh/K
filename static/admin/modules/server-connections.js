@@ -237,6 +237,20 @@ function addConnection(url, label, token) {
     if (existing) {
         return existing;
     }
+    // Derive label from URL if not provided: show host:port
+    if (!label) {
+        try {
+            const u = new URL(url);
+            if (u.port) {
+                label = u.host;
+            } else {
+                const scheme = u.protocol.replace(':', '');
+                const defaultPort = scheme === 'https' ? 443 : scheme === 'http' ? 80 : 0;
+                const actualPort = parseInt(u.port || '0') || defaultPort;
+                label = u.hostname + ':' + actualPort;
+            }
+        } catch (e) { label = url; }
+    }
     const conn = { url, label: label || url, token: token || '', reachable: undefined, _lastError: null, _commands: null, _certs: null, _serverName: null };
     state.connections.push(conn);
     // Persist connections to localStorage

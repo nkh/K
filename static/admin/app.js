@@ -71,7 +71,7 @@
         // Default: auto-connect to current origin
         state.connections = [{
             url: window.location.origin,
-            label: 'Local',
+            label: '',  // will be derived from URL by _getServerLabel
             token: '',
             reachable: undefined,
         }];
@@ -185,8 +185,10 @@
             document.body.style.cursor = 'col-resize';
             document.body.style.userSelect = 'none';
             const onMove = (e) => {
-                const newWidth = Math.max(150, Math.min(600, startWidth + e.clientX - startX));
+                const newWidth = Math.max(150, Math.min(9999, startWidth + e.clientX - startX));
                 sidebar.style.width = newWidth + 'px';
+                // Toggle wide mode for inline details
+                sidebar.classList.toggle('sidebar-wide', newWidth >= 400);
             };
             const onUp = () => {
                 sidebarHandle.classList.remove('active');

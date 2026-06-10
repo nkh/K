@@ -220,7 +220,7 @@ function _getServerLabel(inst, instUrl) {
             return u.hostname + ':' + actualPort;
         } catch (e) { return instUrl; }
     }
-    return 'unknown';
+    return '';
 }
 
 /// Get a distinct background color for a server connection.
@@ -667,7 +667,7 @@ function renderPanels() {
                             <span class="cmd-args" id="cmdArgs-${panel.id}"></span>
                         </div>
                         <span class="panel-header-label" id="panelLabel-${panel.id}"></span>
-                        ${state.panels.length > 1 ? `<button class="btn btn-xs btn-danger" onclick="event.stopPropagation();removePanel('${panel.id}')" title="Remove panel">&#x2715;</button>` : ''}
+                        <button class="btn btn-xs panel-close-btn" onclick="event.stopPropagation();closePanelContent('${panel.id}')" title="Clear command">&#x2715;</button>
                     </div>
                     ${panel.split ? _renderSplitContainer(panel) : _renderVttyContainer(panel)}
                 </div>
@@ -898,6 +898,23 @@ function updateSharedToolbar() {
     const restartBtn = document.getElementById('stRestartBtn');
     if (restartBtn) {
         restartBtn.style.display = panelObj.selectedCmdId ? '' : 'none';
+    }
+
+    // Freeze/thaw button
+    const freezeBtn = document.getElementById('stFreezeBtn');
+    if (freezeBtn) {
+        if (panelObj.selectedCmdId) {
+            const inst = state.connections.find(i => i.url === panelObj.selectedInstUrl);
+            const cmd = inst && inst._commands ? inst._commands.find(c => c.id === panelObj.selectedCmdId) : null;
+            const isAlive = cmd && cmd.alive !== false;
+            const isFrozen = cmd && cmd.frozen === true;
+            freezeBtn.style.display = isAlive ? '' : 'none';
+            freezeBtn.textContent = isFrozen ? '\u25B6' : '\u23F8';
+            freezeBtn.title = isFrozen ? 'Thaw command' : 'Freeze command';
+            freezeBtn.classList.toggle('btn-primary', isFrozen);
+        } else {
+            freezeBtn.style.display = 'none';
+        }
     }
 
     // Max Fit button state
@@ -1840,11 +1857,36 @@ function onPanelDragEnd(e) {
 
 
     // Expose all public functions to global scope
+    /// Clear the command from a panel (disconnect WS/poll, clear selection)
+/// but keep the panel itself. If only one panel, this gives an empty panel.
+/// If multiple panels, also offers to remove the panel entirely.
+function closePanelContent(panelId) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj) return;
+    // If multiple panels, remove entirely; otherwise just clear
+    if (state.panels.length > 1) {
+        removePanel(panelId);
+    } else {
+        disconnectPanelWs(panelId);
+        stopPanelPoll(panelId);
+        panelObj.selectedCmdId = null;
+        panelObj.selectedInstUrl = null;
+        panelObj.customTitle = '';
+        state.selectedCmdId = null;
+        state.selectedInstUrl = null;
+        // Force full rebuild to show empty panel
+        _lastRenderedPanelCount = -1;
+        renderPanels();
+        updateSharedToolbar();
+    }
+}
+
     window.addPanelDirect = addPanelDirect;
     window.addPanel = addPanel;
     window.closePanelModal = closePanelModal;
     window.confirmAddPanel = confirmAddPanel;
     window.removePanel = removePanel;
+    window.closePanelContent = closePanelContent;
     window.toggleMinimizePanel = toggleMinimizePanel;
     window.splitPanel = splitPanel;
     window.unsplitPanel = unsplitPanel;

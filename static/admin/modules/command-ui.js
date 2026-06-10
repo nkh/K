@@ -5,105 +5,117 @@
 // Update the panel header with the selected command's full name and args.
 
 function updatePanelCommandInfo() {
-    if (!state.selectedInstUrl || !state.selectedCmdId) return;
-    // Find the command data from the loaded instance commands
-    let cmd = null;
-    for (const inst of state.connections) {
-        if (inst.url === state.selectedInstUrl && inst._commands) {
-            cmd = inst._commands.find(c => c.id === state.selectedCmdId);
-            break;
+    // Update ALL panels that have a selected command — not just the focused one.
+    // This ensures headers stay accurate when commands exit or servers die.
+    for (const panelObj of state.panels) {
+        if (!panelObj.selectedInstUrl || !panelObj.selectedCmdId) continue;
+        const panelEl = document.getElementById(panelObj.id);
+        if (!panelEl) continue;
+
+        let cmd = null;
+        const inst = state.connections.find(i => i.url === panelObj.selectedInstUrl);
+        if (inst && inst._commands) {
+            cmd = inst._commands.find(c => c.id === panelObj.selectedCmdId);
+        }
+
+        const nameEl = panelEl.querySelector(':scope > .panel-header .cmd-fullname');
+        const argsEl = panelEl.querySelector(':scope > .panel-header .cmd-args');
+        const serverBadge = panelEl.querySelector(':scope > .panel-header .panel-server-badge');
+
+        // Update server badge
+        if (serverBadge) {
+            const sLabel = _getServerLabel(inst, panelObj.selectedInstUrl);
+            serverBadge.textContent = sLabel;
+            serverBadge.style.display = sLabel ? '' : 'none';
+        }
+
+        if (nameEl && cmd) {
+            const fullName = cmd.name || cmd.id;
+            const sLabel = _getServerLabel(inst, panelObj.selectedInstUrl);
+            const titleWithServer = sLabel ? fullName + ' ' + sLabel : fullName;
+            const displayTitle = panelObj.customTitle || titleWithServer;
+            nameEl.textContent = displayTitle;
+            nameEl.title = fullName + (sLabel ? ' (' + sLabel + ')' : '') + (panelObj.customTitle ? ' (title: ' + panelObj.customTitle + ')' : '');
+            if (argsEl) {
+                const argsStr = (cmd.args || []).join(' ');
+                argsEl.textContent = argsStr;
+                argsEl.title = argsStr || '';
+            }
+
+            // Update per-panel pause button
+            const pauseBtn = panelEl.querySelector(`[id^="pauseRunBtn-"]`);
+            if (pauseBtn) {
+                const isAlive = cmd.alive !== false;
+                const isFrozen = cmd.frozen === true;
+                if (isAlive) {
+                    pauseBtn.style.display = '';
+                    pauseBtn.textContent = isFrozen ? '\u25B6 Run' : '\u23F8 Pause';
+                    pauseBtn.className = 'btn btn-xs' + (isFrozen ? ' btn-primary' : '');
+                } else {
+                    pauseBtn.style.display = 'none';
+                }
+            }
+
+            // Show/hide restart button
+            const restartBtn = panelEl.querySelector(`[id^="restartBtn-"]`);
+            if (restartBtn) {
+                restartBtn.style.display = '';
+            }
+
+            // Update resource badge
+            const resourceBadgeEl = panelEl.querySelector(`[id^="resourceBadge-"]`);
+            if (resourceBadgeEl) {
+                const res = state._resourceCache[cmd.id];
+                if (state.showResources && res && (res.cpu_percent != null || res.memory_mb != null)) {
+                    resourceBadgeEl.style.display = '';
+                    resourceBadgeEl.textContent = (res.cpu_percent != null ? 'CPU ' + res.cpu_percent.toFixed(1) + '%' : '') +
+                        (res.cpu_percent != null && res.memory_mb != null ? ' | ' : '') +
+                        (res.memory_mb != null ? res.memory_mb.toFixed(1) + 'MB' : '');
+                } else {
+                    resourceBadgeEl.textContent = '';
+                    if (!state.showResources) resourceBadgeEl.style.display = 'none';
+                }
+            }
+
+            // Update exited banner
+            const exitedBanner = panelEl.querySelector(`[id^="exitedBanner-"]`);
+            if (exitedBanner) {
+                const isAlive = cmd.alive !== false;
+                const isFrozen = cmd.frozen === true;
+                if (!isAlive && !isFrozen) {
+                    const exitCode = cmd.exit_code != null ? cmd.exit_code : '?';
+                    const exitClass = cmd.exit_code === 0 ? 'success' : 'failure';
+                    exitedBanner.innerHTML = `<span class="exited-banner-icon">&#9632;</span> Command exited <span class="exit-badge ${exitClass}">exit ${exitCode}</span>`;
+                    exitedBanner.style.display = 'flex';
+                } else {
+                    exitedBanner.style.display = 'none';
+                }
+            }
+        } else if (nameEl) {
+            // No command found (killed, gone, etc.) — clear header
+            nameEl.textContent = panelObj.customTitle || '';
+            if (argsEl) argsEl.textContent = '';
+            const pauseBtn = panelEl.querySelector(`[id^="pauseRunBtn-"]`);
+            if (pauseBtn) pauseBtn.style.display = 'none';
+            const restartBtn = panelEl.querySelector(`[id^="restartBtn-"]`);
+            if (restartBtn) restartBtn.style.display = 'none';
+            const exitedBanner = panelEl.querySelector(`[id^="exitedBanner-"]`);
+            if (exitedBanner) exitedBanner.style.display = 'none';
         }
     }
-    const panel = getSelectedPanel();
-    if (!panel) return;
-    const nameEl = panel.querySelector('.cmd-fullname');
-    const argsEl = panel.querySelector('.cmd-args');
-    if (nameEl && cmd) {
-        const panelObj = state.panels.find(p => p.id === panel.id);
-        const fullName = cmd.name || cmd.id;
-        // Append server label (name or host:port) after the command name
-        const inst = panelObj && panelObj.selectedInstUrl ? state.connections.find(i => i.url === panelObj.selectedInstUrl) : null;
-        const serverLabel = inst ? inst.label || inst.url.replace(/^https?:\/\//, '') : '';
-        const titleWithServer = serverLabel ? fullName + ' - ' + serverLabel : fullName;
-        // Show custom title if set, otherwise command name + server
-        const displayTitle = (panelObj && panelObj.customTitle) ? panelObj.customTitle : titleWithServer;
-        nameEl.textContent = displayTitle;
-        nameEl.title = fullName + (serverLabel ? ' (' + serverLabel + ')' : '') + (panelObj && panelObj.customTitle ? ' (title: ' + panelObj.customTitle + ')' : '');
-        if (argsEl) {
-            const argsStr = (cmd.args || []).join(' ');
-            argsEl.textContent = argsStr;
-            argsEl.title = argsStr || '';
-        }
-        // Update bottom bar command label
+
+    // Also update the bottom bar for the focused panel
+    const focusedPanelObj = state.panels.find(p => p.id === state._focusedPanelId);
+    if (focusedPanelObj && focusedPanelObj.selectedCmdId) {
+        const inst = state.connections.find(i => i.url === focusedPanelObj.selectedInstUrl);
+        const cmd = inst && inst._commands ? inst._commands.find(c => c.id === focusedPanelObj.selectedCmdId) : null;
         updateBottomBarLabel(cmd);
-
-        // Update per-panel pause button
-        const pauseBtn = panel.querySelector(`[id^="pauseRunBtn-"]`);
-        if (pauseBtn) {
-            const isAlive = cmd.alive !== false;
-            const isFrozen = cmd.frozen === true;
-            if (isAlive) {
-                pauseBtn.style.display = '';
-                pauseBtn.textContent = isFrozen ? '\u25B6 Run' : '\u23F8 Pause';
-                pauseBtn.className = 'btn btn-xs' + (isFrozen ? ' btn-primary' : '');
-            } else {
-                pauseBtn.style.display = 'none';
-            }
-        }
-
-        // Show/hide restart button next to command name
-        const restartBtn = panel.querySelector(`[id^="restartBtn-"]`);
-        if (restartBtn) {
-            restartBtn.style.display = '';
-        }
-
-        // Update resource badge in panel header
-        const resourceBadgeEl = panel.querySelector(`[id^="resourceBadge-"]`);
-        if (resourceBadgeEl) {
-            const res = state._resourceCache[cmd.id];
-            if (state.showResources && res && (res.cpu_percent != null || res.memory_mb != null)) {
-                resourceBadgeEl.style.display = '';
-                resourceBadgeEl.textContent = (res.cpu_percent != null ? 'CPU ' + res.cpu_percent.toFixed(1) + '%' : '') +
-                    (res.cpu_percent != null && res.memory_mb != null ? ' | ' : '') +
-                    (res.memory_mb != null ? res.memory_mb.toFixed(1) + 'MB' : '');
-            } else {
-                resourceBadgeEl.textContent = '';
-                if (!state.showResources) resourceBadgeEl.style.display = 'none';
-            }
-        }
-
-        // Update exited banner on VTTY container
-        const exitedBanner = panel.querySelector(`[id^="exitedBanner-"]`);
-        if (exitedBanner) {
-            const isAlive = cmd.alive !== false;
-            const isFrozen = cmd.frozen === true;
-            if (!isAlive && !isFrozen) {
-                const exitCode = cmd.exit_code != null ? cmd.exit_code : '?';
-                const exitClass = cmd.exit_code === 0 ? 'success' : 'failure';
-                exitedBanner.innerHTML = `<span class="exited-banner-icon">&#9632;</span> Command exited <span class="exit-badge ${exitClass}">exit ${exitCode}</span>`;
-                exitedBanner.style.display = 'flex';
-            } else {
-                exitedBanner.style.display = 'none';
-            }
-        }
-        // Update shared toolbar
-        updateSharedToolbar();
-    } else if (nameEl) {
-        // No command selected — show custom title if set
-        const panelObj = state.panels.find(p => p.id === panel.id);
-        nameEl.textContent = (panelObj && panelObj.customTitle) ? panelObj.customTitle : '';
-        if (argsEl) argsEl.textContent = '';
+    } else {
         updateBottomBarLabel(null);
-        // Hide pause button
-        const pauseBtn = panel.querySelector(`[id^="pauseRunBtn-"]`);
-        if (pauseBtn) pauseBtn.style.display = 'none';
-        // Hide restart button
-        const restartBtn = panel.querySelector(`[id^="restartBtn-"]`);
-        if (restartBtn) restartBtn.style.display = 'none';
-        // Hide exited banner
-        const exitedBanner = panel.querySelector(`[id^="exitedBanner-"]`);
-        if (exitedBanner) exitedBanner.style.display = 'none';
     }
+
+    // Update shared toolbar
+    updateSharedToolbar();
 }
 
 // ─── Bottom bar: command label ───

@@ -160,6 +160,8 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .panel-header .cmd-args { font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .panel-header .instance-url { font-size: 0.6rem; color: var(--text-muted); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
 .panel-header-label { font-size: 0.6rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; font-family: var(--font-mono); }
+.panel-close-btn { font-size: 0.55rem; opacity: 0.5; padding: 0 0.2rem; line-height: 1; flex-shrink: 0; }
+.panel-close-btn:hover { opacity: 1; }
 
 /* VTTY */
 .vtty-container { flex: 1; overflow: auto; background: var(--vtty-bg, #000); position: relative; cursor: text; }
@@ -235,7 +237,13 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
    line below the command name.  Uses padding-left to align with the name. */
 .cmd-item .cmd-detail-row { display: flex; align-items: center; gap: 0.35rem; padding-left: 2rem; font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cmd-item .cmd-detail-row:empty { display: none; }
+.sidebar-wide .cmd-detail-row { display: none; }
+.sidebar-wide .cmd-detail-inline { display: inline !important; }
+.sidebar-wide .cmd-item-row { flex-wrap: wrap; }
 .cmd-item .cmd-detail-row .detail-sep { color: var(--border); }
+.cmd-freeze-btn { font-size: 0.65rem; padding: 0 0.15rem; cursor: pointer; opacity: 0.5; background: none; border: 1px solid transparent; border-radius: 2px; flex-shrink: 0; }
+.cmd-freeze-btn:hover { opacity: 0.8; border-color: var(--border); }
+.cmd-freeze-btn.active { opacity: 1; border-color: var(--accent); color: var(--accent); }
 .cmd-item .cmd-detail-inline { font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 0%; min-width: 0; }
 .cmd-item .cmd-detail-inline:empty { display: none; }
 .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }

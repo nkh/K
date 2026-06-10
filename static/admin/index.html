@@ -29,7 +29,6 @@
             <button class="btn btn-xs" id="soundBtn" onclick="toggleSoundNotifications()" title="Toggle sound notifications">&#128276;</button>
             <button class="btn btn-xs" id="logsBtn" onclick="toggleLogsView()" title="Toggle log viewer">Logs</button>
             <button class="btn btn-xs" id="statusBtn" onclick="toggleBottombar()" title="Toggle status bar">Status</button>
-            <button class="btn btn-xs" onclick="openCmdManager()" title="Command Manager — manage all commands across servers">&#x2630; Commands</button>
 
             <div class="token-bar">
                 <label for="authToken">Token:</label>
@@ -209,6 +208,7 @@
                         </div>
                     </div>
                     <button class="btn btn-xs" onclick="toggleSelectionMode(getActivePanelId())" id="stSelectBtn" title="Toggle text selection mode">Select</button>
+                    <button class="btn btn-xs" onclick="togglePauseRunPanel(getActivePanelId())" id="stFreezeBtn" title="Freeze/Thaw command" style="display:none;">&#x23F8;</button>
                     <button class="btn btn-xs" onclick="copyTerminalSelection(getActivePanelId())" title="Copy selected text to clipboard">Copy</button>
                     <button class="btn btn-xs" onclick="exportTerminal(getActivePanelId())" title="Export terminal as text">&#x2913;</button>
                     <button class="btn btn-xs" onclick="screenshotPanel(getActivePanelId())" title="Download screenshot as PNG">&#x1F4F7;</button>

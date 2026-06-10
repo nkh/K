@@ -107,6 +107,7 @@ function _flushThrottledRefresh() {
 
 // ─── Selection Mode ───
 // When active, mouse events are NOT forwarded to PTY, enabling native text selection.
+// Also freezes VTTY DOM updates so text doesn't shift under the cursor.
 function toggleSelectionMode(panelId) {
     const panelObj = state.panels.find(p => p.id === panelId);
     if (!panelObj) return;
@@ -117,14 +118,20 @@ function toggleSelectionMode(panelId) {
     const btn = document.getElementById('selectBtn-' + panelId);
     if (btn) {
         btn.classList.toggle('btn-primary', panelObj.selectionMode);
-        btn.textContent = panelObj.selectionMode ? '✓ Select' : 'Select';
+        btn.textContent = panelObj.selectionMode ? '\u2713 Select' : 'Select';
+    }
+    // Freeze/thaw VTTY updates so text stays stable for selection
+    if (panelObj.selectionMode) {
+        stopPanelUpdateMode(panelId);
+    } else if (panelObj.selectedInstUrl && panelObj.selectedCmdId) {
+        startPanelUpdateMode(panelId);
     }
     // Update shared toolbar button if this is the active panel
     if (panelId === getActivePanelId()) {
         const stBtn = document.getElementById('stSelectBtn');
         if (stBtn) {
             stBtn.classList.toggle('btn-primary', panelObj.selectionMode);
-            stBtn.textContent = panelObj.selectionMode ? '✓ Select' : 'Select';
+            stBtn.textContent = panelObj.selectionMode ? '\u2713 Select' : 'Select';
         }
     }
 }
