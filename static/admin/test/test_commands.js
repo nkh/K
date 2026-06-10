@@ -19,7 +19,6 @@ globalThis.stopPanelPoll = function() {};
 globalThis.connectPanelWs = function() {};
 globalThis.startPanelPoll = function() {};
 globalThis.loadCommands = function() { return Promise.resolve(); };
-globalThis.checkOnboarding = function() {};
 globalThis.loadVttyHttpForPanel = function() {};
 globalThis.startPanelUpdateMode = function() {};
 globalThis._restoreCachedDom = function() {};

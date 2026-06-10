@@ -24,7 +24,6 @@ globalThis.stopPanelPoll = function() {};
 globalThis.connectPanelWs = function() {};
 globalThis.startPanelPoll = function() {};
 globalThis.loadCommands = function() { return Promise.resolve(); };
-globalThis.checkOnboarding = function() {};
 globalThis._cacheTerminalForSwitch = function() {};
 globalThis._restoreCachedDom = function() {};
 globalThis.focusPanel = function(id) { state._focusedPanelId = id; };

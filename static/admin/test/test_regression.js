@@ -30,7 +30,6 @@ assert(typeof parseLogLine === 'function', 'logs loaded');
 assert(typeof sendDirectKey === 'function', 'keyboard loaded');
 assert(typeof vttySearch === 'function', 'search loaded');
 assert(typeof notifyCommandEnded === 'function', 'notifications loaded');
-assert(typeof checkOnboarding === 'function', 'onboarding loaded');
 assert(typeof saveTemplate === 'function', 'templates loaded');
 assert(typeof onCmdDragStart === 'function', 'dragdrop loaded');
 assert(typeof getWorkspaces === 'function', 'workspaces loaded');
@@ -224,19 +223,6 @@ const md = renderMarkdown('# Hello\n\n**bold** text');
 assert(md.includes('Hello'), 'markdown renders headings');
 assert(md.includes('bold'), 'markdown renders bold');
 assert(!md.includes('#'), 'markdown strips hash from heading');
-
-// ════════════════════════════════════════════════════════════════════
-// REGRESSION 15: Onboarding — step data structure
-// ════════════════════════════════════════════════════════════════════
-console.log('[REG-15] Onboarding steps data structure');
-assert(Array.isArray(_onboardingSteps), 'onboarding steps is array');
-if (_onboardingSteps && _onboardingSteps.length > 0) {
-    assert(typeof _onboardingSteps[0].title === 'string', 'step has title');
-    assert(typeof _onboardingSteps[0].body === 'string', 'step has body');
-    assert(_onboardingSteps.length >= 5, 'at least 5 onboarding steps');
-} else {
-    assert(true, 'onboarding steps not exported (acceptable)');
-}
 
 // ════════════════════════════════════════════════════════════════════
 // REGRESSION 16: Log parsing — handles different log levels

@@ -25,7 +25,6 @@ globalThis.fetchServerConfig = function() {};
 globalThis.applyUpdateModeUI = function() {};
 globalThis.updateSidebarTabsVisibility = function() {};
 globalThis.fetchPeers = function() {};
-globalThis.checkOnboarding = function() {};
 globalThis.autoFitActiveTerminal = function() {};
 
 // ── URL parameter parsing: default single connection ──

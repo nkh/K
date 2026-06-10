@@ -470,7 +470,7 @@ const moduleOrder = [
     'commands-core.js', 'command-selection.js', 'command-ui.js', 'server-connections.js',
     'websocket.js', 'vtty.js', 'snapshot.js',
     'spawn.js', 'logs.js', 'keyboard.js', 'search.js', 'notifications.js',
-    'onboarding.js', 'templates.js', 'dragdrop.js', 'workspaces.js',
+    'templates.js', 'dragdrop.js', 'workspaces.js',
     'misc.js'
 ];
 
@@ -517,7 +517,7 @@ const _crossDeps = (() => {
     'updateVttyDisplay', 'playExitSound', 'fetchServerTemplates',
     'loadCertificates', 'fetchEnvironments', 'fetchServerConfig',
     'applyUpdateModeUI', 'updateSidebarTabsVisibility', 'fetchPeers',
-    'checkOnboarding', 'autoFitActiveTerminal', 'toggleMaxFit', 'toggleMaxFont',
+    'autoFitActiveTerminal', 'toggleMaxFit', 'toggleMaxFont',
     'scrollTerminalBottom', 'vttySearch', 'vttySearchNext', 'vttySearchPrev',
     'vttySearchClose', 'vttyRemoveHighlights', 'vttyApplyHighlights',
     'vttyScrollToMatch', '_updateSearchProgress',
@@ -551,7 +551,7 @@ const _crossDeps = (() => {
     'parseSpawnArgs', 'parseSpawnEnvVars',
     'saveToken', 'loadToken', 'renderMarkdown',
     'togglePanelLayout', 'toggleLayoutPresetMenu', 'applyLayoutPreset',
-    '_resizePanelTo', '_onboardingSteps', '_hex',
+    '_resizePanelTo', '_hex',
     // Common mocks used by individual test files (consolidated here)
     'startRefresh',
     ]);

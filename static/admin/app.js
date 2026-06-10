@@ -15,10 +15,9 @@
 //   vtty.js         ← utils, state
 //   spawn.js        ← utils, state, commands
 //   logs.js         ← utils, state
-//   keyboard.js     ← utils, state, focus, search, onboarding
+//   keyboard.js     ← utils, state, focus, search
 //   search.js       ← utils, state, focus
 //   notifications.js ← utils, state, commands
-//   onboarding.js    ← utils, state, focus
 //   templates.js    ← utils, state, commands, spawn
 //   dragdrop.js     ← utils, state, panels, commands
 //   workspaces.js   ← utils, state, panels, logs, commands
@@ -134,8 +133,6 @@
     applyUpdateModeUI();
     updateSidebarTabsVisibility();
     fetchPeers();
-    checkOnboarding();
-
     // Check if mobile layout should be active
     state._mobileTabbedLayout = window.innerWidth <= 768;
 
