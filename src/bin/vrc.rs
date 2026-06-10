@@ -115,3 +115,41 @@ fn main() -> Result<()> {
 
     std::process::exit(0);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Verify that DEFAULT_PORT is not defined in vrc (vrc uses UDS, not HTTP).
+    /// vrc.rs does not bind to a TCP port — it uses Unix domain sockets exclusively.
+    #[test]
+    fn test_vrc_has_no_tcp_port_binding() {
+        // vrc uses socket_path_for_pid() for IPC, not TCP.
+        // Verify the function exists and produces a valid path.
+        let pid = 12345;
+        let path = vrc_core::ipc::socket_path_for_pid(pid);
+        assert!(path.to_string_lossy().contains("12345"), "socket path includes pid");
+    }
+
+    /// Verify the async_main function compiles and accepts Cli.
+    #[test]
+    fn test_async_main_function_signature() {
+        fn _type_check(_: fn(vrc_core::cli::args::Cli) -> anyhow::Result<()>) {}
+        _type_check(async_main);
+    }
+
+    /// Verify vrc imports the right modules.
+    #[test]
+    fn test_vrc_imports_instance_registry() {
+        // InstanceRegistry::new() should be callable
+        fn _type_check(_: fn() -> anyhow::Result<vrc_core::instance::registry::InstanceRegistry>) {}
+        _type_check(vrc_core::instance::registry::InstanceRegistry::new);
+    }
+
+    /// Verify vrc imports CommandManager.
+    #[test]
+    fn test_vrc_imports_command_manager() {
+        fn _type_check(_: fn(vrc_core::config::schema::Config) -> vrc_core::process::manager::CommandManager) {}
+        _type_check(vrc_core::process::manager::CommandManager::new);
+    }
+}

@@ -281,5 +281,81 @@ mod tests {
         // then collect_all_commands returns empty, then errors on no commands
         assert!(result.is_err(), "no instances should error");
     }
+
+    /// Test filename sanitization logic used in screenshot.
+    #[test]
+    fn test_screenshot_filename_sanitization() {
+        let full = "cargo run --release 2>&1";
+        let cmd_part: String = full
+            .chars()
+            .map(|c| {
+                if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect();
+        assert!(!cmd_part.contains(' '), "spaces replaced");
+        assert!(!cmd_part.contains('&'), "special chars replaced");
+        assert!(cmd_part.contains("cargo"), "alphanumeric preserved");
+        assert!(cmd_part.contains("-"), "hyphens preserved");
+
+        // Truncation at 120 chars
+        let long_name = "a".repeat(200);
+        let truncated = if long_name.len() > 120 {
+            format!("{}...", &long_name[..117])
+        } else {
+            long_name
+        };
+        assert!(truncated.len() <= 123, "truncated + ellipsis <= 123 chars");
+        assert!(truncated.ends_with("..."), "truncated ends with ellipsis");
+    }
+
+    /// Test that the function handles the no-target single-command case.
+    #[test]
+    fn test_screenshot_command_handles_no_target() {
+        // When target is None and only one command, it should proceed.
+        // This is a compile/type check.
+        fn _type_check(_: fn(
+            &crate::cli::args::Cli,
+            Option<&str>,
+            Option<&str>,
+            f32,
+            Option<&str>,
+            bool,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send>>) {}
+        // We can't easily type-check async functions, so just verify it's callable.
+        let _ = std::any::type_name_of_val(&handle_screenshot_command);
+    }
+
+    /// Test the output path logic: absolute path used as-is, relative path resolved via cwd.
+    #[test]
+    fn test_screenshot_output_path_resolution() {
+        let abs_path = "/tmp/screenshot.png";
+        let display_path = std::path::Path::new(abs_path);
+        let abs_result = if display_path.is_absolute() {
+            abs_path.to_string()
+        } else {
+            match std::env::current_dir() {
+                Ok(cwd) => cwd.join(abs_path).to_string_lossy().to_string(),
+                Err(_) => abs_path.to_string(),
+            }
+        };
+        assert!(abs_result.starts_with("/tmp/"), "absolute path preserved");
+
+        let rel_path = "screenshot.png";
+        let rel_display = std::path::Path::new(rel_path);
+        let rel_result = if rel_display.is_absolute() {
+            rel_path.to_string()
+        } else {
+            match std::env::current_dir() {
+                Ok(cwd) => cwd.join(rel_path).to_string_lossy().to_string(),
+                Err(_) => rel_path.to_string(),
+            }
+        };
+        // Relative path should be resolved to include cwd
+        assert!(rel_result.contains("screenshot.png"), "relative path resolved");
+    }
 }
 

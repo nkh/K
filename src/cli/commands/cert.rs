@@ -144,5 +144,82 @@ mod tests {
         // Since load_config(None) picks up default locations, we just verify the
         // command exists and compiles.
     }
+
+    #[test]
+    fn test_cert_action_variants_compile() {
+        // Verify all CertAction variants can be constructed
+        let generate = CertAction::Generate { name: "test-cert".into() };
+        let list = CertAction::List;
+        let show = CertAction::Show { name: "test-cert".into() };
+        let remove = CertAction::Remove { name: "test-cert".into() };
+        // All should exist and be usable in match arms
+        let _ = match generate {
+            CertAction::Generate { name } => name,
+            CertAction::List => "list".to_string(),
+            CertAction::Show { name } => name,
+            CertAction::Remove { name } => name,
+        };
+        let _ = list;
+        let _ = show;
+        let _ = remove;
+    }
+
+    #[test]
+    fn test_cert_store_generate_roundtrip() {
+        // Generate a certificate and verify it has required fields
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = CertificateStore::new();
+        let entry = store.generate("roundtrip-test").unwrap();
+        assert_eq!(entry.name, "roundtrip-test");
+        assert!(!entry.cert_file.is_empty(), "cert_file should not be empty");
+        assert!(!entry.key_file.is_empty(), "key_file should not be empty");
+
+        // Derive token should be a 64-char hex string
+        let token = entry.derive_token().unwrap();
+        assert_eq!(token.len(), 64, "token should be 64 hex chars");
+        assert!(token.chars().all(|c| c.is_ascii_hexdigit()), "token should be hex");
+    }
+
+    #[test]
+    fn test_cert_store_list_after_generate() {
+        let mut store = CertificateStore::new();
+        store.generate("list-test-a").unwrap();
+        store.generate("list-test-b").unwrap();
+        let certs = store.list();
+        assert_eq!(certs.len(), 2);
+        let names: Vec<&str> = certs.iter().map(|c| c.name.as_str()).collect();
+        assert!(names.contains(&"list-test-a"));
+        assert!(names.contains(&"list-test-b"));
+    }
+
+    #[test]
+    fn test_cert_store_get_existing() {
+        let mut store = CertificateStore::new();
+        store.generate("get-test").unwrap();
+        let entry = store.get("get-test");
+        assert!(entry.is_some(), "should find generated cert");
+        assert_eq!(entry.unwrap().name, "get-test");
+    }
+
+    #[test]
+    fn test_cert_store_get_nonexistent() {
+        let store = CertificateStore::new();
+        assert!(store.get("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_cert_store_remove_existing() {
+        let mut store = CertificateStore::new();
+        store.generate("remove-test").unwrap();
+        let removed = store.remove("remove-test").unwrap();
+        assert_eq!(removed.name, "remove-test");
+        assert!(store.get("remove-test").is_none(), "cert should be gone after remove");
+    }
+
+    #[test]
+    fn test_cert_store_remove_nonexistent() {
+        let mut store = CertificateStore::new();
+        assert!(store.remove("nonexistent").is_none());
+    }
 }
 

@@ -359,4 +359,96 @@ mod tests {
         let _ = format!("{:?}", ping);
         let _ = format!("{:?}", shutdown);
     }
+
+    /// Verify all ControlCommand variants can be constructed.
+    #[test]
+    fn test_all_control_command_variants() {
+        let list = ControlCommand::List;
+        let spawn = ControlCommand::Spawn {
+            cmd: "htop".into(),
+            args: vec![],
+            env: None,
+            rows: None,
+            cols: None,
+            dir: None,
+        };
+        let keys = ControlCommand::SendKeys { id: "cmd-1".into(), keys: "hello".into() };
+        let kill = ControlCommand::Kill { id: "cmd-2".into() };
+        let freeze = ControlCommand::Freeze { id: "cmd-3".into() };
+        let thaw = ControlCommand::Thaw { id: "cmd-4".into() };
+        let purge = ControlCommand::Purge { id: "cmd-5".into() };
+        let restart = ControlCommand::Restart { id: "cmd-6".into() };
+        let resize = ControlCommand::Resize { id: "cmd-7".into(), rows: 50, cols: 200 };
+        let cat = ControlCommand::Cat { id: "cmd-8".into() };
+        let snapshot = ControlCommand::Snapshot { id: "cmd-9".into(), name: "snap1".into() };
+        let list_snap = ControlCommand::ListSnapshots { id: "cmd-9".into() };
+        let del_snap = ControlCommand::DeleteSnapshot { id: "cmd-9".into(), name: "snap1".into() };
+        let ping = ControlCommand::Ping;
+        let shutdown = ControlCommand::Shutdown;
+        // All variants constructed without panic
+        let _ = (list, spawn, keys, kill, freeze, thaw, purge, restart, resize, cat,
+                 snapshot, list_snap, del_snap, ping, shutdown);
+    }
+
+    /// Verify ControlResponse variants can be constructed.
+    #[test]
+    fn test_control_response_variants() {
+        let ok = ControlResponse::Ok {
+            data: serde_json::json!({"key": "value"}),
+        };
+        let err = ControlResponse::Error {
+            error: "something went wrong".into(),
+        };
+        // Verify serialization works
+        let ok_json = serde_json::to_string(&ok).unwrap();
+        let err_json = serde_json::to_string(&err).unwrap();
+        assert!(ok_json.contains("key"), "Ok response serializes correctly");
+        assert!(err_json.contains("something went wrong"), "Error response serializes correctly");
+
+        // Verify deserialization round-trip
+        let ok_rt: ControlResponse = serde_json::from_str(&ok_json).unwrap();
+        match ok_rt {
+            ControlResponse::Ok { data } => assert_eq!(data["key"], "value"),
+            ControlResponse::Error { .. } => panic!("expected Ok response"),
+        }
+    }
+
+    /// Verify encode_frame and decode_frame work together.
+    #[test]
+    fn test_encode_decode_frame_roundtrip() {
+        use crate::ipc::protocol::{decode_frame, encode_frame};
+
+        let response = ControlResponse::Ok {
+            data: serde_json::json!({"commands": []}),
+        };
+        let frame = encode_frame(&response).unwrap();
+        assert!(!frame.is_empty(), "encoded frame is not empty");
+
+        let (frame_end, payload) = decode_frame(&frame).unwrap();
+        assert_eq!(frame_end, frame.len(), "frame_end matches total length");
+        assert!(!payload.is_empty(), "payload is not empty");
+
+        let decoded: ControlResponse = serde_json::from_slice(&payload).unwrap();
+        match decoded {
+            ControlResponse::Ok { data } => assert_eq!(data["commands"].as_array().unwrap().len(), 0),
+            ControlResponse::Error { .. } => panic!("expected Ok"),
+        }
+    }
+
+    /// Verify decode_frame with empty buffer returns None.
+    #[test]
+    fn test_decode_frame_empty_buffer() {
+        use crate::ipc::protocol::decode_frame;
+        let result = decode_frame(&[]);
+        assert!(result.is_none(), "empty buffer returns None");
+    }
+
+    /// Verify decode_frame with incomplete frame returns None.
+    #[test]
+    fn test_decode_frame_incomplete() {
+        use crate::ipc::protocol::decode_frame;
+        let incomplete = vec![0x00, 0x01, 0x02]; // Too short for a valid frame
+        let result = decode_frame(&incomplete);
+        assert!(result.is_none(), "incomplete frame returns None");
+    }
 }

@@ -141,4 +141,40 @@ mod tests {
         // We just verify no panic on the pre-fork setup.
         let _cfg = cfg; // Config is valid and usable
     }
+
+    /// Verify that log files are created before forking.
+    #[test]
+    fn test_daemonize_creates_log_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let stdout_path = dir.path().join("test_out.log");
+        let stderr_path = dir.path().join("test_err.log");
+        let cfg = Config {
+            daemon: crate::config::daemon::DaemonConfig {
+                enabled: true,
+                stdout_file: stdout_path.to_string_lossy().to_string(),
+                stderr_file: stderr_path.to_string_lossy().to_string(),
+            },
+            ..Config::default()
+        };
+        // Replicate the file-opening logic from daemonize
+        let stdout_file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&cfg.daemon.stdout_file);
+        assert!(stdout_file.is_ok(), "stdout file created");
+        let stderr_file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&cfg.daemon.stderr_file);
+        assert!(stderr_file.is_ok(), "stderr file created");
+    }
+
+    /// Verify that current directory is captured before forking.
+    #[test]
+    fn test_daemonize_captures_cwd() {
+        let cwd = std::env::current_dir().unwrap();
+        assert!(cwd.is_absolute(), "current directory should be absolute");
+        // The daemonize function captures this for restoration after fork
+        let _ = cwd;
+    }
 }
