@@ -14,6 +14,8 @@ state.connections = [];
 assert(() => { loadSnapshot(); }, 'loadSnapshot with no connections does not throw (falls back to loadCommands)');
 
 // Test: loadSnapshot idempotent — second call skips fetch
+// Reset _snapshotLoaded so this test group starts fresh
+window._snapshotLoaded = false;
 const fetchCalls = [];
 const origFetch = globalThis.fetch;
 globalThis.fetch = async function(url) {
@@ -41,6 +43,7 @@ globalThis.fetch = origFetch;
 
 // Test: loadSnapshot with successful response
 console.log('loadSnapshot success path');
+window._snapshotLoaded = false;
 let snapshotFetched = false;
 globalThis.fetch = async function(url) {
     if (url.includes('/api/snapshot')) {
@@ -99,6 +102,7 @@ successPromise.then(() => {
 
 // Test: loadSnapshot with fetch error
 console.log('loadSnapshot error path');
+window._snapshotLoaded = false;
 globalThis.fetch = async function() {
     throw new Error('Network error');
 };
@@ -114,6 +118,7 @@ errorPromise.then(() => {
 
 // Test: loadSnapshot with bad status response
 console.log('loadSnapshot bad status');
+window._snapshotLoaded = false;
 globalThis.fetch = async function() {
     return { ok: false, status: 500, json: async () => ({ status: 'error' }) };
 };
@@ -128,6 +133,7 @@ badPromise.then(() => {
 
 // Test: loadSnapshot with empty commands → welcome screen
 console.log('loadSnapshot welcome state');
+window._snapshotLoaded = false;
 globalThis.fetch = async function() {
     return {
         ok: true, status: 200,
@@ -150,6 +156,7 @@ welcomePromise.then(() => {
 
 // Test: loadSnapshot with multiple connections (peer fetching)
 console.log('loadSnapshot peer fetching');
+window._snapshotLoaded = false;
 let peerFetched = false;
 globalThis.fetch = async function(url) {
     if (url.includes('/api/snapshot')) {

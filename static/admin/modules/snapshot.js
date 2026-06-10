@@ -11,6 +11,12 @@
     'use strict';
 
 let _snapshotLoaded = false;
+// Expose for test resets (getter/setter keeps local var in sync)
+Object.defineProperty(window, '_snapshotLoaded', {
+    get() { return _snapshotLoaded; },
+    set(v) { _snapshotLoaded = v; },
+    configurable: true,
+});
 
 async function loadSnapshot() {
     if (_snapshotLoaded) { loadCommands(); return; }

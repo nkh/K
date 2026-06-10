@@ -222,7 +222,25 @@ class MockElement {
             const el = _elementRegistry.get(sel.slice(1));
             if (el) results.push(el);
         } else {
-            for (const el of _elementRegistry.values()) results.push(el);
+            // Search descendants recursively (correct DOM behavior)
+            const _matches = (el, s) => {
+                if (s.startsWith('.') && el._classList && el._classList.has(s.slice(1))) return true;
+                if (!s.startsWith('.') && !s.startsWith('[') && el.tagName === s.toUpperCase()) return true;
+                const attrMatch = s.match(/^\[([^\]=]+)\^="([^"]+)"\]$/);
+                if (attrMatch && el.getAttribute(attrMatch[1]) !== null && el.getAttribute(attrMatch[1]).startsWith(attrMatch[2])) return true;
+                const attrExact = s.match(/^\[([^\]=]+)="([^"]+)"\]$/);
+                if (attrExact && el.getAttribute(attrExact[1]) === attrExact[2]) return true;
+                const attrPres = s.match(/^\[([^\]=]+)\]$/);
+                if (attrPres && el.hasAttribute(attrPres[1])) return true;
+                return false;
+            };
+            const _collect = (node) => {
+                for (const child of node.children) {
+                    if (_matches(child, sel)) results.push(child);
+                    _collect(child);
+                }
+            };
+            _collect(this);
         }
         return results;
     }
@@ -265,6 +283,7 @@ class MockElement {
     }
     focus() {}
     blur() {}
+    scrollIntoView() {}
     click() { this.dispatchEvent({ type: 'click', target: this, preventDefault() {}, stopPropagation() {} }); }
     get classList() {
         const self = this; // capture MockElement reference
@@ -449,7 +468,7 @@ const moduleOrder = [
     'state.js', 'eventbus.js', 'utils.js', 'focus.js', 'theme.js',
     'sidebar.js', 'panels.js',
     'commands-core.js', 'command-selection.js', 'command-ui.js', 'server-connections.js',
-    'websocket.js', 'vtty.js',
+    'websocket.js', 'vtty.js', 'snapshot.js',
     'spawn.js', 'logs.js', 'keyboard.js', 'search.js', 'notifications.js',
     'onboarding.js', 'templates.js', 'dragdrop.js', 'workspaces.js',
     'misc.js'
@@ -557,6 +576,7 @@ for (const file of moduleOrder.slice(1)) {
 // Save real function references so resetTestState can restore them.
 // Tests often mock these but don't restore, causing cross-file pollution.
 const _realFunctions = {};
+globalThis._realFunctions = _realFunctions;
 const _allExportedFunctions = [];
 for (const key of Object.getOwnPropertyNames(globalThis)) {
     if (typeof globalThis[key] === 'function' && key !== 'constructor') {

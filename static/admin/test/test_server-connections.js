@@ -368,6 +368,8 @@ assert(() => { fetchServerConfig(); }, 'fetchServerConfig does not throw');
 
 // ── loadCertificates ──
 console.log('loadCertificates tests');
+// Restore the real function for the signature check (was mocked at top of file)
+globalThis.loadCertificates = _realFunctions.loadCertificates;
 assert(typeof loadCertificates === 'function', 'loadCertificates is a function');
 assert(loadCertificates.constructor.name === 'AsyncFunction', 'loadCertificates is async');
 

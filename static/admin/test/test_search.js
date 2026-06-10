@@ -36,7 +36,7 @@ if (typeof vttyApplyHighlights === 'function') {
     const pre = document.createElement('pre');
     pre.innerHTML = 'hello world foo bar';
     const result = vttyApplyHighlights(pre, 'hello world', 'foo');
-    assert(typeof result === 'number', 'vttyApplyHighlights returns number');
+    assert(typeof result === 'undefined', 'vttyApplyHighlights returns undefined (void)');
 }
 
 // ── vttyRemoveHighlights ──

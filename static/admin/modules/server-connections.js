@@ -111,7 +111,7 @@ async function fetchServerConfig() {
 /// Apply the current updateMode to the UI controls.
 function applyUpdateModeUI() {
     document.getElementById('updateMode').value = state.updateMode;
-    document.getElementById('pollInterval').value = state.pollInterval;
+    document.getElementById('pollInterval').value = String(state.pollInterval);
     document.getElementById('pollIntervalWrap').style.display = state.updateMode === 'poll' ? '' : 'none';
 }
 
@@ -132,7 +132,7 @@ function applyPollInterval() {
     const val = parseInt(document.getElementById('pollInterval').value) || 500;
     state.pollInterval = Math.max(50, Math.min(5000, val));
     localStorage.setItem('vrw_poll_interval', state.pollInterval.toString());
-    document.getElementById('pollInterval').value = state.pollInterval;
+    document.getElementById('pollInterval').value = String(state.pollInterval);
     // If currently polling, restart the timer with new interval
     if (state.updateMode === 'poll' && state._pollTimer) {
         stopPoll();
