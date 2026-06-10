@@ -36,25 +36,8 @@ function initPanelDropTargets() {
             try {
                 const data = JSON.parse(e.dataTransfer.getData('application/x-cmd'));
                 if (data && data.cmdId) {
-                    // Assign command to this specific panel
-                    const panelObj = state.panels.find(p => p.id === panelEl.id);
-                    if (panelObj) {
-                        _cacheTerminalForSwitch();
-                        panelObj.selectedInstUrl = data.instUrl;
-                        panelObj.selectedCmdId = data.cmdId;
-                        focusPanel(panelObj.id);
-                        state.selectedInstUrl = data.instUrl;
-                        state.selectedCmdId = data.cmdId;
-                        state._pendingVttyData = null;
-                        state._pendingVttyDirty = false;
-                        state.bufferView = 'current';
-                        _restoreCachedDom(data.cmdId);
-                        updatePanelCommandInfo();
-                        updateTerminalDisconnectedOverlay();
-                        updateSidebarSelection();
-                        loadVttyHttpForPanel(panelObj.id, data.instUrl, data.cmdId);
-                        startPanelUpdateMode(panelObj.id);
-                    }
+                    // Always create a new panel for the dropped command
+                    _openCommandInNewPane(data.instUrl, data.cmdId, data.cmdName);
                 }
             } catch (err) { /* ignore invalid drops */ }
             _draggedCmd = null;

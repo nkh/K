@@ -350,6 +350,7 @@ assertEq(dp.selectedCmdId, null, 'panel starts with no command');
 
 const cmdDropEvt = {
     preventDefault() {},
+    stopPropagation() {},
     dataTransfer: {
         getData(type) {
             if (type === 'application/x-cmd') {
@@ -361,14 +362,19 @@ const cmdDropEvt = {
 };
 onPanelDrop(cmdDropEvt, dp.id);
 
-assertEq(dp.selectedInstUrl, 'http://localhost:9090',
-    'command drop sets panel selectedInstUrl');
-assertEq(dp.selectedCmdId, 'cmd-drop-test',
-    'command drop sets panel selectedCmdId');
-assertEq(state.selectedInstUrl, 'http://localhost:9090',
-    'command drop syncs global selectedInstUrl');
-assertEq(state.selectedCmdId, 'cmd-drop-test',
-    'command drop syncs global selectedCmdId');
+// Dropping a command now creates a NEW panel (not reassigning the target).
+// The original panel should remain empty.
+assertEq(dp.selectedCmdId, null,
+    'command drop does NOT reassign target panel');
+// A new panel should have been created
+assert(state.panels.length === 2,
+    'command drop creates a new panel');
+// The new panel should have the command
+const newPanel = state.panels.find(p => p.id !== dp.id);
+assertEq(newPanel && newPanel.selectedCmdId, 'cmd-drop-test',
+    'new panel has the dropped command');
+assertEq(newPanel && newPanel.selectedInstUrl, 'http://localhost:9090',
+    'new panel has the correct inst URL');
 
 onPanelDragEnd({});
 

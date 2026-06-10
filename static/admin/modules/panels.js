@@ -335,8 +335,8 @@ function _renderSplitContainer(panel) {
     // Primary sub-pane
     const primaryHtml = `<div class="split-pane" data-split-side="primary" data-panel="${panel.id}" style="flex: 0 0 ${primaryWidth}%; display:flex; flex-direction:column; min-width:0; min-height:0;">
             <div class="split-header panel-header" data-panel-id="${panel.id}" data-split-side="primary" style="background:${primaryColor};color:${primaryTextColor};">
-                <span class="split-server-label" style="font-size:0.6rem;opacity:0.8;">${escHtml(primaryServerLabel)}</span>
-                <span class="split-cmd-label" style="font-size:0.65rem;font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">${escHtml(primaryCmdLabel)}</span>
+                <span class="split-server-label" style="font-size:var(--ui-fs);opacity:0.8;">${escHtml(primaryServerLabel)}</span>
+                <span class="split-cmd-label" style="font-size:var(--ui-fs);font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">${escHtml(primaryCmdLabel)}</span>
                 <button class="btn btn-xs btn-danger" onclick="event.stopPropagation();unsplitPanel('${panel.id}')" title="Close split">&#x2715;</button>
             </div>
             <div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" data-split-side="primary" data-panel="${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px; flex:1; min-height:0;">
@@ -359,8 +359,8 @@ function _renderSplitContainer(panel) {
     // Secondary sub-pane
     const secondaryHtml = `<div class="split-pane" data-split-side="secondary" data-panel="${panel.id}" style="flex: 0 0 ${secondaryWidth}%; display:flex; flex-direction:column; min-width:0; min-height:0;">
             <div class="split-header panel-header" data-panel-id="${panel.id}" data-split-side="secondary" style="background:${secondaryColor};color:${secondaryTextColor};">
-                <span class="split-server-label" style="font-size:0.6rem;opacity:0.8;">${escHtml(secondaryServerLabel)}</span>
-                <span class="split-cmd-label" style="font-size:0.65rem;font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">${escHtml(secondaryCmdLabel)}</span>
+                <span class="split-server-label" style="font-size:var(--ui-fs);opacity:0.8;">${escHtml(secondaryServerLabel)}</span>
+                <span class="split-cmd-label" style="font-size:var(--ui-fs);font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">${escHtml(secondaryCmdLabel)}</span>
                 <button class="btn btn-xs btn-danger" onclick="event.stopPropagation();unsplitPanel('${panel.id}')" title="Close split">&#x2715;</button>
             </div>
             <div class="vtty-container" id="vtty-${secondaryId}" data-split-side="secondary" data-panel="${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px; flex:1; min-height:0;">
@@ -537,7 +537,7 @@ function renderPanels() {
             break;
         }
     }
-    const shouldShowWelcome = (!hasAnyCommands && !state.selectedCmdId && !state.serverReachable);
+    const shouldShowWelcome = (!hasAnyCommands && !state.selectedCmdId);
     if (shouldShowWelcome !== _showingWelcome) {
         _showingWelcome = shouldShowWelcome;
     }
@@ -657,8 +657,8 @@ function renderPanels() {
                 <div class="panel${isFocused ? ' focused' : ''}" id="${panel.id}" draggable="false" ondragover="onPanelDragOver(event)" ondrop="onPanelDrop(event,'${panel.id}')" ondragleave="onPanelDragLeave(event)"${mobileHidden}>
                     <div class="panel-header" data-panel-id="${panel.id}" oncontextmenu="showPanelContextMenu(event,'${panel.id}')" tabindex="0" role="button" aria-label="Panel: ${escHtml(panel.selectedInstUrl || 'empty')}" style="background:${serverColor};color:${serverTextColor};">
                         ${dragHandle}
-                        <button class="btn btn-xs panel-close-btn" onclick="event.stopPropagation();closePanelContent('${panel.id}')" title="Clear command">&#x2715;</button>
-                        <span class="panel-server-badge" style="font-size:0.6rem;opacity:0.7;flex-shrink:0;">${escHtml(serverLabel)}</span>
+                        <button class="btn btn-xs btn-danger panel-close-btn" onclick="event.stopPropagation();closePanelContent('${panel.id}')" title="Close panel">&#x2715;</button>
+                        <span class="panel-server-badge" style="font-size:var(--ui-fs);opacity:0.7;flex-shrink:0;">${escHtml(serverLabel)}</span>
                         <button class="btn btn-xs cmd-history-btn" id="histBack-${panel.id}" onclick="event.stopPropagation();panelHistoryBack('${panel.id}')" title="Back in command history" style="display:none;">&#x25C0;</button>
                         <button class="btn btn-xs cmd-history-btn" id="histFwd-${panel.id}" onclick="event.stopPropagation();panelHistoryForward('${panel.id}')" title="Forward in command history" style="display:none;">&#x25B6;</button>
                         <div class="cmd-info" id="cmdInfo-${panel.id}">
@@ -919,30 +919,16 @@ function updateSharedToolbar() {
     const maxFitBtn = document.getElementById('stMaxFitBtn');
     if (maxFitBtn) {
         const fitState = _maxFitState[panelId];
-        if (fitState && fitState.active) {
-            maxFitBtn.textContent = 'Restore';
-            maxFitBtn.style.background = 'var(--accent)';
-            maxFitBtn.style.color = '#fff';
-        } else {
-            maxFitBtn.textContent = 'Max fit';
-            maxFitBtn.style.background = '';
-            maxFitBtn.style.color = '';
-        }
+        maxFitBtn.classList.toggle('btn-primary', !!(fitState && fitState.active));
+        maxFitBtn.style.display = panelObj.selectedCmdId ? '' : 'none';
     }
 
     // Max Font button state
     const maxFontBtn = document.getElementById('stMaxFontBtn');
     if (maxFontBtn) {
         const fontState = _maxFontState[panelId];
-        if (fontState && fontState.active) {
-            maxFontBtn.textContent = 'Restore';
-            maxFontBtn.style.background = 'var(--accent)';
-            maxFontBtn.style.color = '#fff';
-        } else {
-            maxFontBtn.textContent = 'Max font';
-            maxFontBtn.style.background = '';
-            maxFontBtn.style.color = '';
-        }
+        maxFontBtn.classList.toggle('btn-primary', !!(fontState && fontState.active));
+        maxFontBtn.style.display = panelObj.selectedCmdId ? '' : 'none';
     }
 }
 
@@ -1616,18 +1602,15 @@ async function toggleMaxFit(panelId) {
         // Toggle back: restore previous dimensions
         st.active = false;
         if (btn) {
-            btn.textContent = 'Max fit';
-            btn.style.background = '';
-            btn.style.color = '';
+            btn.classList.remove('btn-primary');
+            btn.title = 'Auto-fit terminal to panel';
         }
         const ok = await _resizePanelTo(panelId, st.prevRows, st.prevCols);
         if (!ok) {
-            // Resize failed (no command or command exited) — clean up state
             delete _maxFitState[panelId];
             if (btn) {
-                btn.textContent = 'Max fit';
-                btn.style.background = '';
-                btn.style.color = '';
+                btn.classList.remove('btn-primary');
+                btn.title = 'Auto-fit terminal to panel';
             }
         }
     } else {
@@ -1635,11 +1618,10 @@ async function toggleMaxFit(panelId) {
         const rect = vttyEl.getBoundingClientRect();
         if (rect.width < 10 || rect.height < 10) return;
 
-        // Check if the command is alive — Max Fit cannot resize exited commands.
         const inst = panelObj.selectedInstUrl ? state.connections.find(i => i.url === panelObj.selectedInstUrl) : null;
         const cmd = inst && inst._commands ? inst._commands.find(c => c.id === panelObj.selectedCmdId) : null;
         if (panelObj.selectedCmdId && cmd && cmd.status === 'exited') {
-            return; // cannot resize exited commands
+            return;
         }
 
         const fontSize = panelObj.fontSize || state.fontSize;
@@ -1648,24 +1630,20 @@ async function toggleMaxFit(panelId) {
         const maxCols = Math.max(20, Math.min(500, Math.floor(rect.width / charW)));
         const maxRows = Math.max(5, Math.min(200, Math.floor(rect.height / charH)));
 
-        // Save current dimensions from the toolbar inputs (synced from server)
         const curRows = parseInt(document.getElementById('stResizeRows')?.value || document.getElementById('resizeRows-' + panelId)?.value) || 24;
         const curCols = parseInt(document.getElementById('stResizeCols')?.value || document.getElementById('resizeCols-' + panelId)?.value) || 80;
 
         _maxFitState[panelId] = { prevRows: curRows, prevCols: curCols, active: true };
         if (btn) {
-            btn.textContent = 'Restore';
-            btn.style.background = 'var(--accent)';
-            btn.style.color = '#fff';
+            btn.classList.add('btn-primary');
+            btn.title = 'Restore previous size';
         }
         const ok = await _resizePanelTo(panelId, maxRows, maxCols);
         if (!ok) {
-            // Resize failed — clean up state
             delete _maxFitState[panelId];
             if (btn) {
-                btn.textContent = 'Max fit';
-                btn.style.background = '';
-                btn.style.color = '';
+                btn.classList.remove('btn-primary');
+                btn.title = 'Auto-fit terminal to panel';
             }
         }
     }
@@ -1692,45 +1670,35 @@ async function toggleMaxFont(panelId) {
     const st = _maxFontState[panelId];
     const btn = document.getElementById('stMaxFontBtn') || document.getElementById('maxFontBtn-' + panelId);
 
-    // Get current terminal dimensions from the server
     const curRows = parseInt(document.getElementById('stResizeRows')?.value || '24') || 24;
     const curCols = parseInt(document.getElementById('stResizeCols')?.value || '80') || 80;
 
     if (st && st.active) {
-        // Toggle back: restore previous font size
         st.active = false;
         if (btn) {
-            btn.textContent = '\uD83D\uDD0D';
-            btn.style.background = '';
-            btn.style.color = '';
+            btn.classList.remove('btn-primary');
+            btn.title = 'Maximize font to fit';
         }
         panelObj.fontSize = st.prevFontSize;
         localStorage.setItem('vrw_panel_font_' + panelId, panelObj.fontSize.toString());
         if (vttyEl) vttyEl.style.fontSize = panelObj.fontSize + 'px';
-        const stFontSize = document.getElementById('stFontSize');
-        if (stFontSize && panelId === getActivePanelId()) stFontSize.textContent = panelObj.fontSize + 'px';
         delete _maxFontState[panelId];
     } else {
-        // Apply max font: calculate the largest font that fits current rows/cols
         const rect = vttyEl.getBoundingClientRect();
         if (rect.width < 10 || rect.height < 10) return;
 
-        // Max font = largest font where fontSize * 0.6 * cols <= width AND fontSize * 1.2 * rows <= height
         const maxFontW = Math.floor(rect.width / (curCols * 0.6));
         const maxFontH = Math.floor(rect.height / (curRows * 1.2));
         const maxFont = Math.max(8, Math.min(28, Math.min(maxFontW, maxFontH)));
 
         _maxFontState[panelId] = { prevFontSize: panelObj.fontSize, active: true };
         if (btn) {
-            btn.textContent = 'Restore';
-            btn.style.background = 'var(--accent)';
-            btn.style.color = '#fff';
+            btn.classList.add('btn-primary');
+            btn.title = 'Restore previous font size';
         }
         panelObj.fontSize = maxFont;
         localStorage.setItem('vrw_panel_font_' + panelId, panelObj.fontSize.toString());
         if (vttyEl) vttyEl.style.fontSize = panelObj.fontSize + 'px';
-        const stFontSize = document.getElementById('stFontSize');
-        if (stFontSize && panelId === getActivePanelId()) stFontSize.textContent = panelObj.fontSize + 'px';
     }
 }
 
@@ -1775,32 +1743,17 @@ function onPanelDrop(e, targetPanelId) {
     if (e.stopPropagation) e.stopPropagation();
 
     // ── Command drop from sidebar (application/x-cmd data) ──
-    // This handles dragging a command from the sidebar onto a panel.
+    // Dragging a command from the sidebar onto the panel area always creates
+    // a NEW panel showing that command's vTTY.  This allows the same command
+    // to be viewed in multiple panels simultaneously.
     // Panel reorders use _draggedPanelId; command drops use dataTransfer.
     if (!_draggedPanelId) {
         try {
             const cmdData = JSON.parse(e.dataTransfer.getData('application/x-cmd'));
             if (cmdData && cmdData.cmdId) {
-                const panelObj = state.panels.find(p => p.id === targetPanelId);
-                if (panelObj) {
-                    _cacheTerminalForSwitch();
-                    panelObj.selectedInstUrl = cmdData.instUrl;
-                    panelObj.selectedCmdId = cmdData.cmdId;
-                    focusPanel(panelObj.id);
-                    state.selectedInstUrl = cmdData.instUrl;
-                    state.selectedCmdId = cmdData.cmdId;
-                    state._pendingVttyData = null;
-                    state._pendingVttyDirty = false;
-                    state.bufferView = 'current';
-                    _restoreCachedDom(cmdData.cmdId);
-                    updatePanelCommandInfo();
-                    updateTerminalDisconnectedOverlay();
-                    updateSidebarSelection();
-                    loadVttyHttpForPanel(panelObj.id, cmdData.instUrl, cmdData.cmdId);
-                    startPanelUpdateMode(panelObj.id);
-                    document.querySelectorAll('.panel').forEach(p => p.classList.remove('drag-over-left', 'drag-over-right'));
-                    return;
-                }
+                document.querySelectorAll('.panel').forEach(p => p.classList.remove('drag-over-left', 'drag-over-right'));
+                _openCommandInNewPane(cmdData.instUrl, cmdData.cmdId, cmdData.cmdName);
+                return;
             }
         } catch (err) { /* ignore invalid drops */ }
         onPanelDragEnd(e);
@@ -1857,22 +1810,7 @@ function onPanelAreaDrop(e) {
     try {
         const cmdData = JSON.parse(e.dataTransfer.getData('application/x-cmd'));
         if (cmdData && cmdData.cmdId) {
-            const newPanel = addPanelDirect();
-            if (newPanel) {
-                focusPanel(newPanel.id);
-                newPanel.selectedInstUrl = cmdData.instUrl;
-                newPanel.selectedCmdId = cmdData.cmdId;
-                state.selectedInstUrl = cmdData.instUrl;
-                state.selectedCmdId = cmdData.cmdId;
-                state._pendingVttyData = null;
-                state._pendingVttyDirty = false;
-                state.bufferView = 'current';
-                updatePanelCommandInfo();
-                updateTerminalDisconnectedOverlay();
-                updateSidebarSelection();
-                loadVttyHttpForPanel(newPanel.id, cmdData.instUrl, cmdData.cmdId);
-                startPanelUpdateMode(newPanel.id);
-            }
+            _openCommandInNewPane(cmdData.instUrl, cmdData.cmdId, cmdData.cmdName);
         }
     } catch (err) { /* not a command drop */ }
 }

@@ -130,11 +130,20 @@ const dropEvt = {
 };
 onPanelDrop(dropEvt, panel1.id);
 
-// Verify the panel was updated with the dropped command's instUrl and cmdId
-assertEq(panel1.selectedInstUrl, 'http://localhost:9091',
-    'panel instUrl updated to dropped command server');
-assertEq(panel1.selectedCmdId, 'cmd-2',
-    'panel cmdId updated to dropped command');
+// Dropping a command now creates a NEW panel instead of reassigning the target.
+// The original panel should keep its original command.
+assertEq(panel1.selectedInstUrl, 'http://localhost:9090',
+    'target panel keeps its original instUrl after command drop');
+assertEq(panel1.selectedCmdId, 'cmd-1',
+    'target panel keeps its original cmdId after command drop');
+// A new panel should exist with the dropped command
+const droppedPanel = state.panels.find(p => p.selectedCmdId === 'cmd-2');
+assert(droppedPanel !== undefined,
+    'a new panel was created for the dropped command');
+if (droppedPanel) {
+    assertEq(droppedPanel.selectedInstUrl, 'http://localhost:9091',
+        'new panel has correct instUrl');
+}
 
 // ──────────────────────────────────────────────────────────────
 // REG-BUG-004: All button in sidebar — auto-switched to specific server
