@@ -185,6 +185,7 @@ function disconnectVttyWs() {
 
 function connectPanelWs(panelId) {
     const panelObj = state.panels.find(p => p.id === panelId);
+    console.log('[DBG] connectPanelWs called for', panelId, 'cmdId=', panelObj?.selectedCmdId);
     if (!panelObj || !panelObj.selectedInstUrl || !panelObj.selectedCmdId) return;
 
     // Disconnect existing WS for this panel
@@ -222,16 +223,19 @@ function connectPanelWs(panelId) {
         ws.onmessage = (event) => {
             try {
                 const msg = JSON.parse(event.data);
+                if (msg.type === 'vtty_full' || msg.type === 'vtty_diff') console.log('[DBG] WS msg', msg.type, 'gen=', msg.data?.generation, 'panel=', panelId);
                 // Guard: discard messages for a command that is no longer selected on this panel
-                if (msg.cmd_id && msg.cmd_id !== panelObj.selectedCmdId) return;
-                if (msg.data && msg.data.id && msg.data.id !== panelObj.selectedCmdId) return;
+                if (msg.cmd_id && msg.cmd_id !== panelObj.selectedCmdId) { console.log('[DBG] discarded: cmd_id mismatch', msg.cmd_id, '!=', panelObj.selectedCmdId); return; }
+                if (msg.data && msg.data.id && msg.data.id !== panelObj.selectedCmdId) { console.log('[DBG] discarded: data.id mismatch', msg.data.id, '!=', panelObj.selectedCmdId); return; }
 
                 // Route VTTY updates to THIS panel's DOM
                 const panelEl = document.getElementById(panelObj.id);
                 if (!panelEl) return;
 
                 if (msg.type === 'vtty_full' && msg.data) {
-                    if (!_throttleRefresh()) {
+                    const throttled = _throttleRefresh();
+                    console.log('[DBG] vtty_full throttled=', throttled, 'refreshMs=', state.refreshMs);
+                    if (!throttled) {
                         updateVttyDisplayForPanel(panelObj, panelEl, msg.data);
                     }
                     // Alt screen badge
@@ -270,6 +274,7 @@ function connectPanelWs(panelId) {
         };
 
         ws.onclose = () => {
+            console.log('[DBG] WS onclose panel', panelId, 'reconnectCount=', panelObj.wsReconnectCount);
             if (panelObj.ws === ws) {
                 panelObj.ws = null;
                 clearInterval(panelObj.wsPingInterval);
@@ -316,6 +321,7 @@ function connectPanelWs(panelId) {
 }
 
 function disconnectPanelWs(panelId) {
+    console.log('[DBG] disconnectPanelWs called for', panelId);
     const panelObj = state.panels.find(p => p.id === panelId);
     if (!panelObj) return;
     if (panelObj.wsReconnectTimer) {
@@ -719,6 +725,7 @@ function startUpdateMode() {
 }
 
 function startPanelUpdateMode(panelId) {
+    console.log('[DBG] startPanelUpdateMode called for', panelId, 'updateMode=', state.updateMode, 'bufferView=', state.bufferView);
     stopPanelUpdateMode(panelId);
     const panelObj = state.panels.find(p => p.id === panelId);
     if (!panelObj || panelObj.selectedCmdId === null || state.bufferView !== 'current') return;

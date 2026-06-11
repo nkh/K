@@ -522,6 +522,7 @@ function _applyPanelLayoutClass(container) {
 }
 
 function renderPanels() {
+    console.log('[DBG] renderPanels called, panels=', state.panels.length);
     const container = document.getElementById('view-vtty');
     const visiblePanels = state.panels.filter(p => !p.minimized);
     const hasMultiplePanels = visiblePanels.length > 1;
@@ -550,12 +551,14 @@ function renderPanels() {
     const currentSplitState = state.panels.map(p => p.split ? p.split.direction : '').join(',');
     const structuralUnchanged = _lastRenderedPanelCount === state.panels.length && _lastRenderedPanelIds === currentPanelIds && _lastSplitState === currentSplitState;
     if (structuralUnchanged && _lastShowingWelcome === _showingWelcome) {
+        console.log('[DBG] renderPanels FAST PATH');
         // Just update layout direction and multi-panel visibility
         _applyPanelLayoutClass(container);
         _updatePanelMultiUI();
         return;
     }
 
+    console.log('[DBG] renderPanels FULL REBUILD, structuralUnchanged=', structuralUnchanged, 'welcomeMatch=', _lastShowingWelcome === _showingWelcome);
     // ── Cache all terminal DOM before rebuild ──
     const cachedVtty = {};
     for (const panel of state.panels) {
