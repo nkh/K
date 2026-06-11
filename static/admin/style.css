@@ -16,7 +16,7 @@
     --font-sans: system-ui, -apple-system, sans-serif;
     --font-size: 10px;
     /* Shared sizing — all UI areas MUST use these */
-    --ui-fs: 0.55rem;
+    --ui-fs: 0.5rem;
     --ui-btn-h: calc(var(--ui-fs) * 1.2 + 0.4rem + 2px);
     --ui-btn-min: var(--ui-btn-h);
     --ui-icon-fs: var(--ui-fs);
@@ -246,9 +246,9 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .sidebar-wide .cmd-detail-inline { display: inline !important; flex: 0 0 auto !important; min-width: 0; }
 .sidebar-wide .cmd-item-row { flex-wrap: wrap; }
 .cmd-item .cmd-detail-row .detail-sep { color: var(--border); }
-.cmd-freeze-btn { font-size: var(--ui-fs); padding: 0 0.1rem; cursor: pointer; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 2px; flex-shrink: 0; color: var(--accent); line-height: 1; height: calc(var(--ui-fs) + 0.25rem); min-width: calc(var(--ui-fs) + 0.25rem); display: inline-flex; align-items: center; justify-content: center; }
-.cmd-freeze-btn:hover { border-color: var(--accent); }
-.cmd-freeze-btn.active { border-color: var(--accent); color: var(--accent); }
+.cmd-freeze-btn { font-size: var(--ui-fs); padding: 0 0.1rem; cursor: pointer; background: var(--yellow); border: 1px solid var(--yellow); border-radius: 2px; flex-shrink: 0; color: #000; line-height: 1; height: calc(var(--ui-fs) + 0.25rem); min-width: calc(var(--ui-fs) + 0.25rem); display: inline-flex; align-items: center; justify-content: center; }
+.cmd-freeze-btn:hover { border-color: var(--yellow); }
+.cmd-freeze-btn.active { border-color: var(--yellow); color: #000; background: var(--yellow); }
 .cmd-item .cmd-detail-inline { font-family: var(--font-mono); font-size: var(--ui-fs); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 0%; min-width: 0; }
 .cmd-item .cmd-detail-inline:empty { display: none; }
 .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
