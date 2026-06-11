@@ -56,8 +56,8 @@
                     <div style="padding:0.2rem 0.3rem;display:flex;gap:0.2rem;align-items:center;">
                         <input type="text" id="cmdFilter" placeholder="Filter commands..." oninput="loadCommands()" style="flex:1;min-width:0;font-size:var(--ui-fs);padding:0.1rem 0.3rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:2px;">
                         <button class="btn btn-xs" onclick="showAddServerModal()" title="Add server connection">+ Server</button>
-                        <button class="btn btn-xs" id="killAllBtn" onclick="killAllCommands()" title="Kill all running commands" style="display:none;">&#x2715; All</button>
-                        <button class="btn btn-xs" id="freezeAllBtn" onclick="freezeAllCommands()" title="Freeze/thaw all running commands" style="display:none;background:var(--yellow);color:#000;border-color:var(--yellow);">&#x23F8; All</button>
+                        <button class="btn btn-xs btn-danger" id="killAllBtn" onclick="killAllCommands()" title="Kill all running commands" style="display:none;">&#x2715; All</button>
+                        <button class="btn btn-xs" id="freezeAllBtn" onclick="freezeAllCommands()" title="Freeze/thaw all running commands" style="display:none;color:var(--accent);">&#x23F8; All</button>
                     </div>
                     <div id="commandList"></div>
                 </div>
@@ -104,7 +104,7 @@
                         <div class="field checkbox-field">
                             <label><input type="checkbox" id="spawnOpenPanel" checked> Open in new panel</label>
                         </div>
-                        <div class="spawn-open-panel-hint" id="spawnOpenPanelHint" style="font-size:0.6rem;color:var(--text-muted);margin-top:-0.2rem;margin-bottom:0.3rem;">Shows the main command or the oldest command in a new panel after spawning.</div>
+                        <div class="spawn-open-panel-hint" id="spawnOpenPanelHint" style="font-size:var(--ui-fs);color:var(--text-muted);margin-top:-0.2rem;margin-bottom:0.3rem;">Shows the main command or the oldest command in a new panel after spawning.</div>
                         <button class="btn btn-primary" onclick="spawnCommand()" style="width:100%;margin-top:0.5rem;">Spawn Command</button>
                     </div>
                 </div>
@@ -112,18 +112,18 @@
                 <div id="tab-templates" style="display:none;">
                     <div style="padding:0.3rem;">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.3rem;">
-                            <span style="font-size:0.7rem;color:var(--text-secondary);">Saved Templates</span>
+                            <span style="font-size:var(--ui-fs);color:var(--text-secondary);">Saved Templates</span>
                             <button class="btn btn-xs" onclick="showAddTemplateForm()" title="Add template">+ Add</button>
                         </div>
                         <div id="templateAddForm" style="display:none;margin-bottom:0.4rem;">
                             <div class="field" style="margin-bottom:0.3rem;">
-                                <input type="text" id="templateName" placeholder="Template name" style="width:100%;font-size:0.7rem;">
+                                <input type="text" id="templateName" placeholder="Template name" style="width:100%;font-size:var(--ui-fs);">
                             </div>
                             <div class="field" style="margin-bottom:0.3rem;">
-                                <input type="text" id="templateCmd" placeholder="Command (e.g. npm run dev)" style="width:100%;font-size:0.7rem;">
+                                <input type="text" id="templateCmd" placeholder="Command (e.g. npm run dev)" style="width:100%;font-size:var(--ui-fs);">
                             </div>
                             <div class="field" style="margin-bottom:0.3rem;">
-                                <input type="text" id="templateArgs" placeholder="Arguments (optional)" style="width:100%;font-size:0.7rem;">
+                                <input type="text" id="templateArgs" placeholder="Arguments (optional)" style="width:100%;font-size:var(--ui-fs);">
                             </div>
                             <div style="display:flex;gap:0.3rem;">
                                 <button class="btn btn-xs btn-primary" onclick="saveTemplate()" style="flex:1;">Save</button>
@@ -141,10 +141,10 @@
                 <div id="tab-groups" style="display:none;">
                     <div style="padding:0.3rem;">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.3rem;">
-                            <span style="font-size:0.7rem;color:var(--text-secondary);">Command Groups</span>
+                            <span style="font-size:var(--ui-fs);color:var(--text-secondary);">Command Groups</span>
                         </div>
                         <div style="display:flex;gap:0.2rem;margin-bottom:0.4rem;">
-                            <input type="text" id="newGroupName" placeholder="New group name..." style="flex:1;min-width:0;font-size:0.7rem;padding:0.15rem 0.3rem;" onkeydown="if(event.key==='Enter'){event.preventDefault();createCmdGroup()}">
+                            <input type="text" id="newGroupName" placeholder="New group name..." style="flex:1;min-width:0;font-size:var(--ui-fs);padding:0.15rem 0.3rem;" onkeydown="if(event.key==='Enter'){event.preventDefault();createCmdGroup()}">
                             <button class="btn btn-xs btn-primary" onclick="createCmdGroup()">Create</button>
                         </div>
                         <div id="groupList"></div>
@@ -173,8 +173,8 @@
                         <span style="color:var(--text-muted);">x</span>
                         <input type="number" id="stResizeCols" value="80" min="1" max="1000" title="Cols">
                         <button class="btn btn-xs" id="stResizeBtn" onclick="resizeTerminalPanel(getActivePanelId())" title="Resize terminal">&#x21F2;</button>
-                        <button class="btn btn-xs" id="stMaxFitBtn" onclick="toggleMaxFit(getActivePanelId())" title="Auto-fit terminal to panel" style="display:none;">&#x2922;</button>
-                        <button class="btn btn-xs" id="stMaxFontBtn" onclick="toggleMaxFont(getActivePanelId())" title="Maximize font to fit" style="display:none;">&#x1F50D;</button>
+                        <button class="btn btn-xs" id="stMaxFitBtn" onclick="toggleMaxFit(getActivePanelId())" title="Auto-fit terminal to panel">&#x2922;</button>
+                        <button class="btn btn-xs" id="stMaxFontBtn" onclick="toggleMaxFont(getActivePanelId())" title="Maximize font to fit">&#x1F50D;</button>
                     </span>
                     <span class="shared-toolbar-sep"></span>
                     <button class="btn btn-xs" id="stBufferBtn" onclick="document.getElementById('stBufferSelect').style.display=document.getElementById('stBufferSelect').style.display==='none'?'':'none'" title="Terminal buffer">&#x2630;</button>
@@ -226,7 +226,7 @@
                     <button class="btn btn-xs" onclick="clearLogSearch()">Clear</button>
                     <button class="btn btn-xs" onclick="loadLog()">Refresh</button>
                     <span id="logTransportIndicator" class="log-transport-indicator" data-mode="http">HTTP</span>
-                    <span id="logCount" style="font-size:0.7rem;color:var(--text-muted);"></span>
+                    <span id="logCount" style="font-size:var(--ui-fs);color:var(--text-muted);"></span>
                 </div>
                 <div class="log-content" id="logContent"></div>
             </div>
@@ -243,20 +243,20 @@
         <span class="dims" id="termDims">--</span>
         <span class="cursor-pos" id="scrollbackIndicator" style="color:var(--yellow);display:none;">SCROLLBACK</span>
         <span class="spacer"></span>
-        <label for="updateMode" style="font-size:0.6rem;color:var(--text-muted);">Update:</label>
-        <select id="updateMode" onchange="switchUpdateMode(this.value)" title="How the web UI detects VTTY buffer changes" style="font-size:0.6rem;padding:0.05rem 0.15rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:2px;">
+        <label for="updateMode" style="font-size:var(--ui-fs);color:var(--text-muted);">Update:</label>
+        <select id="updateMode" onchange="switchUpdateMode(this.value)" title="How the web UI detects VTTY buffer changes" style="font-size:var(--ui-fs);padding:0.05rem 0.15rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:2px;">
             <option value="push">Push (WS)</option>
             <option value="poll">Poll</option>
         </select>
         <span id="pollIntervalWrap" style="display:none;">
             <input type="number" id="pollInterval" value="500" min="50" max="5000" step="50" style="width:50px;font-size:var(--ui-fs);text-align:center;padding:0.1rem 0.15rem;" title="Poll interval in milliseconds" onchange="applyPollInterval()">
-            <span style="font-size:0.65rem;color:var(--text-muted);">ms</span>
+            <span style="font-size:var(--ui-fs);color:var(--text-muted);">ms</span>
         </span>
-        <label for="refreshMs" style="font-size:0.6rem;color:var(--text-muted);margin-left:4px;" title="Client-side throttle: limits how often VTTY updates are applied to the DOM, even if the server sends them faster. 0 = no throttle.">Throttle:</label>
+        <label for="refreshMs" style="font-size:var(--ui-fs);color:var(--text-muted);margin-left:4px;" title="Client-side throttle: limits how often VTTY updates are applied to the DOM, even if the server sends them faster. 0 = no throttle.">Throttle:</label>
         <input type="number" id="refreshMs" value="0" min="0" max="2000" step="100" style="width:42px;font-size:var(--ui-fs);text-align:center;padding:0.1rem 0.15rem;" title="Refresh throttle (ms). 0=off, 100-2000=throttle interval." onchange="applyRefreshMs()">
-        <span class="refresh-val" style="font-size:0.6rem;color:var(--text-muted);">off</span>
+        <span class="refresh-val" style="font-size:var(--ui-fs);color:var(--text-muted);">off</span>
         <span id="wsQuality" class="ws-quality" title="">--</span>
-        <span style="font-size:0.6rem;color:var(--text-muted);" id="connStatus">Connected</span>
+        <span style="font-size:var(--ui-fs);color:var(--text-muted);" id="connStatus">Connected</span>
     </div>
 
     <!-- Auto-restart indicator (hidden by default) -->

@@ -920,7 +920,6 @@ function updateSharedToolbar() {
     if (maxFitBtn) {
         const fitState = _maxFitState[panelId];
         maxFitBtn.classList.toggle('btn-primary', !!(fitState && fitState.active));
-        maxFitBtn.style.display = panelObj.selectedCmdId ? '' : 'none';
     }
 
     // Max Font button state
@@ -928,7 +927,6 @@ function updateSharedToolbar() {
     if (maxFontBtn) {
         const fontState = _maxFontState[panelId];
         maxFontBtn.classList.toggle('btn-primary', !!(fontState && fontState.active));
-        maxFontBtn.style.display = panelObj.selectedCmdId ? '' : 'none';
     }
 }
 
