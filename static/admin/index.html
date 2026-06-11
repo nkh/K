@@ -57,7 +57,7 @@
                         <input type="text" id="cmdFilter" placeholder="Filter commands..." oninput="loadCommands()" style="flex:1;min-width:0;font-size:var(--ui-fs);padding:0.1rem 0.3rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:2px;">
                         <button class="btn btn-xs" onclick="showAddServerModal()" title="Add server connection">+ Server</button>
                         <button class="btn btn-xs btn-danger" id="killAllBtn" onclick="killAllCommands()" title="Kill all running commands" style="display:none;">&#x2715; All</button>
-                        <button class="btn btn-xs" id="freezeAllBtn" onclick="freezeAllCommands()" title="Freeze/thaw all running commands" style="display:none;color:var(--accent);">&#x23F8; All</button>
+                        <button class="btn btn-xs" id="freezeAllBtn" onclick="freezeAllCommands()" title="Freeze/thaw all running commands" style="display:none;color:var(--accent);">&#x25AE;&#x25AE; All</button>
                     </div>
                     <div id="commandList"></div>
                 </div>
@@ -207,7 +207,7 @@
                         </div>
                     </div>
                     <button class="btn btn-xs" onclick="toggleSelectionMode(getActivePanelId())" id="stSelectBtn" title="Toggle text selection mode">Select</button>
-                    <button class="btn btn-xs" onclick="togglePauseRunPanel(getActivePanelId())" id="stFreezeBtn" title="Freeze/Thaw command" style="display:none;">&#x23F8;</button>
+                    <button class="btn btn-xs" onclick="togglePauseRunPanel(getActivePanelId())" id="stFreezeBtn" title="Freeze/Thaw command" style="display:none;">&#x25AE;&#x25AE;</button>
                     <button class="btn btn-xs" onclick="copyTerminalSelection(getActivePanelId())" title="Copy selected text to clipboard">Copy</button>
                     <button class="btn btn-xs" onclick="exportTerminal(getActivePanelId())" title="Export terminal as text">&#x2913;</button>
                     <button class="btn btn-xs" onclick="screenshotPanel(getActivePanelId())" title="Download screenshot as PNG">&#x1F4F7;</button>

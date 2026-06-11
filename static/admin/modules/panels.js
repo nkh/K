@@ -537,7 +537,7 @@ function renderPanels() {
             break;
         }
     }
-    const shouldShowWelcome = (!hasAnyCommands && !state.selectedCmdId);
+    const shouldShowWelcome = (!hasAnyCommands && !state.selectedCmdId && !state.serverReachable);
     if (shouldShowWelcome !== _showingWelcome) {
         _showingWelcome = shouldShowWelcome;
     }
