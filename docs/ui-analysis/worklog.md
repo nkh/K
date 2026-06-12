@@ -23,3 +23,28 @@
 - **Zero fetch() calls remain outside api.js**
 - Net result: **-156 lines** (259 removed, 103 added)
 - Tests: 735→735, 0 regressions
+---
+Task ID: 0b
+Agent: main
+Task: Upgrade test framework with controllable fetch mock, async support, and comprehensive api.js tests
+
+Work Log:
+- Discovered that api.js captures fetch reference at eval time — replacing globalThis.fetch after module load has no effect
+- Upgraded setup.js fetch mock to be controllable via _setFetchJson/_setFetchError/_setFetchText/_setFetchBlob/_resetFetch
+- Added _fetchCalls array for tracking fetch calls in tests
+- Made resetTestState() also call _resetFetch() to clean up between tests
+- Upgraded run_all.js to async: supports _asyncTest promise for async test files, adds 10ms drain delay
+- Created helpers.js with mock factories (createMockApi, createMockState, createMockRender, createFetchMock, createMockEvent)
+- Added 12 new assertion helpers: assertDeepEq, assertNotEq, assertIncludes, assertGt, assertLt, assertType, assertInstanceOf, assertNull, assertNonNull, assertLength, assertProperty, assertThrowsAsync, assertResolves
+- Created test_api_proper.js with 166 comprehensive tests for api.js
+- Fixed test_commands-core.js: replaced globalThis.fetch replacement with _setFetchJson/_setFetchError (which actually work with captured-fetch pattern)
+- Fixed test_commands.js: converted async loadCommands test to use _asyncTest pattern, restored real loadCommands from _realFunctions
+
+Stage Summary:
+- 166 new tests for api.js (all HTTP endpoints, auth, URL construction, WebSocket behavior, error handling)
+- Test framework now supports: controllable fetch, async tests, 12+ assertion types, mock factories
+- Fixed 7 pre-existing test breakages caused by Phase 1a api.js migration (fetch capture issue)
+- Net: 905 passed (+172), 2 failed (same pre-existing CSS check), 0 regressions
+- Commit: 0de7558 on fix_overcomplicated_ui, pushed to origin
+
+Key discovery: api.js (loaded via (0, eval) in setup.js) captures the fetch function reference at eval time. This means tests CANNOT replace fetch by setting globalThis.fetch — they must use the controllable mock provided by setup.js. This is a fundamental constraint of the current module loading approach and affects all future test writing.
