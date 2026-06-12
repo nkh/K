@@ -88,6 +88,9 @@ function _syncRefreshMsUI() {
 /// apply it after the throttle window.  Returns true if the update was
 /// throttled (caller should not apply it now), false if it should be applied
 /// immediately.
+/// When refreshMs > 0, the first call sets a timer; subsequent calls within
+/// the window are coalesced.  When the timer fires, ALL panels with active
+/// WS connections are flushed via HTTP to pick up the latest state.
 function _throttleRefresh() {
     if (state.refreshMs <= 0) return false; // no throttle
     if (state._refreshThrottleTimer) return true; // already pending
@@ -98,10 +101,14 @@ function _throttleRefresh() {
     return true;
 }
 
-/// Called when the throttle timer fires: fetch the latest VTTY state.
+/// Called when the throttle timer fires: fetch the latest VTTY state for
+/// ALL panels that have an active command selection.  Uses per-panel
+/// scheduleVttyHttpForPanel to avoid clobbering updates across panels.
 function _flushThrottledRefresh() {
-    if (state.selectedInstUrl && state.selectedCmdId) {
-        scheduleVttyHttp(state.selectedInstUrl, state.selectedCmdId, 0);
+    for (const panelObj of state.panels) {
+        if (panelObj.selectedInstUrl && panelObj.selectedCmdId) {
+            scheduleVttyHttpForPanel(panelObj.id, panelObj.selectedInstUrl, panelObj.selectedCmdId, 0);
+        }
     }
 }
 

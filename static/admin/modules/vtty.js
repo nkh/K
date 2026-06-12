@@ -226,10 +226,12 @@ function applyVttyDiffForPanel(panelObj, panelEl, data) {
 }
 
 /// Per-panel version of scheduleVttyHttp.
+/// Uses a per-panel timer key to avoid clobbering HTTP fetches across panels.
 function scheduleVttyHttpForPanel(panelId, instUrl, cmdId, delayMs) {
-    if (state._vttyHttpTimer) clearTimeout(state._vttyHttpTimer);
-    state._vttyHttpTimer = setTimeout(() => {
-        state._vttyHttpTimer = null;
+    const timerKey = '_vttyHttpTimer_' + panelId;
+    if (state[timerKey]) clearTimeout(state[timerKey]);
+    state[timerKey] = setTimeout(() => {
+        state[timerKey] = null;
         loadVttyHttpForPanel(panelId, instUrl, cmdId);
     }, delayMs);
 }

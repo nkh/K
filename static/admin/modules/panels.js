@@ -795,6 +795,25 @@ function renderPanels() {
     _updatePanelMultiUI();
     // Sync shared toolbar with current state
     if (!_showingWelcome) updateSharedToolbar();
+
+    // ── Reconnect per-panel WS/poll after full DOM rebuild ──
+    // A full rebuild destroys and recreates all DOM elements.  The existing
+    // WS objects on panelObj are still alive (their onmessage closures use
+    // document.getElementById which finds the new elements), but if the WS
+    // silently died during the rebuild or the browser closed it when the
+    // old DOM was GC'd, we need to re-establish the connection.  Calling
+    // startPanelUpdateMode for each panel with an active command ensures
+    // a live WS/poll is running after the rebuild.
+    if (!_showingWelcome && state.bufferView === 'current') {
+        for (const panelObj of state.panels) {
+            if (panelObj.selectedCmdId && panelObj.selectedInstUrl) {
+                // Only reconnect if there's no live WS already
+                if (!panelObj.ws || panelObj.ws.readyState !== WebSocket.OPEN) {
+                    startPanelUpdateMode(panelObj.id);
+                }
+            }
+        }
+    }
     // NOTE: initPanelDropTargets() is intentionally NOT called here.
     // Command drag-and-drop from sidebar is handled by inline ondragover/ondrop
     // handlers on each .panel element (onPanelDragOver/onPanelDrop), which already
