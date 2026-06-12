@@ -103,3 +103,24 @@ Key discovery: api.js (loaded via (0, eval) in setup.js) captures the fetch func
 - Tests: 2416 passed (+62 new delegate tests), 0 regressions, 3 pre-existing CSS failures unchanged
 - Net: +198 lines (delegate.js growth + new helpers) / -50 lines (removed inline onclick strings)
 - Commit: 8341374 on fix_overcomplicated_ui, pushed to origin
+
+## Phase 4a-b: Delete dead code
+- Comprehensive dead-code audit: cataloged all `window.*` exports, searched cross-references across 24 modules + index.html + extract_modules.py
+- **Deleted `eventbus.js`** — entire 13-line module, zero production callers (only test_eventbus.js referenced it)
+- **Deleted `test/test_eventbus.js`** — 59 lines of now-irrelevant tests
+- **Deleted 6 orphaned functions** (defined + exported but never called from any production code):
+  - `vtty.js`: `_prefetchVttyHtml` (33 lines, superseded by per-panel version)
+  - `vtty.js`: `switchBuffer` (18 lines, global version superseded by `switchBufferPanel`)
+  - `websocket.js`: `disconnectAllPanelWs` (6 lines, no caller exists)
+  - `websocket.js`: `pollOnce` (5 lines, legacy wrapper, only `pollOncePanel` is used)
+  - `search.js`: `openCmdManager` (5 lines, no UI entry point to trigger it)
+  - `workspaces.js`: `renderEnvironments` (35 lines, defined but never invoked)
+- Updated `index.html` (removed script tag), `setup.js` (removed stubs), `extract_modules.py` (removed exports), `test_regression.js` (EventBus assert → VRW.state assert)
+- Not deleted (deferred to later phases):
+  - `connectVttyWs`/`disconnectVttyWs` (160+20 lines) — dead global WS, but complex, will be removed when WS pipeline is unified
+  - `api.connectVtty()`/`api.connectLogWs()` — unused API wrappers, kept for future use
+  - `state.vttyWs`/`vttyWsUrl`/`vttyWsCmdId` — only used by dead `connectVttyWs`, will be cleaned with it
+  - Module-level state vars (`_lastCommandState`, `_navCommands`, etc.) — used for change detection, Phase 5 target
+- Net: **-130 lines** from modules (9975→9845), **-227 lines** total including test file
+- Tests: 1072→1072 (removed 8 eventbus tests), 1069 passed, 3 failed (same pre-existing CSS), 0 regressions
+- Commit: 237af66 on fix_overcomplicated_ui, pushed to origin
