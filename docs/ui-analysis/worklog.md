@@ -88,3 +88,18 @@ Key discovery: api.js (loaded via (0, eval) in setup.js) captures the fetch func
   - `data-value`: single data-value attribute
   - `el-panelId`: data-panel-id for panel-specific buttons
   - `element`: passes the DOM element itself
+
+## Phase 3a: Migrate all dynamic onclick= to data-action
+- **48 `onclick=` strings → 0** across all JS modules (sidebar, panels, search, templates, workspaces, commands-core)
+- **0 `onclick=` remain** in the entire codebase (HTML + JS)
+- delegate.js additions:
+  - 8 new signatures: `inst-url`, `cmd-name`, `index`, `value-str`, `name`, `name-index`, `cmd-context`, `data-panel`
+  - 37 new actions covering sidebar commands, panel controls, search results, templates, workspaces, groups
+  - `stop: true` flag on action definitions — calls `event.stopPropagation()` before dispatch to prevent parent `data-action` from firing
+  - `contextmenu` delegation listener for `ShowCmdContextMenu` and `ShowPanelContextMenu` actions
+- Helper functions added: `_sortSidebarBy`, `_selectAndViewCmd`, `_toggleCmdInGroupAndRender`, `closeCmdPicker`, `closeSpecialKeysModal`, `closeWorkspaceManage`
+- `ondragstart`/`ondragover`/`ondrop`/`ondragleave`/`ondragend` kept as inline attributes (not `onclick` — different event type, requires `dataTransfer` setup)
+- `oncontextmenu` kept as inline attribute on cmd-item and panel-header (contextmenu delegation dispatches from `data-action` but the same element also uses `data-action` for click — need separate mechanism)
+- Tests: 2416 passed (+62 new delegate tests), 0 regressions, 3 pre-existing CSS failures unchanged
+- Net: +198 lines (delegate.js growth + new helpers) / -50 lines (removed inline onclick strings)
+- Commit: 8341374 on fix_overcomplicated_ui, pushed to origin
