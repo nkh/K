@@ -1,0 +1,1617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>rvw Admin UI — Visual Element Reference</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root {
+    --bg-primary: #0d1117;
+    --bg-secondary: #161b22;
+    --bg-tertiary: #21262d;
+    --border: #30363d;
+    --text-primary: #c9d1d9;
+    --text-secondary: #8b949e;
+    --text-muted: #484f58;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --red: #f85149;
+    --yellow: #d29922;
+    --purple: #bc8cff;
+    --ui-fs: 0.5rem;
+    --font-mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+}
+
+body {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ── Page chrome ─────────────────────────────────────── */
+.page-header {
+    border-bottom: 1px solid var(--border);
+    padding: 32px 40px 24px;
+    background: var(--bg-secondary);
+}
+.page-header h1 {
+    font-size: 22px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 4px;
+}
+.page-header h1 span { color: var(--accent); }
+.page-header p { color: var(--text-secondary); font-size: 13px; }
+
+.toc {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+}
+.toc a {
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 12px;
+    padding: 3px 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    transition: background .15s;
+}
+.toc a:hover { background: var(--border); }
+
+.container { max-width: 1100px; margin: 0 auto; padding: 32px 40px 80px; }
+
+/* ── Section headers ─────────────────────────────────── */
+.section { margin-bottom: 56px; }
+.section-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.section-title .num-range {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--accent);
+    background: rgba(88,166,255,.1);
+    border: 1px solid rgba(88,166,255,.25);
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-weight: 400;
+}
+.section-desc {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin-bottom: 24px;
+    padding-left: 2px;
+}
+
+/* ── Wireframe ───────────────────────────────────────── */
+.wireframe {
+    border: 2px dashed var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--bg-primary);
+    margin-bottom: 8px;
+}
+.wireframe-topbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    border-bottom: 1px dashed var(--border);
+    min-height: 36px;
+}
+.wireframe-sidebar {
+    display: flex;
+    flex-direction: column;
+    border-right: 1px dashed var(--border);
+    padding: 8px;
+    min-width: 160px;
+}
+.wireframe-main {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+.wireframe-body {
+    display: flex;
+    min-height: 260px;
+}
+.wf-label {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    white-space: nowrap;
+}
+.wf-dots span {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 2px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    margin-right: 3px;
+}
+.wf-sidebar-items span {
+    display: block;
+    width: 100%;
+    height: 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    margin-bottom: 4px;
+}
+.wf-panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    padding: 8px;
+    flex: 1;
+}
+.wf-panel {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    min-height: 80px;
+    position: relative;
+}
+.wf-panel::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 10px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    border-radius: 3px 3px 0 0;
+}
+
+/* ── Element cards ───────────────────────────────────── */
+.elements-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+}
+.el-card {
+    display: grid;
+    grid-template-columns: 44px 180px 1fr;
+    gap: 16px;
+    align-items: start;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 20px;
+    transition: border-color .15s;
+}
+.el-card:hover { border-color: var(--accent); }
+
+/* badge */
+.badge {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+.badge-blue   { background: var(--accent); }
+.badge-green  { background: var(--green); }
+.badge-red    { background: var(--red); }
+.badge-yellow { background: var(--yellow); color: #000; }
+.badge-purple { background: var(--purple); }
+
+/* preview */
+.el-preview {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    overflow: hidden;
+}
+
+/* info */
+.el-info h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 2px;
+}
+.el-info .el-id {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--purple);
+    margin-bottom: 6px;
+}
+.el-info .el-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+    line-height: 1.5;
+}
+.el-info .el-module {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+.el-info .el-module span { color: var(--accent); }
+
+/* ── Actual UI element styles (from rvw) ─────────────── */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0.2rem;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    font-size: var(--ui-fs);
+    line-height: 1;
+    height: calc(var(--ui-fs) + 0.25rem);
+    min-width: calc(var(--ui-fs) + 0.25rem);
+    cursor: default;
+}
+.btn-xs { padding: 0 0.15rem; font-size: var(--ui-fs); }
+.btn-primary { background: #238636; border-color: #2ea043; color: #fff; }
+.btn-danger { background: #da3633; border-color: #f85149; color: #fff; }
+
+/* enlarged preview versions so they're visible in the doc */
+.preview-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 10px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-size: 14px;
+    line-height: 1.4;
+    height: 30px;
+    min-width: 30px;
+    cursor: default;
+    font-family: inherit;
+    gap: 4px;
+}
+.preview-btn.btn-p { background: #238636; border-color: #2ea043; color: #fff; }
+.preview-btn.btn-d { background: #da3633; border-color: #f85149; color: #fff; }
+
+.preview-input {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-primary);
+    padding: 4px 8px;
+    font-size: 13px;
+    font-family: var(--font-mono);
+    height: 30px;
+    outline: none;
+    width: 100%;
+    max-width: 160px;
+}
+
+.preview-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+.dot-green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.dot-red   { background: var(--red);   box-shadow: 0 0 6px var(--red); }
+
+.preview-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    border-bottom: 2px solid transparent;
+    cursor: default;
+    height: 28px;
+}
+.preview-tab.active {
+    color: var(--text-primary);
+    border-bottom-color: var(--accent);
+}
+
+.preview-badge-star {
+    color: var(--yellow);
+    font-size: 14px;
+}
+
+.preview-cmd-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    width: 100%;
+}
+.preview-cmd-item .cmd-name { color: var(--text-primary); }
+.preview-cmd-item .cmd-meta { color: var(--text-muted); font-size: 10px; margin-left: auto; }
+
+.preview-banner {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    background: rgba(210,153,34,.1);
+    border: 1px solid rgba(210,153,34,.3);
+    border-radius: 3px;
+    font-size: 11px;
+    color: var(--yellow);
+}
+
+.preview-select {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-primary);
+    padding: 4px 8px;
+    font-size: 12px;
+    height: 30px;
+    cursor: default;
+    appearance: auto;
+}
+
+.preview-terminal {
+    background: #000;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 8px 10px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--green);
+    line-height: 1.5;
+    white-space: pre;
+    overflow: hidden;
+    width: 100%;
+    max-width: 160px;
+    height: 50px;
+}
+
+.preview-overlay {
+    position: relative;
+    background: rgba(0,0,0,.6);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px;
+    width: 100%;
+    max-width: 160px;
+    text-align: center;
+}
+.preview-overlay-inner {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 8px;
+}
+
+.preview-welcome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    width: 100%;
+    max-width: 160px;
+    text-align: center;
+}
+.preview-welcome .w-icon { font-size: 24px; color: var(--text-muted); }
+.preview-welcome .w-title { font-size: 13px; color: var(--text-secondary); }
+.preview-welcome .w-sub { font-size: 10px; color: var(--text-muted); }
+
+.preview-panel {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    width: 100%;
+    max-width: 160px;
+}
+.preview-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 3px 6px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+}
+.preview-panel-body {
+    padding: 6px;
+    min-height: 24px;
+    background: #000;
+    font-size: 9px;
+    font-family: var(--font-mono);
+    color: var(--green);
+    line-height: 1.4;
+}
+
+.preview-scroll-indicator {
+    width: 4px;
+    height: 36px;
+    background: var(--bg-tertiary);
+    border-radius: 2px;
+    position: relative;
+    display: inline-block;
+}
+.preview-scroll-indicator::after {
+    content: '';
+    position: absolute;
+    top: 4px; left: 0; right: 0;
+    height: 12px;
+    background: var(--accent);
+    border-radius: 2px;
+    opacity: .5;
+}
+
+.preview-dragzone {
+    border: 2px dashed var(--border);
+    border-radius: 4px;
+    padding: 12px;
+    text-align: center;
+    width: 100%;
+    max-width: 160px;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.preview-field {
+    width: 100%;
+    max-width: 160px;
+}
+.preview-field label {
+    display: block;
+    font-size: 10px;
+    color: var(--text-secondary);
+    margin-bottom: 2px;
+}
+.preview-field input, .preview-field select {
+    width: 100%;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-primary);
+    padding: 3px 6px;
+    font-size: 11px;
+    height: 24px;
+    font-family: var(--font-mono);
+}
+
+.preview-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    height: 30px;
+}
+.preview-toggle-track {
+    width: 28px; height: 14px;
+    border-radius: 7px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    position: relative;
+}
+.preview-toggle-track::after {
+    content: '';
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+
+.preview-freeze-btn {
+    width: 20px; height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: var(--text-secondary);
+    border: 1px solid transparent;
+    border-radius: 2px;
+    cursor: default;
+}
+.preview-close-xs {
+    width: 20px; height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: var(--text-muted);
+    cursor: default;
+}
+
+.preview-form-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    width: 100%;
+    max-width: 180px;
+    overflow: hidden;
+}
+.preview-form-head {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.preview-form-body { padding: 8px 10px; }
+.preview-form-body .pf-field { margin-bottom: 6px; }
+.preview-form-body .pf-label { font-size: 10px; color: var(--text-secondary); margin-bottom: 2px; }
+.preview-form-body .pf-input {
+    width: 100%;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-primary);
+    padding: 3px 6px;
+    font-size: 11px;
+    height: 24px;
+    font-family: var(--font-mono);
+}
+.preview-form-foot {
+    padding: 8px 10px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+/* footer */
+.doc-footer {
+    border-top: 1px solid var(--border);
+    padding: 20px 40px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+/* responsive */
+@media (max-width: 800px) {
+    .el-card { grid-template-columns: 1fr; gap: 10px; }
+    .container { padding: 20px 16px 60px; }
+    .page-header { padding: 24px 16px 20px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════
+     HEADER
+     ═══════════════════════════════════════════════════════ -->
+<div class="page-header">
+    <h1><span>rvw</span> Admin UI — Visual Element Reference</h1>
+    <p>Every UI element numbered, named, and described. Refer to elements by number (e.g. "fix element #14").</p>
+    <div class="toc">
+        <a href="#layout">§1 Layout</a>
+        <a href="#topbar">§2 Topbar (#1–#14)</a>
+        <a href="#sidebar">§3 Sidebar (#15–#30)</a>
+        <a href="#panels">§4 Panels (#31–#50)</a>
+        <a href="#modals">§5 Modals (#51–#55)</a>
+    </div>
+</div>
+
+<div class="container">
+
+<!-- ═══════════════════════════════════════════════════════
+     SECTION 1 — FULL LAYOUT OVERVIEW
+     ═══════════════════════════════════════════════════════ -->
+<div class="section" id="layout">
+    <div class="section-title">
+        Section 1: Full Layout Overview
+        <span class="num-range">wireframe</span>
+    </div>
+    <p class="section-desc">CSS wireframe showing the three main layout zones. The topbar spans full width; the sidebar sits on the left; the panel area fills the remaining space.</p>
+
+    <div class="wireframe">
+        <!-- Topbar -->
+        <div class="wireframe-topbar">
+            <span class="wf-label">Topbar</span>
+            <div class="wf-dots"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+            <span style="flex:1"></span>
+            <div class="wf-dots" style="justify-self:end"><span></span><span></span></div>
+        </div>
+        <!-- Body -->
+        <div class="wireframe-body">
+            <!-- Sidebar -->
+            <div class="wireframe-sidebar">
+                <span class="wf-label">Sidebar</span>
+                <div style="margin-top:8px">
+                    <div class="wf-sidebar-items">
+                        <span style="width:60%"></span>
+                        <span style="width:55%"></span>
+                        <span style="width:50%"></span>
+                        <span style="width:65%"></span>
+                    </div>
+                    <div style="height:8px"></div>
+                    <div class="wf-sidebar-items">
+                        <span></span>
+                        <span style="width:90%"></span>
+                        <span style="width:85%"></span>
+                        <span style="width:75%"></span>
+                        <span style="width:80%"></span>
+                    </div>
+                </div>
+            </div>
+            <!-- Panel Area -->
+            <div class="wireframe-main">
+                <div class="wf-panels">
+                    <div class="wf-panel"></div>
+                    <div class="wf-panel"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <p style="font-size:11px;color:var(--text-muted);margin-top:8px;text-align:center">Dashed lines = zone boundaries &nbsp;|&nbsp; Real UI uses 1px solid borders, not dashes</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     SECTION 2 — TOPBAR ELEMENTS  #1–#14
+     ═══════════════════════════════════════════════════════ -->
+<div class="section" id="topbar">
+    <div class="section-title">
+        Section 2: Topbar Elements
+        <span class="num-range">#1 – #14</span>
+    </div>
+    <p class="section-desc">Horizontal bar fixed at the top of the viewport. Contains branding, navigation, actions, and configuration controls.</p>
+
+    <div class="elements-grid">
+
+        <!-- #1 -->
+        <div class="el-card">
+            <div class="badge badge-blue">1</div>
+            <div class="el-preview"><span style="font-size:22px">🌐</span></div>
+            <div class="el-info">
+                <h3>Logo (Favicon)</h3>
+                <div class="el-id">id: <code>#logo</code></div>
+                <div class="el-desc">Small favicon/logo image displayed at the far left of the topbar. Identifies the application.</div>
+                <div class="el-module">module: <span>topbar.js</span></div>
+            </div>
+        </div>
+
+        <!-- #2 -->
+        <div class="el-card">
+            <div class="badge badge-blue">2</div>
+            <div class="el-preview"><div class="preview-btn">☰</div></div>
+            <div class="el-info">
+                <h3>Sidebar Toggle</h3>
+                <div class="el-id">class: <code>.sidebar-toggle</code></div>
+                <div class="el-desc">Hamburger icon button that expands or collapses the sidebar panel.</div>
+                <div class="el-module">module: <span>topbar.js</span></div>
+            </div>
+        </div>
+
+        <!-- #3 -->
+        <div class="el-card">
+            <div class="badge badge-blue">3</div>
+            <div class="el-preview"><div class="preview-btn">◀</div></div>
+            <div class="el-info">
+                <h3>Prev Command</h3>
+                <div class="el-id">class: <code>.cmd-prev</code></div>
+                <div class="el-desc">Navigate to the previous command in the command history stack.</div>
+                <div class="el-module">module: <span>topbar.js</span> → <span>history.js</span></div>
+            </div>
+        </div>
+
+        <!-- #4 -->
+        <div class="el-card">
+            <div class="badge badge-blue">4</div>
+            <div class="el-preview"><div class="preview-btn">▶</div></div>
+            <div class="el-info">
+                <h3>Next Command</h3>
+                <div class="el-id">class: <code>.cmd-next</code></div>
+                <div class="el-desc">Navigate to the next command in the command history stack.</div>
+                <div class="el-module">module: <span>topbar.js</span> → <span>history.js</span></div>
+            </div>
+        </div>
+
+        <!-- #5 -->
+        <div class="el-card">
+            <div class="badge badge-green">5</div>
+            <div class="el-preview"><div class="preview-btn btn-p">+</div></div>
+            <div class="el-info">
+                <h3>+ Panel Button</h3>
+                <div class="el-id">class: <code>.add-panel</code> · <code>.btn-primary</code></div>
+                <div class="el-desc">Opens the spawn form or adds a new empty panel to the grid.</div>
+                <div class="el-module">module: <span>topbar.js</span> → <span>panels.js</span></div>
+            </div>
+        </div>
+
+        <!-- #6 -->
+        <div class="el-card">
+            <div class="badge badge-blue">6</div>
+            <div class="el-preview"><div class="preview-btn">🔍</div></div>
+            <div class="el-info">
+                <h3>Search Button</h3>
+                <div class="el-id">class: <code>.search-btn</code></div>
+                <div class="el-desc">Toggles the search overlay (#51) for filtering commands and output.</div>
+                <div class="el-module">module: <span>topbar.js</span> → <span>search.js</span></div>
+            </div>
+        </div>
+
+        <!-- #7 -->
+        <div class="el-card">
+            <div class="badge badge-blue">7</div>
+            <div class="el-preview"><div class="preview-btn">☾</div></div>
+            <div class="el-info">
+                <h3>Theme Toggle</h3>
+                <div class="el-id">class: <code>.theme-toggle</code></div>
+                <div class="el-desc">Cycles through theme modes: Auto → Grey → Dark. Updates CSS custom properties.</div>
+                <div class="el-module">module: <span>topbar.js</span> → <span>theme.js</span></div>
+            </div>
+        </div>
+
+        <!-- #8 -->
+        <div class="el-card">
+            <div class="badge badge-blue">8</div>
+            <div class="el-preview"><div class="preview-btn">🔔</div></div>
+            <div class="el-info">
+                <h3>Sound Notifications</h3>
+                <div class="el-id">class: <code>.sound-toggle</code></div>
+                <div class="el-desc">Enables or disables audio notifications for command completion and errors.</div>
+                <div class="el-module">module: <span>topbar.js</span> → <span>sound.js</span></div>
+            </div>
+        </div>
+
+        <!-- #9 -->
+        <div class="el-card">
+            <div class="badge badge-blue">9</div>
+            <div class="el-preview"><div class="preview-btn">Logs</div></div>
+            <div class="el-info">
+                <h3>Logs Button</h3>
+                <div class="el-id">class: <code>.logs-btn</code></div>
+                <div class="el-desc">Opens a log viewer showing application-level log messages and events.</div>
+                <div class="el-module">module: <span>topbar.js</span> → <span>logs.js</span></div>
+            </div>
+        </div>
+
+        <!-- #10 -->
+        <div class="el-card">
+            <div class="badge badge-blue">10</div>
+            <div class="el-preview"><div class="preview-btn">
+                <span class="preview-dot dot-green" style="width:6px;height:6px"></span>
+                <span style="font-size:12px">Status</span>
+            </div></div>
+            <div class="el-info">
+                <h3>Status Button</h3>
+                <div class="el-id">class: <code>.status-btn</code></div>
+                <div class="el-desc">Displays connection status; shows a green/red dot and server health summary.</div>
+                <div class="el-module">module: <span>topbar.js</span> → <span>status.js</span></div>
+            </div>
+        </div>
+
+        <!-- #11 -->
+        <div class="el-card">
+            <div class="badge badge-yellow">11</div>
+            <div class="el-preview"><input class="preview-input" type="text" placeholder="auth token…" readonly></div>
+            <div class="el-info">
+                <h3>Auth Token Input</h3>
+                <div class="el-id">id: <code>#auth-token</code></div>
+                <div class="el-desc">Text input field where the user enters the authentication token for the server.</div>
+                <div class="el-module">module: <span>topbar.js</span> → <span>auth.js</span></div>
+            </div>
+        </div>
+
+        <!-- #12 -->
+        <div class="el-card">
+            <div class="badge badge-green">12</div>
+            <div class="el-preview"><div class="preview-btn btn-p">Set Token</div></div>
+            <div class="el-info">
+                <h3>Set Token Button</h3>
+                <div class="el-id">class: <code>.set-token</code> · <code>.btn-primary</code></div>
+                <div class="el-desc">Submits the auth token from the input field to authenticate the session.</div>
+                <div class="el-module">module: <span>topbar.js</span> → <span>auth.js</span></div>
+            </div>
+        </div>
+
+        <!-- #13 -->
+        <div class="el-card">
+            <div class="badge badge-blue">13</div>
+            <div class="el-preview"><div class="preview-btn">Docs</div></div>
+            <div class="el-info">
+                <h3>Docs Link Button</h3>
+                <div class="el-id">class: <code>.docs-btn</code></div>
+                <div class="el-desc">Opens the external documentation page in a new browser tab.</div>
+                <div class="el-module">module: <span>topbar.js</span></div>
+            </div>
+        </div>
+
+        <!-- #14 -->
+        <div class="el-card">
+            <div class="badge badge-blue">14</div>
+            <div class="el-preview"><div class="preview-btn">?</div></div>
+            <div class="el-info">
+                <h3>Help Button</h3>
+                <div class="el-id">class: <code>.help-btn</code></div>
+                <div class="el-desc">Displays keyboard shortcuts and usage help in an overlay or modal.</div>
+                <div class="el-module">module: <span>topbar.js</span> → <span>help.js</span></div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     SECTION 3 — SIDEBAR ELEMENTS  #15–#30
+     ═══════════════════════════════════════════════════════ -->
+<div class="section" id="sidebar">
+    <div class="section-title">
+        Section 3: Sidebar Elements
+        <span class="num-range">#15 – #30</span>
+    </div>
+    <p class="section-desc">Left-hand panel showing server connections, command list, and spawn controls. Collapsible via the toggle (#2).</p>
+
+    <div class="elements-grid">
+
+        <!-- #15 -->
+        <div class="el-card">
+            <div class="badge badge-green">15</div>
+            <div class="el-preview">
+                <div style="display:flex;align-items:center;gap:6px">
+                    <span class="preview-dot dot-green"></span>
+                    <span style="font-size:12px;color:var(--text-secondary)">Connected</span>
+                </div>
+            </div>
+            <div class="el-info">
+                <h3>Server Status Indicator</h3>
+                <div class="el-id">class: <code>.server-status-dot</code></div>
+                <div class="el-desc">Colored dot (green = connected, red = disconnected) reflecting WebSocket server status.</div>
+                <div class="el-module">module: <span>sidebar.js</span> → <span>status.js</span></div>
+            </div>
+        </div>
+
+        <!-- #16 -->
+        <div class="el-card">
+            <div class="badge badge-blue">16</div>
+            <div class="el-preview"><div class="preview-tab active">🖥 Servers</div></div>
+            <div class="el-info">
+                <h3>"Servers" Tab</h3>
+                <div class="el-id">class: <code>.tab-servers</code> · <code>.tab.active</code></div>
+                <div class="el-desc">Tab that shows the list of configured server connections and their commands.</div>
+                <div class="el-module">module: <span>sidebar.js</span> → <span>tabs.js</span></div>
+            </div>
+        </div>
+
+        <!-- #17 -->
+        <div class="el-card">
+            <div class="badge badge-blue">17</div>
+            <div class="el-preview"><div class="preview-tab">📋 Templates</div></div>
+            <div class="el-info">
+                <h3>"Templates" Tab</h3>
+                <div class="el-id">class: <code>.tab-templates</code></div>
+                <div class="el-desc">Tab displaying saved command templates that can be quickly spawned on servers.</div>
+                <div class="el-module">module: <span>sidebar.js</span> → <span>tabs.js</span></div>
+            </div>
+        </div>
+
+        <!-- #18 -->
+        <div class="el-card">
+            <div class="badge badge-blue">18</div>
+            <div class="el-preview"><div class="preview-tab">🔐 Certs</div></div>
+            <div class="el-info">
+                <h3>"Certs" Tab</h3>
+                <div class="el-id">class: <code>.tab-certs</code></div>
+                <div class="el-desc">Tab for managing TLS/SSL certificates used for secure server connections.</div>
+                <div class="el-module">module: <span>sidebar.js</span> → <span>tabs.js</span></div>
+            </div>
+        </div>
+
+        <!-- #19 -->
+        <div class="el-card">
+            <div class="badge badge-blue">19</div>
+            <div class="el-preview"><div class="preview-tab">📁 Groups</div></div>
+            <div class="el-info">
+                <h3>"Groups" Tab</h3>
+                <div class="el-id">class: <code>.tab-groups</code></div>
+                <div class="el-desc">Tab for organizing servers into logical groups for batch operations.</div>
+                <div class="el-module">module: <span>sidebar.js</span> → <span>tabs.js</span></div>
+            </div>
+        </div>
+
+        <!-- #20 -->
+        <div class="el-card">
+            <div class="badge badge-yellow">20</div>
+            <div class="el-preview">
+                <div class="preview-banner">⚠ Output may be stale</div>
+            </div>
+            <div class="el-info">
+                <h3>Stale Output Warning Banner</h3>
+                <div class="el-id">class: <code>.stale-warning</code></div>
+                <div class="el-desc">Yellow warning banner shown when command output hasn't been updated recently, indicating possible disconnection.</div>
+                <div class="el-module">module: <span>sidebar.js</span> → <span>status.js</span></div>
+            </div>
+        </div>
+
+        <!-- #21 -->
+        <div class="el-card">
+            <div class="badge badge-yellow">21</div>
+            <div class="el-preview"><input class="preview-input" type="text" placeholder="filter commands…" readonly></div>
+            <div class="el-info">
+                <h3>Command Filter Input</h3>
+                <div class="el-id">class: <code>.cmd-filter</code></div>
+                <div class="el-desc">Text input that live-filters the command list below by matching command names.</div>
+                <div class="el-module">module: <span>sidebar.js</span></div>
+            </div>
+        </div>
+
+        <!-- #22 -->
+        <div class="el-card">
+            <div class="badge badge-green">22</div>
+            <div class="el-preview"><div class="preview-btn btn-p">+ Server</div></div>
+            <div class="el-info">
+                <h3>+ Server Button</h3>
+                <div class="el-id">class: <code>.add-server</code> · <code>.btn-primary</code></div>
+                <div class="el-desc">Opens the Add Server modal (#52) to configure and register a new server connection.</div>
+                <div class="el-module">module: <span>sidebar.js</span> → <span>modals.js</span></div>
+            </div>
+        </div>
+
+        <!-- #23 -->
+        <div class="el-card">
+            <div class="badge badge-red">23</div>
+            <div class="el-preview"><div class="preview-btn btn-d">✕ All</div></div>
+            <div class="el-info">
+                <h3>Kill All Button</h3>
+                <div class="el-id">class: <code>.kill-all</code> · <code>.btn-danger</code></div>
+                <div class="el-desc">Terminates all running commands across all servers. Requires confirmation.</div>
+                <div class="el-module">module: <span>sidebar.js</span> → <span>commands.js</span></div>
+            </div>
+        </div>
+
+        <!-- #24 -->
+        <div class="el-card">
+            <div class="badge badge-yellow">24</div>
+            <div class="el-preview"><div class="preview-btn">⏸ All</div></div>
+            <div class="el-info">
+                <h3>Freeze All Button</h3>
+                <div class="el-id">class: <code>.freeze-all</code></div>
+                <div class="el-desc">Pauses output scrolling for all active command panels simultaneously.</div>
+                <div class="el-module">module: <span>sidebar.js</span> → <span>commands.js</span></div>
+            </div>
+        </div>
+
+        <!-- #25 -->
+        <div class="el-card">
+            <div class="badge badge-purple">25</div>
+            <div class="el-preview">
+                <div class="preview-cmd-item">
+                    <span class="preview-dot dot-green"></span>
+                    <span class="cmd-name">npm start</span>
+                    <span class="preview-freeze-btn">⏸</span>
+                    <span class="preview-badge-star">★</span>
+                    <span class="preview-close-xs">✕</span>
+                    <span class="cmd-meta">12s · 2% · 48M</span>
+                </div>
+            </div>
+            <div class="el-info">
+                <h3>Command List Item</h3>
+                <div class="el-id">class: <code>.cmd-item</code></div>
+                <div class="el-desc">Single command row showing: status dot, name, freeze btn (⏸), keep badge (★), close btn (✕), runtime/CPU/mem stats.</div>
+                <div class="el-module">module: <span>sidebar.js</span> → <span>commands.js</span></div>
+            </div>
+        </div>
+
+        <!-- #26 -->
+        <div class="el-card">
+            <div class="badge badge-purple">26</div>
+            <div class="el-preview">
+                <div style="width:100%;max-width:160px">
+                    <div class="preview-cmd-item" style="margin-bottom:2px;border-radius:3px 3px 0 0">
+                        <span class="preview-dot dot-green"></span>
+                        <span class="cmd-name">npm start</span>
+                    </div>
+                    <div style="background:var(--bg-tertiary);border:1px solid var(--border);border-top:none;border-radius:0 0 3px 3px;padding:4px 8px 4px 22px;font-size:10px;font-family:var(--font-mono);color:var(--text-muted);line-height:1.4">
+                        PID: 12345 &nbsp; Port: 3000<br>
+                        CPU: 2.1% &nbsp; MEM: 48.2 MB<br>
+                        Uptime: 00:01:23
+                    </div>
+                </div>
+            </div>
+            <div class="el-info">
+                <h3>Command Item Inline Details</h3>
+                <div class="el-id">class: <code>.cmd-item-details</code></div>
+                <div class="el-desc">Expanded detail row (visible in wide sidebar mode) showing PID, port, CPU, memory, and uptime beneath the command name.</div>
+                <div class="el-module">module: <span>sidebar.js</span> → <span>commands.js</span></div>
+            </div>
+        </div>
+
+        <!-- #27 -->
+        <div class="el-card">
+            <div class="badge badge-blue">27</div>
+            <div class="el-preview"><div class="preview-tab active">⚡ Spawn</div></div>
+            <div class="el-info">
+                <h3>Spawn Tab</h3>
+                <div class="el-id">class: <code>.tab-spawn</code> · <code>.tab.active</code></div>
+                <div class="el-desc">Tab that reveals the spawn form for quickly starting new commands on servers.</div>
+                <div class="el-module">module: <span>sidebar.js</span> → <span>spawn.js</span></div>
+            </div>
+        </div>
+
+        <!-- #28 -->
+        <div class="el-card">
+            <div class="badge badge-yellow">28</div>
+            <div class="el-preview">
+                <div class="preview-field">
+                    <label>Target Instance</label>
+                    <input class="preview-input" type="text" value="srv-prod-01" readonly>
+                </div>
+            </div>
+            <div class="el-info">
+                <h3>Spawn Form Fields</h3>
+                <div class="el-id">class: <code>.spawn-field</code></div>
+                <div class="el-desc">Form inputs for spawn: Target Instance, Command, Working Dir, Environment Variables, etc.</div>
+                <div class="el-module">module: <span>sidebar.js</span> → <span>spawn.js</span></div>
+            </div>
+        </div>
+
+        <!-- #29 -->
+        <div class="el-card">
+            <div class="badge badge-blue">29</div>
+            <div class="el-preview"><div class="preview-btn">📁 Workspace</div></div>
+            <div class="el-info">
+                <h3>Workspace Manage Button</h3>
+                <div class="el-id">class: <code>.workspace-btn</code></div>
+                <div class="el-desc">Opens the workspace manager overlay (#54) for saving/loading workspace layouts.</div>
+                <div class="el-module">module: <span>sidebar.js</span> → <span>workspace.js</span></div>
+            </div>
+        </div>
+
+        <!-- #30 -->
+        <div class="el-card">
+            <div class="badge badge-blue">30</div>
+            <div class="el-preview">
+                <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+                    <div style="width:20px;height:2px;background:var(--text-muted);border-radius:1px"></div>
+                    <div style="width:20px;height:2px;background:var(--text-muted);border-radius:1px"></div>
+                    <div style="width:20px;height:2px;background:var(--text-muted);border-radius:1px"></div>
+                </div>
+            </div>
+            <div class="el-info">
+                <h3>Sidebar Collapse State</h3>
+                <div class="el-id">class: <code>.sidebar.collapsed</code></div>
+                <div class="el-desc">When collapsed, the sidebar shrinks to icon-only width (~28px) showing only status dots and minimal icons.</div>
+                <div class="el-module">module: <span>sidebar.js</span></div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     SECTION 4 — PANEL AREA ELEMENTS  #31–#50
+     ═══════════════════════════════════════════════════════ -->
+<div class="section" id="panels">
+    <div class="section-title">
+        Section 4: Panel Area Elements
+        <span class="num-range">#31 – #50</span>
+    </div>
+    <p class="section-desc">The main content area uses a CSS grid to arrange command output panels. Each panel is an independent terminal view.</p>
+
+    <div class="elements-grid">
+
+        <!-- #31 -->
+        <div class="el-card">
+            <div class="badge badge-purple">31</div>
+            <div class="el-preview">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;width:100%;max-width:160px">
+                    <div style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:2px;height:30px"></div>
+                    <div style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:2px;height:30px"></div>
+                    <div style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:2px;height:30px;grid-column:1/-1"></div>
+                </div>
+            </div>
+            <div class="el-info">
+                <h3>Panel Container (Grid Layout)</h3>
+                <div class="el-id">class: <code>.panel-grid</code></div>
+                <div class="el-desc">CSS Grid container that manages the layout of all panels. Supports auto-fit, manual, and preset arrangements.</div>
+                <div class="el-module">module: <span>panels.js</span></div>
+            </div>
+        </div>
+
+        <!-- #32 -->
+        <div class="el-card">
+            <div class="badge badge-purple">32</div>
+            <div class="el-preview">
+                <div class="preview-panel">
+                    <div class="preview-panel-head">
+                        <span>npm start :3000</span>
+                        <span>✕</span>
+                    </div>
+                    <div class="preview-panel-body">$ ready on :3000</div>
+                </div>
+            </div>
+            <div class="el-info">
+                <h3>Panel Element</h3>
+                <div class="el-id">class: <code>.panel</code></div>
+                <div class="el-desc">A single panel box containing a header bar and terminal output area. Resizable via grid layout.</div>
+                <div class="el-module">module: <span>panels.js</span> → <span>panel.js</span></div>
+            </div>
+        </div>
+
+        <!-- #33 -->
+        <div class="el-card">
+            <div class="badge badge-blue">33</div>
+            <div class="el-preview">
+                <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:3px;padding:3px 8px;font-size:12px;font-family:var(--font-mono);color:var(--text-primary);display:flex;align-items:center;justify-content:space-between;width:100%;max-width:160px">
+                    <span>npm start</span>
+                    <span style="color:var(--text-muted);font-size:10px">:3000</span>
+                </div>
+            </div>
+            <div class="el-info">
+                <h3>Panel Header</h3>
+                <div class="el-id">class: <code>.panel-header</code></div>
+                <div class="el-desc">Top bar of each panel showing the command name and port number.</div>
+                <div class="el-module">module: <span>panel.js</span></div>
+            </div>
+        </div>
+
+        <!-- #34 -->
+        <div class="el-card">
+            <div class="badge badge-red">34</div>
+            <div class="el-preview"><div class="preview-btn btn-d" style="font-size:12px">✕</div></div>
+            <div class="el-info">
+                <h3>Panel Close Button</h3>
+                <div class="el-id">class: <code>.panel-close</code> · <code>.btn-danger</code></div>
+                <div class="el-desc">Closes and removes this panel from the grid. Also sends a kill signal to the command.</div>
+                <div class="el-module">module: <span>panel.js</span></div>
+            </div>
+        </div>
+
+        <!-- #35 -->
+        <div class="el-card">
+            <div class="badge badge-blue">35</div>
+            <div class="el-preview">
+                <select class="preview-select" disabled>
+                    <option>2×2 Grid</option>
+                </select>
+            </div>
+            <div class="el-info">
+                <h3>Layout Preset Dropdown</h3>
+                <div class="el-id">class: <code>.layout-select</code></div>
+                <div class="el-desc">Dropdown to choose panel layout presets: 1×1, 1×2, 2×2, 2×3, 3×3, auto-fit, etc.</div>
+                <div class="el-module">module: <span>panels.js</span></div>
+            </div>
+        </div>
+
+        <!-- #36 -->
+        <div class="el-card">
+            <div class="badge badge-blue">36</div>
+            <div class="el-preview"><div class="preview-btn">abcdef</div></div>
+            <div class="el-info">
+                <h3>Select Button</h3>
+                <div class="el-id">class: <code>.select-toggle</code></div>
+                <div class="el-desc">Toggles text selection mode in terminal panels — when active, mouse drag selects text instead of scrolling.</div>
+                <div class="el-module">module: <span>panels.js</span> → <span>terminal.js</span></div>
+            </div>
+        </div>
+
+        <!-- #37 -->
+        <div class="el-card">
+            <div class="badge badge-yellow">37</div>
+            <div class="el-preview"><div class="preview-btn">⏸</div></div>
+            <div class="el-info">
+                <h3>Freeze / Run Button</h3>
+                <div class="el-id">class: <code>.freeze-toggle</code></div>
+                <div class="el-desc">Toggles between ⏸ (freeze/pause output scrolling) and ▶ (resume live output) for the focused panel.</div>
+                <div class="el-module">module: <span>panel.js</span> → <span>terminal.js</span></div>
+            </div>
+        </div>
+
+        <!-- #38 -->
+        <div class="el-card">
+            <div class="badge badge-blue">38</div>
+            <div class="el-preview"><div class="preview-btn">📋</div></div>
+            <div class="el-info">
+                <h3>Copy Button</h3>
+                <div class="el-id">class: <code>.copy-btn</code></div>
+                <div class="el-desc">Copies the current terminal output (or selection) to the system clipboard.</div>
+                <div class="el-module">module: <span>panel.js</span></div>
+            </div>
+        </div>
+
+        <!-- #39 -->
+        <div class="el-card">
+            <div class="badge badge-blue">39</div>
+            <div class="el-preview"><div class="preview-btn">⇩</div></div>
+            <div class="el-info">
+                <h3>Export Button</h3>
+                <div class="el-id">class: <code>.export-btn</code></div>
+                <div class="el-desc">Exports the terminal output as a downloadable file (plain text or HTML).</div>
+                <div class="el-module">module: <span>panel.js</span> → <span>export.js</span></div>
+            </div>
+        </div>
+
+        <!-- #40 -->
+        <div class="el-card">
+            <div class="badge badge-blue">40</div>
+            <div class="el-preview"><div class="preview-btn">📷</div></div>
+            <div class="el-info">
+                <h3>Screenshot Button</h3>
+                <div class="el-id">class: <code>.screenshot-btn</code></div>
+                <div class="el-desc">Captures the current panel's terminal output as an image and downloads it.</div>
+                <div class="el-module">module: <span>panel.js</span> → <span>export.js</span></div>
+            </div>
+        </div>
+
+        <!-- #41 -->
+        <div class="el-card">
+            <div class="badge badge-blue">41</div>
+            <div class="el-preview"><div class="preview-btn">◐</div></div>
+            <div class="el-info">
+                <h3>Panel Theme Toggle</h3>
+                <div class="el-id">class: <code>.panel-theme</code></div>
+                <div class="el-desc">Per-panel theme toggle (light/dark/inverted) independent of the global theme setting.</div>
+                <div class="el-module">module: <span>panel.js</span> → <span>theme.js</span></div>
+            </div>
+        </div>
+
+        <!-- #42 -->
+        <div class="el-card">
+            <div class="badge badge-blue">42</div>
+            <div class="el-preview"><div class="preview-btn">Fit</div></div>
+            <div class="el-info">
+                <h3>Max Fit Button</h3>
+                <div class="el-id">class: <code>.max-fit</code></div>
+                <div class="el-desc">Auto-scales the terminal font size to fit all visible output within the panel's dimensions.</div>
+                <div class="el-module">module: <span>panel.js</span> → <span>terminal.js</span></div>
+            </div>
+        </div>
+
+        <!-- #43 -->
+        <div class="el-card">
+            <div class="badge badge-blue">43</div>
+            <div class="el-preview"><div class="preview-btn">A+</div></div>
+            <div class="el-info">
+                <h3>Max Font Button</h3>
+                <div class="el-id">class: <code>.max-font</code></div>
+                <div class="el-desc">Increases the terminal font size to the maximum readable level for presentations.</div>
+                <div class="el-module">module: <span>panel.js</span> → <span>terminal.js</span></div>
+            </div>
+        </div>
+
+        <!-- #44 -->
+        <div class="el-card">
+            <div class="badge badge-blue">44</div>
+            <div class="el-preview">
+                <div class="preview-toggle">
+                    <span>Current</span>
+                    <span style="color:var(--text-muted)">|</span>
+                    <span style="color:var(--accent)">Scrollback</span>
+                </div>
+            </div>
+            <div class="el-info">
+                <h3>Buffer View Toggle</h3>
+                <div class="el-id">class: <code>.buffer-toggle</code></div>
+                <div class="el-desc">Switches the terminal view between "Current" (live viewport) and "Scrollback" (full output history).</div>
+                <div class="el-module">module: <span>panel.js</span> → <span>terminal.js</span></div>
+            </div>
+        </div>
+
+        <!-- #45 -->
+        <div class="el-card">
+            <div class="badge badge-green">45</div>
+            <div class="el-preview">
+                <pre class="preview-terminal">$ npm start
+
+> my-app@1.0.0 start
+> node server.js
+
+Server ready on :3000</pre>
+            </div>
+            <div class="el-info">
+                <h3>Terminal Output Area</h3>
+                <div class="el-id">class: <code>pre.terminal-output</code></div>
+                <div class="el-desc">The main &lt;pre&gt; element rendering ANSI-styled command output. Supports scroll, search highlight, and selection.</div>
+                <div class="el-module">module: <span>terminal.js</span></div>
+            </div>
+        </div>
+
+        <!-- #46 -->
+        <div class="el-card">
+            <div class="badge badge-blue">46</div>
+            <div class="el-preview">
+                <div style="display:flex;align-items:center;gap:8px">
+                    <div class="preview-scroll-indicator"></div>
+                    <span style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">75%</span>
+                </div>
+            </div>
+            <div class="el-info">
+                <h3>Scroll Position Indicator</h3>
+                <div class="el-id">class: <code>.scroll-indicator</code></div>
+                <div class="el-desc">Vertical scrollbar/indicator showing current scroll position within the terminal buffer. Percentage label shown alongside.</div>
+                <div class="el-module">module: <span>terminal.js</span></div>
+            </div>
+        </div>
+
+        <!-- #47 -->
+        <div class="el-card">
+            <div class="badge badge-purple">47</div>
+            <div class="el-preview">
+                <div class="preview-welcome">
+                    <div class="w-icon">⬡</div>
+                    <div class="w-title">rvw</div>
+                    <div class="w-sub">Select or spawn a command</div>
+                </div>
+            </div>
+            <div class="el-info">
+                <h3>Welcome Screen</h3>
+                <div class="el-id">class: <code>.welcome-screen</code></div>
+                <div class="el-desc">Shown in the panel area when no command is selected. Displays app branding and a prompt to get started.</div>
+                <div class="el-module">module: <span>panels.js</span></div>
+            </div>
+        </div>
+
+        <!-- #48 -->
+        <div class="el-card">
+            <div class="badge badge-blue">48</div>
+            <div class="el-preview"><div class="preview-btn">◀</div></div>
+            <div class="el-info">
+                <h3>History Back Button</h3>
+                <div class="el-id">class: <code>.history-back</code></div>
+                <div class="el-desc">Navigates the focused panel's terminal buffer back to the previous scroll position in history.</div>
+                <div class="el-module">module: <span>panel.js</span> → <span>history.js</span></div>
+            </div>
+        </div>
+
+        <!-- #49 -->
+        <div class="el-card">
+            <div class="badge badge-blue">49</div>
+            <div class="el-preview"><div class="preview-btn">▶</div></div>
+            <div class="el-info">
+                <h3>History Forward Button</h3>
+                <div class="el-id">class: <code>.history-forward</code></div>
+                <div class="el-desc">Navigates the focused panel's terminal buffer forward to the next scroll position in history.</div>
+                <div class="el-module">module: <span>panel.js</span> → <span>history.js</span></div>
+            </div>
+        </div>
+
+        <!-- #50 -->
+        <div class="el-card">
+            <div class="badge badge-blue">50</div>
+            <div class="el-preview">
+                <div class="preview-dragzone">
+                    <div style="font-size:18px;margin-bottom:4px">⬇</div>
+                    Drop here
+                </div>
+            </div>
+            <div class="el-info">
+                <h3>Drag-Drop Zone</h3>
+                <div class="el-id">class: <code>.drop-zone</code></div>
+                <div class="el-desc">Target area for drag-and-drop file uploads. Accepts scripts, configs, or workspace files to import.</div>
+                <div class="el-module">module: <span>panels.js</span> → <span>dropzone.js</span></div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     SECTION 5 — MODALS & OVERLAYS  #51–#55
+     ═══════════════════════════════════════════════════════ -->
+<div class="section" id="modals">
+    <div class="section-title">
+        Section 5: Modals &amp; Overlays
+        <span class="num-range">#51 – #55</span>
+    </div>
+    <p class="section-desc">Overlaid UI elements that appear on top of the main interface for search, configuration, and management tasks.</p>
+
+    <div class="elements-grid">
+
+        <!-- #51 -->
+        <div class="el-card">
+            <div class="badge badge-yellow">51</div>
+            <div class="el-preview">
+                <div class="preview-overlay">
+                    <div style="position:absolute;top:4px;right:6px;font-size:10px;color:var(--text-muted)">ESC</div>
+                    <div class="preview-overlay-inner">
+                        <input class="preview-input" type="text" value="search…" readonly style="max-width:130px;margin-bottom:6px">
+                        <div style="font-size:10px;color:var(--text-muted)">3 matches found</div>
+                    </div>
+                </div>
+            </div>
+            <div class="el-info">
+                <h3>Search Overlay</h3>
+                <div class="el-id">class: <code>.search-overlay</code></div>
+                <div class="el-desc">Full-width overlay with a search input for finding text across all terminal panels. Shows match count and supports keyboard navigation.</div>
+                <div class="el-module">module: <span>search.js</span></div>
+            </div>
+        </div>
+
+        <!-- #52 -->
+        <div class="el-card">
+            <div class="badge badge-green">52</div>
+            <div class="el-preview">
+                <div class="preview-form-card">
+                    <div class="preview-form-head">
+                        <span>Add Server</span>
+                        <span style="color:var(--text-muted);font-size:10px">✕</span>
+                    </div>
+                    <div class="preview-form-body">
+                        <div class="pf-field">
+                            <div class="pf-label">Name</div>
+                            <input class="pf-input" type="text" value="prod-server" readonly>
+                        </div>
+                        <div class="pf-field">
+                            <div class="pf-label">Host</div>
+                            <input class="pf-input" type="text" value="192.168.1.10" readonly>
+                        </div>
+                        <div class="pf-field">
+                            <div class="pf-label">Port</div>
+                            <input class="pf-input" type="text" value="22" readonly>
+                        </div>
+                    </div>
+                    <div class="preview-form-foot">
+                        <div class="preview-btn" style="height:24px;font-size:11px;padding:0 8px">Cancel</div>
+                        <div class="preview-btn btn-p" style="height:24px;font-size:11px;padding:0 8px">Save</div>
+                    </div>
+                </div>
+            </div>
+            <div class="el-info">
+                <h3>Add Server Modal</h3>
+                <div class="el-id">class: <code>.modal-add-server</code></div>
+                <div class="el-desc">Modal dialog for adding a new server connection with fields for name, host, port, and authentication method.</div>
+                <div class="el-module">module: <span>modals.js</span> → <span>servers.js</span></div>
+            </div>
+        </div>
+
+        <!-- #53 -->
+        <div class="el-card">
+            <div class="badge badge-purple">53</div>
+            <div class="el-preview">
+                <div class="preview-form-card">
+                    <div class="preview-form-head">
+                        <span>Command Manager</span>
+                        <span style="color:var(--text-muted);font-size:10px">✕</span>
+                    </div>
+                    <div class="preview-form-body">
+                        <div class="preview-cmd-item" style="margin-bottom:4px;font-size:10px">
+                            <span class="preview-dot dot-green" style="width:6px;height:6px"></span>
+                            <span class="cmd-name">npm start</span>
+                            <span class="cmd-meta" style="font-size:9px">:3000</span>
+                        </div>
+                        <div class="preview-cmd-item" style="margin-bottom:4px;font-size:10px">
+                            <span class="preview-dot dot-red" style="width:6px;height:6px"></span>
+                            <span class="cmd-name">pytest</span>
+                            <span class="cmd-meta" style="font-size:9px">exit 1</span>
+                        </div>
+                        <div class="preview-cmd-item" style="font-size:10px">
+                            <span class="preview-dot dot-green" style="width:6px;height:6px"></span>
+                            <span class="cmd-name">cargo run</span>
+                            <span class="cmd-meta" style="font-size:9px">:8080</span>
+                        </div>
+                    </div>
+                    <div class="preview-form-foot">
+                        <div class="preview-btn btn-d" style="height:24px;font-size:11px;padding:0 8px">Kill All</div>
+                        <div class="preview-btn" style="height:24px;font-size:11px;padding:0 8px">Freeze All</div>
+                    </div>
+                </div>
+            </div>
+            <div class="el-info">
+                <h3>Command Manager Dialog</h3>
+                <div class="el-id">class: <code>.modal-cmd-manager</code></div>
+                <div class="el-desc">Dialog listing all running commands with batch actions: kill all, freeze all, filter, and individual command controls.</div>
+                <div class="el-module">module: <span>modals.js</span> → <span>commands.js</span></div>
+            </div>
+        </div>
+
+        <!-- #54 -->
+        <div class="el-card">
+            <div class="badge badge-blue">54</div>
+            <div class="el-preview">
+                <div class="preview-form-card">
+                    <div class="preview-form-head">
+                        <span>Workspaces</span>
+                        <span style="color:var(--text-muted);font-size:10px">✕</span>
+                    </div>
+                    <div class="preview-form-body">
+                        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);margin-bottom:4px">
+                            <span style="font-size:11px;color:var(--text-primary)">default</span>
+                            <span style="font-size:10px;color:var(--text-muted)">3 panels</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);margin-bottom:4px">
+                            <span style="font-size:11px;color:var(--text-primary)">debug-setup</span>
+                            <span style="font-size:10px;color:var(--text-muted)">6 panels</span>
+                        </div>
+                    </div>
+                    <div class="preview-form-foot">
+                        <div class="preview-btn" style="height:24px;font-size:11px;padding:0 8px">Save As…</div>
+                        <div class="preview-btn btn-p" style="height:24px;font-size:11px;padding:0 8px">Load</div>
+                    </div>
+                </div>
+            </div>
+            <div class="el-info">
+                <h3>Workspace Manager Overlay</h3>
+                <div class="el-id">class: <code>.modal-workspace</code></div>
+                <div class="el-desc">Overlay for saving, loading, and deleting workspace layouts. Each workspace stores panel arrangement and server state.</div>
+                <div class="el-module">module: <span>modals.js</span> → <span>workspace.js</span></div>
+            </div>
+        </div>
+
+        <!-- #55 -->
+        <div class="el-card">
+            <div class="badge badge-green">55</div>
+            <div class="el-preview">
+                <div class="preview-form-card" style="max-width:180px">
+                    <div class="preview-form-head">
+                        <span>⚡ Spawn Command</span>
+                        <span style="color:var(--text-muted);font-size:10px">✕</span>
+                    </div>
+                    <div class="preview-form-body">
+                        <div class="pf-field">
+                            <div class="pf-label">Server</div>
+                            <select class="pf-input" disabled style="cursor:default">
+                                <option>srv-prod-01</option>
+                            </select>
+                        </div>
+                        <div class="pf-field">
+                            <div class="pf-label">Command</div>
+                            <input class="pf-input" type="text" value="npm run dev" readonly>
+                        </div>
+                        <div class="pf-field">
+                            <div class="pf-label">Working Dir</div>
+                            <input class="pf-input" type="text" value="/app" readonly>
+                        </div>
+                    </div>
+                    <div class="preview-form-foot">
+                        <div class="preview-btn" style="height:24px;font-size:11px;padding:0 8px">Cancel</div>
+                        <div class="preview-btn btn-p" style="height:24px;font-size:11px;padding:0 8px">Spawn</div>
+                    </div>
+                </div>
+            </div>
+            <div class="el-info">
+                <h3>Spawn Form</h3>
+                <div class="el-id">class: <code>.spawn-form</code></div>
+                <div class="el-desc">Form displayed in the spawn tab (or as a modal) for configuring and launching a new command: server selection, command string, working directory, environment variables.</div>
+                <div class="el-module">module: <span>spawn.js</span></div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+</div><!-- /container -->
+
+<!-- ═══════════════════════════════════════════════════════
+     FOOTER
+     ═══════════════════════════════════════════════════════ -->
+<div class="doc-footer">
+    rvw Admin UI Reference Document &nbsp;·&nbsp; 55 elements across 5 sections &nbsp;·&nbsp; Generated for development use
+</div>
+
+</body>
+</html>
