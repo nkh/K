@@ -584,40 +584,6 @@ function scheduleVttyHttp(instUrl, cmdId, delayMs) {
     if (panelId) scheduleVttyHttpForPanel(panelId, instUrl, cmdId, delayMs);
 }
 
-/// Pre-fetch VTTY HTML for instant initial display.
-/// Unlike loadVttyHttp, this does NOT check generation (first load, no cache)
-/// and does NOT defer to pending state.  It writes directly into the <pre>.
-async function _prefetchVttyHtml(instUrl, cmdId) {
-    const panel = getSelectedPanel();
-    if (!panel) return;
-    const vttyEl = panel.querySelector('.vtty-container');
-    const pre = vttyEl ? vttyEl.querySelector('pre') : null;
-    if (!pre) return;
-
-    try {
-        const json = await api.getVttyHtml(instUrl, cmdId);
-        if (json.status === 'ok' && json.data && json.data.html !== undefined) {
-            pre.innerHTML = json.data.html;
-            // Store generation for subsequent incremental updates
-            if (json.data.generation !== undefined) {
-                state._lastGeneration[cmdId] = json.data.generation;
-            }
-            // Build cell grid for Level 3 incremental diffing
-            if (state._level3Enabled && json.data.dimensions) {
-                buildCellGrid(cmdId, pre, json.data.dimensions.rows, json.data.dimensions.cols);
-            }
-            // Update metadata (cursor, dimensions, etc.)
-            updateVttyMetadataFromHttp(json.data, panel,
-                state.panels.find(p => p.id === panel.id), 0);
-            // Start the push/poll update mode now that initial content is displayed
-            const panelObj = state.panels.find(p => p.id === panel.id);
-            if (panelObj) startPanelUpdateMode(panelObj.id);
-        }
-    } catch (e) {
-        console.error('Failed to pre-fetch VTTY HTML:', e);
-    }
-}
-
 async function loadVttyHttp(instUrl, cmdId) {
     const panel = getSelectedPanel();
     if (!panel) return;
@@ -747,27 +713,6 @@ function updateVttyMetadataFromHttp(data, panel, panelObj, sbOffset) {
     }
 }
 
-function switchBuffer(view) {
-    state.bufferView = view;
-    if (!state.selectedCmdId) return;
-
-    // Reset scrollback when switching buffer views
-    state.panels.forEach(p => p.scrollbackOffset = 0);
-    // Clear stored scrollback since we reset
-    sessionStorage.removeItem('vrw_scrollback_' + state.selectedCmdId);
-
-    if (view === 'current') {
-        // Re-enable the active update mode for live updates
-        startUpdateMode();
-    } else {
-        // Disconnect WS / stop poll — we're viewing a static snapshot
-        stopUpdateMode();
-        loadVttyHttp(state.selectedInstUrl, state.selectedCmdId);
-    }
-}
-
-
-
     window.updateVttyDisplay = updateVttyDisplay;
     window.updateVttyDisplayForPanel = updateVttyDisplayForPanel;
     window.updateVttyMetadataForPanel = updateVttyMetadataForPanel;
@@ -777,9 +722,7 @@ function switchBuffer(view) {
     window.buildCellGrid = buildCellGrid;
     window.applyVttyDiff = applyVttyDiff;
     window.scheduleVttyHttp = scheduleVttyHttp;
-    window._prefetchVttyHtml = _prefetchVttyHtml;
     window.loadVttyHttp = loadVttyHttp;
     window.updateVttyMetadata = updateVttyMetadata;
     window.updateVttyMetadataFromHttp = updateVttyMetadataFromHttp;
-    window.switchBuffer = switchBuffer;
 })();

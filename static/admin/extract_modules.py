@@ -39,22 +39,6 @@ VRW._lastSplitState = _lastSplitState;
 VRW._lastShowingWelcome = _lastShowingWelcome;
 """)
 
-# ─── 2. eventbus.js ───
-write_module('eventbus.js', """// ─── Event Bus ───
-// Central event emitter for cross-module communication.
-window.VRW = window.VRW || {};
-VRW.EventBus = {
-    _listeners: {},
-    on(event, fn) { (this._listeners[event] = this._listeners[event] || []).push(fn); },
-    off(event, fn) { if (this._listeners[event]) this._listeners[event] = this._listeners[event].filter(f => f !== fn); },
-    emit(event, ...args) { (this._listeners[event] || []).forEach(fn => fn(...args)); },
-    once(event, fn) {
-        const wrapper = (...args) => { fn(...args); this.off(event, wrapper); };
-        this.on(event, wrapper);
-    }
-};
-""")
-
 # ─── 3. utils.js ───
 # Pure utility functions used everywhere. Must load before other modules.
 utils_content = """// ─── Utilities ───
@@ -290,11 +274,9 @@ vtty_content += """
     window.buildCellGrid = buildCellGrid;
     window.applyVttyDiff = applyVttyDiff;
     window.scheduleVttyHttp = scheduleVttyHttp;
-    window._prefetchVttyHtml = _prefetchVttyHtml;
     window.loadVttyHttp = loadVttyHttp;
     window.updateVttyMetadata = updateVttyMetadata;
     window.updateVttyMetadataFromHttp = updateVttyMetadataFromHttp;
-    window.switchBuffer = switchBuffer;
 })();
 """
 write_module('vtty.js', vtty_content)
@@ -315,13 +297,11 @@ ws_content += """
     window.disconnectVttyWs = disconnectVttyWs;
     window.connectPanelWs = connectPanelWs;
     window.disconnectPanelWs = disconnectPanelWs;
-    window.disconnectAllPanelWs = disconnectAllPanelWs;
     window.updateWsQualityIndicator = updateWsQualityIndicator;
     window.startPoll = startPoll;
     window.startPanelPoll = startPanelPoll;
     window.stopPoll = stopPoll;
     window.stopPanelPoll = stopPanelPoll;
-    window.pollOnce = pollOnce;
     window.pollOncePanel = pollOncePanel;
     window._connectSecondaryWs = _connectSecondaryWs;
     window._disconnectSecondaryWs = _disconnectSecondaryWs;
@@ -434,7 +414,6 @@ misc_content += """
     window.updateFrozenIndicator = updateFrozenIndicator;
     window._toggleSearchFreezeCommands = _toggleSearchFreezeCommands;
     // Command manager
-    window.openCmdManager = openCmdManager;
     window.closeCmdManager = closeCmdManager;
     window.renderCmdManagerList = renderCmdManagerList;
     window.cmdManagerKillAll = cmdManagerKillAll;
@@ -461,7 +440,6 @@ misc_content += """
     window.openWorkspaceManage = openWorkspaceManage;
     // Environments
     window.fetchEnvironments = fetchEnvironments;
-    window.renderEnvironments = renderEnvironments;
     window.activateEnvironment = activateEnvironment;
     // Groups
     window.getCmdGroups = getCmdGroups;

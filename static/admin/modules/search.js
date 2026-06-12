@@ -244,12 +244,6 @@ async function _thawAllPanelsFromSearch() {
 }
 
 // ─── Command Manager Dialog ───
-function openCmdManager() {
-    document.getElementById('cmdManagerModal').style.display = '';
-    document.getElementById('cmdManagerFilter').value = '';
-    renderCmdManagerList();
-}
-
 function closeCmdManager() {
     document.getElementById('cmdManagerModal').style.display = 'none';
 }
@@ -504,7 +498,6 @@ async function executeGlobalSearch() {
     };
     window.updateFrozenIndicator = updateFrozenIndicator;
     window._toggleSearchFreezeCommands = _toggleSearchFreezeCommands;
-    window.openCmdManager = openCmdManager;
     window.closeCmdManager = closeCmdManager;
     window.renderCmdManagerList = renderCmdManagerList;
     window.cmdManagerKillAll = cmdManagerKillAll;

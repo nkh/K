@@ -602,7 +602,7 @@ const path = require('path');
 const moduleDir = path.join(__dirname, '..', 'modules');
 
 const moduleOrder = [
-    'state.js', 'eventbus.js', 'utils.js', 'api.js', 'focus.js', 'theme.js',
+    'state.js', 'utils.js', 'api.js', 'focus.js', 'theme.js',
     'sidebar.js', 'panels.js',
     'commands-core.js', 'command-selection.js', 'command-ui.js', 'server-connections.js',
     'websocket.js', 'vtty.js', 'snapshot.js',
@@ -648,7 +648,7 @@ const _crossDeps = (() => {
     'updateTerminalDisconnectedOverlay', 'updateSidebarSelection',
     'updateSharedToolbar', 'updateCmdToolbarVisibility',
     'renderPanels', 'focusPanel', 'connectPanelWs', 'disconnectPanelWs',
-    'disconnectAllPanelWs', 'startPanelPoll', 'stopPanelPoll',
+    'startPanelPoll', 'stopPanelPoll',
     'startUpdateMode', 'stopUpdateMode', 'startPanelUpdateMode', 'stopPanelUpdateMode',
     'renderWorkspaceList', 'showSpecialKeysHelp', 'applyVttyDiff',
     'updateVttyDisplay', 'playExitSound', 'fetchServerTemplates',
@@ -669,8 +669,8 @@ const _crossDeps = (() => {
     '_flushPendingVttyUpdate', 'toggleSelectionMode',
     'updateVttyDisplayForPanel', 'updateVttyMetadataForPanel', 'applyVttyDiffForPanel',
     'scheduleVttyHttpForPanel', 'loadVttyHttpForPanel',
-    'updateVttyMetadataFromHttp', 'switchBuffer', 'buildCellGrid',
-    'pollOncePanel', 'pollOnce', '_maxFontState', '_maxFitState',
+    'updateVttyMetadataFromHttp', 'buildCellGrid',
+    'pollOncePanel', '_maxFontState', '_maxFitState',
     '_openCommandInNewPane', 'copyTerminalSelection', 'exportTerminal',
     'screenshotPanel', 'closeContextMenu', 'showCmdContextMenu',
     'showPanelContextMenu', 'startRenamePanel', 'finishRenamePanel',

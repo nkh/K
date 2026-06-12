@@ -16,7 +16,7 @@ resetTestState();
 console.log('[REG-01] Module loading order');
 assert(typeof state !== 'undefined', 'state module loaded');
 assert(typeof VRW !== 'undefined', 'VRW namespace exists');
-assert(typeof VRW.EventBus !== 'undefined', 'eventbus loaded');
+assert(typeof VRW.state !== 'undefined', 'VRW.state accessible');
 assert(typeof formatRuntime === 'function', 'utils loaded');
 assert(typeof trapFocus === 'function', 'focus loaded');
 assert(typeof toggleGlobalTheme === 'function', 'theme loaded');
@@ -105,16 +105,10 @@ state.authToken = localStorage.getItem('vrw_auth_token') || '';
 assertEq(state.authToken, 'test-pat', 'authToken restored from localStorage after reset');
 
 // ════════════════════════════════════════════════════════════════════
-// REGRESSION 7: EventBus — events don't leak between names
+// REGRESSION 7: (removed) EventBus was deleted in Phase 4 — no event bus needed
 // ════════════════════════════════════════════════════════════════════
-console.log('[REG-07] EventBus isolation');
-let leakA = false, leakB = false;
-VRW.EventBus.on('regress-a', () => { leakA = true; });
-VRW.EventBus.on('regress-b', () => { leakB = true; });
-VRW.EventBus.emit('regress-a');
-assert(leakA && !leakB, 'event A does not trigger listener B');
-VRW.EventBus.off('regress-a');
-VRW.EventBus.off('regress-b');
+console.log('[REG-07] EventBus removed (dead code deleted)');
+assert(typeof VRW.EventBus === 'undefined', 'EventBus has been removed');
 
 // ════════════════════════════════════════════════════════════════════
 // REGRESSION 8: VTTY generation skip — same generation doesn't update DOM

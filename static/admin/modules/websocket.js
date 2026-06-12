@@ -343,13 +343,6 @@ function disconnectPanelWs(panelId) {
     }
 }
 
-/// Disconnect WS for ALL panels (e.g. on page unload).
-function disconnectAllPanelWs() {
-    for (const panel of state.panels) {
-        disconnectPanelWs(panel.id);
-    }
-}
-
 // ─── WebSocket Connection Quality Indicator ───
 function updateWsQualityIndicator() {
     const el = document.getElementById('wsQuality');
@@ -412,12 +405,6 @@ function stopPanelPoll(panelId) {
         clearInterval(panelObj.pollTimer);
         panelObj.pollTimer = null;
     }
-}
-
-async function pollOnce() {
-    // Legacy: poll focused panel
-    const panelId = getActivePanelId();
-    if (panelId) await pollOncePanel(panelId);
 }
 
 async function pollOncePanel(panelId) {
@@ -736,13 +723,11 @@ function stopUpdateMode() {
     window.disconnectVttyWs = disconnectVttyWs;
     window.connectPanelWs = connectPanelWs;
     window.disconnectPanelWs = disconnectPanelWs;
-    window.disconnectAllPanelWs = disconnectAllPanelWs;
     window.updateWsQualityIndicator = updateWsQualityIndicator;
     window.startPoll = startPoll;
     window.startPanelPoll = startPanelPoll;
     window.stopPoll = stopPoll;
     window.stopPanelPoll = stopPanelPoll;
-    window.pollOnce = pollOnce;
     window.pollOncePanel = pollOncePanel;
     window.startUpdateMode = startUpdateMode;
     window.startPanelUpdateMode = startPanelUpdateMode;

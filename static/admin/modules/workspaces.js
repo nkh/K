@@ -202,43 +202,6 @@ async function fetchEnvironments() {
     }
 }
 
-/// Render the environments list in the Envs tab.
-function renderEnvironments() {
-    const container = document.getElementById('envList');
-    if (!container) return;
-
-    // Merge server environments with any user-defined ones from localStorage
-    const userEnvs = JSON.parse(localStorage.getItem('vrw_environments') || '[]');
-    const allEnvs = [..._serverEnvironments, ...userEnvs];
-
-    if (allEnvs.length === 0) {
-        container.innerHTML = '<div style="padding:0.5rem;color:var(--text-muted);font-size:0.7rem;text-align:center;">No environments configured. Add [[environments]] to your config file or create user environments.</div>';
-        return;
-    }
-
-    let html = '';
-    for (const env of allEnvs) {
-        const panelCount = (env.panels || []).length;
-        const cmdCount = (env.panels || []).reduce((sum, p) => sum + (p.commands || []).length, 0);
-        const autoBadge = env.auto_start
-            ? '<span style="color:var(--green);font-size:0.6rem;">auto</span>'
-            : '';
-        const descHtml = env.description
-            ? `<div style="font-size:0.6rem;color:var(--text-muted);margin-top:0.15rem;">${escHtml(env.description)}</div>`
-            : '';
-        const layoutHtml = env.layout
-            ? `<span style="font-size:0.6rem;color:var(--text-muted);">${env.layout === 'vertical' ? 'stacked' : 'side-by-side'}</span>`
-            : '';
-
-        html += `<div class="template-card" data-action="ActivateEnvironment" data-name="${escHtml(env.name)}" title="Click to activate this environment" style="cursor:pointer;">
-            <div class="template-name">${escHtml(env.name)} ${autoBadge}</div>
-            <div class="template-cmd">${panelCount} panel${panelCount !== 1 ? 's' : ''}, ${cmdCount} command${cmdCount !== 1 ? 's' : ''} ${layoutHtml}</div>
-            ${descHtml}
-        </div>`;
-    }
-    container.innerHTML = html;
-}
-
 /// Activate a workspace environment: create panels, connect servers, and spawn commands.
 async function activateEnvironment(name) {
     const allEnvs = [..._serverEnvironments, ...JSON.parse(localStorage.getItem('vrw_environments') || '[]')];
@@ -748,7 +711,6 @@ document.addEventListener('click', (e) => {
     window.renderMarkdown = renderMarkdown;
     // Environments
     window.fetchEnvironments = fetchEnvironments;
-    window.renderEnvironments = renderEnvironments;
     window.activateEnvironment = activateEnvironment;
     // Groups
     window.getCmdGroups = getCmdGroups;
