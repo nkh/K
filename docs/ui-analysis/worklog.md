@@ -124,3 +124,29 @@ Key discovery: api.js (loaded via (0, eval) in setup.js) captures the fetch func
 - Net: **-130 lines** from modules (9975→9845), **-227 lines** total including test file
 - Tests: 1072→1072 (removed 8 eventbus tests), 1069 passed, 3 failed (same pre-existing CSS), 0 regressions
 - Commit: 237af66 on fix_overcomplicated_ui, pushed to origin
+
+## Phase 5a: Remove deprecated state properties
+- Removed `state.vttyWs`, `state.vttyWsUrl`, `state.vttyWsCmdId` (only used by dead `connectVttyWs`)
+- Removed `state._vttyHttpTimer` (unused; actual timers use `state['_vttyHttpTimer_'+panelId]`)
+- Removed `state._pollTimer` (never set; per-panel polling replaced global)
+- Fixed `server-connections.js` poll-interval change handler (removed `_pollTimer` guard)
+- Updated test_state.js, test_websocket.js, helpers.js, setup.js
+- Tests: 1069 passed, 3 failed (same), 0 regressions
+- Commit: ef8eb61 on fix_overcomplicated_ui, pushed to origin
+
+## Phase 4c: Delete dead global WebSocket functions
+- Removed `connectVttyWs` (156 lines) and `disconnectVttyWs` (23 lines) from websocket.js
+- These were legacy single-command WS functions, completely superseded by per-panel `connectPanelWs`
+- No external caller existed — only self-referential reconnection logic within the dead code
+- Removed `window.connectVttyWs`, `window.disconnectVttyWs` exports
+- Updated extract_modules.py
+- Tests: 1069 passed, 3 failed (same), 0 regressions (test_websocket.js has typeof guards)
+- websocket.js: 743→564 lines. Total modules: 9845→9657 lines
+- Commit: d3e4dcc on fix_overcomplicated_ui, pushed to origin
+
+## Running totals
+- **Start: ~10,700 lines, 24 modules**
+- **Current: 9,657 lines, 23 modules** (−1,043 lines, −1 module)
+- **Target: ~5,200 lines, ~14 modules**
+- **Remaining: ~4,400 lines to cut**
+- Biggest targets remaining: panels.js (1873), workspaces.js (744), vtty.js (728), websocket.js (564), spawn.js (561), keyboard.js (552)
