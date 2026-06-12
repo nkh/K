@@ -17,26 +17,26 @@
     <div class="topbar">
         <img src="favicon.png" alt="vrw" style="height:1.1rem;width:auto;margin-right:0.15rem;">
         <div class="topbar-group topbar-group-left">
-            <button class="btn btn-xs" onclick="toggleSidebar()" title="Toggle sidebar">&#9776;</button>
-            <button class="btn btn-xs" onclick="navigatePrevCommand()" title="Previous command">&#x25C0;</button>
-            <button class="btn btn-xs" onclick="navigateNextCommand()" title="Next command">&#x25B6;</button>
-            <button class="btn btn-xs" onclick="addPanel()" title="Add panel">+ Panel</button>
-            <button class="btn btn-xs" id="globalSearchBtn" onclick="openGlobalSearch()" title="Search output">&#128269;</button>
+            <button class="btn btn-xs" data-action="ToggleSidebar" title="Toggle sidebar">&#9776;</button>
+            <button class="btn btn-xs" data-action="NavigatePrevCommand" title="Previous command">&#x25C0;</button>
+            <button class="btn btn-xs" data-action="NavigateNextCommand" title="Next command">&#x25B6;</button>
+            <button class="btn btn-xs" data-action="AddPanel" title="Add panel">+ Panel</button>
+            <button class="btn btn-xs" id="globalSearchBtn" data-action="OpenGlobalSearch" title="Search output">&#128269;</button>
         </div>
 
         <div class="topbar-group topbar-group-right">
-            <button class="btn btn-xs" id="themeToggle" onclick="toggleGlobalTheme()" title="Toggle theme (cycles: Auto → Grey → Dark → Auto)"></button>
-            <button class="btn btn-xs" id="soundBtn" onclick="toggleSoundNotifications()" title="Toggle sound notifications">&#128276;</button>
-            <button class="btn btn-xs" id="logsBtn" onclick="toggleLogsView()" title="Toggle log viewer">Logs</button>
-            <button class="btn btn-xs" id="statusBtn" onclick="toggleBottombar()" title="Toggle status bar">Status</button>
+            <button class="btn btn-xs" id="themeToggle" data-action="ToggleGlobalTheme" title="Toggle theme (cycles: Auto → Grey → Dark → Auto)"></button>
+            <button class="btn btn-xs" id="soundBtn" data-action="ToggleSoundNotifications" title="Toggle sound notifications">&#128276;</button>
+            <button class="btn btn-xs" id="logsBtn" data-action="ToggleLogsView" title="Toggle log viewer">Logs</button>
+            <button class="btn btn-xs" id="statusBtn" data-action="ToggleBottombar" title="Toggle status bar">Status</button>
 
             <div class="token-bar">
                 <label for="authToken">Token:</label>
                 <input type="password" id="authToken" placeholder="Bearer token" title="Authorization token">
-                <button class="btn btn-xs" onclick="saveToken()">Set</button>
+                <button class="btn btn-xs" data-action="SaveToken">Set</button>
             </div>
-            <button class="btn btn-xs" id="docsBtn" onclick="showDocs()" title="Documentation">Docs</button>
-            <button class="btn btn-xs" onclick="showShortcuts()" title="Keyboard shortcuts">?</button>
+            <button class="btn btn-xs" id="docsBtn" data-action="ShowDocs" title="Documentation">Docs</button>
+            <button class="btn btn-xs" data-action="ShowShortcuts" title="Keyboard shortcuts">?</button>
         </div>
     </div>
 
@@ -44,20 +44,20 @@
         <!-- Sidebar -->
         <div class="sidebar" id="sidebar">
             <div class="sidebar-tabs">
-                <div class="sidebar-tab active" onclick="switchSidebarTab('servers', this)">Servers</div>
-                <div class="sidebar-tab" onclick="switchSidebarTab('spawn', this)">Spawn</div>
-                <div class="sidebar-tab" onclick="switchSidebarTab('templates', this)">Templates</div>
-                <div class="sidebar-tab" onclick="switchSidebarTab('certs', this)">Certs</div>
-                <div class="sidebar-tab" onclick="switchSidebarTab('groups', this)">Groups</div>
+                <div class="sidebar-tab active" data-action="SwitchSidebarTab" data-tab="servers">Servers</div>
+                <div class="sidebar-tab" data-action="SwitchSidebarTab" data-tab="spawn">Spawn</div>
+                <div class="sidebar-tab" data-action="SwitchSidebarTab" data-tab="templates">Templates</div>
+                <div class="sidebar-tab" data-action="SwitchSidebarTab" data-tab="certs">Certs</div>
+                <div class="sidebar-tab" data-action="SwitchSidebarTab" data-tab="groups">Groups</div>
             </div>
             <div class="sidebar-content" id="sidebarContent">
                 <!-- Servers tab (default) -->
                 <div id="tab-servers">
                     <div style="padding:0.2rem 0.3rem;display:flex;gap:0.2rem;align-items:center;">
                         <input type="text" id="cmdFilter" placeholder="Filter commands..." oninput="loadCommands()" style="flex:1;min-width:0;font-size:var(--ui-fs);padding:0.1rem 0.3rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:2px;">
-                        <button class="btn btn-xs" onclick="showAddServerModal()" title="Add server connection">+ Server</button>
-                        <button class="btn btn-xs btn-danger" id="killAllBtn" onclick="killAllCommands()" title="Kill all running commands" style="display:none;">&#x2715; All</button>
-                        <button class="btn btn-xs" id="freezeAllBtn" onclick="freezeAllCommands()" title="Freeze/thaw all running commands" style="display:none;">&#9208; All</button>
+                        <button class="btn btn-xs" data-action="ShowAddServerModal" title="Add server connection">+ Server</button>
+                        <button class="btn btn-xs btn-danger" id="killAllBtn" data-action="KillAllCommands" title="Kill all running commands" style="display:none;">&#x2715; All</button>
+                        <button class="btn btn-xs" id="freezeAllBtn" data-action="FreezeAllCommands" title="Freeze/thaw all running commands" style="display:none;">&#9208; All</button>
                     </div>
                     <div id="commandList"></div>
                 </div>
@@ -89,7 +89,7 @@
                                 <label>Cols</label>
                                 <input type="number" id="spawnCols" value="" min="1" max="1000" placeholder="default">
                             </div>
-                            <button class="btn btn-xs" onclick="autofitTerminalSize()" title="Calculate optimal terminal size from the panel container" style="align-self:flex-end;margin-bottom:0.2rem;">Auto-fit</button>
+                            <button class="btn btn-xs" data-action="AutofitTerminalSize" title="Calculate optimal terminal size from the panel container" style="align-self:flex-end;margin-bottom:0.2rem;">Auto-fit</button>
                         </div>
                         <div class="autofit-hint" id="autofitHint"></div>
                         <div class="field">
@@ -105,7 +105,7 @@
                             <label><input type="checkbox" id="spawnOpenPanel" checked> Open in new panel</label>
                         </div>
                         <div class="spawn-open-panel-hint" id="spawnOpenPanelHint" style="font-size:var(--ui-fs);color:var(--text-muted);margin-top:-0.2rem;margin-bottom:0.3rem;">Shows the main command or the oldest command in a new panel after spawning.</div>
-                        <button class="btn btn-primary" onclick="spawnCommand()" style="width:100%;margin-top:0.5rem;">Spawn Command</button>
+                        <button class="btn btn-primary" data-action="SpawnCommand" style="width:100%;margin-top:0.5rem;">Spawn Command</button>
                     </div>
                 </div>
                 <!-- Templates tab -->
@@ -113,7 +113,7 @@
                     <div style="padding:0.3rem;">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.3rem;">
                             <span style="font-size:var(--ui-fs);color:var(--text-secondary);">Saved Templates</span>
-                            <button class="btn btn-xs" onclick="showAddTemplateForm()" title="Add template">+ Add</button>
+                            <button class="btn btn-xs" data-action="ShowAddTemplateForm" title="Add template">+ Add</button>
                         </div>
                         <div id="templateAddForm" style="display:none;margin-bottom:0.4rem;">
                             <div class="field" style="margin-bottom:0.3rem;">
@@ -126,8 +126,8 @@
                                 <input type="text" id="templateArgs" placeholder="Arguments (optional)" style="width:100%;font-size:var(--ui-fs);">
                             </div>
                             <div style="display:flex;gap:0.3rem;">
-                                <button class="btn btn-xs btn-primary" onclick="saveTemplate()" style="flex:1;">Save</button>
-                                <button class="btn btn-xs" onclick="hideAddTemplateForm()">Cancel</button>
+                                <button class="btn btn-xs btn-primary" data-action="SaveTemplate" style="flex:1;">Save</button>
+                                <button class="btn btn-xs" data-action="HideAddTemplateForm">Cancel</button>
                             </div>
                         </div>
                         <div id="templateList"></div>
@@ -145,7 +145,7 @@
                         </div>
                         <div style="display:flex;gap:0.2rem;margin-bottom:0.4rem;">
                             <input type="text" id="newGroupName" placeholder="New group name..." style="flex:1;min-width:0;font-size:var(--ui-fs);padding:0.15rem 0.3rem;" onkeydown="if(event.key==='Enter'){event.preventDefault();createCmdGroup()}">
-                            <button class="btn btn-xs btn-primary" onclick="createCmdGroup()">Create</button>
+                            <button class="btn btn-xs btn-primary" data-action="CreateCmdGroup">Create</button>
                         </div>
                         <div id="groupList"></div>
                     </div>
@@ -159,59 +159,59 @@
             <!-- Shared toolbar for terminal controls (acts on the focused panel) -->
             <div class="shared-toolbar" id="sharedToolbar" style="display:none;">
                 <div class="shared-toolbar-row shared-toolbar-main">
-                    <button class="btn btn-xs restart-btn" id="stRestartBtn" onclick="restartCommand(getActivePanelId())" title="Restart this command" style="display:none;">&#x21BB;</button>
-                    <button class="btn btn-xs" onclick="toggleResources()" title="Toggle resource info">&#x2699;</button>
+                    <button class="btn btn-xs restart-btn" id="stRestartBtn" data-action="RestartCommand" title="Restart this command" style="display:none;">&#x21BB;</button>
+                    <button class="btn btn-xs" data-action="ToggleResources" title="Toggle resource info">&#x2699;</button>
                     <span class="resource-badge" id="stResourceBadge" style="display:none;"></span>
                     <span class="instance-url" id="stInstanceUrl" style="display:none;"></span>
                     <span class="shared-toolbar-sep"></span>
                     <span class="panel-font-size-ctrl">
-                        <button class="btn btn-xs" onclick="changePanelFontSize(getActivePanelId(), -1)" title="Decrease font size">A-</button>
-                        <button class="btn btn-xs" onclick="changePanelFontSize(getActivePanelId(), 1)" title="Increase font size">A+</button>
+                        <button class="btn btn-xs" data-action="ChangePanelFontSize" data-delta="-1" title="Decrease font size">A-</button>
+                        <button class="btn btn-xs" data-action="ChangePanelFontSize" data-delta="1" title="Increase font size">A+</button>
                     </span>
                     <span class="panel-resize-controls" id="stResizeControls">
                         <input type="number" id="stResizeRows" value="24" min="1" max="10000" title="Rows">
                         <span style="color:var(--text-muted);">x</span>
                         <input type="number" id="stResizeCols" value="80" min="1" max="1000" title="Cols">
-                        <button class="btn btn-xs" id="stResizeBtn" onclick="resizeTerminalPanel(getActivePanelId())" title="Resize terminal">&#x21F2;</button>
-                        <button class="btn btn-xs" id="stMaxFitBtn" onclick="toggleMaxFit(getActivePanelId())" title="Auto-fit terminal to panel">&#x2922;</button>
-                        <button class="btn btn-xs" id="stMaxFontBtn" onclick="toggleMaxFont(getActivePanelId())" title="Maximize font to fit">&#x1F50D;</button>
+                        <button class="btn btn-xs" id="stResizeBtn" data-action="ResizeTerminalPanel" title="Resize terminal">&#x21F2;</button>
+                        <button class="btn btn-xs" id="stMaxFitBtn" data-action="ToggleMaxFit" title="Auto-fit terminal to panel">&#x2922;</button>
+                        <button class="btn btn-xs" id="stMaxFontBtn" data-action="ToggleMaxFont" title="Maximize font to fit">&#x1F50D;</button>
                     </span>
                     <span class="shared-toolbar-sep"></span>
-                    <button class="btn btn-xs" id="stBufferBtn" onclick="document.getElementById('stBufferSelect').style.display=document.getElementById('stBufferSelect').style.display==='none'?'':'none'" title="Terminal buffer">&#x2630;</button>
-                    <select id="stBufferSelect" class="select-xs" onchange="switchBufferPanel(getActivePanelId(), this.value)" title="Which terminal buffer to view" style="display:none;">
+                    <button class="btn btn-xs" id="stBufferBtn" data-action="ToggleBufferDropdown" title="Terminal buffer">&#x2630;</button>
+                    <select id="stBufferSelect" class="select-xs" data-action="SwitchBufferPanel" title="Which terminal buffer to view" style="display:none;">
                         <option value="current">Current</option>
                         <option value="main">Main</option>
                         <option value="alt">Alt</option>
                     </select>
                     <span class="refresh-ctrl" title="Refresh throttle (ms). 0 = no throttle.">
-                        <button class="btn btn-xs" onclick="changeRefreshMs(-100)" title="Decrease throttle">-</button>
+                        <button class="btn btn-xs" data-action="ChangeRefreshMs" data-delta="-100" title="Decrease throttle">-</button>
                         <span class="refresh-val" id="stRefreshVal">off</span>
-                        <button class="btn btn-xs" onclick="changeRefreshMs(100)" title="Increase throttle">+</button>
+                        <button class="btn btn-xs" data-action="ChangeRefreshMs" data-delta="100" title="Increase throttle">+</button>
                     </span>
                     <span class="shared-toolbar-sep"></span>
                     <div class="panel-send-row" id="stSendRow">
                         <input type="text" id="stKeyInput" placeholder="Send keys..." onkeydown="if(event.key==='Enter'){event.preventDefault();sendKeysToPanel(getActivePanelId())}">
-                        <button class="btn btn-xs" onclick="sendKeysToPanel(getActivePanelId())" title="Send keys to terminal">Send</button>
-                        <button class="btn btn-xs" onclick="showSpecialKeysHelp()" title="Special keys reference">&#63;</button>
+                        <button class="btn btn-xs" data-action="SendKeysToPanel" title="Send keys to terminal">Send</button>
+                        <button class="btn btn-xs" data-action="ShowSpecialKeysHelp" title="Special keys reference">&#63;</button>
                     </div>
                     <span class="shared-toolbar-sep"></span>
-                    <button class="btn btn-xs" onclick="togglePanelLayout()" id="stLayoutBtn" title="Toggle horizontal/vertical layout" style="display:none;">&#x21C4;</button>
+                    <button class="btn btn-xs" data-action="TogglePanelLayout" id="stLayoutBtn" title="Toggle horizontal/vertical layout" style="display:none;">&#x21C4;</button>
                     <div class="layout-preset-dropdown" id="stLayoutPresetBtn" style="display:none;" title="Panel layout presets">
-                        <button class="btn btn-xs" onclick="toggleLayoutPresetMenu(event)">&#x25A3;</button>
+                        <button class="btn btn-xs" data-action="ToggleLayoutPresetMenu">&#x25A3;</button>
                         <div class="layout-preset-menu" id="layoutPresetMenu" style="display:none;">
-                            <button onclick="applyLayoutPreset('row')">Side by Side</button>
-                            <button onclick="applyLayoutPreset('column')">Stacked</button>
-                            <button onclick="applyLayoutPreset('grid-2x2')">2x2 Grid</button>
-                            <button onclick="applyLayoutPreset('grid-1-2')">1 Top + 2 Bottom</button>
-                            <button onclick="applyLayoutPreset('grid-2-1')">2 Top + 1 Bottom</button>
+                            <button data-action="ApplyLayoutPreset" data-preset="row">Side by Side</button>
+                            <button data-action="ApplyLayoutPreset" data-preset="column">Stacked</button>
+                            <button data-action="ApplyLayoutPreset" data-preset="grid-2x2">2x2 Grid</button>
+                            <button data-action="ApplyLayoutPreset" data-preset="grid-1-2">1 Top + 2 Bottom</button>
+                            <button data-action="ApplyLayoutPreset" data-preset="grid-2-1">2 Top + 1 Bottom</button>
                         </div>
                     </div>
-                    <button class="btn btn-xs" onclick="toggleSelectionMode(getActivePanelId())" id="stSelectBtn" title="Toggle text selection mode">Select</button>
-                    <button class="btn btn-xs" onclick="togglePauseRunPanel(getActivePanelId())" id="stFreezeBtn" title="Freeze/Thaw command" style="display:none;">&#9208;</button>
-                    <button class="btn btn-xs" onclick="copyTerminalSelection(getActivePanelId())" title="Copy selected text to clipboard">Copy</button>
-                    <button class="btn btn-xs" onclick="exportTerminal(getActivePanelId())" title="Export terminal as text">&#x2913;</button>
-                    <button class="btn btn-xs" onclick="screenshotPanel(getActivePanelId())" title="Download screenshot as PNG">&#x1F4F7;</button>
-                    <button class="btn btn-xs" id="stPanelThemeBtn" onclick="togglePanelTheme(getActivePanelId())" title="Panel theme: inherit (click to toggle)" style="font-size:calc(var(--ui-fs) + 0.35rem);">&#x25D0;</button>
+                    <button class="btn btn-xs" data-action="ToggleSelectionMode" id="stSelectBtn" title="Toggle text selection mode">Select</button>
+                    <button class="btn btn-xs" data-action="TogglePauseRunPanel" id="stFreezeBtn" title="Freeze/Thaw command" style="display:none;">&#9208;</button>
+                    <button class="btn btn-xs" data-action="CopyTerminalSelection" title="Copy selected text to clipboard">Copy</button>
+                    <button class="btn btn-xs" data-action="ExportTerminal" title="Export terminal as text">&#x2913;</button>
+                    <button class="btn btn-xs" data-action="ScreenshotPanel" title="Download screenshot as PNG">&#x1F4F7;</button>
+                    <button class="btn btn-xs" id="stPanelThemeBtn" data-action="TogglePanelTheme" title="Panel theme: inherit (click to toggle)" style="font-size:calc(var(--ui-fs) + 0.35rem);">&#x25D0;</button>
                 </div>
             </div>
             <!-- Terminal view -->
@@ -223,8 +223,8 @@
             <div id="view-log" class="log-viewer" style="display:none;">
                 <div class="log-toolbar">
                     <input type="text" id="logSearch" placeholder="Search logs..." oninput="searchLogs()">
-                    <button class="btn btn-xs" onclick="clearLogSearch()">Clear</button>
-                    <button class="btn btn-xs" onclick="loadLog()">Refresh</button>
+                    <button class="btn btn-xs" data-action="ClearLogSearch">Clear</button>
+                    <button class="btn btn-xs" data-action="LoadLog">Refresh</button>
                     <span id="logTransportIndicator" class="log-transport-indicator" data-mode="http">HTTP</span>
                     <span id="logCount" style="font-size:var(--ui-fs);color:var(--text-muted);"></span>
                 </div>
@@ -244,16 +244,16 @@
         <span class="cursor-pos" id="scrollbackIndicator" style="color:var(--yellow);display:none;">SCROLLBACK</span>
         <span class="spacer"></span>
         <label for="updateMode" style="font-size:var(--ui-fs);color:var(--text-muted);">Update:</label>
-        <select id="updateMode" onchange="switchUpdateMode(this.value)" title="How the web UI detects VTTY buffer changes" style="font-size:var(--ui-fs);padding:0.05rem 0.15rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:2px;">
+        <select id="updateMode" data-action="SwitchUpdateMode" title="How the web UI detects VTTY buffer changes" style="font-size:var(--ui-fs);padding:0.05rem 0.15rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:2px;">
             <option value="push">Push (WS)</option>
             <option value="poll">Poll</option>
         </select>
         <span id="pollIntervalWrap" style="display:none;">
-            <input type="number" id="pollInterval" value="500" min="50" max="5000" step="50" style="width:50px;font-size:var(--ui-fs);text-align:center;padding:0.1rem 0.15rem;" title="Poll interval in milliseconds" onchange="applyPollInterval()">
+            <input type="number" id="pollInterval" value="500" min="50" max="5000" step="50" style="width:50px;font-size:var(--ui-fs);text-align:center;padding:0.1rem 0.15rem;" title="Poll interval in milliseconds" data-action="ApplyPollInterval">
             <span style="font-size:var(--ui-fs);color:var(--text-muted);">ms</span>
         </span>
         <label for="refreshMs" style="font-size:var(--ui-fs);color:var(--text-muted);margin-left:4px;" title="Client-side throttle: limits how often VTTY updates are applied to the DOM, even if the server sends them faster. 0 = no throttle.">Throttle:</label>
-        <input type="number" id="refreshMs" value="0" min="0" max="2000" step="100" style="width:42px;font-size:var(--ui-fs);text-align:center;padding:0.1rem 0.15rem;" title="Refresh throttle (ms). 0=off, 100-2000=throttle interval." onchange="applyRefreshMs()">
+        <input type="number" id="refreshMs" value="0" min="0" max="2000" step="100" style="width:42px;font-size:var(--ui-fs);text-align:center;padding:0.1rem 0.15rem;" title="Refresh throttle (ms). 0=off, 100-2000=throttle interval." data-action="ApplyRefreshMs">
         <span class="refresh-val" style="font-size:var(--ui-fs);color:var(--text-muted);">off</span>
         <span id="wsQuality" class="ws-quality" title="">--</span>
         <span style="font-size:var(--ui-fs);color:var(--text-muted);" id="connStatus">Connected</span>
@@ -264,15 +264,15 @@
 </div>
 
 <!-- Global search overlay -->
-<div class="search-modal" id="globalSearchModal" style="display:none;" onclick="if(event.target===this)closeGlobalSearch()">
+<div class="search-modal" id="globalSearchModal" style="display:none;" data-close-action="CloseGlobalSearch">
     <div class="search-modal-content">
         <div class="search-modal-toolbar">
             <input type="text" id="globalSearchInput" placeholder="Search command output..." onkeydown="if(event.key==='Enter'){event.preventDefault();executeGlobalSearch()}" autofocus>
             <label style="font-size:var(--ui-fs);color:var(--text-muted);display:flex;align-items:center;gap:0.2rem;cursor:pointer;" title="Freeze (SIGSTOP) all running commands while searching to prevent text changes">
                 <input type="checkbox" id="searchFreezeToggle" onchange="_toggleSearchFreezeCommands()"> Freeze cmds
             </label>
-            <button class="btn btn-xs btn-primary" onclick="executeGlobalSearch()">Search</button>
-            <button class="btn btn-xs" onclick="closeGlobalSearch()">&#x2715;</button>
+            <button class="btn btn-xs btn-primary" data-action="ExecuteGlobalSearch">Search</button>
+            <button class="btn btn-xs" data-action="CloseGlobalSearch">&#x2715;</button>
         </div>
         <div class="search-modal-results" id="globalSearchResults">
             <div style="padding:1rem;color:var(--text-muted);text-align:center;font-size:0.75rem;">Type a query and press Enter to search across all command output</div>
@@ -281,7 +281,7 @@
 </div>
 
 <!-- Add panel modal -->
-<div class="modal-overlay" id="panelModal" style="display:none;" onclick="if(event.target===this)closePanelModal()">
+<div class="modal-overlay" id="panelModal" style="display:none;" data-close-action="ClosePanelModal">
     <div class="modal">
         <h2>Add Server &amp; Panel</h2>
         <div class="field">
@@ -305,14 +305,14 @@
             </select>
         </div>
         <div class="actions">
-            <button class="btn" onclick="closePanelModal()">Cancel</button>
-            <button class="btn btn-primary" onclick="confirmAddPanel()">Add Panel</button>
+            <button class="btn" data-action="ClosePanelModal">Cancel</button>
+            <button class="btn btn-primary" data-action="ConfirmAddPanel">Add Panel</button>
         </div>
     </div>
 </div>
 
 <!-- Add Server modal (add connection without panel) -->
-<div class="modal-overlay" id="addServerModal" style="display:none;" onclick="if(event.target===this)closeAddServerModal()">
+<div class="modal-overlay" id="addServerModal" style="display:none;" data-close-action="CloseAddServerModal">
     <div class="modal">
         <h2>Add Server Connection</h2>
         <div class="field">
@@ -331,14 +331,14 @@
             <label><input type="checkbox" id="addServerOpenPane" checked> Open pane connected to this server</label>
         </div>
         <div class="actions">
-            <button class="btn" onclick="closeAddServerModal()">Cancel</button>
-            <button class="btn btn-primary" onclick="confirmAddServer()">Add Server</button>
+            <button class="btn" data-action="CloseAddServerModal">Cancel</button>
+            <button class="btn btn-primary" data-action="ConfirmAddServer">Add Server</button>
         </div>
     </div>
 </div>
 
 <!-- Command Manager Dialog -->
-<div class="modal-overlay" id="cmdManagerModal" style="display:none;" onclick="if(event.target===this)closeCmdManager()">
+<div class="modal-overlay" id="cmdManagerModal" style="display:none;" data-close-action="CloseCmdManager">
     <div class="modal modal-lg">
         <h2>Command Manager</h2>
         <div class="cmd-manager-toolbar">
@@ -349,8 +349,8 @@
                 <option value="cpu">Sort: CPU</option>
                 <option value="mem">Sort: Memory</option>
             </select>
-            <button class="btn btn-xs btn-danger" onclick="cmdManagerKillAll()" title="Kill all commands">Kill All</button>
-            <button class="btn btn-xs" onclick="closeCmdManager()">&#x2715;</button>
+            <button class="btn btn-xs btn-danger" data-action="CmdManagerKillAll" title="Kill all commands">Kill All</button>
+            <button class="btn btn-xs" data-action="CloseCmdManager">&#x2715;</button>
         </div>
         <div class="cmd-manager-list" id="cmdManagerList"></div>
         <div class="cmd-manager-footer" id="cmdManagerFooter"></div>

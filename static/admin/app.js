@@ -27,6 +27,9 @@
 // DO NOT reorder these script tags in index.html — the load order is significant.
 
 (function init() {
+    // Initialize event delegation FIRST — replaces all inline onclick handlers
+    initDelegation();
+
     initTheme();
     document.getElementById('authToken').value = state.authToken;
     applyFontSize();

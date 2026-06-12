@@ -218,7 +218,18 @@ function _dispatchModalBackdrop(event) {
 function initDelegation() {
     // Click delegation on the whole document
     // This catches ALL [data-action] clicks regardless of where they are
+    // Skip <select> and <input> — they dispatch on 'change', not 'click'
     document.addEventListener('click', function(event) {
+        const tag = event.target && event.target.tagName;
+        if (tag === 'SELECT' || tag === 'INPUT') return;
+        _dispatchAction(event);
+    });
+
+    // Change delegation for <select> and <input> elements with data-action
+    // These fire 'change' events (not 'click') when the user selects a new value
+    document.addEventListener('change', function(event) {
+        const el = event.target;
+        if (!el || !el.dataset || !el.dataset.action) return;
         _dispatchAction(event);
     });
 
