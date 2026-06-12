@@ -72,10 +72,16 @@ function removeEventListener(type, fn) {
     const arr = _listeners.get(type).filter(f => f !== fn);
     _listeners.set(type, arr);
 }
-function emitEvent(type, detail) {
-    const evt = { type, detail, target: globalThis, preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {} };
-    if (_listeners.has(type)) {
-        for (const fn of _listeners.get(type)) fn(evt);
+function emitEvent(typeOrEvent, detail) {
+    // Allow passing a pre-built event object (for delegation tests)
+    let evt;
+    if (typeOrEvent && typeof typeOrEvent === 'object' && typeOrEvent.type) {
+        evt = typeOrEvent;
+    } else {
+        evt = { type: typeOrEvent, detail, target: globalThis, preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {} };
+    }
+    if (_listeners.has(evt.type)) {
+        for (const fn of _listeners.get(evt.type)) fn(evt);
     }
     return evt;
 }
@@ -111,7 +117,37 @@ class MockElement {
         }, set: (t, p, v) => { t[p] = v; return true; } });
         this._innerHTML = '';
         this._textContent = undefined; // undefined means "derive from innerHTML"
-        this.dataset = {};
+        // Dataset: proxy that reads/writes data-* attributes
+        // dataset.closeAction ↔ _attrs['data-close-action']
+        // Converts camelCase to kebab-case
+        this.dataset = new Proxy({}, {
+            get: (target, prop) => {
+                if (prop === 'toJSON') return () => ({});
+                const attrName = 'data-' + prop.replace(/[A-Z]/g, m => '-' + m.toLowerCase());
+                return this._attrs[attrName] !== undefined ? this._attrs[attrName] : undefined;
+            },
+            set: (target, prop, val) => {
+                const attrName = 'data-' + prop.replace(/[A-Z]/g, m => '-' + m.toLowerCase());
+                this._attrs[attrName] = String(val);
+                return true;
+            },
+            has: (target, prop) => {
+                const attrName = 'data-' + prop.replace(/[A-Z]/g, m => '-' + m.toLowerCase());
+                return attrName in this._attrs;
+            },
+            ownKeys: () => {
+                return Object.keys(this._attrs)
+                    .filter(k => k.startsWith('data-'))
+                    .map(k => k.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase()));
+            },
+            getOwnPropertyDescriptor: (target, prop) => {
+                const attrName = 'data-' + prop.replace(/[A-Z]/g, m => '-' + m.toLowerCase());
+                if (attrName in this._attrs) {
+                    return { configurable: true, enumerable: true, value: this._attrs[attrName] };
+                }
+                return undefined;
+            },
+        });
         this.children = [];
         this.childNodes = [];
         this.parentElement = null;
@@ -244,8 +280,42 @@ class MockElement {
         }
         return results;
     }
-    closest(sel) { return null; }
-    matches(sel) { return false; }
+    closest(sel) {
+        // Walk up the parent chain looking for an element matching the selector.
+        // Supports: [data-action], [data-action="Foo"], #id, .class, tag
+        let el = this;
+        while (el) {
+            if (el.matches && el.matches(sel)) return el;
+            el = el.parentElement || null;
+        }
+        return null;
+    }
+    matches(sel) {
+        // Basic selector matching for test purposes.
+        // Supports: [attr], [attr="val"], #id, .class, tag
+        if (!sel) return false;
+        // [data-action]
+        const attrMatch = sel.match(/^\[([^\]=]+)(?:="([^"]*)")?\]$/);
+        if (attrMatch) {
+            const attrName = attrMatch[1];
+            const attrVal = attrMatch[2];
+            if (attrVal !== undefined) {
+                return this.getAttribute(attrName) === attrVal;
+            }
+            return this.hasAttribute(attrName);
+        }
+        // #id
+        if (sel.startsWith('#')) {
+            return this.id === sel.slice(1);
+        }
+        // .class
+        if (sel.startsWith('.')) {
+            return this.classList && this.classList.contains(sel.slice(1));
+        }
+        // tag
+        if (this.tagName === sel.toUpperCase()) return true;
+        return false;
+    }
     getAttribute(name) { return this._attrs[name] || null; }
     setAttribute(name, val) { this._attrs[name] = String(val); }
     removeAttribute(name) { delete this._attrs[name]; }
@@ -538,7 +608,7 @@ const moduleOrder = [
     'websocket.js', 'vtty.js', 'snapshot.js',
     'spawn.js', 'logs.js', 'keyboard.js', 'search.js', 'notifications.js',
     'templates.js', 'dragdrop.js', 'workspaces.js',
-    'misc.js'
+    'misc.js', 'delegate.js'
 ];
 
 // Load state.js first and expose its variables globally
