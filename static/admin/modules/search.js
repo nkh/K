@@ -319,11 +319,11 @@ function renderCmdManagerList() {
             <span class="cm-col cm-res">${cmd.mem.toFixed(1)}MB</span>
             <span class="cm-col cm-server" title="${escHtml(cmd.instUrl)}">${escHtml(serverLabel)}</span>
             <span class="cm-col cm-actions">
-                ${isAlive ? `<button class="btn btn-xs" onclick="restartCommandById('${escHtml(cmd.instUrl)}','${escHtml(cmd.id)}')" title="Restart">&#x21BB;</button>` : ''}
-                ${isAlive ? `<button class="btn btn-xs" onclick="toggleKeepCmd('${escHtml(cmd.instUrl)}','${escHtml(cmd.id)}')" title="${kept ? 'Unkeep' : 'Keep'}">${kept ? '★' : '☆'}</button>` : ''}
-                <button class="btn btn-xs ${pinned ? 'btn-primary' : ''}" onclick="togglePinCmd('${escHtml(name)}')" title="Pin/Unpin">${pinned ? '◉' : '◎'}</button>
-                ${isAlive ? `<button class="btn btn-xs btn-danger" onclick="killCommand('${escHtml(cmd.instUrl)}','${escHtml(cmd.id)}')" title="Kill">&#x2715;</button>` : ''}
-                <button class="btn btn-xs" onclick="selectCommand('${escHtml(cmd.instUrl)}','${escHtml(cmd.id)}','${escHtml(name)}');closeCmdManager()" title="View">&#x25B6;</button>
+                ${isAlive ? `<button class="btn btn-xs" data-action="RestartCommandById" data-inst-url="${escHtml(cmd.instUrl)}" data-cmd-id="${escHtml(cmd.id)}" title="Restart">&#x21BB;</button>` : ''}
+                ${isAlive ? `<button class="btn btn-xs" data-action="ToggleKeepCmd" data-inst-url="${escHtml(cmd.instUrl)}" data-cmd-id="${escHtml(cmd.id)}" title="${kept ? 'Unkeep' : 'Keep'}">${kept ? '★' : '☆'}</button>` : ''}
+                <button class="btn btn-xs ${pinned ? 'btn-primary' : ''}" data-action="TogglePinCmd" data-cmd-name="${escHtml(name)}" title="Pin/Unpin">${pinned ? '◉' : '◎'}</button>
+                ${isAlive ? `<button class="btn btn-xs btn-danger" data-action="KillCommand" data-inst-url="${escHtml(cmd.instUrl)}" data-cmd-id="${escHtml(cmd.id)}" title="Kill">&#x2715;</button>` : ''}
+                <button class="btn btn-xs" data-action="SelectAndViewCmd" data-inst-url="${escHtml(cmd.instUrl)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(name)}" title="View">&#x25B6;</button>
             </span>
         </div>`;
     }
@@ -478,7 +478,7 @@ async function executeGlobalSearch() {
     }
     resultsContainer.innerHTML = allResults.map(group => `
         <div class="search-result-group">
-            <div class="search-result-header" onclick="onSearchResultClick('${escHtml(group.instUrl)}','${escHtml(group.cmdId)}','${escHtml(group.cmdName)}')">
+            <div class="search-result-header" data-action="OnSearchResultClick" data-inst-url="${escHtml(group.instUrl)}" data-cmd-id="${escHtml(group.cmdId)}" data-cmd-name="${escHtml(group.cmdName)}">
                 ${escHtml(group.cmdName)} <span style="color:var(--text-muted);font-size:0.6rem;">(${group.lines.length} matches)</span>
             </div>
             ${group.lines.map(l => `<div class="search-result-line" title="${escHtml(l.text)}"><span style="color:var(--text-muted);">${l.lineNum}:</span> ${escHtml(l.text)}</div>`).join('')}
@@ -498,6 +498,10 @@ async function executeGlobalSearch() {
     window.closeGlobalSearch = closeGlobalSearch;
     window.executeGlobalSearch = executeGlobalSearch;
     window.onSearchResultClick = onSearchResultClick;
+    window._selectAndViewCmd = function(instUrl, cmdId, cmdName) {
+        selectCommand(instUrl, cmdId, cmdName);
+        closeCmdManager();
+    };
     window.updateFrozenIndicator = updateFrozenIndicator;
     window._toggleSearchFreezeCommands = _toggleSearchFreezeCommands;
     window.openCmdManager = openCmdManager;

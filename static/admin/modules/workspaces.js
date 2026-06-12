@@ -230,7 +230,7 @@ function renderEnvironments() {
             ? `<span style="font-size:0.6rem;color:var(--text-muted);">${env.layout === 'vertical' ? 'stacked' : 'side-by-side'}</span>`
             : '';
 
-        html += `<div class="template-card" onclick="activateEnvironment('${escHtml(env.name)}')" title="Click to activate this environment" style="cursor:pointer;">
+        html += `<div class="template-card" data-action="ActivateEnvironment" data-name="${escHtml(env.name)}" title="Click to activate this environment" style="cursor:pointer;">
             <div class="template-name">${escHtml(env.name)} ${autoBadge}</div>
             <div class="template-cmd">${panelCount} panel${panelCount !== 1 ? 's' : ''}, ${cmdCount} command${cmdCount !== 1 ? 's' : ''} ${layoutHtml}</div>
             ${descHtml}
@@ -469,13 +469,13 @@ function renderGroups() {
         const isCollapsed = collapsed[gName] === true;
         const cmdNames = groups[gName] || [];
         html += '<div class="group-section">';
-        html += '<div class="group-header" onclick="toggleGroupCollapse(\'' + escHtml(gName).replace(/'/g, "\\'") + '\')">';
+        html += '<div class="group-header" data-action="ToggleGroupCollapse" data-name="' + escHtml(gName) + '">';
         html += '<span class="group-caret">' + (isCollapsed ? '&#x25B6;' : '&#x25BC;') + '</span>';
         html += '<span class="group-name">' + escHtml(gName) + '</span>';
         html += '<span class="group-count">' + cmdNames.length + '</span>';
         html += '<span class="group-actions">';
-        html += '<button class="btn btn-xs" onclick="event.stopPropagation();renameCmdGroup(\'' + escHtml(gName).replace(/'/g, "\\'") + '\')" title="Rename group">&#9998;</button>';
-        html += '<button class="btn btn-xs btn-danger" onclick="event.stopPropagation();deleteCmdGroup(\'' + escHtml(gName).replace(/'/g, "\\'") + '\')" title="Delete group">&#x2715;</button>';
+        html += '<button class="btn btn-xs" data-action="RenameCmdGroup" data-name="' + escHtml(gName) + '" title="Rename group">&#9998;</button>';
+        html += '<button class="btn btn-xs btn-danger" data-action="DeleteCmdGroup" data-name="' + escHtml(gName) + '" title="Delete group">&#x2715;</button>';
         html += '</span>';
         html += '</div>';
         if (!isCollapsed) {
@@ -496,17 +496,17 @@ function renderGroups() {
                             ' data-cmd-id="' + escHtml(entry.cmd.id) + '"' +
                             ' data-cmd-name="' + escHtml(cmdName) + '"' +
                             (isUnreachable ? ' style="opacity:0.4;"' : '') +
-                            ' onclick="selectCommand(this.dataset.instUrl, this.dataset.cmdId, this.dataset.cmdName)"' +
+                            ' data-action="SelectCommand"' +
                             ' title="' + escHtml(entry.inst.label) + ' / ' + escHtml(cmdName) + '">' +
                             statusDot +
                             '<span class="group-cmd-name">' + escHtml(cmdName) + '</span>' +
-                            '<button class="btn btn-xs" onclick="event.stopPropagation();toggleCmdInGroup(\'' + escHtml(gName).replace(/'/g, "\\'") + '\',\'' + escHtml(cmdName).replace(/'/g, "\\'") + '\');renderGroups()" title="Remove from group" style="margin-left:auto;padding:0 0.2rem;font-size:0.55rem;">&#x2715;</button>' +
+                            '<button class="btn btn-xs" data-action="ToggleCmdInGroup" data-name="' + escHtml(gName) + '" data-cmd-name="' + escHtml(cmdName) + '" title="Remove from group" style="margin-left:auto;padding:0 0.2rem;font-size:0.55rem;">&#x2715;</button>' +
                             '</div>';
                     } else {
                         html += '<div class="group-cmd-item" style="opacity:0.4;cursor:default;">' +
                             '<span class="group-cmd-name" style="text-decoration:line-through;">' + escHtml(cmdName) + '</span>' +
                             '<span style="font-size:0.55rem;color:var(--text-muted);margin-left:auto;">(not running)</span>' +
-                            '<button class="btn btn-xs" onclick="event.stopPropagation();toggleCmdInGroup(\'' + escHtml(gName).replace(/'/g, "\\'") + '\',\'' + escHtml(cmdName).replace(/'/g, "\\'") + '\');renderGroups()" title="Remove from group" style="margin-left:auto;padding:0 0.2rem;font-size:0.55rem;">&#x2715;</button>' +
+                            '<button class="btn btn-xs" data-action="ToggleCmdInGroup" data-name="' + escHtml(gName) + '" data-cmd-name="' + escHtml(cmdName) + '" title="Remove from group" style="margin-left:auto;padding:0 0.2rem;font-size:0.55rem;">&#x2715;</button>' +
                             '</div>';
                     }
                 }
@@ -569,10 +569,10 @@ function renderWorkspaceList() {
     for (const name of names) {
         const panelCount = (workspaces[name].panels || []).length;
         html += '<div style="display:flex;align-items:center;gap:0.3rem;">';
-        html += '<button class="ws-load-btn" onclick="loadWorkspace(\'' + escHtml(name).replace(/'/g, "\\'") + '\');toggleWorkspaceDropdown(event)" style="flex:1;text-align:left;">' +
+        html += '<button class="ws-load-btn" data-action="LoadWorkspace" data-name="' + escHtml(name) + '" style="flex:1;text-align:left;">' +
             '<span style="color:var(--accent);">&#x1F4C2;</span> ' + escHtml(name) +
             ' <span style="color:var(--text-muted);font-size:0.55rem;">(' + panelCount + ' panels)</span></button>';
-        html += '<button class="btn btn-xs" onclick="deleteWorkspace(\'' + escHtml(name).replace(/'/g, "\\'") + '\')" title="Delete" style="font-size:0.55rem;">&#x2715;</button>';
+        html += '<button class="btn btn-xs" data-action="DeleteWorkspace" data-name="' + escHtml(name) + '" title="Delete" style="font-size:0.55rem;">&#x2715;</button>';
         html += '</div>';
     }
     container.innerHTML = html;
@@ -717,14 +717,14 @@ function openWorkspaceManage() {
             content += '<div style="font-size:0.75rem;color:var(--text-primary);font-weight:500;">' + escHtml(name) + '</div>';
             content += '<div style="font-size:0.6rem;color:var(--text-muted);">' + panelCount + ' panels &middot; saved ' + escHtml(ts) + '</div>';
             content += '</div>';
-            content += '<button class="btn btn-xs" onclick="loadWorkspace(\'' + escHtml(name).replace(/'/g, "\\'") + '\');releaseCurrentFocusTrap();document.getElementById(\'workspaceManageOverlay\').remove()" title="Load">&#x25B6;</button>';
-            content += '<button class="btn btn-xs" onclick="deleteWorkspace(\'' + escHtml(name).replace(/'/g, "\\'") + '\');openWorkspaceManage()" title="Delete">&#x2715;</button>';
+            content += '<button class="btn btn-xs" data-action="LoadWorkspace" data-name="' + escHtml(name) + '" title="Load">&#x25B6;</button>';
+            content += '<button class="btn btn-xs" data-action="DeleteWorkspace" data-name="' + escHtml(name) + '" title="Delete">&#x2715;</button>';
             content += '</div>';
         }
         content += '</div>';
     }
     content += '<div class="actions" style="margin-top:1rem;">';
-    content += '<button class="btn" onclick="releaseCurrentFocusTrap();document.getElementById(\'workspaceManageOverlay\').remove()">Close</button>';
+    content += '<button class="btn" data-action="CloseWorkspaceManage">Close</button>';
     content += '</div>';
     content += '</div>';
 
@@ -770,4 +770,13 @@ document.addEventListener('click', (e) => {
     window.loadWorkspace = loadWorkspace;
     window.deleteWorkspace = deleteWorkspace;
     window.openWorkspaceManage = openWorkspaceManage;
+    window._toggleCmdInGroupAndRender = function(groupName, cmdName) {
+        toggleCmdInGroup(groupName, cmdName);
+        renderGroups();
+    };
+    window.closeWorkspaceManage = function() {
+        releaseCurrentFocusTrap();
+        const overlay = document.getElementById('workspaceManageOverlay');
+        if (overlay) overlay.remove();
+    };
 })();

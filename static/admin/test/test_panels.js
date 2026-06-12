@@ -371,7 +371,7 @@ if (typeof _renderMinimizedPanels === 'function') {
     const result = _renderMinimizedPanels();
     assert(result.includes('minimized-panels'), 'has minimized-panels container');
     assert(result.includes('My Panel'), 'shows custom title');
-    assert(result.includes('toggleMinimizePanel'), 'has click handler');
+    assert(result.includes('ToggleMinimizePanel'), 'has click handler');
 
     // With command name (no custom title)
     minP.customTitle = '';

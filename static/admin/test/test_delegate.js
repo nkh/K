@@ -22,6 +22,19 @@ const expectedActions = [
     'LoadCommands', 'SpawnCommand', 'AutofitTerminalSize',
     'ShowAddTemplateForm', 'SaveTemplate', 'HideAddTemplateForm',
     'CreateCmdGroup', 'RenderCmdManagerList',
+    // Phase 3: dynamic onclick migrations
+    'DisconnectServer', 'SortSidebarBy', 'ToggleKeepCmd', 'TogglePauseRunByIdx',
+    'TogglePinCmd', 'SelectCommand', 'ShowCmdContextMenu',
+    'ClosePanelContent', 'PanelHistoryBack', 'PanelHistoryForward',
+    'StartRenamePanel', 'UnsplitPanel', 'ToggleMinimizePanel', 'FocusPanel',
+    'ScrollTerminalBottom', 'VttySearchNext', 'VttySearchPrev', 'VttySearchClose',
+    'ShowPanelContextMenu', 'CloseSpecialKeysModal',
+    'RestartCommandById', 'KillCommand', 'SelectAndViewCmd', 'OnSearchResultClick',
+    'SpawnServerTemplate', 'SpawnUserTemplate', 'DeleteUserTemplate',
+    'ActivateEnvironment', 'ToggleGroupCollapse', 'RenameCmdGroup', 'DeleteCmdGroup',
+    'ToggleCmdInGroup', 'LoadWorkspace', 'DeleteWorkspace',
+    'CloseCmdPicker', 'PickCommand', 'CloseWorkspaceManage',
+    // Shared toolbar
     'RestartCommand', 'ToggleResources', 'ChangePanelFontSize',
     'ResizeTerminalPanel', 'ToggleMaxFit', 'ToggleMaxFont',
     'SwitchBufferPanel', 'ChangeRefreshMs', 'SendKeysToPanel',
@@ -45,7 +58,9 @@ assertEq(Object.keys(window._actions).length, expectedActions.length,
 console.log('  (' + expectedActions.length + ' actions registered)');
 
 // ── Signature registry ──
-const expectedSigs = ['none', 'event', 'tab-el', 'panelId', 'panelId-delta', 'preset', 'delta', 'panelId-value', 'value'];
+const expectedSigs = ['none', 'event', 'tab-el', 'panelId', 'panelId-delta', 'preset', 'delta', 'panelId-value', 'value',
+    'cmd-select', 'cmd-id', 'data-value', 'el-panelId', 'element',
+    'inst-url', 'cmd-name', 'index', 'value-str', 'name', 'name-index', 'cmd-context', 'data-panel'];
 for (const sig of expectedSigs) {
     assertProperty(window._sigs, sig, 'sigs has ' + sig);
     assertType(window._sigs[sig], 'function', 'sigs.' + sig + ' is a function');

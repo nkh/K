@@ -57,7 +57,7 @@ function renderTemplates() {
             if (t.certificate) extras.push('cert: ' + t.certificate);
             if (t.rows || t.cols) extras.push((t.rows || '?') + 'x' + (t.cols || '?'));
             const extraStr = extras.length > 0 ? extras.join(' | ') : '';
-            return `<div class="template-card" onclick="spawnServerTemplate(${i})" title="Click to spawn this command">
+            return `<div class="template-card" data-action="SpawnServerTemplate" data-index="${i}" title="Click to spawn this command">
                 <div style="display:flex;align-items:center;gap:0.3rem;">
                     <div class="template-name">${escHtml(t.name)}</div>
                     <span style="font-size:0.5rem;background:var(--accent);color:#fff;padding:0 0.25rem;border-radius:2px;">config</span>
@@ -72,11 +72,11 @@ function renderTemplates() {
     if (user.length > 0) {
         html += '<div style="font-size:0.6rem;color:var(--text-muted);padding:0.3rem 0.3rem 0.1rem;text-transform:uppercase;letter-spacing:0.05em;">Custom</div>';
         html += user.map((t, i) => `
-            <div class="template-card" onclick="spawnUserTemplate(${i})" title="Click to spawn this command">
+            <div class="template-card" data-action="SpawnUserTemplate" data-index="${i}" title="Click to spawn this command">
                 <div class="template-name">${escHtml(t.name)}</div>
                 <div class="template-cmd">${escHtml(t.cmd)}${t.args ? ' ' + escHtml(t.args) : ''}</div>
                 <div class="template-actions">
-                    <button class="btn btn-xs btn-danger" onclick="event.stopPropagation();deleteUserTemplate(${i})" title="Delete">&#x2715;</button>
+                    <button class="btn btn-xs btn-danger" data-action="DeleteUserTemplate" data-index="${i}" title="Delete">&#x2715;</button>
                 </div>
             </div>
         `).join('');

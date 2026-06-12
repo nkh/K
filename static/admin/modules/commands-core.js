@@ -51,7 +51,7 @@ function showCommandPicker(matches) {
         <p style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.75rem;">Click a command to view its terminal:</p>
         <div style="max-height:50vh;overflow-y:auto;">${items}</div>
         <div style="margin-top:0.75rem;text-align:right;">
-            <button class="btn" onclick="releaseCurrentFocusTrap();document.getElementById('cmdPicker').remove()">Cancel</button>
+            <button class="btn" data-action="CloseCmdPicker">Cancel</button>
         </div>
     </div>`;
     document.body.appendChild(overlay);
@@ -185,6 +185,11 @@ async function loadCommands() {
     window.lookupAndSelectCommand = lookupAndSelectCommand;
     window.showCommandPicker = showCommandPicker;
     window.pickCommand = pickCommand;
+    window.closeCmdPicker = function() {
+        releaseCurrentFocusTrap();
+        const picker = document.getElementById('cmdPicker');
+        if (picker) picker.remove();
+    };
     window.navigateCommand = navigateCommand;
     window.navigatePrevCommand = navigatePrevCommand;
     window.navigateNextCommand = navigateNextCommand;

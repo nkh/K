@@ -187,14 +187,14 @@ function _renderVttyContainer(panel) {
                             <input type="text" id="searchInput-${panel.id}" placeholder="Search terminal..." oninput="vttySearch('${panel.id}')" onkeydown="if(event.key==='Enter'){event.shiftKey?vttySearchPrev('${panel.id}'):vttySearchNext('${panel.id}')}">
                             <span class="search-count" id="searchCount-${panel.id}" title="Click to jump: Shift+Click to reverse"></span>
                             <div class="search-progress-bar" id="searchProgress-${panel.id}"></div>
-                            <button onclick="vttySearchNext('${panel.id}')" title="Next match (Enter)">&#x25BC;</button>
-                            <button onclick="vttySearchPrev('${panel.id}')" title="Previous match (Shift+Enter)">&#x25B2;</button>
-                            <button onclick="vttySearchClose('${panel.id}')" title="Close search">&#x2715;</button>
+                            <button data-action="VttySearchNext" data-panel="${panel.id}" title="Next match (Enter)">&#x25BC;</button>
+                            <button data-action="VttySearchPrev" data-panel="${panel.id}" title="Previous match (Shift+Enter)">&#x25B2;</button>
+                            <button data-action="VttySearchClose" data-panel="${panel.id}" title="Close search">&#x2715;</button>
                         </div>
                         <pre style="color:#484f58;">No command selected — select a command from the sidebar to view its output</pre>
                         <div class="cursor-indicator" style="display:none;"></div>
                         <div class="copy-feedback" id="copyFeedback-${panel.id}">Copied!</div>
-                        <button class="scroll-bottom-btn" id="scrollBtn-${panel.id}" onclick="scrollTerminalBottom('${panel.id}')" title="Scroll to bottom">&#x25BC;</button>
+                        <button class="scroll-bottom-btn" id="scrollBtn-${panel.id}" data-action="ScrollTerminalBottom" data-panel="${panel.id}" title="Scroll to bottom">&#x25BC;</button>
                     </div>`;
 }
 
@@ -337,7 +337,7 @@ function _renderSplitContainer(panel) {
             <div class="split-header panel-header" data-panel-id="${panel.id}" data-split-side="primary" style="background:${primaryColor};color:${primaryTextColor};">
                 <span class="split-server-label" style="font-size:var(--ui-fs);opacity:0.8;">${escHtml(primaryServerLabel)}</span>
                 <span class="split-cmd-label" style="font-size:var(--ui-fs);font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">${escHtml(primaryCmdLabel)}</span>
-                <button class="btn btn-xs btn-danger" onclick="event.stopPropagation();unsplitPanel('${panel.id}')" title="Close split">&#x2715;</button>
+                <button class="btn btn-xs btn-danger" data-action="UnsplitPanel" data-panel="${panel.id}" title="Close split">&#x2715;</button>
             </div>
             <div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" data-split-side="primary" data-panel="${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px; flex:1; min-height:0;">
                 <div class="exited-banner" id="exitedBanner-${panel.id}" style="display:none;"></div>
@@ -345,14 +345,14 @@ function _renderSplitContainer(panel) {
                     <input type="text" id="searchInput-${panel.id}" placeholder="Search terminal..." oninput="vttySearch('${panel.id}')" onkeydown="if(event.key==='Enter'){event.shiftKey?vttySearchPrev('${panel.id}'):vttySearchNext('${panel.id}')}">
                     <span class="search-count" id="searchCount-${panel.id}" title="Click to jump: Shift+Click to reverse"></span>
                     <div class="search-progress-bar" id="searchProgress-${panel.id}"></div>
-                    <button onclick="vttySearchNext('${panel.id}')" title="Next match (Enter)">&#x25BC;</button>
-                    <button onclick="vttySearchPrev('${panel.id}')" title="Previous match (Shift+Enter)">&#x25B2;</button>
-                    <button onclick="vttySearchClose('${panel.id}')" title="Close search">&#x2715;</button>
+                    <button data-action="VttySearchNext" data-panel="${panel.id}" title="Next match (Enter)">&#x25BC;</button>
+                    <button data-action="VttySearchPrev" data-panel="${panel.id}" title="Previous match (Shift+Enter)">&#x25B2;</button>
+                    <button data-action="VttySearchClose" data-panel="${panel.id}" title="Close search">&#x2715;</button>
                 </div>
                 <pre>${panel.selectedCmdId ? '' : '<span style="color:#484f58;">No command selected — select a command from the sidebar</span>'}</pre>
                 <div class="cursor-indicator" style="display:none;"></div>
                 <div class="copy-feedback" id="copyFeedback-${panel.id}">Copied!</div>
-                <button class="scroll-bottom-btn" id="scrollBtn-${panel.id}" onclick="scrollTerminalBottom('${panel.id}')" title="Scroll to bottom">&#x25BC;</button>
+                <button class="scroll-bottom-btn" id="scrollBtn-${panel.id}" data-action="ScrollTerminalBottom" data-panel="${panel.id}" title="Scroll to bottom">&#x25BC;</button>
             </div>
         </div>`;
 
@@ -361,13 +361,13 @@ function _renderSplitContainer(panel) {
             <div class="split-header panel-header" data-panel-id="${panel.id}" data-split-side="secondary" style="background:${secondaryColor};color:${secondaryTextColor};">
                 <span class="split-server-label" style="font-size:var(--ui-fs);opacity:0.8;">${escHtml(secondaryServerLabel)}</span>
                 <span class="split-cmd-label" style="font-size:var(--ui-fs);font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">${escHtml(secondaryCmdLabel)}</span>
-                <button class="btn btn-xs btn-danger" onclick="event.stopPropagation();unsplitPanel('${panel.id}')" title="Close split">&#x2715;</button>
+                <button class="btn btn-xs btn-danger" data-action="UnsplitPanel" data-panel="${panel.id}" title="Close split">&#x2715;</button>
             </div>
             <div class="vtty-container" id="vtty-${secondaryId}" data-split-side="secondary" data-panel="${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px; flex:1; min-height:0;">
                 <div class="exited-banner" id="exitedBanner-${secondaryId}" style="display:none;"></div>
                 <pre>${split.secondaryCmdId ? '' : '<span style="color:#484f58;">No command selected — select a command from the sidebar</span>'}</pre>
                 <div class="cursor-indicator" style="display:none;"></div>
-                <button class="scroll-bottom-btn" id="scrollBtn-${secondaryId}" onclick="scrollTerminalBottom('${secondaryId}')" title="Scroll to bottom">&#x25BC;</button>
+                <button class="scroll-bottom-btn" id="scrollBtn-${secondaryId}" data-action="ScrollTerminalBottom" data-panel="${secondaryId}" title="Scroll to bottom">&#x25BC;</button>
             </div>
         </div>`;
 
@@ -431,7 +431,7 @@ function _renderMinimizedPanels() {
                 }
             }
         }
-        html += `<div class="minimized-panel-item" onclick="toggleMinimizePanel('${panel.id}')" title="Click to restore: ${escHtml(label)}">
+        html += `<div class="minimized-panel-item" data-action="ToggleMinimizePanel" data-panel="${panel.id}" title="Click to restore: ${escHtml(label)}">
             <span class="minimized-icon">&#x25A0;</span>
             <span class="minimized-label">${escHtml(label)}</span>
         </div>`;
@@ -634,9 +634,9 @@ function renderPanels() {
                         }
                     }
                 }
-                html += `<div class="mobile-tab${isFocused ? ' active' : ''}" data-panel="${panel.id}" onclick="focusPanel('${panel.id}')" title="${escHtml(tabLabel)}">
+                html += `<div class="mobile-tab${isFocused ? ' active' : ''}" data-action="FocusPanel" data-panel="${panel.id}" title="${escHtml(tabLabel)}">
                     <span class="mobile-tab-label">${escHtml(tabLabel)}</span>
-                    ${state.panels.length > 1 ? `<button class="mobile-tab-close" onclick="event.stopPropagation();removePanel('${panel.id}')" title="Remove">&#x2715;</button>` : ''}
+                    ${state.panels.length > 1 ? `<button class="mobile-tab-close" data-action="ClosePanelContent" data-panel="${panel.id}" title="Remove">&#x2715;</button>` : ''}
                 </div>`;
             }
             html += '</div>';
@@ -657,10 +657,10 @@ function renderPanels() {
                 <div class="panel${isFocused ? ' focused' : ''}" id="${panel.id}" draggable="false" ondragover="onPanelDragOver(event)" ondrop="onPanelDrop(event,'${panel.id}')" ondragleave="onPanelDragLeave(event)"${mobileHidden}>
                     <div class="panel-header" data-panel-id="${panel.id}" oncontextmenu="showPanelContextMenu(event,'${panel.id}')" tabindex="0" role="button" aria-label="Panel: ${escHtml(panel.selectedInstUrl || 'empty')}" style="background:${serverColor};color:${serverTextColor};">
                         ${dragHandle}
-                        <button class="btn btn-xs btn-danger panel-close-btn" onclick="event.stopPropagation();closePanelContent('${panel.id}')" title="Close panel">&#x2715;</button>
+                        <button class="btn btn-xs btn-danger panel-close-btn" data-action="ClosePanelContent" data-panel="${panel.id}" title="Close panel">&#x2715;</button>
                         <span class="panel-server-badge" style="font-size:var(--ui-fs);opacity:0.7;flex-shrink:0;">${escHtml(serverLabel)}</span>
-                        <button class="btn btn-xs cmd-history-btn" id="histBack-${panel.id}" onclick="event.stopPropagation();panelHistoryBack('${panel.id}')" title="Back in command history" style="display:none;">&#x25C0;</button>
-                        <button class="btn btn-xs cmd-history-btn" id="histFwd-${panel.id}" onclick="event.stopPropagation();panelHistoryForward('${panel.id}')" title="Forward in command history" style="display:none;">&#x25B6;</button>
+                        <button class="btn btn-xs cmd-history-btn" id="histBack-${panel.id}" data-action="PanelHistoryBack" data-panel="${panel.id}" title="Back in command history" style="display:none;">&#x25C0;</button>
+                        <button class="btn btn-xs cmd-history-btn" id="histFwd-${panel.id}" data-action="PanelHistoryForward" data-panel="${panel.id}" title="Forward in command history" style="display:none;">&#x25B6;</button>
                         <div class="cmd-info" id="cmdInfo-${panel.id}">
                             <span class="cmd-fullname" id="cmdName-${panel.id}" ondblclick="event.stopPropagation();startRenamePanel('${panel.id}')" title="Double-click to rename"></span>
                             <span class="cmd-args" id="cmdArgs-${panel.id}"></span>
@@ -1017,7 +1017,7 @@ function showSpecialKeysHelp() {
             </tbody>
         </table>
         <div style="margin-top:0.75rem;text-align:right;">
-            <button class="btn btn-xs" onclick="releaseCurrentFocusTrap();document.getElementById('specialKeysModal').remove()">Close</button>
+            <button class="btn btn-xs" data-action="CloseSpecialKeysModal">Close</button>
         </div>
     </div>`;
 
@@ -1830,6 +1830,11 @@ function closePanelContent(panelId) {
     window.updateSharedToolbar = updateSharedToolbar;
     window.sendKeysToPanel = sendKeysToPanel;
     window.showSpecialKeysHelp = showSpecialKeysHelp;
+    window.closeSpecialKeysModal = function() {
+        releaseCurrentFocusTrap();
+        const modal = document.getElementById('specialKeysModal');
+        if (modal) modal.remove();
+    };
     window.togglePanelLayout = togglePanelLayout;
     window.toggleLayoutPresetMenu = toggleLayoutPresetMenu;
     window.applyLayoutPreset = applyLayoutPreset;

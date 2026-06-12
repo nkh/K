@@ -80,6 +80,37 @@ const _sigs = {
 
     // Pass the element itself
     'element':       function(el) { return [el]; },
+
+    // Pass (instUrl) from data-inst-url attribute
+    'inst-url':      function(el) { return [el.dataset.instUrl]; },
+
+    // Pass (cmdName) from data-cmd-name attribute
+    'cmd-name':      function(el) { return [el.dataset.cmdName]; },
+
+    // Pass (index) from data-index attribute (numeric)
+    'index':         function(el) {
+        return [el.dataset.index !== undefined ? parseInt(el.dataset.index, 10) : -1];
+    },
+
+    // Pass (value) from data-value attribute (string)
+    'value-str':     function(el) { return [el.dataset.value]; },
+
+    // Pass (name) from data-name attribute (string)
+    'name':          function(el) { return [el.dataset.name]; },
+
+    // Pass (name, cmdName) for group+cmd operations
+    'name-index':    function(el) {
+        return [el.dataset.name, el.dataset.cmdName || ''];
+    },
+
+    // Pass (instUrl, cmdId, cmdName, alive, retained) for context menu
+    'cmd-context':   function(el) {
+        return [el.dataset.instUrl, el.dataset.cmdId, el.dataset.cmdName,
+            el.dataset.cmdAlive === 'true', el.dataset.cmdRetained === 'true'];
+    },
+
+    // Pass (panelId) from data-panel attribute (for dynamically rendered panel elements)
+    'data-panel':    function(el) { return [el.dataset.panel]; },
 };
 
 // ── Action registry ──
@@ -113,6 +144,59 @@ const _actions = {
     'HideAddTemplateForm':      { handler: 'hideAddTemplateForm' },
     'CreateCmdGroup':           { handler: 'createCmdGroup' },
     'RenderCmdManagerList':     { handler: 'renderCmdManagerList' },
+
+    // ── Sidebar: dynamic command list ──
+    'DisconnectServer':         { handler: 'disconnectServer', sig: 'inst-url', stop: true },
+    'SortSidebarBy':            { handler: '_sortSidebarBy', sig: 'data-value' },
+    'ToggleKeepCmd':            { handler: 'toggleKeepCmd', sig: 'cmd-id', stop: true },
+    'TogglePauseRunByIdx':      { handler: 'togglePauseRunPanelByIdx', sig: 'cmd-id', stop: true },
+    'TogglePinCmd':             { handler: 'togglePinCmd', sig: 'cmd-name', stop: true },
+    'SelectCommand':            { handler: 'selectCommand', sig: 'cmd-select' },
+
+    // ── Sidebar: command context menu ──
+    'ShowCmdContextMenu':       { handler: 'showCmdContextMenu', sig: 'cmd-context' },
+
+    // ── Panels: dynamic ──
+    'ClosePanelContent':        { handler: 'closePanelContent', sig: 'data-panel', stop: true },
+    'PanelHistoryBack':         { handler: 'panelHistoryBack', sig: 'data-panel', stop: true },
+    'PanelHistoryForward':      { handler: 'panelHistoryForward', sig: 'data-panel', stop: true },
+    'StartRenamePanel':         { handler: 'startRenamePanel', sig: 'data-panel', stop: true },
+    'UnsplitPanel':             { handler: 'unsplitPanel', sig: 'data-panel', stop: true },
+    'ToggleMinimizePanel':      { handler: 'toggleMinimizePanel', sig: 'data-panel' },
+    'FocusPanel':               { handler: 'focusPanel', sig: 'data-panel' },
+    'ScrollTerminalBottom':     { handler: 'scrollTerminalBottom', sig: 'data-panel' },
+    'VttySearchNext':           { handler: 'vttySearchNext', sig: 'data-panel' },
+    'VttySearchPrev':           { handler: 'vttySearchPrev', sig: 'data-panel' },
+    'VttySearchClose':          { handler: 'vttySearchClose', sig: 'data-panel' },
+    'ShowPanelContextMenu':     { handler: 'showPanelContextMenu', sig: 'data-panel' },
+
+    // ── Special keys modal ──
+    'CloseSpecialKeysModal':    { handler: 'closeSpecialKeysModal' },
+
+    // ── Search: dynamic ──
+    'RestartCommandById':       { handler: 'restartCommandById', sig: 'cmd-id', stop: true },
+    'KillCommand':              { handler: 'killCommand', sig: 'cmd-id', stop: true },
+    'SelectAndViewCmd':         { handler: '_selectAndViewCmd', sig: 'cmd-select', stop: true },
+    'OnSearchResultClick':      { handler: 'onSearchResultClick', sig: 'cmd-select' },
+
+    // ── Templates: dynamic ──
+    'SpawnServerTemplate':      { handler: 'spawnServerTemplate', sig: 'index' },
+    'SpawnUserTemplate':        { handler: 'spawnUserTemplate', sig: 'index' },
+    'DeleteUserTemplate':       { handler: 'deleteUserTemplate', sig: 'index', stop: true },
+
+    // ── Workspaces: dynamic ──
+    'ActivateEnvironment':      { handler: 'activateEnvironment', sig: 'name' },
+    'ToggleGroupCollapse':      { handler: 'toggleGroupCollapse', sig: 'name' },
+    'RenameCmdGroup':           { handler: 'renameCmdGroup', sig: 'name', stop: true },
+    'DeleteCmdGroup':           { handler: 'deleteCmdGroup', sig: 'name', stop: true },
+    'ToggleCmdInGroup':         { handler: '_toggleCmdInGroupAndRender', sig: 'name-index', stop: true },
+    'LoadWorkspace':            { handler: 'loadWorkspace', sig: 'name' },
+    'DeleteWorkspace':          { handler: 'deleteWorkspace', sig: 'name', stop: true },
+
+    // ── Command picker ──
+    'CloseCmdPicker':           { handler: 'closeCmdPicker' },
+    'PickCommand':              { handler: 'pickCommand', sig: 'cmd-select' },
+    'CloseWorkspaceManage':     { handler: 'closeWorkspaceManage' },
 
     // ── Shared toolbar ──
     'RestartCommand':           { handler: 'restartCommand', sig: 'panelId' },
@@ -213,6 +297,9 @@ function _dispatchAction(event) {
     const sigFn = _sigs[sigKey] || _sigs['none'];
     const args = sigFn(el, event, panelId);
 
+    // If this action has stop:true, prevent event from bubbling to parent data-action
+    if (def.stop) event.stopPropagation();
+
     handler.apply(null, args);
     return true;
 }
@@ -254,6 +341,24 @@ function initDelegation() {
         const el = event.target;
         if (!el || !el.dataset || !el.dataset.action) return;
         _dispatchAction(event);
+    });
+
+    // Contextmenu delegation for [data-action] elements
+    document.addEventListener('contextmenu', function(event) {
+        const el = event.target.closest('[data-action]');
+        if (!el) return;
+        const action = el.dataset.action;
+        const def = _actions[action];
+        if (!def) return;
+        // Only dispatch contextmenu for actions that explicitly handle it
+        if (action !== 'ShowCmdContextMenu' && action !== 'ShowPanelContextMenu') return;
+        event.preventDefault();
+        const handler = window[def.handler];
+        if (typeof handler !== 'function') return;
+        const sigKey = def.sig || 'none';
+        const sigFn = _sigs[sigKey] || _sigs['none'];
+        const args = sigFn(el, event, null);
+        handler.apply(null, args);
     });
 
     // Modal backdrop close: each modal overlay has data-close-action

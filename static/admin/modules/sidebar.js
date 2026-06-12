@@ -193,7 +193,7 @@ function _buildSidebar() {
             html += `<div class="server-conn-item" title="${escHtml(inst.url)} — ${inst.reachable === true ? 'connected' : inst.reachable === false ? 'unreachable' : 'checking...'}">`;
             html += `<span class="server-reach-dot ${reachClass}"></span>`;
             html += `<span class="server-conn-label">${escHtml(inst.label)}</span>`;
-            html += `<button class="server-conn-close-btn" onclick="event.stopPropagation();disconnectServer('${escHtml(inst.url)}')" title="Disconnect from ${escHtml(inst.label)}">&#x2715;</button>`;
+            html += `<button class="server-conn-close-btn" data-action="DisconnectServer" data-inst-url="${escHtml(inst.url)}" title="Disconnect from ${escHtml(inst.label)}">&#x2715;</button>`;
             html += '</div>';
         }
         html += '</div>';
@@ -201,10 +201,10 @@ function _buildSidebar() {
 
     if (state.connections.length > 1) {
         html += '<div class="sidebar-sort-bar">';
-        html += `<span class="sidebar-sort-item${_sidebarSort === 'name' ? ' active' : ''}" onclick="_sidebarSort='name';loadCommands()">All</span>`;
+        html += `<span class="sidebar-sort-item${_sidebarSort === 'name' ? ' active' : ''}" data-action="SortSidebarBy" data-value="name">All</span>`;
         for (const inst of state.connections) {
             const active = _sidebarSort === inst.url ? ' active' : '';
-            html += `<span class="sidebar-sort-item${active}" onclick="_sidebarSort='${escHtml(inst.url)}';window._userSpawnInstUrl='${escHtml(inst.url)}';loadCommands()">${escHtml(inst.label)}</span>`;
+            html += `<span class="sidebar-sort-item${active}" data-action="SortSidebarBy" data-value="${escHtml(inst.url)}">${escHtml(inst.label)}</span>`;
         }
         html += '</div>';
     }
@@ -255,7 +255,7 @@ function _buildSidebar() {
                 continue;
             }
             if (state.connections.length > 1) {
-                html += `<div class="pinned-section-header">${escHtml(inst.label)}<button class="server-close-btn" onclick="event.stopPropagation();disconnectServer('${escHtml(inst.url)}')" title="Disconnect this server">&#x2715;</button></div>`;
+                html += `<div class="pinned-section-header">${escHtml(inst.label)}<button class="server-close-btn" data-action="DisconnectServer" data-inst-url="${escHtml(inst.url)}" title="Disconnect this server">&#x2715;</button></div>`;
             }
             if (instCmds.length === 0) {
                 html += `<div style="padding:0.3rem 0.4rem;color:var(--text-muted);font-size:0.7rem;">No commands</div>`;
@@ -299,13 +299,13 @@ function _buildSidebar() {
             const retainOnExit = cmd.exit && cmd.exit.retain_on_exit === true;
             const keepTitle = retainOnExit ? 'Unkeep (terminal will be removed on exit)' : 'Keep (retain terminal after exit)';
             const keepBtnHtml = isAlive
-                ? `<button class="keep-btn${retainOnExit ? ' active' : ''}" onclick="event.stopPropagation();toggleKeepCmd('${escHtml(inst.url)}','${escHtml(cmd.id)}')" title="${keepTitle}">${retainOnExit ? '&#9733;' : '&#9734;'}</button>`
+                ? `<button class="keep-btn${retainOnExit ? ' active' : ''}" data-action="ToggleKeepCmd" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" title="${keepTitle}">${retainOnExit ? '&#9733;' : '&#9734;'}</button>`
                 : (retainOnExit
                     ? `<span class="keep-badge" title="Terminal kept after exit">&#9733;</span>`
                     : '');
             // Freeze/thaw button for alive commands
             const freezeBtnHtml = isAlive
-                ? `<button class="cmd-freeze-btn${isFrozen ? ' active' : ''}" onclick="event.stopPropagation();togglePauseRunPanelByIdx('${escHtml(inst.url)}','${escHtml(cmd.id)}')" title="${isFrozen ? 'Thaw' : 'Freeze'}">${isFrozen ? '&#9654;' : '&#9208;'}</button>`
+                ? `<button class="cmd-freeze-btn${isFrozen ? ' active' : ''}" data-action="TogglePauseRunByIdx" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" title="${isFrozen ? 'Thaw' : 'Freeze'}">${isFrozen ? '&#9654;' : '&#9208;'}</button>`
                 : '';
             // Build detail parts as separate spans for the detail row
             // Compact: runtime · cpu% · memM · pid  (numeric only, no labels)
@@ -326,11 +326,11 @@ function _buildSidebar() {
                 ? `<span class="resource-badge" style="font-size:0.55rem;opacity:0.7;" title="${escHtml(inst.url)}">${escHtml(inst.label)}</span>`
                 : '';
             out += `
-                <div class="cmd-item${selected}${frozenClass}${exitedClass}${instUnreachable ? ' unreachable' : ''}" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" data-cmd-retained="${retainOnExit}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" draggable="true" ondragstart="onCmdDragStart(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" onclick="selectCommand(this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true',this.dataset.cmdRetained==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)}${unreachableTitle}" style="${dimStyle}">
+                <div class="cmd-item${selected}${frozenClass}${exitedClass}${instUnreachable ? ' unreachable' : ''}" data-action="SelectCommand" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" data-cmd-retained="${retainOnExit}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" draggable="true" ondragstart="onCmdDragStart(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true',this.dataset.cmdRetained==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)}${unreachableTitle}" style="${dimStyle}">
                     <div class="cmd-item-row">
                         <button class="btn btn-xs btn-danger cmd-kill-btn" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-retained="${retainOnExit}" data-cmd-alive="${isAlive}"${killDisabled}>&#x2715;</button>
                         ${keepBtnHtml}
-                        <button class="pin-btn${isPinned ? ' active' : ''}" onclick="event.stopPropagation();togglePinCmd('${escHtml(cmdName)}')" title="${isPinned ? 'Unpin' : 'Pin'}">${isPinned ? '◉' : '◎'}</button>
+                        <button class="pin-btn${isPinned ? ' active' : ''}" data-action="TogglePinCmd" data-cmd-name="${escHtml(cmdName)}" title="${isPinned ? 'Unpin' : 'Pin'}">${isPinned ? '◉' : '◎'}</button>
                         <span class="cmd-grab-handle" onmousedown="_cmdReorderMouseDown(event,'${escHtml(inst.url)}','${escHtml(cmd.id)}','${escHtml(cmdName)}')" title="Drag to reorder / drop on pane to open">&#x2807;</span>
                         <span class="name">${escHtml(cmdName)}</span>
                         <span class="cmd-detail-inline">${detailParts.map(p => escHtml(p)).join(' · ')}</span>
@@ -531,6 +531,11 @@ function updateTerminalDisconnectedOverlay() {
     window.setPinnedNames = setPinnedNames;
     window.togglePinCmd = togglePinCmd;
     window.rearrangePinnedCommands = rearrangePinnedCommands;
+    window._sortSidebarBy = function(sortKey) {
+        _sidebarSort = sortKey;
+        if (sortKey !== 'name') window._userSpawnInstUrl = sortKey;
+        loadCommands();
+    };
     window.togglePauseRunPanelByIdx = function(instUrl, cmdId) {
         // Like togglePauseRunPanel but without touching focus/selection state
         const inst = state.connections.find(i => i.url === instUrl);
