@@ -57,6 +57,29 @@ const _sigs = {
 
     // Pass element.value for select change handlers
     'value':         function(el) { return [el.value || el.dataset.value]; },
+
+    // Pass (instUrl, cmdId, cmdName) from data-* attributes on command items
+    'cmd-select':    function(el) {
+        return [el.dataset.instUrl, el.dataset.cmdId, el.dataset.cmdName];
+    },
+
+    // Pass (instUrl, cmdId) from data-* attributes
+    'cmd-id':        function(el) {
+        return [el.dataset.instUrl, el.dataset.cmdId];
+    },
+
+    // Pass single string from data-value attribute
+    'data-value':    function(el) {
+        return [el.dataset.value];
+    },
+
+    // Pass (panelId) from data-panel-id attribute (for dynamically generated panel buttons)
+    'el-panelId':    function(el) {
+        return [el.dataset.panelId];
+    },
+
+    // Pass the element itself
+    'element':       function(el) { return [el]; },
 };
 
 // ── Action registry ──
