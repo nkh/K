@@ -48,3 +48,43 @@ Stage Summary:
 - Commit: 0de7558 on fix_overcomplicated_ui, pushed to origin
 
 Key discovery: api.js (loaded via (0, eval) in setup.js) captures the fetch function reference at eval time. This means tests CANNOT replace fetch by setting globalThis.fetch — they must use the controllable mock provided by setup.js. This is a fundamental constraint of the current module loading approach and affects all future test writing.
+
+## Phase 2a-b: Create event delegation system
+- Created `modules/delegate.js` — metadata-driven event dispatcher replacing inline onclick
+- 59 actions registered with signature-based argument builders
+- 9 signature types: none, event, tab-el, panelId, panelId-delta, preset, delta, panelId-value, value
+- `_dispatchAction()` resolves handler from `_actions` registry lazily via `window.*`
+- `initDelegation()` sets up document-level click + change listeners once
+- `_dispatchModalBackdrop()` handles click-outside-to-close for 4 modal overlays
+- Added `data-action-placeholder` support for elements not yet migrated (ignored safely)
+- Click delegation skips `<select>` and `<input>` (those use change delegation)
+- Test infrastructure: implemented MockElement.closest(), .matches(), dataset Proxy (camelCase↔kebab-case), upgraded emitEvent() to accept pre-built events
+- Added `test/test_delegate.js` — 30 tests covering all signatures, closest traversal, modal backdrop, initDelegation, unknown/missing handlers, panelId resolution
+- Tests: 905→1015 (+110 new), 0 regressions
+- Commits: 205b608, efc8595, ea86ab1
+
+## Phase 2c-e: Migrate index.html onclick to data-action
+- **65 `onclick` attributes → 0** in index.html
+- **65 `data-action` attributes added**
+- **4 `data-close-action` attributes** on modal overlays
+- Topbar: 12 buttons migrated
+- Sidebar: 8 elements migrated (5 tabs + 3 action buttons)
+- Shared toolbar: 16 buttons migrated (including 5 layout presets, font size ±, buffer toggle)
+- Log viewer: 2 buttons
+- Global search modal: 2 buttons + backdrop
+- Add panel modal: 2 buttons + backdrop
+- Add server modal: 2 buttons + backdrop
+- Command manager: 2 buttons + backdrop
+- Bottombar: 3 selects/inputs
+- `initDelegation()` called as first line in app.js init
+- 17 form/input handlers remain (oninput, onkeydown, onfocus, onblur, ondragover, ondrop) with complex inline logic — deferred to later phases
+- ~40 more onclick handlers exist in dynamically-generated HTML (sidebar.js, panels.js, workspaces.js, templates.js, search.js) — will be migrated during Phase 3 render layer extraction
+- Tests: 1015 passed, same baseline failures. Zero regressions.
+
+## Phase 2f: Dynamic action signatures
+- Added 5 new signatures for Phase 3 readiness:
+  - `cmd-select`: (instUrl, cmdId, cmdName) from data-* attrs
+  - `cmd-id`: (instUrl, cmdId) from data-* attrs
+  - `data-value`: single data-value attribute
+  - `el-panelId`: data-panel-id for panel-specific buttons
+  - `element`: passes the DOM element itself
