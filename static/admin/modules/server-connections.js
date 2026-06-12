@@ -123,7 +123,7 @@ function applyPollInterval() {
     localStorage.setItem('vrw_poll_interval', state.pollInterval.toString());
     document.getElementById('pollInterval').value = String(state.pollInterval);
     // If currently polling, restart the timer with new interval
-    if (state.updateMode === 'poll' && state._pollTimer) {
+    if (state.updateMode === 'poll') {
         stopPoll();
         startPoll();
     }

@@ -283,10 +283,8 @@ function createMockState(overrides = {}) {
         _wsReconnectCount: 0,
         bufferView: 'current',
         _userAtBottom: true,
-        vttyWs: null,
         logWs: null,
         logWsReconnectTimer: null,
-        _pollTimer: null,
     };
 
     // Apply overrides

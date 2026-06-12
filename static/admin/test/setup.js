@@ -802,10 +802,8 @@ globalThis.resetTestState = function() {
         state._wsReconnectCount = 0;
         state.bufferView = 'current';
         state._userAtBottom = true;
-        state.vttyWs = null;
         state.logWs = null;
         state.logWsReconnectTimer = null;
-        state._pollTimer = null;
     }
     // Sync VRW vars
     if (typeof VRW !== 'undefined') {

@@ -64,9 +64,6 @@ assertEq(typeof VRW._lastSplitState, 'string', '_lastSplitState is string');
 console.log('state connection/VTty fields');
 assertEq(state.selectedInstUrl, null, 'selectedInstUrl defaults to null');
 assertEq(state.selectedCmdId, null, 'selectedCmdId defaults to null');
-assertEq(state.vttyWs, null, 'vttyWs defaults to null');
-assertEq(state.vttyWsUrl, null, 'vttyWsUrl defaults to null');
-assertEq(state.vttyWsCmdId, null, 'vttyWsCmdId defaults to null');
 assertEq(state.bufferView, 'current', 'bufferView defaults to current');
 assertEq(state._pendingVttyData, null, '_pendingVttyData defaults to null');
 assertEq(state._pendingVttyDirty, false, '_pendingVttyDirty defaults to false');
@@ -87,7 +84,6 @@ assert(state.updateMode === 'push' || state.updateMode === 'poll', 'updateMode i
 assert(typeof state.pollInterval === 'number', 'pollInterval is number');
 assert(state.pollInterval >= 50, 'pollInterval >= 50ms minimum');
 assert(state.pollInterval <= 5000, 'pollInterval <= 5000ms maximum');
-assertEq(state._pollTimer, null, '_pollTimer defaults to null');
 
 // ── state refresh throttle fields ──
 console.log('state refresh throttle fields');

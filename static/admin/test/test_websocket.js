@@ -178,9 +178,6 @@ if (typeof connectVttyWs === 'function') {
 }
 if (typeof disconnectVttyWs === 'function') {
     disconnectVttyWs();
-    assertEq(state.vttyWs, null, 'disconnectVttyWs clears vttyWs');
-    assertEq(state.vttyWsUrl, null, 'disconnectVttyWs clears vttyWsUrl');
-    assertEq(state.vttyWsCmdId, null, 'disconnectVttyWs clears vttyWsCmdId');
     assertEq(state._wsReconnectCount, 0, 'disconnectVttyWs resets reconnect count');
     assertEq(state._wsPingSendTime, 0, 'disconnectVttyWs resets ping send time');
     assertEq(state._wsLatency, 0, 'disconnectVttyWs resets latency');

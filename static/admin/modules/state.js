@@ -32,16 +32,8 @@ const state = {
     fontSize: parseInt(localStorage.getItem('vrw_font_size') || '10'),
     instanceUrls: [],
     currentView: 'vtty',
-    // DEPRECATED: kept for backward compat with log WS, quality indicator, etc.
-    // Per-panel WebSocket is now stored on panel objects (panel.ws).
-    vttyWs: null,
-    vttyWsUrl: null,
-    vttyWsCmdId: null,
     // Buffer view: 'current', 'main', 'alt' — GLOBAL for shared toolbar
     bufferView: 'current',
-    // Debounce timer for throttled HTTP VTTY fetches (per panel).
-    // Keyed by panelId.
-    _vttyHttpTimer: null,
     // Last-known buffer generation per command ID. Used to skip redundant
     // DOM updates when the server reports no change (Level 2 optimization).
     _lastGeneration: {},
@@ -74,7 +66,6 @@ const state = {
     // or 'poll' (client polls /api/commands/:id/vtty/changed)
     updateMode: localStorage.getItem('vrw_update_mode') || 'push',
     pollInterval: parseInt(localStorage.getItem('vrw_poll_interval') || '500'),
-    _pollTimer: null,
     // Client-side refresh throttle (ms).  In push mode, this throttles how
     // often VTTY updates are applied to the DOM even if the server sends them
     // faster.  0 = no throttle (apply immediately).  Range: 0–2000 in 100ms
