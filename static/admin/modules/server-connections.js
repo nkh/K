@@ -8,13 +8,8 @@ async function togglePauseRun() {
     const inst = state.connections.find(i => i.url === state.selectedInstUrl);
     const cmd = inst && inst._commands ? inst._commands.find(c => c.id === state.selectedCmdId) : null;
     const isFrozen = cmd && cmd.frozen;
-    const endpoint = isFrozen ? 'thaw' : 'freeze';
     try {
-        await fetch(apiUrl(`/api/commands/${state.selectedCmdId}/${endpoint}`, { url: state.selectedInstUrl }), {
-            method: 'POST',
-            headers: authHeadersForInstance({ url: state.selectedInstUrl }),
-            body: JSON.stringify({}),
-        });
+        await (isFrozen ? api.thaw(state.selectedInstUrl, state.selectedCmdId) : api.freeze(state.selectedInstUrl, state.selectedCmdId));
         loadCommands();
     } catch (e) { /* ignore */ }
 }
@@ -27,13 +22,8 @@ async function togglePauseRunPanel(panelId) {
     const cmdId = panelObj.selectedCmdId;
     const cmd = inst._commands.find(c => c.id === cmdId);
     const isFrozen = cmd && cmd.frozen;
-    const endpoint = isFrozen ? 'thaw' : 'freeze';
     try {
-        await fetch(apiUrl(`/api/commands/${cmdId}/${endpoint}`, { url: panelObj.selectedInstUrl }), {
-            method: 'POST',
-            headers: authHeadersForInstance({ url: panelObj.selectedInstUrl }),
-            body: JSON.stringify({}),
-        });
+        await (isFrozen ? api.thaw(panelObj.selectedInstUrl, cmdId) : api.freeze(panelObj.selectedInstUrl, cmdId));
         loadCommands();
     } catch (e) { /* ignore */ }
 }
@@ -55,8 +45,7 @@ async function togglePauseRunPanel(panelId) {
 /// Also tracks whether the server is reachable at all.
 async function fetchServerConfig() {
     try {
-        const res = await fetch(apiUrl('/api/info'), { headers: authHeaders() });
-        const json = await res.json();
+        const json = await api.getInfo();
         const wasReachable = state.serverReachable;
         state.serverReachable = !!json.status;
         // When server transitions from unreachable → reachable, immediately
@@ -143,8 +132,7 @@ function applyPollInterval() {
 async function loadCertificates() {
     for (const inst of state.connections) {
         try {
-            const res = await fetch(apiUrl('/api/certificates', inst), { headers: authHeadersForInstance(inst) });
-            const json = await res.json();
+            const json = await api.getCertificates(inst.url);
             inst._certs = json.status === 'ok' ? json.data : [];
         } catch (e) {
             inst._certs = [];
@@ -333,8 +321,7 @@ function healthCheckConnections(restoredUrls) {
 /// Fetch server_name from /api/info for a non-primary connection.
 async function _fetchServerName(conn) {
     try {
-        const res = await fetch(apiUrl('/api/info', conn), { headers: authHeadersForInstance(conn) });
-        const json = await res.json();
+        const json = await api.getInfo(conn.url);
         if (json.status === 'ok' && json.data && json.data.server_name) {
             conn._serverName = json.data.server_name;
         }
@@ -446,12 +433,7 @@ async function restartCommandById(instUrl, cmdId) {
     // FIRST, then kills the old one.  This prevents the server from
     // shutting down when the old command was the last one running.
     try {
-        const res = await fetch(apiUrl(`/api/commands/${cmdId}/restart`, { url: instUrl }), {
-            method: 'POST',
-            headers: authHeadersForInstance({ url: instUrl }),
-            body: JSON.stringify({}),
-        });
-        const json = await res.json();
+        const json = await api.restart(instUrl, cmdId);
         if (json.status === 'ok' && json.data && json.data.id) {
             const newId = json.data.id;
             state.selectedInstUrl = instUrl;
@@ -481,12 +463,7 @@ async function spawnFromWelcome() {
     const cmd = input.value.trim();
     const instUrl = getBaseUrl();
     try {
-        const res = await fetch(apiUrl('/api/commands', { url: instUrl }), {
-            method: 'POST',
-            headers: authHeaders(),
-            body: JSON.stringify({ cmd }),
-        });
-        const json = await res.json();
+        const json = await api.spawnCommand(instUrl, { cmd });
         if (json.status === 'ok') {
             const newId = json.data && json.data.id ? json.data.id : null;
             if (newId) {

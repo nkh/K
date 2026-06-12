@@ -263,12 +263,7 @@ async function sendDirectKey(e, panelObj) {
     if (!seq) return;
 
     try {
-        const res = await fetch(apiUrl(`/api/commands/${state.selectedCmdId}/keys`, { url: panelObj.selectedInstUrl }), {
-            method: 'POST',
-            headers: authHeadersForInstance({ url: panelObj.selectedInstUrl }),
-            body: JSON.stringify({ keys: seq }),
-        });
-        const json = await res.json();
+        const json = await api.sendKeys(panelObj.selectedInstUrl, state.selectedCmdId, { keys: seq });
         if (json.status === 'ok') {
             // Trigger a refresh
             scheduleVttyHttp(panelObj.selectedInstUrl, state.selectedCmdId, 50);
@@ -529,15 +524,11 @@ async function sendMouseEvent(panelObj, eventType, button, e) {
     const y = Math.max(1, Math.floor((e.clientY - rect.top) / charH) + 1);
 
     try {
-        await fetch(apiUrl(`/api/commands/${state.selectedCmdId}/mouse`, { url: panelObj.selectedInstUrl }), {
-            method: 'POST',
-            headers: authHeadersForInstance({ url: panelObj.selectedInstUrl }),
-            body: JSON.stringify({
-                event: eventType,
-                button: button,
-                x: x,
-                y: y,
-            }),
+        await api.sendMouse(panelObj.selectedInstUrl, state.selectedCmdId, {
+            event: eventType,
+            button: button,
+            x: x,
+            y: y,
         });
         // Refresh display after mouse events (the child may have reacted)
         scheduleVttyHttp(panelObj.selectedInstUrl, state.selectedCmdId, 30);

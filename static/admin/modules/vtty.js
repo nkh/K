@@ -256,11 +256,12 @@ async function loadVttyHttpForPanel(panelId, instUrl, cmdId) {
     }
 
     try {
-        const res = await fetch(apiUrl(endpoint, { url: instUrl }), {
-            headers: authHeadersForInstance({ url: instUrl }),
-        });
-        if (!res.ok) return;
-        const json = await res.json();
+        let json;
+        if (endpoint === `/api/commands/${cmdId}/vtty/html`) {
+            json = await api.getVttyHtml(instUrl, cmdId);
+        } else {
+            json = await api.getJson(endpoint, instUrl);
+        }
         if (json.status === 'ok' && json.data) {
             updateVttyDisplayForPanel(panelObj, panelEl, json.data);
         }
@@ -594,10 +595,7 @@ async function _prefetchVttyHtml(instUrl, cmdId) {
     if (!pre) return;
 
     try {
-        const res = await fetch(apiUrl(`/api/commands/${cmdId}/vtty/html`, { url: instUrl }),
-            { headers: authHeadersForInstance({ url: instUrl }) });
-        if (!res.ok) return;
-        const json = await res.json();
+        const json = await api.getVttyHtml(instUrl, cmdId);
         if (json.status === 'ok' && json.data && json.data.html !== undefined) {
             pre.innerHTML = json.data.html;
             // Store generation for subsequent incremental updates
@@ -640,12 +638,12 @@ async function loadVttyHttp(instUrl, cmdId) {
     }
 
     try {
-        const res = await fetch(apiUrl(endpoint, { url: instUrl }), { headers: authHeadersForInstance({ url: instUrl }) });
-        if (!res.ok) {
-            console.warn('VTTY HTTP fetch failed:', res.status, res.statusText);
-            return;
+        let json;
+        if (endpoint === `/api/commands/${cmdId}/vtty/html`) {
+            json = await api.getVttyHtml(instUrl, cmdId);
+        } else {
+            json = await api.getJson(endpoint, instUrl);
         }
-        const json = await res.json();
         if (json.status === 'ok' && json.data) {
             // Level 2: Skip redundant DOM updates if generation hasn't changed.
             if (json.data.generation !== undefined && state._lastGeneration[cmdId] === json.data.generation) {

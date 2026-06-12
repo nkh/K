@@ -154,8 +154,7 @@ async function loadLog() {
         if (search) params.set('search', search);
         params.set('limit', '500');
 
-        const res = await fetch(apiUrl('/api/log?' + params.toString()), { headers: authHeaders() });
-        const json = await res.json();
+        const json = await api.getLog(undefined, Object.fromEntries(params));
 
         if (json.status === 'ok' && json.data) {
             const container = document.getElementById('logContent');

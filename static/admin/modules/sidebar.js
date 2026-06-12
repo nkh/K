@@ -537,11 +537,7 @@ function updateTerminalDisconnectedOverlay() {
         if (!inst || !inst._commands) return;
         const cmd = inst._commands.find(c => c.id === cmdId);
         const isFrozen = cmd && cmd.frozen;
-        const endpoint = isFrozen ? 'thaw' : 'freeze';
-        fetch(apiUrl(`/api/commands/${cmdId}/${endpoint}`, { url: instUrl }), {
-            method: 'POST',
-            headers: authHeadersForInstance({ url: instUrl }),
-            body: JSON.stringify({}),
-        }).then(() => loadCommands()).catch(() => {});
+        (isFrozen ? api.thaw(instUrl, cmdId) : api.freeze(instUrl, cmdId))
+            .then(() => loadCommands()).catch(() => {});
     };
 })();

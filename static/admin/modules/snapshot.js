@@ -26,10 +26,7 @@ async function loadSnapshot() {
     if (!primaryInst) { loadCommands(); return; }
 
     try {
-        const res = await fetch(apiUrl('/api/snapshot', primaryInst),
-            { headers: authHeadersForInstance(primaryInst) });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const json = await res.json();
+        const json = await api.getSnapshot(primaryInst.url);
         if (json.status !== 'ok' || !json.data) throw new Error('bad snapshot');
 
         const { commands, vtty, resources } = json.data;
@@ -49,10 +46,7 @@ async function loadSnapshot() {
         // Fetch peer instances in parallel (don't block the primary display)
         const peerPromises = state.connections.slice(1).map(async (inst) => {
             try {
-                const r = await fetch(apiUrl('/api/commands', inst),
-                    { headers: authHeadersForInstance(inst) });
-                if (!r.ok) throw new Error('HTTP ' + r.status);
-                const j = await r.json();
+                const j = await api.getCommands(inst.url);
                 inst._commands = j.status === 'ok' ? j.data : [];
                 inst.reachable = true;
                 inst._lastError = null;

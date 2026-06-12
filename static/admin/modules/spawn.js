@@ -52,11 +52,7 @@ async function spawnCmdTabComplete(event) {
     try {
         const instSelect = document.getElementById('spawnInstance');
         const instUrl = instSelect ? instSelect.value : '';
-        const res = await fetch(apiUrl('/api/completions?prefix=' + encodeURIComponent(prefix), { url: instUrl }), {
-            headers: authHeadersForInstance({ url: instUrl }),
-        });
-        if (!res.ok) return;
-        const json = await res.json();
+        const json = await api.getCompletions(instUrl, prefix);
         if (json.status !== 'ok' || !Array.isArray(json.data)) return;
 
         _spawnCompletions = json.data;
@@ -248,12 +244,7 @@ async function spawnCommand() {
     const openInPanel = document.getElementById('spawnOpenPanel').checked;
 
     try {
-        const res = await fetch(apiUrl('/api/commands', { url: instUrl }), {
-            method: 'POST',
-            headers: authHeadersForInstance({ url: instUrl }),
-            body: JSON.stringify(body),
-        });
-        const json = await res.json();
+        const json = await api.spawnCommand(instUrl, body);
         if (json.status === 'ok') {
             // Save to spawn history before clearing form
             _addSpawnHistoryEntry(fullCmd, '', dir || '', document.getElementById('spawnEnv').value);
@@ -301,15 +292,14 @@ async function toggleKeepCmd(instUrl, cmdId) {
     const isKept = cmd && cmd.exit && cmd.exit.retain_on_exit === true;
     const endpoint = isKept ? 'unkeep' : 'keep';
     try {
-        const res = await fetch(apiUrl(`/api/commands/${cmdId}/${endpoint}`, { url: instUrl }), {
-            method: 'POST',
-            headers: authHeadersForInstance({ url: instUrl }),
-        });
-        if (res.ok) {
-            // Force full rebuild to update the keep button
-            _lastCommandState = '';
-            loadCommands();
+        if (isKept) {
+            await api.unkeep(instUrl, cmdId);
+        } else {
+            await api.keep(instUrl, cmdId);
         }
+        // Force full rebuild to update the keep button
+        _lastCommandState = '';
+        loadCommands();
     } catch (e) { /* ignore */ }
 }
 
@@ -317,11 +307,7 @@ async function killCommand(instUrl, cmdId) {
     // Force full rebuild on state transition
     _lastCommandState = '';
     try {
-        await fetch(apiUrl(`/api/commands/${cmdId}/kill`, { url: instUrl }), {
-            method: 'POST',
-            headers: authHeadersForInstance({ url: instUrl }),
-            body: JSON.stringify({}),
-        });
+        await api.kill(instUrl, cmdId);
         if (state.selectedInstUrl === instUrl && state.selectedCmdId === cmdId) {
             state.selectedInstUrl = null;
             state.selectedCmdId = null;
@@ -335,11 +321,7 @@ async function purgeCommand(instUrl, cmdId, cmdName) {
     _lastCommandState = '';
     if (!confirm(`Purge "${cmdName || cmdId}"?\nThis permanently discards the VTTY buffer and all associated state.`)) return;
     try {
-        const res = await fetch(apiUrl(`/api/commands/${cmdId}`, { url: instUrl }), {
-            method: 'DELETE',
-            headers: authHeadersForInstance({ url: instUrl }),
-        });
-        const json = await res.json();
+        const json = await api.purge(instUrl, cmdId);
         if (json.status === 'ok') {
             if (state.selectedInstUrl === instUrl && state.selectedCmdId === cmdId) {
                 state.selectedInstUrl = null;
@@ -367,11 +349,7 @@ async function purgeCommand(instUrl, cmdId, cmdName) {
 async function purgeKeptCommand(instUrl, cmdId, cmdName) {
     // Same as purgeCommand but skips the "are you sure" dialog for kept commands
     try {
-        const res = await fetch(apiUrl(`/api/commands/${cmdId}`, { url: instUrl }), {
-            method: 'DELETE',
-            headers: authHeadersForInstance({ url: instUrl }),
-        });
-        const json = await res.json();
+        const json = await api.purge(instUrl, cmdId);
         if (json.status === 'ok') {
             if (state.selectedInstUrl === instUrl && state.selectedCmdId === cmdId) {
                 state.selectedInstUrl = null;
@@ -428,11 +406,7 @@ async function killAllCommands() {
         for (const inst of state.connections) {
             if (!inst.reachable) continue;
             promises.push(
-                fetch(apiUrl('/api/commands/kill-all', { url: inst.url }), {
-                    method: 'POST',
-                    headers: authHeadersForInstance({ url: inst.url }),
-                    body: JSON.stringify({}),
-                }).catch(() => {})
+                api.killAll(inst.url).catch(() => {})
             );
         }
         await Promise.all(promises);
@@ -450,11 +424,7 @@ async function killAllCommands() {
                         !String(cmd.pid).includes(filterLower)) continue;
                 }
                 promises.push(
-                    fetch(apiUrl(`/api/commands/${cmd.id}/kill`, { url: inst.url }), {
-                        method: 'POST',
-                        headers: authHeadersForInstance({ url: inst.url }),
-                        body: JSON.stringify({}),
-                    }).catch(() => {})
+                    api.kill(inst.url, cmd.id).catch(() => {})
                 );
             }
         }
@@ -499,12 +469,9 @@ async function freezeAllCommands() {
     if (cmds.length === 0) return;
     const anyRunning = cmds.some(c => c.cmd.frozen !== true);
     const endpoint = anyRunning ? 'freeze' : 'thaw';
+    const doFreeze = endpoint === 'freeze';
     const promises = cmds.map(({ inst, cmd }) =>
-        fetch(apiUrl(`/api/commands/${cmd.id}/${endpoint}`, { url: inst.url }), {
-            method: 'POST',
-            headers: authHeadersForInstance({ url: inst.url }),
-            body: JSON.stringify({}),
-        }).catch(() => {})
+        (doFreeze ? api.freeze(inst.url, cmd.id) : api.thaw(inst.url, cmd.id)).catch(() => {})
     );
     await Promise.all(promises);
     _lastCommandState = '';
@@ -526,11 +493,7 @@ async function resizeTerminal() {
     const rows = parseInt(document.getElementById('resizeRows')?.value) || 24;
     const cols = parseInt(document.getElementById('resizeCols')?.value) || 80;
     try {
-        await fetch(apiUrl(`/api/commands/${state.selectedCmdId}/resize`, { url: state.selectedInstUrl }), {
-            method: 'POST',
-            headers: authHeadersForInstance({ url: state.selectedInstUrl }),
-            body: JSON.stringify({ rows, cols }),
-        });
+        await api.resize(state.selectedInstUrl, state.selectedCmdId, { rows, cols });
     } catch (e) { /* ignore */ }
 }
 
@@ -544,17 +507,11 @@ async function resizeTerminalPanel(panelId) {
     const rows = parseInt(document.getElementById('stResizeRows')?.value || document.getElementById('resizeRows-' + panelId)?.value) || 24;
     const cols = parseInt(document.getElementById('stResizeCols')?.value || document.getElementById('resizeCols-' + panelId)?.value) || 80;
     try {
-        const res = await fetch(apiUrl(`/api/commands/${cmdId}/resize`, { url: panelObj.selectedInstUrl }), {
-            method: 'POST',
-            headers: authHeadersForInstance({ url: panelObj.selectedInstUrl }),
-            body: JSON.stringify({ rows, cols }),
-        });
-        if (res.ok) {
-            const ri = document.getElementById('resizeRows-' + panelId);
-            const ci = document.getElementById('resizeCols-' + panelId);
-            if (ri) ri.value = rows;
-            if (ci) ci.value = cols;
-        }
+        await api.resize(panelObj.selectedInstUrl, cmdId, { rows, cols });
+        const ri = document.getElementById('resizeRows-' + panelId);
+        const ci = document.getElementById('resizeCols-' + panelId);
+        if (ri) ri.value = rows;
+        if (ci) ci.value = cols;
     } catch (e) { /* ignore */ }
 }
 

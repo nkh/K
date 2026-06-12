@@ -961,29 +961,16 @@ async function sendKeysToPanel(panelId) {
     const instUrl = panel.selectedInstUrl || state.selectedInstUrl;
 
     try {
-        const res = await fetch(apiUrl(`/api/commands/${cmdId}/keys`, { url: instUrl }), {
-            method: 'POST',
-            headers: authHeadersForInstance({ url: instUrl }),
-            body: JSON.stringify({ keys: keysValue }),
-        });
-        let json;
-        try {
-            json = await res.json();
-        } catch (parseErr) {
-            console.error('send_keys: non-JSON response', res.status, res.statusText);
-            input.value = '';
-            loadVttyHttp(instUrl, cmdId);
-            return;
-        }
+        const json = await api.sendKeys(instUrl, cmdId, { keys: keysValue });
         if (json.status === 'ok') {
             input.value = '';
             loadVttyHttp(instUrl, cmdId);
         } else {
-            console.error('send_keys server error:', res.status, json.error);
+            console.error('send_keys server error:', json.error);
             input.value = '';
         }
     } catch (e) {
-        console.error('send_keys network error:', e);
+        console.error('send_keys error:', e);
     }
 }
 
@@ -1168,22 +1155,13 @@ async function screenshotPanel(panelId) {
     const fontSize = state.serverScreenshotFontSize || 12;
     const fontName = state.serverScreenshotFontName || 'monospace';
 
-    // Build the PNG endpoint URL
+    // Build PNG screenshot parameters
     const params = new URLSearchParams({ font_size: fontSize });
     if (fontName && fontName !== 'monospace') {
         params.set('font_name', fontName);
     }
-    const url = apiUrl(`/api/commands/${cmdId}/vtty/png?${params}`, { url: instUrl });
-
     try {
-        const res = await fetch(url, { headers: authHeadersForInstance({ url: instUrl }) });
-        if (!res.ok) {
-            const json = await res.json().catch(() => null);
-            const error = (json && json.error) || `HTTP ${res.status}`;
-            alert('Screenshot failed: ' + error);
-            return;
-        }
-        const blob = await res.blob();
+        const blob = await api.getVttyPng(instUrl, cmdId, Object.fromEntries(params));
         const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
 
@@ -1566,11 +1544,7 @@ function autoFitActiveTerminal() {
     const rows = Math.max(5, Math.min(200, Math.floor(rect.height / charH)));
     // Only resize if dimensions actually changed
     if (rows !== state._termRows || cols !== state._termCols) {
-        fetch(apiUrl(`/api/commands/${state.selectedCmdId}/resize`, { url: state.selectedInstUrl }), {
-            method: 'POST',
-            headers: authHeadersForInstance({ url: state.selectedInstUrl }),
-            body: JSON.stringify({ rows, cols }),
-        }).catch(() => {});
+        api.resize(state.selectedInstUrl, state.selectedCmdId, { rows, cols }).catch(() => {});
     }
 }
 
@@ -1584,12 +1558,8 @@ async function _resizePanelTo(panelId, rows, cols) {
     const cmd = inst && inst._commands ? inst._commands.find(c => c.id === panelObj.selectedCmdId) : null;
     if (cmd && cmd.status === 'exited') return false;
     try {
-        const resp = await fetch(apiUrl(`/api/commands/${panelObj.selectedCmdId}/resize`, { url: panelObj.selectedInstUrl }), {
-            method: 'POST',
-            headers: authHeadersForInstance({ url: panelObj.selectedInstUrl }),
-            body: JSON.stringify({ rows, cols }),
-        });
-        return resp.ok;
+        await api.resize(panelObj.selectedInstUrl, panelObj.selectedCmdId, { rows, cols });
+        return true;
     } catch {
         return false;
     }

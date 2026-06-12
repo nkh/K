@@ -36,12 +36,9 @@ async function loadDocs() {
 
     // Try fetching docs from the server, fall back to embedded docs
     try {
-        const res = await fetch('/admin/docs.md', { headers: authHeaders() });
-        if (res.ok) {
-            const text = await res.text();
-            container.innerHTML = renderMarkdown(text);
-            return;
-        }
+        const text = await api.getDocs();
+        container.innerHTML = renderMarkdown(text);
+        return;
     } catch (e) { /* fall through */ }
 
     // Embedded documentation
@@ -196,9 +193,7 @@ let _serverEnvironments = [];
 /// Fetch workspace environments from the server.
 async function fetchEnvironments() {
     try {
-        const res = await fetch(apiUrl('/api/environments'), { headers: authHeaders() });
-        if (!res.ok) return;
-        const json = await res.json();
+        const json = await api.getEnvironments();
         if (json.status === 'ok' && Array.isArray(json.data)) {
             _serverEnvironments = json.data;
         }
@@ -305,12 +300,7 @@ async function activateEnvironment(name) {
                 if (cmdDef.cols) body.cols = cmdDef.cols;
                 if (cmdDef.retain_on_exit) body.retain_on_exit = true;
 
-                const res = await fetch(apiUrl('/api/commands', { url: serverUrl }), {
-                    method: 'POST',
-                    headers: authHeadersForInstance({ url: serverUrl, token: serverUrl === defaultServer ? defaultToken : (panelDef.token || '') }),
-                    body: JSON.stringify(body),
-                });
-                const json = await res.json();
+                const json = await api.activateEnvironment(serverUrl, body);
                 if (json.status === 'ok' && json.data && json.data.id) {
                     panel.selectedCmdId = json.data.id;
                 }

@@ -237,11 +237,7 @@ async function _thawAllPanelsFromSearch() {
     // Thaw any commands that were frozen during search
     for (const entry of _searchFrozenCmdIds) {
         try {
-            await fetch(apiUrl(`/api/commands/${entry.cmdId}/thaw`, { url: entry.instUrl }), {
-                method: 'POST',
-                headers: authHeadersForInstance({ url: entry.instUrl }),
-                body: JSON.stringify({}),
-            });
+            await api.thaw(entry.instUrl, entry.cmdId);
         } catch (e) { /* ignore */ }
     }
     _searchFrozenCmdIds = [];
@@ -340,7 +336,7 @@ async function cmdManagerKillAll() {
         if (!inst._commands) continue;
         for (const cmd of inst._commands) {
             if (cmd.alive !== false) {
-                try { await fetch(apiUrl('/api/commands/' + cmd.id, { url: inst.url }), { method: 'DELETE', headers: authHeadersForInstance(inst) }); } catch {}
+                try { await api.purge(inst.url, cmd.id); } catch {}
             }
         }
     }
@@ -374,14 +370,8 @@ async function _toggleSearchFreezeCommands() {
             for (const cmd of inst._commands) {
                 if (!cmd.alive || cmd.frozen) continue;
                 try {
-                    const res = await fetch(apiUrl(`/api/commands/${cmd.id}/freeze`, { url: inst.url }), {
-                        method: 'POST',
-                        headers: authHeadersForInstance(inst),
-                        body: JSON.stringify({}),
-                    });
-                    if (res.ok) {
-                        _searchFrozenCmdIds.push({ instUrl: inst.url, cmdId: cmd.id, wasFrozen: false });
-                    }
+                    await api.freeze(inst.url, cmd.id);
+                    _searchFrozenCmdIds.push({ instUrl: inst.url, cmdId: cmd.id, wasFrozen: false });
                 } catch (e) { /* skip */ }
             }
         }
@@ -390,11 +380,7 @@ async function _toggleSearchFreezeCommands() {
         for (const entry of _searchFrozenCmdIds) {
             if (!entry.wasFrozen) {
                 try {
-                    await fetch(apiUrl(`/api/commands/${entry.cmdId}/thaw`, { url: entry.instUrl }), {
-                        method: 'POST',
-                        headers: authHeadersForInstance({ url: entry.instUrl }),
-                        body: JSON.stringify({}),
-                    });
+                    await api.thaw(entry.instUrl, entry.cmdId);
                 } catch (e) { /* ignore */ }
             }
         }
@@ -423,11 +409,7 @@ function onSearchResultClick(instUrl, cmdId, cmdName) {
     // Thaw all frozen commands
     for (const entry of _searchFrozenCmdIds) {
         if (!entry.wasFrozen) {
-            fetch(apiUrl(`/api/commands/${entry.cmdId}/thaw`, { url: entry.instUrl }), {
-                method: 'POST',
-                headers: authHeadersForInstance({ url: entry.instUrl }),
-                body: JSON.stringify({}),
-            }).catch(() => {});
+            api.thaw(entry.instUrl, entry.cmdId).catch(() => {});
         }
     }
     _searchFrozenCmdIds = [];
@@ -474,11 +456,7 @@ async function executeGlobalSearch() {
         if (!inst._commands) continue;
         for (const cmd of inst._commands) {
             try {
-                const res = await fetch(apiUrl(`/api/commands/${cmd.id}/vtty/text`, { url: inst.url }), {
-                    headers: authHeadersForInstance(inst),
-                });
-                if (!res.ok) continue;
-                const json = await res.json();
+                const json = await api.getVttyText(inst.url, cmd.id);
                 if (json.status !== 'ok' || !json.data || !json.data.text) continue;
                 const lines = json.data.text.split('\n');
                 const cmdName = cmd.name || cmd.id;

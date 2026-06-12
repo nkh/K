@@ -5,11 +5,7 @@
 // ── Command-name URL lookup ──
 async function lookupAndSelectCommand(name) {
     try {
-        const base = getBaseUrl();
-        const res = await fetch(apiUrl('/api/commands/lookup/' + encodeURIComponent(name)), {
-            headers: authHeaders()
-        });
-        const json = await res.json();
+        const json = await api.lookupCommand(name);
         if (json.status !== 'ok') return;
         const matches = json.data;
         if (matches.length === 0) return; // no match, show admin page
@@ -116,9 +112,7 @@ async function loadCommands() {
     let anyReachableChanged = false;
     await Promise.all(state.connections.map(async (inst) => {
         try {
-            const res = await fetch(apiUrl('/api/commands', inst), { headers: authHeadersForInstance(inst) });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            const json = await res.json();
+            const json = await api.getCommands(inst.url);
             inst._commands = json.status === 'ok' ? json.data : [];
             const wasReachable = inst.reachable;
             inst.reachable = true;

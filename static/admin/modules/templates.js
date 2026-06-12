@@ -15,8 +15,7 @@ function getServerTemplates() {
 
 async function fetchServerTemplates() {
     try {
-        const res = await fetch(apiUrl('/api/templates'), { headers: authHeaders() });
-        const json = await res.json();
+        const json = await api.getTemplates();
         if (json.status === 'ok') {
             _serverTemplates = json.data || [];
         }
@@ -106,11 +105,7 @@ function spawnServerTemplate(index) {
     if (t.certificate) body.certificate = t.certificate;
     if (t.rows) body.rows = t.rows;
     if (t.cols) body.cols = t.cols;
-    fetch(apiUrl('/api/commands', { url: instUrl }), {
-        method: 'POST',
-        headers: authHeadersForInstance({ url: instUrl }),
-        body: JSON.stringify(body),
-    }).then(res => res.json()).then(json => {
+    api.spawnCommand(instUrl, body).then(json => {
         if (json.status === 'ok') {
             const newId = json.data && json.data.id ? json.data.id : null;
             if (newId) {
@@ -135,11 +130,7 @@ function spawnUserTemplate(index) {
     const instUrl = instSelect ? instSelect.value : (window._userSpawnInstUrl || getBaseUrl());
     const args = t.args ? t.args.split(/\s+/) : [];
     const body = { cmd: t.cmd, args };
-    fetch(apiUrl('/api/commands', { url: instUrl }), {
-        method: 'POST',
-        headers: authHeadersForInstance({ url: instUrl }),
-        body: JSON.stringify(body),
-    }).then(res => res.json()).then(json => {
+    api.spawnCommand(instUrl, body).then(json => {
         if (json.status === 'ok') {
             const newId = json.data && json.data.id ? json.data.id : null;
             if (newId) {

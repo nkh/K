@@ -426,8 +426,7 @@ async function pollOncePanel(panelId) {
     const cmdId = panelObj.selectedCmdId;
     const instUrl = panelObj.selectedInstUrl;
     try {
-        const res = await fetch(apiUrl(`/api/commands/${cmdId}/vtty/changed`, { url: instUrl }), { headers: authHeadersForInstance({ url: instUrl }) });
-        const json = await res.json();
+        const json = await api.getVttyChanged(instUrl, cmdId);
         if (json.status === 'ok' && json.data && json.data.changed) {
             loadVttyHttpForPanel(panelId, instUrl, cmdId);
         }
@@ -595,14 +594,9 @@ async function _loadSecondaryVttyHttp(panelObj) {
 
     const cmdId = s.secondaryCmdId;
     const instUrl = s.secondaryInstUrl;
-    const endpoint = `/api/commands/${cmdId}/vtty/html`;
 
     try {
-        const res = await fetch(apiUrl(endpoint, { url: instUrl }), {
-            headers: authHeadersForInstance({ url: instUrl }),
-        });
-        if (!res.ok) return;
-        const json = await res.json();
+        const json = await api.getVttyHtml(instUrl, cmdId);
         if (json.status === 'ok' && json.data) {
             _updateSecondaryVttyDisplay(panelObj, vttyEl, json.data);
         }

@@ -189,9 +189,7 @@ function startRefresh() {
 // ─── Peer Instances (registration & failover) ───
 async function fetchPeers() {
     try {
-        const res = await fetch(apiUrl('/api/peers'), { headers: authHeaders() });
-        if (!res.ok) return;
-        const json = await res.json();
+        const json = await api.getPeers();
         if (json.status !== 'ok' || !Array.isArray(json.data)) return;
 
         for (const peer of json.data) {

@@ -137,7 +137,7 @@
         },
 
         getVttyHtml(instUrl, cmdId) {
-            return _textGet('/api/commands/' + cmdId + '/vtty/html', instUrl);
+            return _jsonGet('/api/commands/' + cmdId + '/vtty/html', instUrl);
         },
 
         getVttyPng(instUrl, cmdId, params) {
@@ -238,7 +238,7 @@
         // ── Logs ──
         getLog(instUrl, params) {
             const qs = params ? '?' + new URLSearchParams(params).toString() : '';
-            return _textGet('/api/log' + qs, instUrl);
+            return _jsonGet('/api/log' + qs, instUrl);
         },
 
         // ── Environments ──
@@ -255,6 +255,26 @@
             const base = getBaseUrl();
             return fetch(base + '/admin/docs.md')
                 .then(r => r.ok ? r.text() : Promise.reject(r.status));
+        },
+
+        // ── Snapshots ──
+        getSnapshot(instUrl) {
+            return _jsonGet('/api/snapshot', instUrl);
+        },
+
+        // ── Peers ──
+        getPeers() {
+            return _jsonGet('/api/peers');
+        },
+
+        // ── Search ──
+        getVttyText(instUrl, cmdId) {
+            return _jsonGet('/api/commands/' + cmdId + '/vtty/text', instUrl);
+        },
+
+        // ── Generic JSON GET (for variant VTTY endpoints like scrollback/buffer) ──
+        getJson(path, instUrl) {
+            return _jsonGet(path, instUrl);
         },
     };
 

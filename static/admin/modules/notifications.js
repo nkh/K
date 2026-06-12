@@ -94,10 +94,7 @@ async function pollResources() {
             if (cmd.alive === false) continue;
             promises.push((async () => {
                 try {
-                    const res = await fetch(apiUrl(`/api/commands/${cmd.id}/resources`, { url: inst.url }), {
-                        headers: authHeadersForInstance(inst),
-                    });
-                    const json = await res.json();
+                    const json = await api.getCommandResources(inst.url, cmd.id);
                     if (json.status === 'ok' && json.data) {
                         state._resourceCache[cmd.id] = json.data;
                     }
