@@ -407,16 +407,83 @@ globalThis.Notification = class {
     static requestPermission() { return Promise.resolve('granted'); }
 };
 
-// ── fetch mock ──
-globalThis.fetch = async function(url, opts) {
-    return {
-        ok: true,
-        status: 200,
-        statusText: 'OK',
+// ── fetch mock (controllable) ──
+// Modules capture `fetch` at eval time, so we can't replace it later.
+// Instead, make this single mock controllable via global helpers.
+const _fetchCalls = [];
+let _fetchResponse = {
+    ok: true, status: 200, statusText: 'OK',
+    headers: new Map([['content-type', 'application/json']]),
+    json: async () => ({ status: 'ok', data: {} }),
+    text: async () => '',
+    blob: async () => new Blob([], { type: 'application/octet-stream' }),
+    clone() { return this; },
+};
+
+globalThis.fetch = function(url, opts) {
+    _fetchCalls.push({ url, method: opts?.method || 'GET', headers: opts?.headers || {}, body: opts?.body });
+    const r = _fetchResponse;
+    return Promise.resolve({
+        ok: r.ok, status: r.status, statusText: r.statusText,
+        headers: r.headers,
+        json: r.json, text: r.text, blob: r.blob,
+        clone() { return this; },
+    });
+};
+
+// Controllable fetch helpers for tests
+globalThis._fetchCalls = _fetchCalls;
+globalThis._setFetchResponse = function(resp) { _fetchResponse = resp; };
+globalThis._setFetchJson = function(data, status) {
+    _fetchResponse = {
+        ok: (status || 200) >= 200 && (status || 200) < 300,
+        status: status || 200, statusText: String(status || 200),
+        headers: new Map([['content-type', 'application/json']]),
+        json: async () => data,
+        text: async () => JSON.stringify(data),
+        blob: async () => new Blob(),
+        clone() { return _fetchResponse; },
+    };
+};
+globalThis._setFetchError = function(status, errData) {
+    _fetchResponse = {
+        ok: false, status, statusText: String(status),
+        headers: new Map([['content-type', 'application/json']]),
+        json: async () => errData || { error: 'test error' },
+        text: async () => JSON.stringify(errData),
+        blob: async () => new Blob(),
+        clone() { return _fetchResponse; },
+    };
+};
+globalThis._setFetchText = function(text) {
+    _fetchResponse = {
+        ok: true, status: 200, statusText: 'OK',
+        headers: new Map([['content-type', 'text/plain']]),
+        json: async () => { throw new Error('not json'); },
+        text: async () => text,
+        blob: async () => new Blob(),
+        clone() { return _fetchResponse; },
+    };
+};
+globalThis._setFetchBlob = function(blob) {
+    _fetchResponse = {
+        ok: true, status: 200, statusText: 'OK',
+        headers: new Map([['content-type', blob.type || 'application/octet-stream']]),
+        json: async () => { throw new Error('not json'); },
+        text: async () => '',
+        blob: async () => blob,
+        clone() { return _fetchResponse; },
+    };
+};
+globalThis._resetFetch = function() {
+    _fetchCalls.length = 0;
+    _fetchResponse = {
+        ok: true, status: 200, statusText: 'OK',
         headers: new Map([['content-type', 'application/json']]),
         json: async () => ({ status: 'ok', data: {} }),
         text: async () => '',
-        clone() { return this; },
+        blob: async () => new Blob(),
+        clone() { return _fetchResponse; },
     };
 };
 
@@ -612,6 +679,7 @@ globalThis.restoreMock = function(saved) {
 globalThis.resetTestState = function() {
     clearIntervalAll();
     clearTimeoutAll();
+    _resetFetch();
     _elementRegistry.clear();
     // Re-register body
     _doc.body = _doc.createElement('body');

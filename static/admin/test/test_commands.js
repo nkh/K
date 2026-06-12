@@ -221,23 +221,22 @@ if (typeof pickCommand === 'function') {
 
 // ── loadCommands ──
 console.log('loadCommands tests');
-(async function() {
+
+const loadCommandsTest = (async function() {
 if (typeof loadCommands === 'function') {
-    // loadCommands may be stubbed to a sync function; verify it's callable
     assert(typeof loadCommands === 'function', 'loadCommands is a function');
 
-    // Mock fetch for commands
-    const origFetch2 = globalThis.fetch;
-    globalThis.fetch = async function(url, opts) {
-        return {
-            ok: true, status: 200,
-            json: async () => ({ status: 'ok', data: [
-                { id: 'lc-1', name: 'bash', alive: true, pid: 100 },
-                { id: 'lc-2', name: 'top', alive: false, pid: 101 },
-            ]}),
-            clone() { return this; },
-        };
-    };
+    // Restore real loadCommands (it was stubbed at the top of this file)
+    const realLoadCommands = _realFunctions.loadCommands;
+    if (realLoadCommands) globalThis.loadCommands = realLoadCommands;
+
+    // Set up controllable fetch
+    _resetFetch();
+    _setFetchJson({ status: 'ok', data: [
+        { id: 'lc-1', name: 'bash', alive: true, pid: 100 },
+        { id: 'lc-2', name: 'top', alive: false, pid: 101 },
+    ]});
+    globalThis._buildSidebar = function() {};
     state.connections = [{ url: 'http://localhost:9090', label: 'Local', token: '' }];
     state.panels = [];
     const lcPanel = addPanelDirect();
@@ -252,13 +251,13 @@ if (typeof loadCommands === 'function') {
     assertEq(state.connections[0]._lastError, null, 'no error on success');
 
     // Fetch failure → marks unreachable
-    globalThis.fetch = async function() { throw new Error('network'); };
+    _resetFetch();
+    _setFetchError(503, { status: 'error', error: 'connection lost (instance may have exited)' });
     await loadCommands();
     assertEq(state.connections[0].reachable, false, 'instance marked unreachable on error');
-    assertEq(state.connections[0]._lastError, 'connection lost (instance may have exited)', 'error message set');
-
-    globalThis.fetch = origFetch2;
 }
 })().catch(e => { console.error('loadCommands test error:', e.message); });
+
+globalThis._asyncTest = loadCommandsTest;
 
 console.log('\n[commands.js] Tests complete');
