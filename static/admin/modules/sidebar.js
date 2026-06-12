@@ -305,7 +305,7 @@ function _buildSidebar() {
                     : '');
             // Freeze/thaw button for alive commands
             const freezeBtnHtml = isAlive
-                ? `<button class="cmd-freeze-btn${isFrozen ? ' active' : ''}" onclick="event.stopPropagation();togglePauseRunPanelByIdx('${escHtml(inst.url)}','${escHtml(cmd.id)}')" title="${isFrozen ? 'Thaw' : 'Freeze'}">${isFrozen ? '&#9654;' : '&#9646;&#9646;'}</button>`
+                ? `<button class="cmd-freeze-btn${isFrozen ? ' active' : ''}" onclick="event.stopPropagation();togglePauseRunPanelByIdx('${escHtml(inst.url)}','${escHtml(cmd.id)}')" title="${isFrozen ? 'Thaw' : 'Freeze'}">${isFrozen ? '&#9654;' : '&#9208;'}</button>`
                 : '';
             // Build detail parts as separate spans for the detail row
             // Compact: runtime · cpu% · memM · pid  (numeric only, no labels)
