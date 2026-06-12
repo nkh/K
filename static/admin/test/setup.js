@@ -465,7 +465,7 @@ const path = require('path');
 const moduleDir = path.join(__dirname, '..', 'modules');
 
 const moduleOrder = [
-    'state.js', 'eventbus.js', 'utils.js', 'focus.js', 'theme.js',
+    'state.js', 'eventbus.js', 'utils.js', 'api.js', 'focus.js', 'theme.js',
     'sidebar.js', 'panels.js',
     'commands-core.js', 'command-selection.js', 'command-ui.js', 'server-connections.js',
     'websocket.js', 'vtty.js', 'snapshot.js',
