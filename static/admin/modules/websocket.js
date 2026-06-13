@@ -2,6 +2,47 @@
 (function() {
     'use strict';
 
+// ─── Shared Helpers ───
+
+function _buildWsUrl(instUrl, cmdId) {
+    const wsUrl = instUrl.replace(/^http/, 'ws');
+    const token = state.authToken || (state.connections.find(i => i.url === instUrl) || {}).token || '';
+    const sep = token ? '?' : '';
+    return `${wsUrl}/api/commands/${cmdId}/ws${sep}${token ? 'token=' + encodeURIComponent(token) : ''}`;
+}
+
+/// Generic WS cleanup: clears timers, resets counters, closes socket, nulls properties.
+/// Works for both primary (prefix='ws') and secondary (prefix='secondaryWs').
+function _cleanupWs(obj, prefix) {
+    const t = obj[prefix + 'ReconnectTimer'];
+    if (t) { clearTimeout(t); obj[prefix + 'ReconnectTimer'] = null; }
+    clearInterval(obj[prefix + 'PingInterval']);
+    obj[prefix + 'PingInterval'] = null;
+    obj[prefix + 'PingSendTime'] = 0;
+    obj[prefix + 'Latency'] = 0;
+    obj[prefix + 'ReconnectCount'] = 0;
+    const ws = obj[prefix];
+    if (ws) {
+        ws.onclose = null;
+        ws.close();
+        obj[prefix] = null;
+        obj[prefix + 'InstUrl'] = null;
+        obj[prefix + 'CmdId'] = null;
+    }
+}
+
+/// Scroll-aware innerHTML replacement shared by secondary VTTY display/diff.
+function _applyScrollHtml(vttyEl, pre, html) {
+    const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
+    const oldScrollHeight = vttyEl.scrollHeight;
+    pre.innerHTML = html;
+    if (wasAtBottom) {
+        vttyEl.scrollTop = vttyEl.scrollHeight;
+    } else {
+        vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
+    }
+}
+
 // ─── Per-Panel WebSocket Management ───
 // Each panel has its own WebSocket connection to its selected command.
 // This allows multiple panels to stream different commands simultaneously.
@@ -15,10 +56,7 @@ function connectPanelWs(panelId) {
 
     const instUrl = panelObj.selectedInstUrl;
     const cmdId = panelObj.selectedCmdId;
-    const wsUrl = instUrl.replace(/^http/, 'ws');
-    const token = state.authToken || (state.connections.find(i => i.url === instUrl) || {}).token || '';
-    const sep = token ? '?' : '';
-    const url = `${wsUrl}/api/commands/${cmdId}/ws${sep}${token ? 'token=' + encodeURIComponent(token) : ''}`;
+    const url = _buildWsUrl(instUrl, cmdId);
 
     try {
         const ws = new WebSocket(url);
@@ -45,24 +83,16 @@ function connectPanelWs(panelId) {
         ws.onmessage = (event) => {
             try {
                 const msg = JSON.parse(event.data);
-                // Guard: discard messages for a command that is no longer selected on this panel
-
-                // Route VTTY updates to THIS panel's DOM
                 const panelEl = document.getElementById(panelObj.id);
                 if (!panelEl) return;
 
                 if (msg.type === 'vtty_full' && msg.data) {
-                    const throttled = _throttleRefresh();
-                    if (!throttled) {
-                        updateVttyDisplayForPanel(panelObj, panelEl, msg.data);
-                    }
+                    if (!_throttleRefresh()) updateVttyDisplayForPanel(panelObj, panelEl, msg.data);
                     // Alt screen badge
                     const badge = panelEl.querySelector('.alt-screen-badge');
                     if (badge) badge.classList.toggle('visible', !!msg.data.alternate_screen);
                 } else if (msg.type === 'vtty_diff' && msg.data) {
-                    if (!_throttleRefresh()) {
-                        applyVttyDiffForPanel(panelObj, panelEl, msg.data);
-                    }
+                    if (!_throttleRefresh()) applyVttyDiffForPanel(panelObj, panelEl, msg.data);
                 } else if (msg.type === 'vtty_dirty' && msg.data) {
                     scheduleVttyHttpForPanel(panelObj.id, panelObj.selectedInstUrl, panelObj.selectedCmdId, 50);
                 } else if (msg.type === 'command_ended') {
@@ -81,8 +111,6 @@ function connectPanelWs(panelId) {
                             if (connEl) connEl.textContent = 'Connected (' + panelObj.wsLatency + 'ms)';
                         }
                     }
-                } else if (msg.type === 'connected') {
-                    // Server confirms connection. A vtty_full follows immediately.
                 } else if (msg.type === 'peer_registered' || msg.type === 'peer_unregistered') {
                     handlePeerEvent(msg);
                 }
@@ -92,34 +120,31 @@ function connectPanelWs(panelId) {
         };
 
         ws.onclose = () => {
-            if (panelObj.ws === ws) {
-                panelObj.ws = null;
-                clearInterval(panelObj.wsPingInterval);
-                panelObj.wsPingInterval = null;
-                panelObj.wsPingSendTime = 0;
-                panelObj.wsLatency = 0;
-                if (panelObj.id === state._focusedPanelId) {
-                    document.getElementById('connStatus').textContent = 'WS Disconnected';
-                    updateWsQualityIndicator();
-                }
-                // Schedule HTTP fallback to keep display alive
-                if (panelObj.selectedInstUrl && panelObj.selectedCmdId) {
-                    scheduleVttyHttpForPanel(panelObj.id, panelObj.selectedInstUrl, panelObj.selectedCmdId, 0);
-                }
-                // Auto-reconnect (max 5 attempts)
-                if (panelObj.selectedInstUrl && panelObj.selectedCmdId && !panelObj.wsReconnectTimer) {
-                    panelObj.wsReconnectCount++;
-                    if (panelObj.wsReconnectCount <= 5) {
-                        panelObj.wsReconnectTimer = setTimeout(() => {
-                            panelObj.wsReconnectTimer = null;
-                            if (panelObj.selectedInstUrl && panelObj.selectedCmdId && state.updateMode === 'push') {
-                                const inst = state.connections.find(i => i.url === panelObj.selectedInstUrl);
-                                if (inst && inst.reachable !== false) {
-                                    connectPanelWs(panelObj.id);
-                                }
-                            }
-                        }, 2000);
-                    }
+            if (panelObj.ws !== ws) return;
+            panelObj.ws = null;
+            clearInterval(panelObj.wsPingInterval);
+            panelObj.wsPingInterval = null;
+            panelObj.wsPingSendTime = 0;
+            panelObj.wsLatency = 0;
+            if (panelObj.id === state._focusedPanelId) {
+                document.getElementById('connStatus').textContent = 'WS Disconnected';
+                updateWsQualityIndicator();
+            }
+            // Schedule HTTP fallback to keep display alive
+            if (panelObj.selectedInstUrl && panelObj.selectedCmdId) {
+                scheduleVttyHttpForPanel(panelObj.id, panelObj.selectedInstUrl, panelObj.selectedCmdId, 0);
+            }
+            // Auto-reconnect (max 5 attempts)
+            if (panelObj.selectedInstUrl && panelObj.selectedCmdId && !panelObj.wsReconnectTimer) {
+                panelObj.wsReconnectCount++;
+                if (panelObj.wsReconnectCount <= 5) {
+                    panelObj.wsReconnectTimer = setTimeout(() => {
+                        panelObj.wsReconnectTimer = null;
+                        if (panelObj.selectedInstUrl && panelObj.selectedCmdId && state.updateMode === 'push') {
+                            const inst = state.connections.find(i => i.url === panelObj.selectedInstUrl);
+                            if (inst && inst.reachable !== false) connectPanelWs(panelObj.id);
+                        }
+                    }, 2000);
                 }
             }
         };
@@ -140,22 +165,7 @@ function connectPanelWs(panelId) {
 function disconnectPanelWs(panelId) {
     const panelObj = state.panels.find(p => p.id === panelId);
     if (!panelObj) return;
-    if (panelObj.wsReconnectTimer) {
-        clearTimeout(panelObj.wsReconnectTimer);
-        panelObj.wsReconnectTimer = null;
-    }
-    clearInterval(panelObj.wsPingInterval);
-    panelObj.wsPingInterval = null;
-    panelObj.wsPingSendTime = 0;
-    panelObj.wsLatency = 0;
-    panelObj.wsReconnectCount = 0;
-    if (panelObj.ws) {
-        panelObj.ws.onclose = null; // prevent re-entry
-        panelObj.ws.close();
-        panelObj.ws = null;
-        panelObj.wsInstUrl = null;
-        panelObj.wsCmdId = null;
-    }
+    _cleanupWs(panelObj, 'ws');
     // Also disconnect secondary WS if panel is split
     if (panelObj.split) {
         _disconnectSecondaryWs(panelObj);
@@ -186,7 +196,6 @@ function updateWsQualityIndicator() {
 
     let color;
     if (latency === 0) {
-        // Connected but no measurement yet
         color = 'var(--text-muted)';
     } else if (latency < 50) {
         color = 'var(--green)';
@@ -234,32 +243,13 @@ async function pollOncePanel(panelId) {
     }
 }
 
-// NOTE: updateVttyDisplay is defined in vtty.js and exported via window.
-// It is used here via the global scope (vtty.js loads before websocket.js).
+// ─── Secondary WebSocket for Split Panels ───
 
-/// Disconnect the secondary WebSocket for a split panel.
 function _disconnectSecondaryWs(panelObj) {
     if (!panelObj || !panelObj.split) return;
-    const s = panelObj.split;
-    if (s.secondaryWsReconnectTimer) {
-        clearTimeout(s.secondaryWsReconnectTimer);
-        s.secondaryWsReconnectTimer = null;
-    }
-    clearInterval(s.secondaryWsPingInterval);
-    s.secondaryWsPingInterval = null;
-    s.secondaryWsPingSendTime = 0;
-    s.secondaryWsLatency = 0;
-    s.secondaryWsReconnectCount = 0;
-    if (s.secondaryWs) {
-        s.secondaryWs.onclose = null;
-        s.secondaryWs.close();
-        s.secondaryWs = null;
-        s.secondaryWsCmdId = null;
-        s.secondaryWsInstUrl = null;
-    }
+    _cleanupWs(panelObj.split, 'secondaryWs');
 }
 
-/// Connect a secondary WebSocket for a split panel's secondary pane.
 function _connectSecondaryWs(panelObj) {
     if (!panelObj || !panelObj.split) return;
     const s = panelObj.split;
@@ -270,10 +260,7 @@ function _connectSecondaryWs(panelObj) {
 
     const instUrl = s.secondaryInstUrl;
     const cmdId = s.secondaryCmdId;
-    const wsUrl = instUrl.replace(/^http/, 'ws');
-    const token = state.authToken || (state.connections.find(i => i.url === instUrl) || {}).token || '';
-    const sep = token ? '?' : '';
-    const url = `${wsUrl}/api/commands/${cmdId}/ws${sep}${token ? 'token=' + encodeURIComponent(token) : ''}`;
+    const url = _buildWsUrl(instUrl, cmdId);
 
     try {
         const ws = new WebSocket(url);
@@ -294,11 +281,9 @@ function _connectSecondaryWs(panelObj) {
         ws.onmessage = (event) => {
             try {
                 const msg = JSON.parse(event.data);
-                // Guard: discard messages for a command that is no longer selected on this pane
                 if (msg.cmd_id && msg.cmd_id !== s.secondaryCmdId) return;
                 if (msg.data && msg.data.id && msg.data.id !== s.secondaryCmdId) return;
 
-                // Route VTTY updates to the secondary vtty-container
                 const secondaryId = panelObj.id + '-secondary';
                 const panelEl = document.getElementById(panelObj.id);
                 if (!panelEl) return;
@@ -306,13 +291,9 @@ function _connectSecondaryWs(panelObj) {
                 if (!vttyEl) return;
 
                 if (msg.type === 'vtty_full' && msg.data) {
-                    if (!_throttleRefresh()) {
-                        _updateSecondaryVttyDisplay(panelObj, vttyEl, msg.data);
-                    }
+                    if (!_throttleRefresh()) _updateSecondaryVttyDisplay(panelObj, vttyEl, msg.data);
                 } else if (msg.type === 'vtty_diff' && msg.data) {
-                    if (!_throttleRefresh()) {
-                        _applySecondaryVttyDiff(panelObj, vttyEl, msg.data);
-                    }
+                    if (!_throttleRefresh()) _applySecondaryVttyDiff(panelObj, vttyEl, msg.data);
                 } else if (msg.type === 'vtty_dirty' && msg.data) {
                     scheduleSecondaryVttyHttp(panelObj, 50);
                 } else if (msg.type === 'command_ended') {
@@ -323,8 +304,6 @@ function _connectSecondaryWs(panelObj) {
                         s.secondaryWsLatency = Date.now() - s.secondaryWsPingSendTime;
                         s.secondaryWsPingSendTime = 0;
                     }
-                } else if (msg.type === 'connected') {
-                    // Server confirms connection.
                 } else if (msg.type === 'peer_registered' || msg.type === 'peer_unregistered') {
                     handlePeerEvent(msg);
                 }
@@ -334,30 +313,27 @@ function _connectSecondaryWs(panelObj) {
         };
 
         ws.onclose = () => {
-            if (s.secondaryWs === ws) {
-                s.secondaryWs = null;
-                clearInterval(s.secondaryWsPingInterval);
-                s.secondaryWsPingInterval = null;
-                s.secondaryWsPingSendTime = 0;
-                s.secondaryWsLatency = 0;
-                // Schedule HTTP fallback to keep display alive
-                if (s.secondaryInstUrl && s.secondaryCmdId) {
-                    scheduleSecondaryVttyHttp(panelObj, 0);
-                }
-                // Auto-reconnect (max 5 attempts)
-                if (s.secondaryInstUrl && s.secondaryCmdId && !s.secondaryWsReconnectTimer) {
-                    s.secondaryWsReconnectCount++;
-                    if (s.secondaryWsReconnectCount <= 5) {
-                        s.secondaryWsReconnectTimer = setTimeout(() => {
-                            s.secondaryWsReconnectTimer = null;
-                            if (s.secondaryInstUrl && s.secondaryCmdId && state.updateMode === 'push') {
-                                const inst = state.connections.find(i => i.url === s.secondaryInstUrl);
-                                if (inst && inst.reachable !== false) {
-                                    _connectSecondaryWs(panelObj);
-                                }
-                            }
-                        }, 2000);
-                    }
+            if (s.secondaryWs !== ws) return;
+            s.secondaryWs = null;
+            clearInterval(s.secondaryWsPingInterval);
+            s.secondaryWsPingInterval = null;
+            s.secondaryWsPingSendTime = 0;
+            s.secondaryWsLatency = 0;
+            // Schedule HTTP fallback to keep display alive
+            if (s.secondaryInstUrl && s.secondaryCmdId) {
+                scheduleSecondaryVttyHttp(panelObj, 0);
+            }
+            // Auto-reconnect (max 5 attempts)
+            if (s.secondaryInstUrl && s.secondaryCmdId && !s.secondaryWsReconnectTimer) {
+                s.secondaryWsReconnectCount++;
+                if (s.secondaryWsReconnectCount <= 5) {
+                    s.secondaryWsReconnectTimer = setTimeout(() => {
+                        s.secondaryWsReconnectTimer = null;
+                        if (s.secondaryInstUrl && s.secondaryCmdId && state.updateMode === 'push') {
+                            const inst = state.connections.find(i => i.url === s.secondaryInstUrl);
+                            if (inst && inst.reachable !== false) _connectSecondaryWs(panelObj);
+                        }
+                    }, 2000);
                 }
             }
         };
@@ -370,7 +346,12 @@ function _connectSecondaryWs(panelObj) {
     }
 }
 
-/// Schedule an HTTP fetch for the secondary pane's VTTY content.
+// ─── Secondary Pane VTTY Display ───
+// These mirror the primary functions in vtty.js but operate on the secondary
+// split pane. They use a separate generation cache key (_secondaryGen_) and
+// write to split-specific state properties (secondaryMouseTracking, etc.)
+// instead of the panel-level properties and global toolbar/bottombar elements.
+
 function scheduleSecondaryVttyHttp(panelObj, delayMs) {
     if (!panelObj || !panelObj.split) return;
     const s = panelObj.split;
@@ -383,34 +364,21 @@ function scheduleSecondaryVttyHttp(panelObj, delayMs) {
     }, delayMs);
 }
 
-/// Load secondary pane's VTTY content via HTTP.
 async function _loadSecondaryVttyHttp(panelObj) {
     if (!panelObj || !panelObj.split) return;
     const s = panelObj.split;
-    const secondaryId = panelObj.id + '-secondary';
-    const vttyEl = document.getElementById('vtty-' + secondaryId);
+    const vttyEl = document.getElementById('vtty-' + panelObj.id + '-secondary');
     if (!vttyEl) return;
-
-    const cmdId = s.secondaryCmdId;
-    const instUrl = s.secondaryInstUrl;
-
     try {
-        const json = await api.getVttyHtml(instUrl, cmdId);
-        if (json.status === 'ok' && json.data) {
-            _updateSecondaryVttyDisplay(panelObj, vttyEl, json.data);
-        }
-    } catch (e) {
-        // Silently ignore fetch errors
-    }
+        const json = await api.getVttyHtml(s.secondaryInstUrl, s.secondaryCmdId);
+        if (json.status === 'ok' && json.data) _updateSecondaryVttyDisplay(panelObj, vttyEl, json.data);
+    } catch (e) { /* ignore fetch errors */ }
 }
 
-/// Update secondary pane's VTTY display (similar to updateVttyDisplayForPanel).
 function _updateSecondaryVttyDisplay(panelObj, vttyEl, data) {
     const pre = vttyEl ? vttyEl.querySelector('pre') : null;
     if (!pre) return;
-
     const cmdId = panelObj.split.secondaryCmdId;
-    // Use a separate generation cache key for secondary
     const genKey = '_secondaryGen_' + cmdId;
     if (cmdId && data.generation !== undefined) {
         if (state[genKey] === data.generation) {
@@ -419,22 +387,12 @@ function _updateSecondaryVttyDisplay(panelObj, vttyEl, data) {
         }
         state[genKey] = data.generation;
     }
-
     if (data.html !== undefined && data.html !== null) {
-        const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
-        const oldScrollHeight = vttyEl.scrollHeight;
-        pre.innerHTML = data.html;
-        if (wasAtBottom) {
-            vttyEl.scrollTop = vttyEl.scrollHeight;
-        } else {
-            vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
-        }
+        _applyScrollHtml(vttyEl, pre, data.html);
     }
-
     _updateSecondaryVttyMetadata(panelObj, vttyEl, data);
 }
 
-/// Update secondary pane's VTTY metadata (cursor, dimensions, mouse state).
 function _updateSecondaryVttyMetadata(panelObj, vttyEl, data) {
     const cursor = data.cursor || {};
     const dims = data.dimensions || {};
@@ -455,8 +413,7 @@ function _updateSecondaryVttyMetadata(panelObj, vttyEl, data) {
     panelObj.split.secondaryMouseTracking = !!data.mouse_tracking;
     panelObj.split.secondaryMouseSgr = !!data.mouse_sgr;
     if (vttyEl) {
-        const mt = panelObj.split.secondaryMouseTracking;
-        vttyEl.classList.toggle('selectable', !mt);
+        vttyEl.classList.toggle('selectable', !panelObj.split.secondaryMouseTracking);
         const pre = vttyEl.querySelector('pre');
         if (pre && dims.rows && dims.cols) {
             pre._vttyRows = dims.rows;
@@ -465,43 +422,26 @@ function _updateSecondaryVttyMetadata(panelObj, vttyEl, data) {
     }
 }
 
-/// Apply VTTY diff to secondary pane (similar to applyVttyDiffForPanel).
 function _applySecondaryVttyDiff(panelObj, vttyEl, data) {
     const cmdId = panelObj.split.secondaryCmdId;
     if (!cmdId) return;
     const pre = vttyEl ? vttyEl.querySelector('pre') : null;
     if (!pre) return;
-
     const genKey = '_secondaryGen_' + cmdId;
     if (data.generation !== undefined && state[genKey] === data.generation) {
-        if (data.cursor || data.dimensions || data.mouse_tracking !== undefined) {
+        if (data.cursor || data.dimensions || data.mouse_tracking !== undefined)
             _updateSecondaryVttyMetadata(panelObj, vttyEl, data);
-        }
         return;
     }
-    if (data.generation !== undefined) {
-        state[genKey] = data.generation;
-    }
-
-    // If full HTML is embedded, use it directly
+    if (data.generation !== undefined) state[genKey] = data.generation;
     if (data.html !== undefined) {
-        const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
-        const oldScrollHeight = vttyEl.scrollHeight;
-        pre.innerHTML = data.html;
-        if (wasAtBottom) {
-            vttyEl.scrollTop = vttyEl.scrollHeight;
-        } else {
-            vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
-        }
+        _applyScrollHtml(vttyEl, pre, data.html);
         _updateSecondaryVttyMetadata(panelObj, vttyEl, data);
         return;
     }
-
     // Level 3 cell-level incremental diff not supported for secondary pane — fall back to HTTP
     scheduleSecondaryVttyHttp(panelObj, 0);
 }
-
-
 
 // ─── VTTY Update Mode Start/Stop ───
 function startPanelUpdateMode(panelId) {
@@ -520,19 +460,14 @@ function stopPanelUpdateMode(panelId) {
     stopPanelPoll(panelId);
 }
 
-    window.connectPanelWs = connectPanelWs;
-    window.disconnectPanelWs = disconnectPanelWs;
-    window.updateWsQualityIndicator = updateWsQualityIndicator;
-    window.startPanelPoll = startPanelPoll;
-    window.stopPanelPoll = stopPanelPoll;
-    window.pollOncePanel = pollOncePanel;
-    window.startPanelUpdateMode = startPanelUpdateMode;
-    window.stopPanelUpdateMode = stopPanelUpdateMode;
-    window._connectSecondaryWs = _connectSecondaryWs;
-    window._disconnectSecondaryWs = _disconnectSecondaryWs;
-    window.scheduleSecondaryVttyHttp = scheduleSecondaryVttyHttp;
-    window._loadSecondaryVttyHttp = _loadSecondaryVttyHttp;
-    window._updateSecondaryVttyDisplay = _updateSecondaryVttyDisplay;
-    window._updateSecondaryVttyMetadata = _updateSecondaryVttyMetadata;
-    window._applySecondaryVttyDiff = _applySecondaryVttyDiff;
+    // ─── Exports ───
+    Object.assign(window, {
+        connectPanelWs, disconnectPanelWs, updateWsQualityIndicator,
+        startPanelPoll, stopPanelPoll, pollOncePanel,
+        startPanelUpdateMode, stopPanelUpdateMode,
+        _connectSecondaryWs, _disconnectSecondaryWs,
+        scheduleSecondaryVttyHttp, _loadSecondaryVttyHttp,
+        _updateSecondaryVttyDisplay, _updateSecondaryVttyMetadata,
+        _applySecondaryVttyDiff,
+    });
 })();

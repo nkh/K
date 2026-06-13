@@ -1,20 +1,12 @@
 // ─── Miscellaneous ───
-// UI Controls, Refresh Loop, Snapshot loading, Shared Toolbar.
-(function() {
-    'use strict';
+'use strict';
 
-// ─── UI Controls ───
-// ─── Token Management ───
 function saveToken() {
-    state.authToken = document.getElementById('authToken').value.trim();
-    if (state.authToken) {
-        localStorage.setItem('vrw_auth_token', state.authToken);
-    } else {
-        localStorage.removeItem('vrw_auth_token');
-    }
+    const val = document.getElementById('authToken').value.trim();
+    state.authToken = val;
+    val ? localStorage.setItem('vrw_auth_token', val) : localStorage.removeItem('vrw_auth_token');
 }
 
-// ─── Font Size ───
 function changeFontSize(delta) {
     state.fontSize = Math.max(8, Math.min(28, state.fontSize + delta));
     applyFontSize();
@@ -27,73 +19,49 @@ function applyFontSize() {
     localStorage.setItem('vrw_font_size', state.fontSize.toString());
 }
 
-// Per-panel font size: changes only the specified panel's font size.
 function changePanelFontSize(panelId, delta) {
     const panelObj = state.panels.find(p => p.id === panelId);
     if (!panelObj) return;
     panelObj.fontSize = Math.max(8, Math.min(28, panelObj.fontSize + delta));
     localStorage.setItem('vrw_panel_font_' + panelId, panelObj.fontSize.toString());
-    // Apply inline style on the VTTY container
     const vttyEl = document.getElementById('vtty-' + panelId);
     if (vttyEl) vttyEl.style.fontSize = panelObj.fontSize + 'px';
-    // Update the shared toolbar font size label
     const stFontSize = document.getElementById('stFontSize');
-    if (stFontSize && panelId === getActivePanelId()) {
-        stFontSize.textContent = panelObj.fontSize + 'px';
-    }
-    // Update the label in the panel header (if per-panel label still exists)
+    if (stFontSize && panelId === getActivePanelId()) stFontSize.textContent = panelObj.fontSize + 'px';
     const label = document.querySelector(`#${panelId} .panel-font-size`);
     if (label) label.textContent = panelObj.fontSize + 'px';
 }
 
-// ─── Refresh throttle ───
-// Controls how often VTTY updates are applied to the DOM.
-// 0 = no throttle (updates applied immediately on every server push).
-// 100–2000 = throttle interval in milliseconds (updates batched and applied
-// at most once per interval).
+// ─── Refresh throttle (0 = off, 100–2000 = ms interval) ───
+function _snapRefreshMs() {
+    if (state.refreshMs > 0 && state.refreshMs % 100 !== 0)
+        state.refreshMs = Math.round(state.refreshMs / 100) * 100;
+}
+
 function changeRefreshMs(delta) {
     state.refreshMs = Math.max(0, Math.min(2000, state.refreshMs + delta));
-    // Snap to 100ms steps (0 stays 0)
-    if (state.refreshMs > 0 && state.refreshMs % 100 !== 0) {
-        state.refreshMs = Math.round(state.refreshMs / 100) * 100;
-    }
+    _snapRefreshMs();
     localStorage.setItem('vrw_refresh_ms', state.refreshMs.toString());
-    // Update all panel widgets
     _syncRefreshMsUI();
 }
 
-/// Apply the refresh throttle from the input field (called on change).
 function applyRefreshMs() {
-    const val = parseInt(document.getElementById('refreshMs').value) || 0;
-    state.refreshMs = Math.max(0, Math.min(2000, val));
-    // Snap to 100ms steps (0 stays 0)
-    if (state.refreshMs > 0 && state.refreshMs % 100 !== 0) {
-        state.refreshMs = Math.round(state.refreshMs / 100) * 100;
-    }
+    state.refreshMs = Math.max(0, Math.min(2000, parseInt(document.getElementById('refreshMs').value) || 0));
+    _snapRefreshMs();
     localStorage.setItem('vrw_refresh_ms', state.refreshMs.toString());
     document.getElementById('refreshMs').value = state.refreshMs;
     _syncRefreshMsUI();
 }
 
-/// Sync all refresh throttle UI elements with state.refreshMs.
 function _syncRefreshMsUI() {
     const input = document.getElementById('refreshMs');
     if (input) input.value = state.refreshMs;
-    document.querySelectorAll('.refresh-val').forEach(el => {
-        el.textContent = state.refreshMs || 'off';
-    });
+    document.querySelectorAll('.refresh-val').forEach(el => { el.textContent = state.refreshMs || 'off'; });
 }
 
-/// Throttled wrapper: if a refresh throttle is active, buffer the update and
-/// apply it after the throttle window.  Returns true if the update was
-/// throttled (caller should not apply it now), false if it should be applied
-/// immediately.
-/// When refreshMs > 0, the first call sets a timer; subsequent calls within
-/// the window are coalesced.  When the timer fires, ALL panels with active
-/// WS connections are flushed via HTTP to pick up the latest state.
 function _throttleRefresh() {
-    if (state.refreshMs <= 0) return false; // no throttle
-    if (state._refreshThrottleTimer) return true; // already pending
+    if (state.refreshMs <= 0) return false;
+    if (state._refreshThrottleTimer) return true;
     state._refreshThrottleTimer = setTimeout(() => {
         state._refreshThrottleTimer = null;
         _flushThrottledRefresh();
@@ -101,20 +69,18 @@ function _throttleRefresh() {
     return true;
 }
 
-/// Called when the throttle timer fires: fetch the latest VTTY state for
-/// ALL panels that have an active command selection.  Uses per-panel
-/// scheduleVttyHttpForPanel to avoid clobbering updates across panels.
 function _flushThrottledRefresh() {
-    for (const panelObj of state.panels) {
-        if (panelObj.selectedInstUrl && panelObj.selectedCmdId) {
-            scheduleVttyHttpForPanel(panelObj.id, panelObj.selectedInstUrl, panelObj.selectedCmdId, 0);
-        }
-    }
+    for (const p of state.panels)
+        if (p.selectedInstUrl && p.selectedCmdId)
+            scheduleVttyHttpForPanel(p.id, p.selectedInstUrl, p.selectedCmdId, 0);
 }
 
-// ─── Selection Mode ───
-// When active, mouse events are NOT forwarded to PTY, enabling native text selection.
-// Also freezes VTTY DOM updates so text doesn't shift under the cursor.
+function _updateSelectBtn(btn, active) {
+    if (!btn) return;
+    btn.classList.toggle('btn-primary', active);
+    btn.textContent = active ? '\u2713 Select' : 'Select';
+}
+
 function toggleSelectionMode(panelId) {
     const panelObj = state.panels.find(p => p.id === panelId);
     if (!panelObj) return;
@@ -122,59 +88,30 @@ function toggleSelectionMode(panelId) {
     localStorage.setItem('vrw_panel_sel_' + panelId, panelObj.selectionMode.toString());
     const vttyEl = document.getElementById('vtty-' + panelId);
     if (vttyEl) vttyEl.classList.toggle('selection-mode', panelObj.selectionMode);
-    const btn = document.getElementById('selectBtn-' + panelId);
-    if (btn) {
-        btn.classList.toggle('btn-primary', panelObj.selectionMode);
-        btn.textContent = panelObj.selectionMode ? '\u2713 Select' : 'Select';
-    }
-    // Freeze/thaw VTTY updates so text stays stable for selection
-    if (panelObj.selectionMode) {
-        stopPanelUpdateMode(panelId);
-    } else if (panelObj.selectedInstUrl && panelObj.selectedCmdId) {
-        startPanelUpdateMode(panelId);
-    }
-    // Update shared toolbar button if this is the active panel
-    if (panelId === getActivePanelId()) {
-        const stBtn = document.getElementById('stSelectBtn');
-        if (stBtn) {
-            stBtn.classList.toggle('btn-primary', panelObj.selectionMode);
-            stBtn.textContent = panelObj.selectionMode ? '\u2713 Select' : 'Select';
-        }
-    }
+    _updateSelectBtn(document.getElementById('selectBtn-' + panelId), panelObj.selectionMode);
+    if (panelObj.selectionMode) stopPanelUpdateMode(panelId);
+    else if (panelObj.selectedInstUrl && panelObj.selectedCmdId) startPanelUpdateMode(panelId);
+    if (panelId === getActivePanelId()) _updateSelectBtn(document.getElementById('stSelectBtn'), panelObj.selectionMode);
 }
 
 // ─── Refresh Loop ───
 function startRefresh() {
-    // First call uses the snapshot endpoint (1 request = commands + VTTY + resources)
     loadSnapshot();
     if (state.refreshInterval) clearInterval(state.refreshInterval);
-    state.refreshInterval = setInterval(() => {
-        loadCommands();
-        checkForExitedCommands();
-    }, 1000);
-
-    // Periodically re-check server reachability via /api/info so that
-    // state.serverReachable stays accurate even when the server starts
-    // after the page loaded.  Runs every 5 seconds (no need to be aggressive).
+    state.refreshInterval = setInterval(() => { loadCommands(); checkForExitedCommands(); }, 1000);
     if (state._serverConfigInterval) clearInterval(state._serverConfigInterval);
-    state._serverConfigInterval = setInterval(() => {
-        fetchServerConfig();
-    }, 5000);
-
-    // Start resource polling (every 2 seconds) — first poll fires immediately
+    state._serverConfigInterval = setInterval(fetchServerConfig, 5000);
     if (state._resourceInterval) clearInterval(state._resourceInterval);
-    pollResources(); // immediate first poll
+    pollResources();
     state._resourceInterval = setInterval(pollResources, 2000);
 }
 
-    // ─── Notifications, Sound, Auto-Restart, Resource Polling ───
 const _notifiedExits = new Set();
 
 function notifyCommandEnded(cmdId) {
     if (!cmdId || _notifiedExits.has(cmdId)) return;
     _notifiedExits.add(cmdId);
-    let cmdName = cmdId;
-    let exitCode = null;
+    let cmdName = cmdId, exitCode = null;
     for (const inst of state.connections) {
         if (inst._commands) {
             const cmd = inst._commands.find(c => c.id === cmdId);
@@ -183,12 +120,11 @@ function notifyCommandEnded(cmdId) {
     }
     if (state.soundEnabled) playExitSound(exitCode === 0);
     if ('Notification' in window) {
+        const opts = { body: cmdName, icon: '/favicon.ico' };
         if (Notification.permission === 'granted') {
-            new Notification('vrw: Command exited', { body: cmdName, icon: '/favicon.ico' });
+            new Notification('vrw: Command exited', opts);
         } else if (Notification.permission !== 'denied') {
-            Notification.requestPermission().then(perm => {
-                if (perm === 'granted') new Notification('vrw: Command exited', { body: cmdName, icon: '/favicon.ico' });
-            });
+            Notification.requestPermission().then(p => { if (p === 'granted') new Notification('vrw: Command exited', opts); });
         }
     }
 }
@@ -211,18 +147,11 @@ function checkForExitedCommands() {
 
 function _autoRestartCommand(instUrl, cmd, cmdName) {
     if (_autoRestartDebounce.has(cmdName)) return;
-    _autoRestartDebounce.set(cmdName, setTimeout(() => { _autoRestartDebounce.delete(cmdName); }, 10000));
+    _autoRestartDebounce.set(cmdName, setTimeout(() => _autoRestartDebounce.delete(cmdName), 10000));
     restartCommandById(instUrl, cmd.id).then(() => {
-        const indicator = document.getElementById('autoRestartIndicator');
-        if (indicator) {
-            indicator.textContent = 'Auto-restarted: ' + cmdName;
-            indicator.classList.remove('hidden');
-            setTimeout(() => { indicator.classList.add('hidden'); }, 3000);
-        }
-    }).catch(() => {
-        const t = _autoRestartDebounce.get(cmdName);
-        if (t) { clearTimeout(t); _autoRestartDebounce.delete(cmdName); }
-    });
+        const el = document.getElementById('autoRestartIndicator');
+        if (el) { el.textContent = 'Auto-restarted: ' + cmdName; el.classList.remove('hidden'); setTimeout(() => el.classList.add('hidden'), 3000); }
+    }).catch(() => { const t = _autoRestartDebounce.get(cmdName); if (t) { clearTimeout(t); _autoRestartDebounce.delete(cmdName); } });
 }
 
 async function pollResources() {
@@ -243,6 +172,12 @@ async function pollResources() {
     updateSidebarResourceText();
 }
 
+function _formatRuntime(secs) {
+    if (secs < 60) return Math.floor(secs) + 's';
+    if (secs < 3600) return Math.floor(secs / 60) + 'm ' + Math.floor(secs % 60) + 's';
+    return Math.floor(secs / 3600) + 'h ' + Math.floor((secs % 3600) / 60) + 'm';
+}
+
 function updateSidebarResourceText() {
     for (const inst of state.connections) {
         if (!inst._commands) continue;
@@ -251,300 +186,128 @@ function updateSidebarResourceText() {
             const res = state._resourceCache[cmd.id];
             const item = document.querySelector(`.cmd-item[data-cmd-id="${cmd.id}"]`);
             if (!item) continue;
-            const isFrozen = cmd.frozen === true;
-            const runtimeStr = cmd.runtime_secs > 0
-                ? (cmd.runtime_secs < 60 ? Math.floor(cmd.runtime_secs) + 's'
-                   : cmd.runtime_secs < 3600 ? Math.floor(cmd.runtime_secs / 60) + 'm ' + Math.floor(cmd.runtime_secs % 60) + 's'
-                   : Math.floor(cmd.runtime_secs / 3600) + 'h ' + Math.floor((cmd.runtime_secs % 3600) / 60) + 'm')
-                : '';
-            const frozenBadge = isFrozen ? 'PAUSED' : '';
-            const detailParts = [];
-            if (runtimeStr) detailParts.push(runtimeStr);
-            if (frozenBadge) detailParts.push(frozenBadge);
-            if (res && res.cpu_percent != null) detailParts.push(res.cpu_percent.toFixed(1) + '%');
+            const parts = [];
+            if (cmd.runtime_secs > 0) parts.push(_formatRuntime(cmd.runtime_secs));
+            if (cmd.frozen === true) parts.push('PAUSED');
+            if (res && res.cpu_percent != null) parts.push(res.cpu_percent.toFixed(1) + '%');
             if (res && res.memory_mb != null) {
                 const mb = res.memory_mb;
-                detailParts.push(mb >= 1024 ? (mb / 1024).toFixed(1) + 'G' : mb.toFixed(1) + 'M');
+                parts.push(mb >= 1024 ? (mb / 1024).toFixed(1) + 'G' : mb.toFixed(1) + 'M');
             }
-            if (cmd.pid) detailParts.push(String(cmd.pid));
+            if (cmd.pid) parts.push(String(cmd.pid));
             let detailRow = item.querySelector('.cmd-detail-row');
-            if (detailParts.length === 0) {
-                if (detailRow) detailRow.remove();
-            } else {
-                if (!detailRow) {
-                    detailRow = document.createElement('div');
-                    detailRow.className = 'cmd-detail-row';
-                    item.appendChild(detailRow);
-                }
-                detailRow.innerHTML = detailParts.join(' · ');
+            if (!parts.length) { if (detailRow) detailRow.remove(); }
+            else {
+                if (!detailRow) { detailRow = document.createElement('div'); detailRow.className = 'cmd-detail-row'; item.appendChild(detailRow); }
+                detailRow.innerHTML = parts.join(' · ');
             }
         }
     }
 }
 
-function initSoundToggle() {
-    const btn = document.getElementById('soundBtn');
-    if (!btn) return;
-    if (state.soundEnabled) btn.classList.add('sound-btn-active');
-}
+function initSoundToggle() { const b = document.getElementById('soundBtn'); if (b && state.soundEnabled) b.classList.add('sound-btn-active'); }
 
 function toggleSoundNotifications() {
     state.soundEnabled = !state.soundEnabled;
     localStorage.setItem('vrw_sound', state.soundEnabled.toString());
-    const btn = document.getElementById('soundBtn');
-    if (btn) btn.classList.toggle('sound-btn-active', state.soundEnabled);
+    const b = document.getElementById('soundBtn');
+    if (b) b.classList.toggle('sound-btn-active', state.soundEnabled);
 }
 
 function playExitSound(success) {
     try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        if (success) { osc.frequency.value = 880; osc.type = 'sine'; }
-        else { osc.frequency.value = 440; osc.type = 'square'; }
+        const osc = ctx.createOscillator(), gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value = success ? 880 : 440;
+        osc.type = success ? 'sine' : 'square';
         gain.gain.value = 0.1;
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
-        osc.start(ctx.currentTime);
-        osc.stop(ctx.currentTime + 0.5);
+        osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.5);
     } catch (e) { /* ignore */ }
 }
 
-    // UI Controls
-    window._syncRefreshMsUI = _syncRefreshMsUI;
-    window.saveToken = saveToken;
-    window.changeFontSize = changeFontSize;
-    window.applyFontSize = applyFontSize;
-    window.changePanelFontSize = changePanelFontSize;
-    window.changeRefreshMs = changeRefreshMs;
-    window.applyRefreshMs = applyRefreshMs;
-    window.toggleSelectionMode = toggleSelectionMode;
-    // Refresh loop
-    window.startRefresh = startRefresh;
-    // Notifications & Resources
-    window.pollResources = pollResources;
-    window.updateSidebarResourceText = updateSidebarResourceText;
-    window.checkForExitedCommands = checkForExitedCommands;
-    window.notifyCommandEnded = notifyCommandEnded;
-    window.initSoundToggle = initSoundToggle;
-    window.toggleSoundNotifications = toggleSoundNotifications;
-    window.playExitSound = playExitSound;
-    // Peer discovery
-    window.fetchPeers = fetchPeers;
-    window.addDiscoveredPeer = addDiscoveredPeer;
-    window.savePeersToStorage = savePeersToStorage;
-    window.handlePeerEvent = handlePeerEvent;
-    // addConnection and removeConnection are exported by commands.js
-})();
-
-// ─── Peer Instances (registration & failover) ───
+// ─── Peer Instances ───
 async function fetchPeers() {
     try {
         const json = await api.getPeers();
         if (json.status !== 'ok' || !Array.isArray(json.data)) return;
-
         for (const peer of json.data) {
-            if (state.connections.some(i => i.url === peer.url)) continue;
-            addDiscoveredPeer(peer.url, peer.label || peer.url, peer.token || '');
+            if (!state.connections.some(i => i.url === peer.url))
+                addDiscoveredPeer(peer.url, peer.label || peer.url, peer.token || '');
         }
-
         savePeersToStorage();
-
-        if (json.data.length > 0) {
-            loadCommands();
-        }
-    } catch (e) {
-        // Not critical — peers can also be discovered via WS push
-    }
+        if (json.data.length) loadCommands();
+    } catch (e) { /* WS push fallback */ }
 }
 
-function addDiscoveredPeer(url, label, token) {
-    addConnection(url, label, token);
-    console.log('[vrw] Peer discovered:', label, '(' + url + ')');
-}
+function addDiscoveredPeer(url, label, token) { addConnection(url, label, token); console.log('[vrw] Peer discovered:', label, '(' + url + ')'); }
 
 function handlePeerEvent(msg) {
     if (msg.type === 'peer_registered' && msg.data) {
         const { url, label, token } = msg.data;
-        addDiscoveredPeer(url, label, token);
-        savePeersToStorage();
+        addDiscoveredPeer(url, label, token); savePeersToStorage();
     } else if (msg.type === 'peer_unregistered' && msg.data) {
-        const { url } = msg.data;
-        removeConnection(url);
-        loadCommands();
-        savePeersToStorage();
+        removeConnection(msg.data.url); loadCommands(); savePeersToStorage();
     }
 }
 
 function savePeersToStorage() {
     const peers = state.connections.filter(i => i.url !== window.location.origin);
-    if (peers.length > 0) {
-        try {
-            localStorage.setItem('vrw_peers', JSON.stringify(
-                peers.map(p => ({ url: p.url, label: p.label, token: p.token }))
-            ));
-        } catch (e) { /* quota exceeded — not critical */ }
-    } else {
-        localStorage.removeItem('vrw_peers');
-    }
+    if (peers.length) {
+        try { localStorage.setItem('vrw_peers', JSON.stringify(peers.map(p => ({ url: p.url, label: p.label, token: p.token })))); } catch (e) { /* quota */ }
+    } else localStorage.removeItem('vrw_peers');
 }
 
 // ─── Command Templates ───
-// Server-side templates (from vrw config [[templates]]) and user-defined templates
-// (stored in localStorage). Templates provide one-click command spawning.
-let _serverTemplates = []; // cached from /api/templates
-
-function getServerTemplates() {
-    return _serverTemplates;
-}
+let _serverTemplates = [];
+function getServerTemplates() { return _serverTemplates; }
 
 async function fetchServerTemplates() {
-    try {
-        const json = await api.getTemplates();
+    try { const j = await api.getTemplates(); if (j.status === 'ok') _serverTemplates = j.data || []; } catch { /* cached */ }
+}
+
+function getUserTemplates() { try { return JSON.parse(localStorage.getItem('vrw_templates') || '[]'); } catch { return []; } }
+function saveUserTemplates(t) { localStorage.setItem('vrw_templates', JSON.stringify(t)); }
+
+function _spawnFromTemplate(t, extraBody) {
+    const instUrl = (document.getElementById('spawnInstance') || {}).value || window._userSpawnInstUrl || getBaseUrl();
+    const body = Object.assign({ cmd: t.cmd, args: t.args ? t.args.split(/\s+/) : [] }, extraBody);
+    api.spawnCommand(instUrl, body).then(json => {
         if (json.status === 'ok') {
-            _serverTemplates = json.data || [];
-        }
-    } catch { /* ignore — use cached */ }
-}
-
-function getUserTemplates() {
-    try {
-        return JSON.parse(localStorage.getItem('vrw_templates') || '[]');
-    } catch { return []; }
-}
-
-function saveUserTemplates(templates) {
-    localStorage.setItem('vrw_templates', JSON.stringify(templates));
-}
-
-function renderTemplates() {
-    const container = document.getElementById('templateList');
-    if (!container) return;
-
-    const server = getServerTemplates();
-    const user = getUserTemplates();
-    const hasAny = server.length > 0 || user.length > 0;
-
-    if (!hasAny) {
-        container.innerHTML = '<div style="padding:0.5rem;color:var(--text-muted);font-size:0.7rem;text-align:center;">No templates configured. Add templates in your config file under [[templates]].</div>';
-        return;
-    }
-
-    let html = '';
-
-    if (server.length > 0) {
-        html += '<div style="font-size:0.6rem;color:var(--text-muted);padding:0.2rem 0.3rem;text-transform:uppercase;letter-spacing:0.05em;">From config</div>';
-        html += server.map((t, i) => {
-            const detail = [t.cmd, t.args].filter(Boolean).join(' ');
-            const extras = [];
-            if (t.workdir) extras.push('dir: ' + t.workdir);
-            if (t.certificate) extras.push('cert: ' + t.certificate);
-            if (t.rows || t.cols) extras.push((t.rows || '?') + 'x' + (t.cols || '?'));
-            const extraStr = extras.length > 0 ? extras.join(' | ') : '';
-            return `<div class="template-card" data-action="SpawnServerTemplate" data-index="${i}" title="Click to spawn this command">
-                <div style="display:flex;align-items:center;gap:0.3rem;">
-                    <div class="template-name">${escHtml(t.name)}</div>
-                    <span style="font-size:0.5rem;background:var(--accent);color:#fff;padding:0 0.25rem;border-radius:2px;">config</span>
-                </div>
-                <div class="template-cmd">${escHtml(detail)}</div>
-                ${extraStr ? `<div style="font-size:0.6rem;color:var(--text-muted);padding-left:0.2rem;">${escHtml(extraStr)}</div>` : ''}
-            </div>`;
-        }).join('');
-    }
-
-    if (user.length > 0) {
-        html += '<div style="font-size:0.6rem;color:var(--text-muted);padding:0.3rem 0.3rem 0.1rem;text-transform:uppercase;letter-spacing:0.05em;">Custom</div>';
-        html += user.map((t, i) => `
-            <div class="template-card" data-action="SpawnUserTemplate" data-index="${i}" title="Click to spawn this command">
-                <div class="template-name">${escHtml(t.name)}</div>
-                <div class="template-cmd">${escHtml(t.cmd)}${t.args ? ' ' + escHtml(t.args) : ''}</div>
-                <div class="template-actions">
-                    <button class="btn btn-xs btn-danger" data-action="DeleteUserTemplate" data-index="${i}" title="Delete">&#x2715;</button>
-                </div>
-            </div>
-        `).join('');
-    }
-
-    container.innerHTML = html;
+            const newId = json.data && json.data.id ? json.data.id : null;
+            if (newId) { state.selectedInstUrl = instUrl; _cacheTerminalForSwitch(); state._pendingSelectId = newId; }
+            loadCommands();
+            const cmdTab = document.querySelector('.sidebar-tab');
+            if (cmdTab) switchSidebarTab('commands', cmdTab);
+        } else alert('Spawn failed: ' + (json.error || 'unknown'));
+    }).catch(e => alert('Spawn failed: ' + e.message));
 }
 
 function spawnServerTemplate(index) {
     const t = getServerTemplates()[index];
     if (!t) return;
-    const instSelect = document.getElementById('spawnInstance');
-    const instUrl = instSelect ? instSelect.value : (window._userSpawnInstUrl || getBaseUrl());
-    const args = t.args ? t.args.split(/\s+/) : [];
-    const body = { cmd: t.cmd, args };
-    if (t.env && t.env.length > 0) {
+    const extra = {};
+    if (t.env && t.env.length) {
         const envObj = {};
-        for (const entry of t.env) {
-            const eqIdx = entry.indexOf('=');
-            if (eqIdx > 0) envObj[entry.substring(0, eqIdx)] = entry.substring(eqIdx + 1);
-        }
-        body.env = envObj;
+        for (const entry of t.env) { const eq = entry.indexOf('='); if (eq > 0) envObj[entry.substring(0, eq)] = entry.substring(eq + 1); }
+        extra.env = envObj;
     }
-    if (t.workdir) body.workdir = t.workdir;
-    if (t.certificate) body.certificate = t.certificate;
-    if (t.rows) body.rows = t.rows;
-    if (t.cols) body.cols = t.cols;
-    api.spawnCommand(instUrl, body).then(json => {
-        if (json.status === 'ok') {
-            const newId = json.data && json.data.id ? json.data.id : null;
-            if (newId) {
-                state.selectedInstUrl = instUrl;
-                _cacheTerminalForSwitch();
-                state._pendingSelectId = newId;
-            }
-            loadCommands();
-            const cmdTab = document.querySelector('.sidebar-tab');
-            if (cmdTab) switchSidebarTab('commands', cmdTab);
-        } else {
-            alert('Spawn failed: ' + (json.error || 'unknown'));
-        }
-    }).catch(e => alert('Spawn failed: ' + e.message));
+    if (t.workdir) extra.workdir = t.workdir;
+    if (t.certificate) extra.certificate = t.certificate;
+    if (t.rows) extra.rows = t.rows;
+    if (t.cols) extra.cols = t.cols;
+    _spawnFromTemplate(t, extra);
 }
 
-function spawnUserTemplate(index) {
-    const user = getUserTemplates();
-    const t = user[index];
-    if (!t) return;
-    const instSelect = document.getElementById('spawnInstance');
-    const instUrl = instSelect ? instSelect.value : (window._userSpawnInstUrl || getBaseUrl());
-    const args = t.args ? t.args.split(/\s+/) : [];
-    const body = { cmd: t.cmd, args };
-    api.spawnCommand(instUrl, body).then(json => {
-        if (json.status === 'ok') {
-            const newId = json.data && json.data.id ? json.data.id : null;
-            if (newId) {
-                state.selectedInstUrl = instUrl;
-                _cacheTerminalForSwitch();
-                state._pendingSelectId = newId;
-            }
-            loadCommands();
-            const cmdTab = document.querySelector('.sidebar-tab');
-            if (cmdTab) switchSidebarTab('commands', cmdTab);
-        } else {
-            alert('Spawn failed: ' + (json.error || 'unknown'));
-        }
-    }).catch(e => alert('Spawn failed: ' + e.message));
-}
+function spawnUserTemplate(index) { const t = getUserTemplates()[index]; if (t) _spawnFromTemplate(t, {}); }
 
-function deleteUserTemplate(index) {
-    const templates = getUserTemplates();
-    templates.splice(index, 1);
-    saveUserTemplates(templates);
-    renderTemplates();
-}
-
-function showAddTemplateForm() {
-    const form = document.getElementById('templateAddForm');
-    if (form) form.classList.remove('hidden');
-}
+function deleteUserTemplate(index) { const t = getUserTemplates(); t.splice(index, 1); saveUserTemplates(t); renderTemplates(); }
+function showAddTemplateForm() { const f = document.getElementById('templateAddForm'); if (f) f.classList.remove('hidden'); }
 
 function hideAddTemplateForm() {
-    const form = document.getElementById('templateAddForm');
-    if (form) form.classList.add('hidden');
+    const f = document.getElementById('templateAddForm');
+    if (f) f.classList.add('hidden');
     document.getElementById('templateName').value = '';
     document.getElementById('templateCmd').value = '';
     document.getElementById('templateArgs').value = '';
@@ -555,148 +318,107 @@ function saveTemplate() {
     const cmd = document.getElementById('templateCmd').value.trim();
     const args = document.getElementById('templateArgs').value.trim();
     if (!name || !cmd) { alert('Name and command are required'); return; }
-    const templates = getUserTemplates();
-    templates.push({ name, cmd, args });
-    saveUserTemplates(templates);
-    hideAddTemplateForm();
-    renderTemplates();
+    const t = getUserTemplates(); t.push({ name, cmd, args }); saveUserTemplates(t); hideAddTemplateForm(); renderTemplates();
 }
 
-window.fetchServerTemplates = fetchServerTemplates;
-window.getServerTemplates = getServerTemplates;
-window.getUserTemplates = getUserTemplates;
-window.saveUserTemplates = saveUserTemplates;
-window.renderTemplates = renderTemplates;
-window.spawnServerTemplate = spawnServerTemplate;
-window.spawnUserTemplate = spawnUserTemplate;
-window.deleteUserTemplate = deleteUserTemplate;
-window.showAddTemplateForm = showAddTemplateForm;
-window.hideAddTemplateForm = hideAddTemplateForm;
-window.saveTemplate = saveTemplate;
+function renderTemplates() {
+    const container = document.getElementById('templateList');
+    if (!container) return;
+    const server = getServerTemplates(), user = getUserTemplates();
+    if (!server.length && !user.length) {
+        container.innerHTML = '<div style="padding:0.5rem;color:var(--text-muted);font-size:0.7rem;text-align:center;">No templates configured. Add templates in your config file under [[templates]].</div>';
+        return;
+    }
+    let html = '';
+    if (server.length) {
+        html += '<div style="font-size:0.6rem;color:var(--text-muted);padding:0.2rem 0.3rem;text-transform:uppercase;letter-spacing:0.05em;">From config</div>';
+        html += server.map((t, i) => {
+            const extras = [];
+            if (t.workdir) extras.push('dir: ' + t.workdir);
+            if (t.certificate) extras.push('cert: ' + t.certificate);
+            if (t.rows || t.cols) extras.push((t.rows || '?') + 'x' + (t.cols || '?'));
+            return `<div class="template-card" data-action="SpawnServerTemplate" data-index="${i}" title="Click to spawn"><div style="display:flex;align-items:center;gap:0.3rem;"><div class="template-name">${escHtml(t.name)}</div><span style="font-size:0.5rem;background:var(--accent);color:#fff;padding:0 0.25rem;border-radius:2px;">config</span></div><div class="template-cmd">${escHtml([t.cmd, t.args].filter(Boolean).join(' '))}</div>${extras.length ? `<div style="font-size:0.6rem;color:var(--text-muted);padding-left:0.2rem;">${escHtml(extras.join(' | '))}</div>` : ''}</div>`;
+        }).join('');
+    }
+    if (user.length) {
+        html += '<div style="font-size:0.6rem;color:var(--text-muted);padding:0.3rem 0.3rem 0.1rem;text-transform:uppercase;letter-spacing:0.05em;">Custom</div>';
+        html += user.map((t, i) => `<div class="template-card" data-action="SpawnUserTemplate" data-index="${i}" title="Click to spawn"><div class="template-name">${escHtml(t.name)}</div><div class="template-cmd">${escHtml(t.cmd)}${t.args ? ' ' + escHtml(t.args) : ''}</div><div class="template-actions"><button class="btn btn-xs btn-danger" data-action="DeleteUserTemplate" data-index="${i}" title="Delete">&#x2715;</button></div></div>`).join('');
+    }
+    container.innerHTML = html;
+}
 
 // ─── Log Viewer ───
-// Log WebSocket connection, HTTP log loading, log line parsing, search.
-
 function _updateLogTransportIndicator(mode) {
     const el = document.getElementById('logTransportIndicator');
-    if (!el) return;
-    el.textContent = mode.toUpperCase();
-    el.dataset.mode = mode;
+    if (el) { el.textContent = mode.toUpperCase(); el.dataset.mode = mode; }
+}
+
+function _cleanupLogWs(ws) {
+    _updateLogTransportIndicator('http');
+    clearInterval(state._logWsPingTimer); state._logWsPingTimer = null;
+    if (state.logWs === ws) state.logWs = null;
+    _scheduleLogWsReconnect();
 }
 
 function connectLogWs() {
     if (state.logWs && state.logWs.readyState === WebSocket.OPEN) return;
     disconnectLogWs();
-
     const wsUrl = getBaseUrl().replace(/^http/, 'ws');
     const token = state.authToken || (state.connections[0] || {}).token || '';
-    const sep = token ? '?' : '';
-    const url = `${wsUrl}/api/ws/logs${sep}${token ? 'token=' + encodeURIComponent(token) : ''}`;
-
+    const url = `${wsUrl}/api/ws/logs${token ? '?token=' + encodeURIComponent(token) : ''}`;
     try {
         const ws = new WebSocket(url);
         state.logWs = ws;
-
         ws.onopen = () => {
             state._logWsReconnectAttempts = 0;
             _updateLogTransportIndicator('ws');
-            const container = document.getElementById('logContent');
-            if (container && container.querySelector('.log-line')) {
-                const indicator = document.createElement('div');
-                indicator.className = 'log-line log-ws-indicator';
-                indicator.innerHTML = '<span class="timestamp">[' + new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '') + ']</span> <span class="details" style="color:var(--green);">Connected to log stream</span>';
-                container.appendChild(indicator);
-                _autoScrollLog(container);
+            const c = document.getElementById('logContent');
+            if (c && c.querySelector('.log-line')) {
+                const d = document.createElement('div');
+                d.className = 'log-line log-ws-indicator';
+                d.innerHTML = '<span class="timestamp">[' + new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '') + ']</span> <span class="details" style="color:var(--green);">Connected to log stream</span>';
+                c.appendChild(d); _autoScrollLog(c);
             }
             clearInterval(state._logWsPingTimer);
-            state._logWsPingTimer = setInterval(() => {
-                if (state.logWs && state.logWs.readyState === WebSocket.OPEN) {
-                    state.logWs.send(JSON.stringify({ type: 'ping' }));
-                }
-            }, 30000);
+            state._logWsPingTimer = setInterval(() => { if (state.logWs && state.logWs.readyState === WebSocket.OPEN) state.logWs.send(JSON.stringify({ type: 'ping' })); }, 30000);
         };
-
         ws.onmessage = (event) => {
             try {
                 const msg = JSON.parse(event.data);
                 if (msg.type === 'log_entry' && msg.data) {
-                    const container = document.getElementById('logContent');
-                    if (!container) return;
-                    const placeholder = container.querySelector('[style*="text-align:center"]');
-                    if (placeholder && !placeholder.classList.contains('log-line')) {
-                        placeholder.remove();
-                    }
-                    const parsed = parseLogLine(msg.data);
+                    const c = document.getElementById('logContent');
+                    if (!c) return;
+                    const ph = c.querySelector('[style*="text-align:center"]');
+                    if (ph && !ph.classList.contains('log-line')) ph.remove();
                     const div = document.createElement('div');
                     div.className = 'log-line';
-                    div.innerHTML = formatLogLine(parsed, msg.data);
-                    container.appendChild(div);
-                    _autoScrollLog(container);
+                    div.innerHTML = formatLogLine(parseLogLine(msg.data), msg.data);
+                    c.appendChild(div); _autoScrollLog(c);
                     const countEl = document.getElementById('logCount');
-                    if (countEl) {
-                        const current = container.querySelectorAll('.log-line').length;
-                        countEl.textContent = `${current} lines (streaming)`;
-                    }
+                    if (countEl) countEl.textContent = `${c.querySelectorAll('.log-line').length} lines (streaming)`;
                 }
-            } catch (e) {
-                console.error('Log WS message parse error:', e);
-            }
+            } catch (e) { console.error('Log WS parse error:', e); }
         };
-
-        ws.onclose = () => {
-            _updateLogTransportIndicator('http');
-            clearInterval(state._logWsPingTimer);
-            state._logWsPingTimer = null;
-            if (state.logWs === ws) state.logWs = null;
-            _scheduleLogWsReconnect();
-        };
-
-        ws.onerror = () => {
-            _updateLogTransportIndicator('http');
-            clearInterval(state._logWsPingTimer);
-            state._logWsPingTimer = null;
-            if (state.logWs === ws) state.logWs = null;
-            _scheduleLogWsReconnect();
-        };
-    } catch (e) {
-        console.error('Log WebSocket connect failed:', e);
-        _updateLogTransportIndicator('http');
-        _scheduleLogWsReconnect();
-    }
+        ws.onclose = () => _cleanupLogWs(ws);
+        ws.onerror = () => _cleanupLogWs(ws);
+    } catch (e) { console.error('Log WS connect failed:', e); _updateLogTransportIndicator('http'); _scheduleLogWsReconnect(); }
 }
 
 function _scheduleLogWsReconnect() {
-    if (state.logWsReconnectTimer) return;
-    if (state.currentView !== 'log') return;
+    if (state.logWsReconnectTimer || state.currentView !== 'log') return;
     const delay = Math.min(1000 * Math.pow(2, state._logWsReconnectAttempts), 30000);
     state._logWsReconnectAttempts++;
-    state.logWsReconnectTimer = setTimeout(() => {
-        state.logWsReconnectTimer = null;
-        if (state.currentView === 'log') connectLogWs();
-    }, delay);
+    state.logWsReconnectTimer = setTimeout(() => { state.logWsReconnectTimer = null; if (state.currentView === 'log') connectLogWs(); }, delay);
 }
 
 function disconnectLogWs() {
-    if (state.logWsReconnectTimer) {
-        clearTimeout(state.logWsReconnectTimer);
-        state.logWsReconnectTimer = null;
-    }
-    clearInterval(state._logWsPingTimer);
-    state._logWsPingTimer = null;
-    if (state.logWs) {
-        state.logWs.onclose = null;
-        state.logWs.onerror = null;
-        state.logWs.close();
-        state.logWs = null;
-    }
+    if (state.logWsReconnectTimer) { clearTimeout(state.logWsReconnectTimer); state.logWsReconnectTimer = null; }
+    clearInterval(state._logWsPingTimer); state._logWsPingTimer = null;
+    if (state.logWs) { state.logWs.onclose = null; state.logWs.onerror = null; state.logWs.close(); state.logWs = null; }
     _updateLogTransportIndicator('http');
 }
 
-function _autoScrollLog(container) {
-    if (container.scrollHeight - container.scrollTop - container.clientHeight < 50) {
-        container.scrollTop = container.scrollHeight;
-    }
-}
+function _autoScrollLog(c) { if (c.scrollHeight - c.scrollTop - c.clientHeight < 50) c.scrollTop = c.scrollHeight; }
 
 async function loadLog() {
     _updateLogTransportIndicator('http');
@@ -707,20 +429,17 @@ async function loadLog() {
         params.set('limit', '500');
         const json = await api.getLog(undefined, Object.fromEntries(params));
         if (json.status === 'ok' && json.data) {
-            const container = document.getElementById('logContent');
+            const c = document.getElementById('logContent');
             const lines = json.data.lines || [];
             document.getElementById('logCount').textContent = `${json.data.filtered_lines}/${json.data.total_lines} lines`;
-            if (lines.length === 0) {
-                container.innerHTML = '<div style="padding:1rem;color:var(--text-muted);text-align:center;">No log entries found.' + (json.data.message ? ' ' + json.data.message : '') + '</div>';
+            if (!lines.length) {
+                c.innerHTML = '<div style="padding:1rem;color:var(--text-muted);text-align:center;">No log entries found.' + (json.data.message ? ' ' + json.data.message : '') + '</div>';
             } else {
-                container.innerHTML = lines.map(line => {
-                    const parsed = parseLogLine(line);
-                    if (search && line.toLowerCase().includes(search.toLowerCase())) {
-                        return `<div class="log-line highlight">${formatLogLine(parsed, line)}</div>`;
-                    }
-                    return `<div class="log-line">${formatLogLine(parsed, line)}</div>`;
+                c.innerHTML = lines.map(line => {
+                    const cls = search && line.toLowerCase().includes(search.toLowerCase()) ? ' highlight' : '';
+                    return `<div class="log-line${cls}">${formatLogLine(parseLogLine(line), line)}</div>`;
                 }).join('');
-                container.scrollTop = container.scrollHeight;
+                c.scrollTop = c.scrollHeight;
             }
             if (!search) connectLogWs();
         }
@@ -730,40 +449,32 @@ async function loadLog() {
 }
 
 function parseLogLine(line) {
-    const match = line.match(/^\[([^\]]+)\]\s+(\w+):\s+(.*)$/);
-    if (match) {
-        return { timestamp: match[1], command: match[2], details: match[3], raw: line };
-    }
-    return { timestamp: '', command: '', details: line, raw: line };
+    const m = line.match(/^\[([^\]]+)\]\s+(\w+):\s+(.*)$/);
+    return m ? { timestamp: m[1], command: m[2], details: m[3], raw: line } : { timestamp: '', command: '', details: line, raw: line };
 }
 
-function formatLogLine(parsed, raw) {
-    if (parsed.timestamp) {
-        return `<span class="timestamp">[${escHtml(parsed.timestamp)}]</span> <span class="cmd-type">${escHtml(parsed.command)}</span> <span class="details">${escHtml(parsed.details)}</span>`;
-    }
-    return escHtml(raw);
+function formatLogLine(p, raw) {
+    return p.timestamp ? `<span class="timestamp">[${escHtml(p.timestamp)}]</span> <span class="cmd-type">${escHtml(p.command)}</span> <span class="details">${escHtml(p.details)}</span>` : escHtml(raw);
 }
 
-function searchLogs() {
-    disconnectLogWs();
-    state._logWsReconnectAttempts = 0;
-    loadLog();
-}
+function searchLogs() { disconnectLogWs(); state._logWsReconnectAttempts = 0; loadLog(); }
 
 function clearLogSearch() {
     document.getElementById('logSearch').value = '';
     loadLog();
     clearTimeout(state._logSearchReconnectTimer);
-    state._logSearchReconnectTimer = setTimeout(() => {
-        state._logSearchReconnectTimer = null;
-        if (state.currentView === 'log') connectLogWs();
-    }, 500);
+    state._logSearchReconnectTimer = setTimeout(() => { state._logSearchReconnectTimer = null; if (state.currentView === 'log') connectLogWs(); }, 500);
 }
 
-window.connectLogWs = connectLogWs;
-window.disconnectLogWs = disconnectLogWs;
-window.loadLog = loadLog;
-window.searchLogs = searchLogs;
-window.clearLogSearch = clearLogSearch;
-window._updateLogTransportIndicator = _updateLogTransportIndicator;
-window._scheduleLogWsReconnect = _scheduleLogWsReconnect;
+Object.assign(window, {
+    _syncRefreshMsUI, saveToken, changeFontSize, applyFontSize, changePanelFontSize,
+    changeRefreshMs, applyRefreshMs, toggleSelectionMode, startRefresh,
+    pollResources, updateSidebarResourceText, checkForExitedCommands,
+    notifyCommandEnded, initSoundToggle, toggleSoundNotifications, playExitSound,
+    fetchPeers, addDiscoveredPeer, savePeersToStorage, handlePeerEvent,
+    fetchServerTemplates, getServerTemplates, getUserTemplates, saveUserTemplates,
+    renderTemplates, spawnServerTemplate, spawnUserTemplate, deleteUserTemplate,
+    showAddTemplateForm, hideAddTemplateForm, saveTemplate,
+    connectLogWs, disconnectLogWs, loadLog, searchLogs, clearLogSearch,
+    _updateLogTransportIndicator, _scheduleLogWsReconnect,
+});

@@ -15,12 +15,10 @@ function vttySearch(panelId) {
     vttySearchState.panelId = panelId;
     vttySearchState.matchIndex = 0;
 
-    // Get the text content of the terminal
     const panel = document.getElementById(panelId);
     const pre = panel ? panel.querySelector('pre') : null;
     if (!pre) { countEl.textContent = '0/0'; return; }
 
-    // Remove previous highlights
     vttyRemoveHighlights(pre);
 
     if (!query) {
@@ -29,7 +27,6 @@ function vttySearch(panelId) {
         return;
     }
 
-    // Find all text nodes and mark matches
     const text = pre.textContent || '';
     const lowerText = text.toLowerCase();
     const lowerQuery = query.toLowerCase();
@@ -53,46 +50,20 @@ function vttySearch(panelId) {
 }
 
 function vttyApplyHighlights(pre, text, query) {
-    // Walk through text and highlight matches
-    const lowerText = text.toLowerCase();
-    const lowerQuery = query.toLowerCase();
-    const fragment = document.createDocumentFragment();
-    let lastIdx = 0;
-    let matchIdx = 0;
-    let pos = 0;
-
-    // We need to rebuild using the pre's innerHTML which has spans for ANSI
-    // Instead, work at the text level using a tree walker on text nodes
-    const walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT, null);
-    const textNodes = [];
-    while (walker.nextNode()) textNodes.push(walker.currentNode);
-
-    if (textNodes.length === 0) return;
-
-    // Simple approach: highlight by rebuilding innerHTML with mark spans
-    // Get the full innerHTML and do string replacement on text portions
     let html = pre.innerHTML;
     const escaped = escHtml(query);
-    // Use a regex that matches the query text (case insensitive) but only
-    // within text content, not inside HTML tags
     const regex = new RegExp('(?![^<]*>)(' + escaped.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
     const results = [];
     let match;
-    while ((match = regex.exec(html)) !== null) {
-        results.push(match.index);
-    }
+    while ((match = regex.exec(html)) !== null) results.push(match.index);
 
-    // Apply highlights in reverse order to preserve indices
     for (let i = results.length - 1; i >= 0; i--) {
         const idx = results[i];
-        const originalLen = query.length;
-        // Find the end of the match in the HTML
         const endIdx = html.indexOf(match[1], idx) + match[1].length;
         if (endIdx <= idx) continue;
         const cls = i === 0 ? 'vtty-search-highlight current' : 'vtty-search-highlight';
         html = html.substring(0, idx) + '<mark class="' + cls + '" data-match-idx="' + i + '">' + html.substring(idx, endIdx) + '</mark>' + html.substring(endIdx);
     }
-
     pre.innerHTML = html;
 }
 
@@ -108,40 +79,31 @@ function vttyRemoveHighlights(pre) {
 function vttyScrollToMatch(panelId, idx) {
     const panel = document.getElementById(panelId);
     if (!panel) return;
-    const mark = panel.querySelector('mark.vtty-search-highlight.current');
-    if (mark) mark.classList.remove('current');
     const marks = panel.querySelectorAll('mark.vtty-search-highlight');
+    const cur = panel.querySelector('mark.vtty-search-highlight.current');
+    if (cur) cur.classList.remove('current');
     if (marks[idx]) {
         marks[idx].classList.add('current');
         marks[idx].scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
 }
 
-function vttySearchNext(panelId) {
+function _vttySearchStep(panelId, direction) {
     if (vttySearchState.matches.length === 0) return;
-    vttySearchState.matchIndex = (vttySearchState.matchIndex + 1) % vttySearchState.matches.length;
+    const total = vttySearchState.matches.length;
+    vttySearchState.matchIndex = (vttySearchState.matchIndex + direction + total) % total;
     vttyScrollToMatch(panelId, vttySearchState.matchIndex);
     const countEl = document.getElementById('searchCount-' + panelId);
-    if (countEl) countEl.textContent = (vttySearchState.matchIndex + 1) + '/' + vttySearchState.matches.length;
-    _updateSearchProgress(panelId, vttySearchState.matchIndex, vttySearchState.matches.length);
+    if (countEl) countEl.textContent = (vttySearchState.matchIndex + 1) + '/' + total;
+    _updateSearchProgress(panelId, vttySearchState.matchIndex, total);
 }
 
-function vttySearchPrev(panelId) {
-    if (vttySearchState.matches.length === 0) return;
-    vttySearchState.matchIndex = (vttySearchState.matchIndex - 1 + vttySearchState.matches.length) % vttySearchState.matches.length;
-    vttyScrollToMatch(panelId, vttySearchState.matchIndex);
-    const countEl = document.getElementById('searchCount-' + panelId);
-    if (countEl) countEl.textContent = (vttySearchState.matchIndex + 1) + '/' + vttySearchState.matches.length;
-    _updateSearchProgress(panelId, vttySearchState.matchIndex, vttySearchState.matches.length);
-}
+function vttySearchNext(panelId) { _vttySearchStep(panelId, 1); }
+function vttySearchPrev(panelId) { _vttySearchStep(panelId, -1); }
 
 function _updateSearchProgress(panelId, currentIdx, totalMatches) {
     const bar = document.getElementById('searchProgress-' + panelId);
-    if (!bar) return;
-    if (totalMatches <= 1) {
-        bar.classList.add('hidden');
-        return;
-    }
+    if (!bar || totalMatches <= 1) { if (bar) bar.classList.add('hidden'); return; }
     bar.classList.remove('hidden');
     const pct = ((currentIdx + 1) / totalMatches) * 100;
     bar.style.background = `linear-gradient(to right, var(--accent) ${pct}%, var(--border) ${pct}%)`;
@@ -149,39 +111,30 @@ function _updateSearchProgress(panelId, currentIdx, totalMatches) {
 
 function vttySearchClose(panelId) {
     releaseCurrentFocusTrap();
+    const panel = document.getElementById(panelId);
     const searchBar = document.getElementById('searchBar-' + panelId);
     if (searchBar) searchBar.classList.remove('visible');
-    const panel = document.getElementById(panelId);
-    const pre = panel ? panel.querySelector('pre') : null;
+    const pre = panel?.querySelector('pre');
     if (pre) vttyRemoveHighlights(pre);
     vttySearchState.matches = [];
     vttySearchState.matchIndex = 0;
     const countEl = document.getElementById('searchCount-' + panelId);
     if (countEl) countEl.textContent = '';
-    // Return focus to the VTTY container
-    if (panel) {
-        const vtty = panel.querySelector('.vtty-container');
-        if (vtty) vtty.focus();
-    }
+    const vtty = panel?.querySelector('.vtty-container');
+    if (vtty) vtty.focus();
 }
-
 
 // ─── Scroll to Bottom ───
 function scrollTerminalBottom(panelId) {
-    // Check if this is a secondary pane of a split panel
     const isSecondary = panelId.endsWith('-secondary');
     if (isSecondary) {
         const primaryPanelId = panelId.slice(0, -'-secondary'.length);
         const vtty = document.getElementById('vtty-' + panelId);
-        if (vtty) {
-            vtty.scrollTop = vtty.scrollHeight;
-        }
+        if (vtty) vtty.scrollTop = vtty.scrollHeight;
         const panelObj = state.panels.find(p => p.id === primaryPanelId);
         if (panelObj && panelObj.split && panelObj.split.secondaryScrollbackOffset > 0) {
             panelObj.split.secondaryScrollbackOffset = 0;
-            if (panelObj.split.secondaryCmdId) {
-                _loadSecondaryVttyHttp(panelObj);
-            }
+            if (panelObj.split.secondaryCmdId) _loadSecondaryVttyHttp(panelObj);
         }
         return;
     }
@@ -189,17 +142,11 @@ function scrollTerminalBottom(panelId) {
     const panelEl = document.getElementById(panelId);
     if (!panelEl) return;
     const vtty = panelEl.querySelector('.vtty-container');
-    if (vtty) {
-        vtty.scrollTop = vtty.scrollHeight;
-    }
-    // Reset scrollback offset and re-fetch
+    if (vtty) vtty.scrollTop = vtty.scrollHeight;
     const panelObj = state.panels.find(p => p.id === panelId);
     if (panelObj && panelObj.scrollbackOffset > 0) {
         panelObj.scrollbackOffset = 0;
-        // Clear stored scrollback since we reset
-        if (state.selectedCmdId) {
-            sessionStorage.removeItem('vrw_scrollback_' + state.selectedCmdId);
-        }
+        if (state.selectedCmdId) sessionStorage.removeItem('vrw_scrollback_' + state.selectedCmdId);
         const sbIndicator = document.getElementById('scrollbackIndicator');
         if (sbIndicator) sbIndicator.classList.add('hidden');
         if (state.selectedCmdId && panelObj.selectedInstUrl) {
@@ -208,13 +155,7 @@ function scrollTerminalBottom(panelId) {
     }
 }
 
-
 // ─── Global Search ───
-// When the search overlay opens, all panel VTTY updates are paused so text
-// doesn't shift under the user's eyes. Optionally, the commands themselves
-// can be frozen (SIGSTOP). On cancel, everything resumes. On result click,
-// the selected panel stays frozen so the matched text remains stable.
-
 function _freezeAllPanelsForSearch() {
     _searchFrozenPanelIds.clear();
     _searchFrozenCmdIds = [];
@@ -234,11 +175,8 @@ async function _thawAllPanelsFromSearch() {
         }
     }
     _searchFrozenPanelIds.clear();
-    // Thaw any commands that were frozen during search
     for (const entry of _searchFrozenCmdIds) {
-        try {
-            await api.thaw(entry.instUrl, entry.cmdId);
-        } catch (e) { /* ignore */ }
+        try { await api.thaw(entry.instUrl, entry.cmdId); } catch (e) {}
     }
     _searchFrozenCmdIds = [];
 }
@@ -254,7 +192,6 @@ function renderCmdManagerList() {
     const sortBy = document.getElementById('cmdManagerSort').value;
     const footer = document.getElementById('cmdManagerFooter');
 
-    // Collect all commands across all instances
     let cmds = [];
     for (const inst of state.connections) {
         if (!inst._commands) continue;
@@ -264,7 +201,6 @@ function renderCmdManagerList() {
         }
     }
 
-    // Filter
     if (filter) {
         cmds = cmds.filter(c => {
             const name = (c.name || c.id).toLowerCase();
@@ -273,20 +209,17 @@ function renderCmdManagerList() {
         });
     }
 
-    // Sort
     if (sortBy === 'name') cmds.sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
     else if (sortBy === 'runtime') cmds.sort((a, b) => (b.runtime_secs || 0) - (a.runtime_secs || 0));
     else if (sortBy === 'cpu') cmds.sort((a, b) => b.cpu - a.cpu);
     else if (sortBy === 'mem') cmds.sort((a, b) => b.mem - a.mem);
 
-    // Stats
     const alive = cmds.filter(c => c.alive !== false).length;
     const total = cmds.length;
     const totalCpu = cmds.reduce((s, c) => s + c.cpu, 0);
     const totalMem = cmds.reduce((s, c) => s + c.mem, 0);
     footer.textContent = total + ' commands (' + alive + ' running) | CPU: ' + totalCpu.toFixed(1) + '% | Mem: ' + totalMem.toFixed(1) + 'MB';
 
-    // Render rows
     if (cmds.length === 0) {
         container.innerHTML = '<div class="cmd-manager-empty">No commands found</div>';
         return;
@@ -300,7 +233,6 @@ function renderCmdManagerList() {
         const runtime = cmd.runtime_secs != null ? formatRuntime(cmd.runtime_secs) : '-';
         const statusClass = isAlive ? 'cm-running' : 'cm-exited';
         const statusText = isAlive ? (cmd.frozen ? 'frozen' : 'running') : ('exit ' + (cmd.exit_code != null ? cmd.exit_code : '?'));
-        const exitCode = cmd.exit_code;
         const kept = cmd.exit && cmd.exit.retain_on_exit;
         const pinned = getPinnedNames().includes(name);
         const serverLabel = cmd.instUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
@@ -350,15 +282,13 @@ function openGlobalSearch() {
 }
 
 function closeGlobalSearch() {
-    const modal = document.getElementById('globalSearchModal');
-    modal.classList.add('hidden');
+    document.getElementById('globalSearchModal').classList.add('hidden');
     _thawAllPanelsFromSearch();
 }
 
 async function _toggleSearchFreezeCommands() {
     const freeze = document.getElementById('searchFreezeToggle').checked;
     if (freeze) {
-        // Freeze all running commands across all servers
         for (const inst of state.connections) {
             if (!inst._commands) continue;
             for (const cmd of inst._commands) {
@@ -366,16 +296,13 @@ async function _toggleSearchFreezeCommands() {
                 try {
                     await api.freeze(inst.url, cmd.id);
                     _searchFrozenCmdIds.push({ instUrl: inst.url, cmdId: cmd.id, wasFrozen: false });
-                } catch (e) { /* skip */ }
+                } catch (e) {}
             }
         }
     } else {
-        // Thaw all commands we froze
         for (const entry of _searchFrozenCmdIds) {
             if (!entry.wasFrozen) {
-                try {
-                    await api.thaw(entry.instUrl, entry.cmdId);
-                } catch (e) { /* ignore */ }
+                try { await api.thaw(entry.instUrl, entry.cmdId); } catch (e) {}
             }
         }
         _searchFrozenCmdIds = [];
@@ -383,43 +310,30 @@ async function _toggleSearchFreezeCommands() {
 }
 
 function onSearchResultClick(instUrl, cmdId, cmdName) {
-    const modal = document.getElementById('globalSearchModal');
-    modal.classList.add('hidden');
-
-    // Select the command in the focused panel
+    document.getElementById('globalSearchModal').classList.add('hidden');
     const activePanelId = getActivePanelId();
     selectCommand(instUrl, cmdId, cmdName);
 
     // Thaw all OTHER panels and commands, but keep the selected panel frozen
-    const keepFrozenId = activePanelId;
     for (const panelId of _searchFrozenPanelIds) {
-        if (panelId !== keepFrozenId) {
+        if (panelId !== activePanelId) {
             const panelObj = state.panels.find(p => p.id === panelId);
             if (panelObj && panelObj.selectedInstUrl && panelObj.selectedCmdId) {
                 startPanelUpdateMode(panelId);
             }
         }
     }
-    // Thaw all frozen commands
     for (const entry of _searchFrozenCmdIds) {
-        if (!entry.wasFrozen) {
-            api.thaw(entry.instUrl, entry.cmdId).catch(() => {});
-        }
+        if (!entry.wasFrozen) api.thaw(entry.instUrl, entry.cmdId).catch(() => {});
     }
     _searchFrozenCmdIds = [];
     _searchFrozenPanelIds.clear();
+    if (activePanelId) _searchFrozenPanelIds.add(activePanelId);
 
-    // Keep only the active panel frozen
-    if (keepFrozenId) {
-        _searchFrozenPanelIds.add(keepFrozenId);
-    }
-
-    // Show a frozen indicator on the panel so the user knows updates are paused
     updateFrozenIndicator();
 }
 
 function updateFrozenIndicator() {
-    // Remove any existing frozen indicators
     document.querySelectorAll('.search-frozen-indicator').forEach(el => el.remove());
     for (const panelId of _searchFrozenPanelIds) {
         const panelEl = document.getElementById(panelId);
@@ -463,7 +377,7 @@ async function executeGlobalSearch() {
                 if (matchingLines.length > 0) {
                     allResults.push({ cmdName, cmdId: cmd.id, instUrl: inst.url, lines: matchingLines.slice(0, 50) });
                 }
-            } catch (e) { /* skip */ }
+            } catch (e) {}
         }
     }
     if (allResults.length === 0) {
@@ -480,25 +394,16 @@ async function executeGlobalSearch() {
     `).join('');
 }
 
-    // Expose to global scope
-    window.vttySearch = vttySearch;
-    window.vttyApplyHighlights = vttyApplyHighlights;
-    window.vttyRemoveHighlights = vttyRemoveHighlights;
-    window.vttySearchClose = vttySearchClose;
-    window.vttySearchNext = vttySearchNext;
-    window.vttySearchPrev = vttySearchPrev;
-    window.scrollTerminalBottom = scrollTerminalBottom;
-    window.openGlobalSearch = openGlobalSearch;
-    window.closeGlobalSearch = closeGlobalSearch;
-    window.executeGlobalSearch = executeGlobalSearch;
-    window.onSearchResultClick = onSearchResultClick;
-    window._selectAndViewCmd = function(instUrl, cmdId, cmdName) {
+Object.assign(window, {
+    vttySearch, vttyApplyHighlights, vttyRemoveHighlights,
+    vttySearchClose, vttySearchNext, vttySearchPrev,
+    scrollTerminalBottom, openGlobalSearch, closeGlobalSearch,
+    executeGlobalSearch, onSearchResultClick,
+    updateFrozenIndicator, _toggleSearchFreezeCommands,
+    closeCmdManager, renderCmdManagerList, cmdManagerKillAll,
+    _selectAndViewCmd(instUrl, cmdId, cmdName) {
         selectCommand(instUrl, cmdId, cmdName);
         closeCmdManager();
-    };
-    window.updateFrozenIndicator = updateFrozenIndicator;
-    window._toggleSearchFreezeCommands = _toggleSearchFreezeCommands;
-    window.closeCmdManager = closeCmdManager;
-    window.renderCmdManagerList = renderCmdManagerList;
-    window.cmdManagerKillAll = cmdManagerKillAll;
+    },
+});
 })();
