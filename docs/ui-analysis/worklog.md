@@ -277,3 +277,42 @@ Key discovery: api.js (loaded via (0, eval) in setup.js) captures the fetch func
 - **Target: ~5,200 lines, ~14 modules**
 - **Remaining: ~903 lines to cut**
 - Modules: state(100), utils(272), api(282), commands-core(289), server-connections(328), keyboard(339), delegate(376), search(409), spawn(409), vtty(457), websocket(472), misc(479), sidebar(614), panels(1277)
+
+## Session 6: Cleanup + websocket.js simplification
+
+### Branch cleanup: remove dead files from bad merge
+- Previous session's merge (31ba57a) re-added 13 deleted module files and left unresolved
+  merge conflict markers in 3 files. Reset to eb6278a (clean 1463-test state).
+- Deleted 13 dead module files not referenced by index.html or setup.js:
+  command-selection.js, command-ui.js, commands.js, dragdrop.js, eventbus.js,
+  focus.js, logs.js, notifications.js, onboarding.js, snapshot.js, templates.js,
+  theme.js, workspaces.js
+- Deleted 10 orphaned test files for those modules
+- Deleted app.js.backup (junk from merge)
+- Back to 14 modules, 6103 lines, 1224 tests (10 orphaned test files removed)
+- Commit: (part of 05c017f)
+
+### Simplify websocket.js: shared _setupWs, move VTTY display to vtty.js
+- Extracted `_setupWs(obj, prefix, instUrl, cmdId, opts)` — unified WS lifecycle helper
+  that replaces the duplicate ~95-line setup blocks in connectPanelWs and _connectSecondaryWs
+- _setupWs handles: WebSocket creation, ping/pong, message dispatch via callbacks,
+  reconnect with backoff, cleanup, connection status DOM updates
+- connectPanelWs and _connectSecondaryWs now both call _setupWs with different opts
+- Moved secondary VTTY display/render functions from websocket.js to vtty.js:
+  - `_applyScrollHtml` (scroll-aware innerHTML replacement)
+  - `scheduleSecondaryVttyHttp`, `_loadSecondaryVttyHttp`
+  - `updateSecondaryVttyDisplay`, `_updateSecondaryVttyMetadata`, `applySecondaryVttyDiff`
+- Renamed: `_updateSecondaryVttyDisplay` → `updateSecondaryVttyDisplay` (public)
+- Renamed: `_applySecondaryVttyDiff` → `applySecondaryVttyDiff` (public)
+- websocket.js: 472→323 (−149, −31%)
+- vtty.js: 457→557 (+100, secondary display code)
+- Total: 6103→6054 (−49 lines, net)
+- Tests: 1226 passed, 0 failed (+2 new tests in test_vtty.js)
+- Commit: 05c017f, pushed to origin
+
+### Updated running totals
+- **Start: ~10,700 lines, 24 modules**
+- **Current: 6,054 lines, 14 modules** (−4,646 lines, −10 modules)
+- **Target: ~5,200 lines, ~14 modules**
+- **Remaining: ~854 lines to cut**
+- Modules: state(100), utils(272), api(282), commands-core(289), websocket(323), server-connections(328), keyboard(339), delegate(376), search(409), spawn(409), misc(479), vtty(557), sidebar(614), panels(1277)
