@@ -274,7 +274,6 @@ async function activateEnvironment(name) {
     }
 
     // Re-render panels
-    _lastRenderedPanelCount = -1; // force rebuild
     renderPanels();
 
     // Reload commands list to show spawned commands in sidebar
@@ -578,7 +577,6 @@ function loadWorkspace(name) {
     }
 
     // Force panel re-render
-    _lastRenderedPanelCount = -1;
     renderPanels();
 
     // Focus the first panel

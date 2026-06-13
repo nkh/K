@@ -1,6 +1,4 @@
 // ─── State ───
-// Fingerprint of last command list state to avoid redundant DOM updates
-let _lastCommandState = '';
 // Flat list of visible commands for prev/next navigation.
 // Each entry: { instUrl, cmdId, name }
 let _navCommands = [];
@@ -15,12 +13,7 @@ let _sidebarSort = 'name';
 let _searchFrozenPanelIds = new Set();
 let _searchFrozenCmdIds = []; // { instUrl, cmdId, wasFrozen }
 
-// Track panel count to avoid unnecessary DOM rebuilds.
-let _lastRenderedPanelCount = -1;
-let _lastRenderedPanelIds = '';
-let _lastSplitState = '';
-// Track welcome-panel state to force rebuild on welcome ↔ panel transitions.
-let _lastShowingWelcome = true;
+
 
 const state = {
     panels: [],
@@ -109,13 +102,8 @@ const state = {
 // Expose module-level vars to VRW namespace for cross-module access
 window.VRW = window.VRW || {};
 VRW.state = state;
-VRW._lastCommandState = _lastCommandState;
 VRW._navCommands = _navCommands;
 VRW._showingWelcome = _showingWelcome;
 VRW._sidebarSort = _sidebarSort;
 VRW._searchFrozenPanelIds = _searchFrozenPanelIds;
 VRW._searchFrozenCmdIds = _searchFrozenCmdIds;
-VRW._lastRenderedPanelCount = _lastRenderedPanelCount;
-VRW._lastRenderedPanelIds = _lastRenderedPanelIds;
-VRW._lastSplitState = _lastSplitState;
-VRW._lastShowingWelcome = _lastShowingWelcome;

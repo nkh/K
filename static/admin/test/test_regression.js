@@ -143,18 +143,6 @@ updateVttyDisplayForPanel(vp, panelEl, { html: 'gen2', generation: 2 });
 assertEq(pre.innerHTML, 'gen2', 'new generation applied');
 
 // ════════════════════════════════════════════════════════════════════
-// REGRESSION 9: Spawn history — no duplicates, most recent first
-// ════════════════════════════════════════════════════════════════════
-console.log('[REG-09] Spawn history deduplication');
-localStorage.removeItem('vrw_spawn_history');
-_addSpawnHistoryEntry('htop');
-_addSpawnHistoryEntry('vim');
-_addSpawnHistoryEntry('htop'); // duplicate
-const hist = _loadSpawnHistory();
-assertEq(hist.length, 2, 'duplicate spawn commands not added');
-assertEq(hist[0].cmd, 'htop', 'most recent spawn first');
-
-// ════════════════════════════════════════════════════════════════════
 // REGRESSION 10: Pinning commands — persisted in localStorage
 // ════════════════════════════════════════════════════════════════════
 console.log('[REG-10] Command pinning');

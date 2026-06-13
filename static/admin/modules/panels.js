@@ -542,20 +542,6 @@ function renderPanels() {
         _showingWelcome = shouldShowWelcome;
     }
 
-    // Fast path: if panel count and IDs haven't changed, skip the full rebuild.
-    // This prevents erasing terminal content when only command selection changes.
-    // EXCEPTION: must rebuild when transitioning between welcome and panel views,
-    // or when split state changes for any panel.
-    const currentPanelIds = state.panels.map(p => p.id).join(',');
-    const currentSplitState = state.panels.map(p => p.split ? p.split.direction : '').join(',');
-    const structuralUnchanged = _lastRenderedPanelCount === state.panels.length && _lastRenderedPanelIds === currentPanelIds && _lastSplitState === currentSplitState;
-    if (structuralUnchanged && _lastShowingWelcome === _showingWelcome) {
-        // Just update layout direction and multi-panel visibility
-        _applyPanelLayoutClass(container);
-        _updatePanelMultiUI();
-        return;
-    }
-
     // ── Cache all terminal DOM before rebuild ──
     const cachedVtty = {};
     for (const panel of state.panels) {
@@ -783,10 +769,6 @@ function renderPanels() {
         });
     });
 
-    _lastRenderedPanelCount = state.panels.length;
-    _lastRenderedPanelIds = currentPanelIds;
-    _lastSplitState = currentSplitState;
-    _lastShowingWelcome = _showingWelcome;
     // Persist panel count for reload
     localStorage.setItem('vrw_panel_count', state.panels.length.toString());
     _updatePanelMultiUI();

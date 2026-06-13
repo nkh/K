@@ -159,7 +159,6 @@
             const wasMobile = state._mobileTabbedLayout;
             state._mobileTabbedLayout = window.innerWidth <= 768;
             if (wasMobile !== state._mobileTabbedLayout) {
-                _lastRenderedPanelCount = -1;
                 renderPanels();
             }
             autoFitActiveTerminal();

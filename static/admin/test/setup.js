@@ -621,16 +621,11 @@ if (typeof VRW !== 'undefined' && VRW.state) {
 }
 // Expose module-level vars from state.js
 if (typeof VRW !== 'undefined') {
-    globalThis._lastCommandState = VRW._lastCommandState;
     globalThis._navCommands = VRW._navCommands;
     globalThis._showingWelcome = VRW._showingWelcome;
     globalThis._sidebarSort = VRW._sidebarSort;
     globalThis._searchFrozenPanelIds = VRW._searchFrozenPanelIds;
     globalThis._searchFrozenCmdIds = VRW._searchFrozenCmdIds;
-    globalThis._lastRenderedPanelCount = VRW._lastRenderedPanelCount;
-    globalThis._lastRenderedPanelIds = VRW._lastRenderedPanelIds;
-    globalThis._lastSplitState = VRW._lastSplitState;
-    globalThis._lastShowingWelcome = VRW._lastShowingWelcome;
 }
 
 // Some modules reference functions from other modules that are loaded later.
@@ -786,10 +781,6 @@ globalThis.resetTestState = function() {
         state._pendingVttyDirty = false;
         state._pendingVttyData = null;
         state._refreshThrottleTimer = null;
-        state._lastRenderedPanelCount = -1;
-        state._lastRenderedPanelIds = '';
-        state._lastShowingWelcome = true;
-        state._showingWelcome = true;
         state.refreshInterval = null;
         state._resourceInterval = null;
         state._lastGeneration = {};
@@ -807,19 +798,11 @@ globalThis.resetTestState = function() {
     }
     // Sync VRW vars
     if (typeof VRW !== 'undefined') {
-        VRW._lastCommandState = '';
         VRW._showingWelcome = true;
-        VRW._lastRenderedPanelCount = -1;
-        VRW._lastRenderedPanelIds = '';
-        VRW._lastShowingWelcome = true;
         VRW._searchFrozenPanelIds = new Set();
         VRW._searchFrozenCmdIds = [];
         VRW._sidebarSort = 'name';
-        _lastCommandState = '';
         _showingWelcome = true;
-        _lastRenderedPanelCount = -1;
-        _lastRenderedPanelIds = '';
-        _lastShowingWelcome = true;
         _searchFrozenPanelIds = new Set();
         _searchFrozenCmdIds = [];
         _sidebarSort = 'name';

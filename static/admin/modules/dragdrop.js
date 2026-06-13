@@ -246,7 +246,6 @@ function _cmdReorderMouseUp(e) {
             instOrder.splice(targetIdx >= 0 ? targetIdx : instOrder.length, 0, _reorderState.cmdId);
             order[_reorderState.instUrl] = instOrder;
             setCmdOrder(order);
-            _lastCommandState = ''; // force sidebar rebuild with new order
             loadCommands();
         } else if (placeholder.parentNode) {
             // Moved but dropped back to same spot — just remove placeholder

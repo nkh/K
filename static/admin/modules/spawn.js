@@ -297,15 +297,11 @@ async function toggleKeepCmd(instUrl, cmdId) {
         } else {
             await api.keep(instUrl, cmdId);
         }
-        // Force full rebuild to update the keep button
-        _lastCommandState = '';
         loadCommands();
     } catch (e) { /* ignore */ }
 }
 
 async function killCommand(instUrl, cmdId) {
-    // Force full rebuild on state transition
-    _lastCommandState = '';
     try {
         await api.kill(instUrl, cmdId);
         if (state.selectedInstUrl === instUrl && state.selectedCmdId === cmdId) {
@@ -317,8 +313,6 @@ async function killCommand(instUrl, cmdId) {
 }
 
 async function purgeCommand(instUrl, cmdId, cmdName) {
-    // Force full rebuild on state transition
-    _lastCommandState = '';
     if (!confirm(`Purge "${cmdName || cmdId}"?\nThis permanently discards the VTTY buffer and all associated state.`)) return;
     try {
         const json = await api.purge(instUrl, cmdId);
@@ -364,7 +358,6 @@ async function purgeKeptCommand(instUrl, cmdId, cmdName) {
                 const argsEl = panel.querySelector('.cmd-args');
                 if (argsEl) argsEl.textContent = '';
             }
-            _lastCommandState = '';
             loadCommands();
         }
     } catch (e) { /* ignore */ }
@@ -397,8 +390,6 @@ async function killAllCommands() {
         ? `Kill ${count} matching command(s)? (filter: "${filter}")`
         : `Kill all ${count} running command(s) on all servers?`;
     if (!confirm(scopeMsg)) return;
-    // Force full rebuild on state transition
-    _lastCommandState = '';
 
     if (!filterLower) {
         // No filter — use the server-side kill-all endpoint per server (atomic)
@@ -431,7 +422,6 @@ async function killAllCommands() {
         await Promise.all(promises);
     }
     // Re-fetch from server to get accurate state (some kills may have failed)
-    _lastCommandState = '';
     await loadCommands();
 
     // Clear commands for servers that are unreachable (they can't have been killed
@@ -451,7 +441,6 @@ async function killAllCommands() {
             }
         }
     }
-    _lastCommandState = '';
     _buildSidebar();
     updateSharedToolbar();
 }
@@ -474,7 +463,6 @@ async function freezeAllCommands() {
         (doFreeze ? api.freeze(inst.url, cmd.id) : api.thaw(inst.url, cmd.id)).catch(() => {})
     );
     await Promise.all(promises);
-    _lastCommandState = '';
     await loadCommands();
 }
 

@@ -232,7 +232,7 @@ assertEq(state.panelLayout, 'row', 'default layout is row after reset');
 assertEq(state.fontSize, 10, 'default fontSize is 10 after reset');
 assertEq(state.updateMode, 'push', 'default updateMode is push after reset');
 assertEq(state.bufferView, 'current', 'default bufferView is current after reset');
-assertEq(state._showingWelcome, true, 'welcome shown after reset');
+assertEq(_showingWelcome, true, 'welcome shown after reset');
 assertEq(state._focusedPanelId, null, 'no focused panel after reset');
 assertEq(state.serverReachable, false, 'server not reachable after reset');
 assertEq(state.showResources, false, 'resources hidden after reset');

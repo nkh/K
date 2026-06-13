@@ -145,39 +145,18 @@ function _buildSidebar() {
         _sidebarSort = 'name';
     }
 
-    let fingerprint = '';
-    for (const inst of state.connections) {
-        fingerprint += inst.url + ':reachable=' + inst.reachable + '|';
-        for (const cmd of (inst._commands || [])) {
-            const cmdName = cmd.name || cmd.id;
-            if (filterLower && !cmdName.toLowerCase().includes(filterLower) &&
-                !(cmd.args || []).join(' ').toLowerCase().includes(filterLower) &&
-                !String(cmd.pid).includes(filterLower)) continue;
-            const isAlive = cmd.alive !== false;
-            fingerprint += inst.url + ':' + cmd.id + ':' + isAlive + ':' + (cmd.exit_code != null ? cmd.exit_code : '') + ':' + (cmd.runtime_secs || 0) + '|';
-        }
-    }
-    if (fingerprint === _lastCommandState) {
-        if (state._pendingSelectId) {
-            const pendingId = state._pendingSelectId;
-            state._pendingSelectId = null;
-            for (const inst of state.connections) {
-                if (inst._commands && inst._commands.find(c => c.id === pendingId)) {
-                    const cmd = inst._commands.find(c => c.id === pendingId);
-                    selectCommand(inst.url, cmd.id, cmd.name || cmd.id);
-                    return;
-                }
+    // Handle pending command selection (e.g. from workspace restore)
+    if (state._pendingSelectId) {
+        const pendingId = state._pendingSelectId;
+        state._pendingSelectId = null;
+        for (const inst of state.connections) {
+            if (inst._commands && inst._commands.find(c => c.id === pendingId)) {
+                const cmd = inst._commands.find(c => c.id === pendingId);
+                selectCommand(inst.url, cmd.id, cmd.name || cmd.id);
+                return;
             }
         }
-        if (state.selectedInstUrl && state.selectedCmdId) {
-            updatePanelCommandInfo();
-            if (state.updateMode === 'poll' || state.bufferView !== 'current') {
-                scheduleVttyHttp(state.selectedInstUrl, state.selectedCmdId, 500);
-            }
-        }
-        return;
     }
-    _lastCommandState = fingerprint;
 
     const container = document.getElementById('commandList');
     let html = '';

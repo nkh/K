@@ -248,7 +248,6 @@ function addConnection(url, label, token) {
 
 function removeConnection(url) {
     state.connections = state.connections.filter(c => c.url !== url);
-    _lastCommandState = ''; // force sidebar rebuild
     _saveConnections();
     loadCommands();
     updateDisconnectedUI();
@@ -438,7 +437,6 @@ async function restartCommandById(instUrl, cmdId) {
             const newId = json.data.id;
             state.selectedInstUrl = instUrl;
             state.selectedCmdId = newId;
-            _lastCommandState = '';
             // Reload command list so the sidebar contains the new command.
             await loadCommands();
             // Find the new command's name from the refreshed list.
