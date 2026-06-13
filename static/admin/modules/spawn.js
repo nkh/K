@@ -478,25 +478,6 @@ async function freezeAllCommands() {
     await loadCommands();
 }
 
-async function sendKeys() {
-    // Delegate to the per-panel sendKeysToPanel using the selected panel
-    const panel = getSelectedPanel();
-    if (!panel) return;
-    await sendKeysToPanel(panel.id);
-}
-
-async function resizeTerminal() {
-    if (!state.selectedCmdId) return;
-    const panelId = state.panels.find(p => p.id && p.selectedInstUrl === state.selectedInstUrl)?.id;
-    if (panelId) { resizeTerminalPanel(panelId); return; }
-    // Fallback: use old global elements if present (backward compat)
-    const rows = parseInt(document.getElementById('resizeRows')?.value) || 24;
-    const cols = parseInt(document.getElementById('resizeCols')?.value) || 80;
-    try {
-        await api.resize(state.selectedInstUrl, state.selectedCmdId, { rows, cols });
-    } catch (e) { /* ignore */ }
-}
-
 async function resizeTerminalPanel(panelId) {
     const panelObj = state.panels.find(p => p.id === panelId);
     if (!panelObj) return;
@@ -539,12 +520,7 @@ function switchBufferPanel(panelId, view) {
 
     window.spawnCmdTabComplete = spawnCmdTabComplete;
     window._resetSpawnCompletion = _resetSpawnCompletion;
-    window._loadSpawnHistory = _loadSpawnHistory;
-    window._saveSpawnHistory = _saveSpawnHistory;
-    window._addSpawnHistoryEntry = _addSpawnHistoryEntry;
-    window._renderSpawnHistoryDropdown = _renderSpawnHistoryDropdown;
     window._removeSpawnHistoryDropdown = _removeSpawnHistoryDropdown;
-    window._applySpawnHistoryEntry = _applySpawnHistoryEntry;
     window._onSpawnCmdFocus = _onSpawnCmdFocus;
     window._onSpawnCmdKeydownForHistory = _onSpawnCmdKeydownForHistory;
     window.spawnCommand = spawnCommand;
@@ -554,8 +530,6 @@ function switchBufferPanel(panelId, view) {
     window.purgeKeptCommand = purgeKeptCommand;
     window.killAllCommands = killAllCommands;
     window.freezeAllCommands = freezeAllCommands;
-    window.sendKeys = sendKeys;
-    window.resizeTerminal = resizeTerminal;
     window.resizeTerminalPanel = resizeTerminalPanel;
     window.switchBufferPanel = switchBufferPanel;
 })();
