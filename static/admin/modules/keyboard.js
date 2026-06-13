@@ -4,6 +4,56 @@
 (function() {
     'use strict';
 
+const _INPUT_TAGS = ['INPUT', 'TEXTAREA', 'SELECT'];
+function _inInput(e) { return _INPUT_TAGS.includes(e.target.tagName); }
+
+// ─── Keyboard shortcut bindings ───
+// Each entry: { key, ctrl?, shift?, alt?, meta?, noInput?, action(e) }
+// noInput=true means the shortcut is suppressed when focus is in an input.
+const _shortcuts = [
+    { key: 'Escape', action() {
+        const pm = document.getElementById('panelModal');
+        if (pm && pm.style.display !== 'none') { closePanelModal(); return; }
+        const cp = document.getElementById('cmdPicker');
+        if (cp) { releaseCurrentFocusTrap(); cp.remove(); return; }
+        const panel = getSelectedPanel();
+        if (panel) vttySearchClose(panel.id);
+        closeContextMenu();
+        closeShortcuts();
+    }},
+    { key: 'ContextMenu', shift: 'F10', action(e) {
+        e.preventDefault();
+        const t = document.activeElement;
+        if (!t) return;
+        if (t.classList.contains('panel-header') && t.dataset.panelId) {
+            const r = t.getBoundingClientRect();
+            showPanelContextMenu({ preventDefault(){}, clientX: r.left + r.width/2, clientY: r.bottom }, t.dataset.panelId);
+        }
+        if (t.classList.contains('cmd-item') && t.dataset.instUrl) {
+            const r = t.getBoundingClientRect();
+            showCmdContextMenu({ preventDefault(){}, clientX: r.left + r.width/2, clientY: r.bottom }, t.dataset.instUrl, t.dataset.cmdId, t.dataset.cmdName, t.dataset.cmdAlive === 'true');
+        }
+    }},
+    { key: 'c', ctrl: true, shift: true, action() { const p = getSelectedPanel(); if (p) { e.preventDefault(); copyTerminalSelection(p.id); } }},
+    { key: 's', ctrl: true, shift: true, action() { const p = getSelectedPanel(); if (p) { e.preventDefault(); toggleSelectionMode(p.id); } }},
+    { key: 's', alt: true, action() { const p = getSelectedPanel(); if (p) { e.preventDefault(); toggleSelectionMode(p.id); } }},
+    { key: '?', noInput: true, action() { showShortcuts(); }},
+    { key: 'e', ctrl: true, shift: true, noInput: true, action() { const p = getSelectedPanel(); if (p) { e.preventDefault(); exportTerminal(p.id); } }},
+    { key: 'r', ctrl: true, shift: true, noInput: true, action() { const p = getSelectedPanel(); if (p) { e.preventDefault(); restartCommand(p.id); } }},
+    { key: 't', alt: true, noInput: true, action() { const id = getActivePanelId(); if (id) { e.preventDefault(); togglePanelTheme(id); } }},
+    { key: 'n', alt: true, noInput: true, action() { e.preventDefault(); addPanel(); }},
+    { key: 'ArrowLeft', alt: true, noInput: true, action() {
+        const panel = getSelectedPanel();
+        const po = panel && state.panels.find(p => p.id === panel.id);
+        if (!(po && po.focused)) { e.preventDefault(); navigatePrevCommand(); }
+    }},
+    { key: 'ArrowRight', alt: true, noInput: true, action() {
+        const panel = getSelectedPanel();
+        const po = panel && state.panels.find(p => p.id === panel.id);
+        if (!(po && po.focused)) { e.preventDefault(); navigateNextCommand(); }
+    }},
+];
+
 // ─── Keyboard handling ───
 document.addEventListener('keydown', (e) => {
     // Direct terminal keyboard input: when a panel is focused,
@@ -19,19 +69,11 @@ document.addEventListener('keydown', (e) => {
                     document.activeElement && document.activeElement.id === 'searchInput-' + panel.id) {
                     // Let search input handle the key
                 } else if (e.key === 'Escape') {
-                    // Close Add Panel modal if open
+                    // Close modals/search when terminal focused and Escape pressed
                     const panelModal = document.getElementById('panelModal');
-                    if (panelModal && panelModal.style.display !== 'none') {
-                        closePanelModal();
-                        return;
-                    }
-                    // Close Command Picker if open
+                    if (panelModal && panelModal.style.display !== 'none') { closePanelModal(); return; }
                     const cmdPicker = document.getElementById('cmdPicker');
-                    if (cmdPicker) {
-                        releaseCurrentFocusTrap();
-                        cmdPicker.remove();
-                        return;
-                    }
+                    if (cmdPicker) { releaseCurrentFocusTrap(); cmdPicker.remove(); return; }
                     vttySearchClose(panel.id);
                     closeContextMenu();
                     closeShortcuts();
@@ -41,7 +83,6 @@ document.addEventListener('keydown', (e) => {
                     const sb = document.getElementById('searchBar-' + panel.id);
                     if (sb) {
                         sb.classList.add('visible');
-                        // Trap focus inside the search bar
                         const vttyContainer = panel.querySelector('.vtty-container');
                         if (vttyContainer) trapFocus(vttyContainer);
                         const si = document.getElementById('searchInput-' + panel.id);
@@ -58,15 +99,15 @@ document.addEventListener('keydown', (e) => {
     }
 
     // Focus key input when not in an input field and a command is selected
-    if (state.currentView === 'vtty' && state.selectedCmdId &&
-        !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
+    if (state.currentView === 'vtty' && state.selectedCmdId && !_inInput(e)) {
         const panel = getSelectedPanel();
         if (panel) {
             const input = document.getElementById('keyInput-' + panel.id);
             if (input) input.focus();
         }
     }
-    // Ctrl+F — open terminal search bar
+
+    // Ctrl+F — open terminal search bar (only when not already handled above)
     if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         const vttyContainer = e.target.closest && e.target.closest('.vtty-container');
         if (vttyContainer || state.currentView === 'vtty') {
@@ -76,131 +117,28 @@ document.addEventListener('keydown', (e) => {
                 const searchBar = document.getElementById('searchBar-' + panel.id);
                 if (searchBar) {
                     searchBar.classList.add('visible');
-                    // Trap focus inside the search bar area
                     const vtty = panel.querySelector('.vtty-container');
                     if (vtty) trapFocus(vtty);
                     const searchInput = document.getElementById('searchInput-' + panel.id);
                     if (searchInput) { searchInput.focus(); searchInput.select(); }
                 }
             }
-        }
-    }
-    // Shift+F10 or ContextMenu key — open context menu on focused cmd-item or panel-header
-    if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
-        e.preventDefault();
-        const target = document.activeElement;
-        if (!target) return;
-        // Panel header context menu
-        if (target.classList.contains('panel-header') && target.dataset.panelId) {
-            const rect = target.getBoundingClientRect();
-            showPanelContextMenu({ preventDefault: () => {}, clientX: rect.left + rect.width / 2, clientY: rect.bottom }, target.dataset.panelId);
-        }
-        // Command item context menu
-        if (target.classList.contains('cmd-item') && target.dataset.instUrl) {
-            const rect = target.getBoundingClientRect();
-            showCmdContextMenu({ preventDefault: () => {}, clientX: rect.left + rect.width / 2, clientY: rect.bottom }, target.dataset.instUrl, target.dataset.cmdId, target.dataset.cmdName, target.dataset.cmdAlive === 'true');
-        }
-    }
-    // Escape — close terminal search bar, panel modal, command picker, shortcuts
-    if (e.key === 'Escape') {
-        // Close Add Panel modal if open
-        const panelModal = document.getElementById('panelModal');
-        if (panelModal && panelModal.style.display !== 'none') {
-            closePanelModal();
-            return;
-        }
-        // Close Command Picker if open
-        const cmdPicker = document.getElementById('cmdPicker');
-        if (cmdPicker) {
-            releaseCurrentFocusTrap();
-            cmdPicker.remove();
-            return;
-        }
-        const panel = getSelectedPanel();
-        if (panel) {
-            vttySearchClose(panel.id);
-        }
-        closeContextMenu();
-        closeShortcuts();
-    }
-    // Ctrl+Shift+C — copy terminal selection
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'C' || e.key === 'c')) {
-        const panel = getSelectedPanel();
-        if (panel) {
-            e.preventDefault();
-            copyTerminalSelection(panel.id);
             return;
         }
     }
-    // Ctrl+Shift+S — toggle selection mode
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'S' || e.key === 's')) {
-        const panel = getSelectedPanel();
-        if (panel) {
-            e.preventDefault();
-            toggleSelectionMode(panel.id);
-            return;
-        }
-    }
-    // Alt+S — toggle selection mode (alternative shortcut)
-    if (e.altKey && (e.key === 's' || e.key === 'S') && !e.ctrlKey && !e.metaKey) {
-        const panel = getSelectedPanel();
-        if (panel) {
-            e.preventDefault();
-            toggleSelectionMode(panel.id);
-            return;
-        }
-    }
-    // ? — show keyboard shortcuts
-    if (e.key === '?' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
-        showShortcuts();
-    }
-    // Ctrl+Shift+E — export terminal as text
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'E' || e.key === 'e')) {
-        const panel = getSelectedPanel();
-        if (panel) {
-            e.preventDefault();
-            exportTerminal(panel.id);
-            return;
-        }
-    }
-    // Ctrl+Shift+R — restart command (only when not in input)
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'R' || e.key === 'r') && !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
-        const panel = getSelectedPanel();
-        if (panel) {
-            e.preventDefault();
-            restartCommand(panel.id);
-            return;
-        }
-    }
-    // Alt+T — toggle panel theme (only when not in input)
-    if (e.altKey && (e.key === 't' || e.key === 'T') && !e.ctrlKey && !e.metaKey && !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
-        const panelId = getActivePanelId();
-        if (panelId) {
-            e.preventDefault();
-            togglePanelTheme(panelId);
-            return;
-        }
-    }
-    // Alt+N — add new panel (only when not in input)
-    if (e.altKey && (e.key === 'n' || e.key === 'N') && !e.ctrlKey && !e.metaKey && !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
-        e.preventDefault();
-        addPanel();
+
+    // ── Shortcut table dispatch ──
+    for (const s of _shortcuts) {
+        const keyMatch = e.key === s.key || (s.shift && e.shiftKey && e.key === s.shift);
+        if (!keyMatch) continue;
+        const ctrlOk = !s.ctrl || e.ctrlKey || e.metaKey;
+        const altOk = s.alt ? e.altKey : !e.altKey;
+        const shiftOk = !s.shift || e.shiftKey;
+        const metaOk = !s.meta || e.metaKey;
+        if (!ctrlOk || !altOk || !shiftOk || !metaOk) continue;
+        if (s.noInput && _inInput(e)) continue;
+        s.action(e);
         return;
-    }
-    // Alt+Left / Alt+Right — navigate prev/next command (only when not focused on terminal)
-    if (e.altKey && !e.ctrlKey && !e.metaKey && !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
-        const panel = getSelectedPanel();
-        const panelObj = panel && state.panels.find(p => p.id === panel.id);
-        if (e.key === 'ArrowLeft' && !(panelObj && panelObj.focused)) {
-            e.preventDefault();
-            navigatePrevCommand();
-            return;
-        }
-        if (e.key === 'ArrowRight' && !(panelObj && panelObj.focused)) {
-            e.preventDefault();
-            navigateNextCommand();
-            return;
-        }
     }
 });
 
