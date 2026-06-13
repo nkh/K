@@ -1,6 +1,44 @@
 // ─── Panels ───
 (function() {
     'use strict';
+
+// ─── Shared Helpers ───
+function _findCmd(instUrl, cmdId) {
+    const inst = instUrl ? state.connections.find(i => i.url === instUrl) : null;
+    return inst && inst._commands ? inst._commands.find(c => c.id === cmdId) : null;
+}
+
+function _renderSearchBar(panelId) {
+    return `<div class="search-bar" id="searchBar-${panelId}">
+                            <input type="text" id="searchInput-${panelId}" placeholder="Search terminal..." oninput="vttySearch('${panelId}')" onkeydown="if(event.key==='Enter'){event.shiftKey?vttySearchPrev('${panelId}'):vttySearchNext('${panelId}')}">
+                            <span class="search-count" id="searchCount-${panelId}" title="Click to jump: Shift+Click to reverse"></span>
+                            <div class="search-progress-bar hidden" id="searchProgress-${panelId}"></div>
+                            <button data-action="VttySearchNext" data-panel="${panelId}" title="Next match (Enter)">&#x25BC;</button>
+                            <button data-action="VttySearchPrev" data-panel="${panelId}" title="Previous match (Shift+Enter)">&#x25B2;</button>
+                            <button data-action="VttySearchClose" data-panel="${panelId}" title="Close search">&#x2715;</button>
+                        </div>`;
+}
+
+function _showCopyFeedback(panelId) {
+    const feedback = document.getElementById('copyFeedback-' + panelId);
+    if (feedback) {
+        feedback.classList.add('visible');
+        setTimeout(() => feedback.classList.remove('visible'), 1200);
+    }
+}
+
+function _getPanelLabel(panel) {
+    if (panel.customTitle) return panel.customTitle;
+    if (!panel.selectedCmdId) return 'Panel';
+    for (const inst of state.connections) {
+        if (inst._commands) {
+            const cmd = inst._commands.find(c => c.id === panel.selectedCmdId);
+            if (cmd) return cmd.name || cmd.id;
+        }
+    }
+    return 'Panel';
+}
+
 // ─── Panels (Multi-view) ───
 // Panels are pure display containers — decoupled from server connections.
 // A panel can display any command's VTTY from any server connection.
@@ -183,14 +221,7 @@ function unsplitPanel(panelId) {
 function _renderVttyContainer(panel) {
     return `<div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px;">
                         <div class="exited-banner hidden" id="exitedBanner-${panel.id}"></div>
-                        <div class="search-bar" id="searchBar-${panel.id}">
-                            <input type="text" id="searchInput-${panel.id}" placeholder="Search terminal..." oninput="vttySearch('${panel.id}')" onkeydown="if(event.key==='Enter'){event.shiftKey?vttySearchPrev('${panel.id}'):vttySearchNext('${panel.id}')}">
-                            <span class="search-count" id="searchCount-${panel.id}" title="Click to jump: Shift+Click to reverse"></span>
-                            <div class="search-progress-bar hidden" id="searchProgress-${panel.id}"></div>
-                            <button data-action="VttySearchNext" data-panel="${panel.id}" title="Next match (Enter)">&#x25BC;</button>
-                            <button data-action="VttySearchPrev" data-panel="${panel.id}" title="Previous match (Shift+Enter)">&#x25B2;</button>
-                            <button data-action="VttySearchClose" data-panel="${panel.id}" title="Close search">&#x2715;</button>
-                        </div>
+                        ${_renderSearchBar(panel.id)}
                         <pre style="color:#484f58;">No command selected — select a command from the sidebar to view its output</pre>
                         <div class="cursor-indicator hidden"></div>
                         <div class="copy-feedback" id="copyFeedback-${panel.id}">Copied!</div>
@@ -273,8 +304,7 @@ function _getServerTextColor(inst, instUrl) {
 /// Get the command name label for a panel/sub-pane.
 function _getPanelCmdLabel(cmdId, instUrl) {
     if (!cmdId) return 'No command';
-    const inst = instUrl ? state.connections.find(i => i.url === instUrl) : null;
-    const cmd = inst && inst._commands ? inst._commands.find(c => c.id === cmdId) : null;
+    const cmd = _findCmd(instUrl, cmdId);
     return cmd ? (cmd.name || cmd.id) : cmdId;
 }
 
@@ -284,29 +314,45 @@ function _updateSplitHeaders(panelObj) {
     const panelEl = document.getElementById(panelObj.id);
     if (!panelEl) return;
 
-    // Update primary split header
-    const primaryHeader = panelEl.querySelector('.split-header[data-split-side="primary"]');
-    if (primaryHeader) {
-        const primaryInst = panelObj.selectedInstUrl ? state.connections.find(i => i.url === panelObj.selectedInstUrl) : null;
-        primaryHeader.style.background = _getServerColor(primaryInst, panelObj.selectedInstUrl);
-        primaryHeader.style.color = _getServerTextColor(primaryInst, panelObj.selectedInstUrl);
-        const serverLabel = primaryHeader.querySelector('.split-server-label');
-        if (serverLabel) serverLabel.textContent = _getServerLabel(primaryInst, panelObj.selectedInstUrl);
-        const cmdLabel = primaryHeader.querySelector('.split-cmd-label');
-        if (cmdLabel) cmdLabel.textContent = _getPanelCmdLabel(panelObj.selectedCmdId, panelObj.selectedInstUrl);
+    const sides = [
+        { key: 'primary', instUrl: panelObj.selectedInstUrl, cmdId: panelObj.selectedCmdId },
+        { key: 'secondary', instUrl: panelObj.split.secondaryInstUrl, cmdId: panelObj.split.secondaryCmdId },
+    ];
+    for (const side of sides) {
+        const header = panelEl.querySelector('.split-header[data-split-side="' + side.key + '"]');
+        if (!header) continue;
+        const inst = side.instUrl ? state.connections.find(i => i.url === side.instUrl) : null;
+        header.style.background = _getServerColor(inst, side.instUrl);
+        header.style.color = _getServerTextColor(inst, side.instUrl);
+        const serverLabel = header.querySelector('.split-server-label');
+        if (serverLabel) serverLabel.textContent = _getServerLabel(inst, side.instUrl);
+        const cmdLabel = header.querySelector('.split-cmd-label');
+        if (cmdLabel) cmdLabel.textContent = _getPanelCmdLabel(side.cmdId, side.instUrl);
     }
+}
 
-    // Update secondary split header
-    const secondaryHeader = panelEl.querySelector('.split-header[data-split-side="secondary"]');
-    if (secondaryHeader) {
-        const secondaryInst = panelObj.split.secondaryInstUrl ? state.connections.find(i => i.url === panelObj.split.secondaryInstUrl) : null;
-        secondaryHeader.style.background = _getServerColor(secondaryInst, panelObj.split.secondaryInstUrl);
-        secondaryHeader.style.color = _getServerTextColor(secondaryInst, panelObj.split.secondaryInstUrl);
-        const serverLabel = secondaryHeader.querySelector('.split-server-label');
-        if (serverLabel) serverLabel.textContent = _getServerLabel(secondaryInst, panelObj.split.secondaryInstUrl);
-        const cmdLabel = secondaryHeader.querySelector('.split-cmd-label');
-        if (cmdLabel) cmdLabel.textContent = _getPanelCmdLabel(panelObj.split.secondaryCmdId, panelObj.split.secondaryInstUrl);
-    }
+/// Render a single split pane (primary or secondary).
+function _renderSplitPane(panel, side, paneId, widthPct, serverLabel, color, textColor, cmdLabel, showSearch) {
+    const selMode = panel.selectionMode ? ' selection-mode' : '';
+    const themeAttr = panel.theme ? 'data-panel-theme="' + panel.theme + '"' : '';
+    const searchHtml = showSearch ? _renderSearchBar(paneId) : '';
+    const bannerStyle = side === 'secondary' ? ' style="display:none;"' : ' class="hidden"';
+    const noCmdText = cmdLabel === 'No command' ? '<span style="color:#484f58;">No command selected — select a command from the sidebar</span>' : '';
+    return `<div class="split-pane" data-split-side="${side}" data-panel="${panel.id}" style="flex: 0 0 ${widthPct}%; display:flex; flex-direction:column; min-width:0; min-height:0;">
+            <div class="split-header panel-header" data-panel-id="${panel.id}" data-split-side="${side}" style="background:${color};color:${textColor};">
+                <span class="split-server-label" style="font-size:var(--ui-fs);opacity:0.8;">${escHtml(serverLabel)}</span>
+                <span class="split-cmd-label" style="font-size:var(--ui-fs);font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">${escHtml(cmdLabel)}</span>
+                <button class="btn btn-xs btn-danger" data-action="UnsplitPanel" data-panel="${panel.id}" title="Close split">&#x2715;</button>
+            </div>
+            <div class="vtty-container${selMode}" id="vtty-${paneId}" data-split-side="${side}" data-panel="${panel.id}" ${themeAttr} style="font-size: ${panel.fontSize}px; flex:1; min-height:0;">
+                <div class="exited-banner"${bannerStyle} id="exitedBanner-${paneId}"></div>
+                ${searchHtml}
+                <pre>${noCmdText}</pre>
+                <div class="cursor-indicator hidden"></div>
+                ${showSearch ? `<div class="copy-feedback" id="copyFeedback-${paneId}">Copied!</div>` : ''}
+                <button class="scroll-bottom-btn" id="scrollBtn-${paneId}" data-action="ScrollTerminalBottom" data-panel="${paneId}" title="Scroll to bottom">&#x25BC;</button>
+            </div>
+        </div>`;
 }
 
 /// Render a split container with two vtty-panes and a draggable divider.
@@ -332,44 +378,8 @@ function _renderSplitContainer(panel) {
     const secondaryTextColor = _getServerTextColor(secondaryInst, split.secondaryInstUrl);
     const secondaryCmdLabel = _getPanelCmdLabel(split.secondaryCmdId, split.secondaryInstUrl);
 
-    // Primary sub-pane
-    const primaryHtml = `<div class="split-pane" data-split-side="primary" data-panel="${panel.id}" style="flex: 0 0 ${primaryWidth}%; display:flex; flex-direction:column; min-width:0; min-height:0;">
-            <div class="split-header panel-header" data-panel-id="${panel.id}" data-split-side="primary" style="background:${primaryColor};color:${primaryTextColor};">
-                <span class="split-server-label" style="font-size:var(--ui-fs);opacity:0.8;">${escHtml(primaryServerLabel)}</span>
-                <span class="split-cmd-label" style="font-size:var(--ui-fs);font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">${escHtml(primaryCmdLabel)}</span>
-                <button class="btn btn-xs btn-danger" data-action="UnsplitPanel" data-panel="${panel.id}" title="Close split">&#x2715;</button>
-            </div>
-            <div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" data-split-side="primary" data-panel="${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px; flex:1; min-height:0;">
-                <div class="exited-banner hidden" id="exitedBanner-${panel.id}"></div>
-                <div class="search-bar" id="searchBar-${panel.id}">
-                    <input type="text" id="searchInput-${panel.id}" placeholder="Search terminal..." oninput="vttySearch('${panel.id}')" onkeydown="if(event.key==='Enter'){event.shiftKey?vttySearchPrev('${panel.id}'):vttySearchNext('${panel.id}')}">
-                    <span class="search-count" id="searchCount-${panel.id}" title="Click to jump: Shift+Click to reverse"></span>
-                    <div class="search-progress-bar hidden" id="searchProgress-${panel.id}"></div>
-                    <button data-action="VttySearchNext" data-panel="${panel.id}" title="Next match (Enter)">&#x25BC;</button>
-                    <button data-action="VttySearchPrev" data-panel="${panel.id}" title="Previous match (Shift+Enter)">&#x25B2;</button>
-                    <button data-action="VttySearchClose" data-panel="${panel.id}" title="Close search">&#x2715;</button>
-                </div>
-                <pre>${panel.selectedCmdId ? '' : '<span style="color:#484f58;">No command selected — select a command from the sidebar</span>'}</pre>
-                <div class="cursor-indicator hidden"></div>
-                <div class="copy-feedback" id="copyFeedback-${panel.id}">Copied!</div>
-                <button class="scroll-bottom-btn" id="scrollBtn-${panel.id}" data-action="ScrollTerminalBottom" data-panel="${panel.id}" title="Scroll to bottom">&#x25BC;</button>
-            </div>
-        </div>`;
-
-    // Secondary sub-pane
-    const secondaryHtml = `<div class="split-pane" data-split-side="secondary" data-panel="${panel.id}" style="flex: 0 0 ${secondaryWidth}%; display:flex; flex-direction:column; min-width:0; min-height:0;">
-            <div class="split-header panel-header" data-panel-id="${panel.id}" data-split-side="secondary" style="background:${secondaryColor};color:${secondaryTextColor};">
-                <span class="split-server-label" style="font-size:var(--ui-fs);opacity:0.8;">${escHtml(secondaryServerLabel)}</span>
-                <span class="split-cmd-label" style="font-size:var(--ui-fs);font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">${escHtml(secondaryCmdLabel)}</span>
-                <button class="btn btn-xs btn-danger" data-action="UnsplitPanel" data-panel="${panel.id}" title="Close split">&#x2715;</button>
-            </div>
-            <div class="vtty-container" id="vtty-${secondaryId}" data-split-side="secondary" data-panel="${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px; flex:1; min-height:0;">
-                <div class="exited-banner" id="exitedBanner-${secondaryId}" style="display:none;"></div>
-                <pre>${split.secondaryCmdId ? '' : '<span style="color:#484f58;">No command selected — select a command from the sidebar</span>'}</pre>
-                <div class="cursor-indicator hidden"></div>
-                <button class="scroll-bottom-btn" id="scrollBtn-${secondaryId}" data-action="ScrollTerminalBottom" data-panel="${secondaryId}" title="Scroll to bottom">&#x25BC;</button>
-            </div>
-        </div>`;
+    const primaryHtml = _renderSplitPane(panel, 'primary', panel.id, primaryWidth, primaryServerLabel, primaryColor, primaryTextColor, primaryCmdLabel, true);
+    const secondaryHtml = _renderSplitPane(panel, 'secondary', secondaryId, secondaryWidth, secondaryServerLabel, secondaryColor, secondaryTextColor, secondaryCmdLabel, false);
 
     return `<div class="split-container ${dir}" id="split-${panel.id}" data-panel="${panel.id}">
                     ${primaryHtml}
@@ -401,8 +411,7 @@ function _updateSplitPanelHeader(panelObj) {
     }
 
     if (cmdId && instUrl) {
-        const inst = state.connections.find(i => i.url === instUrl);
-        const cmd = inst && inst._commands ? inst._commands.find(c => c.id === cmdId) : null;
+        const cmd = _findCmd(instUrl, cmdId);
         const fullName = cmd ? (cmd.name || cmd.id) : cmdId;
         const displayTitle = panelObj.customTitle || fullName;
         nameEl.textContent = displayTitle;
@@ -420,17 +429,7 @@ function _renderMinimizedPanels() {
     if (minimized.length === 0) return '';
     let html = '<div class="minimized-panels" id="minimizedPanels">';
     for (const panel of minimized) {
-        let label = 'Panel';
-        if (panel.customTitle) {
-            label = panel.customTitle;
-        } else if (panel.selectedCmdId) {
-            for (const inst of state.connections) {
-                if (inst._commands) {
-                    const cmd = inst._commands.find(c => c.id === panel.selectedCmdId);
-                    if (cmd) { label = cmd.name || cmd.id; break; }
-                }
-            }
-        }
+        const label = _getPanelLabel(panel);
         html += `<div class="minimized-panel-item" data-action="ToggleMinimizePanel" data-panel="${panel.id}" title="Click to restore: ${escHtml(label)}">
             <span class="minimized-icon">&#x25A0;</span>
             <span class="minimized-label">${escHtml(label)}</span>
@@ -566,7 +565,7 @@ function renderPanels() {
             const secondaryPre = secondaryVtty ? secondaryVtty.querySelector('pre') : null;
             if (secondaryPre && secondaryPre.childNodes.length > 0) {
                 const secFrag = document.createDocumentFragment();
-                while (secondaryPre.firstChild) secFrag.appendChild(secondaryPre.firstChild);
+                while (secondaryPre.firstChild) secFrag.appendChild(secFrag);
                 cachedVtty[secondaryId] = {
                     frag: secFrag,
                     scrollTop: secondaryVtty ? secondaryVtty.scrollTop : 0,
@@ -608,18 +607,7 @@ function renderPanels() {
             html += '<div class="mobile-tab-bar" id="mobileTabBar">';
             for (const panel of state.panels) {
                 const isFocused = panel.id === state._focusedPanelId;
-                // Find command name for tab label
-                let tabLabel = 'Panel';
-                if (panel.customTitle) {
-                    tabLabel = panel.customTitle;
-                } else if (panel.selectedCmdId) {
-                    for (const inst of state.connections) {
-                        if (inst._commands) {
-                            const cmd = inst._commands.find(c => c.id === panel.selectedCmdId);
-                            if (cmd) { tabLabel = cmd.name || cmd.id; break; }
-                        }
-                    }
-                }
+                const tabLabel = _getPanelLabel(panel);
                 html += `<div class="mobile-tab${isFocused ? ' active' : ''}" data-action="FocusPanel" data-panel="${panel.id}" title="${escHtml(tabLabel)}">
                     <span class="mobile-tab-label">${escHtml(tabLabel)}</span>
                     ${state.panels.length > 1 ? `<button class="mobile-tab-close" data-action="ClosePanelContent" data-panel="${panel.id}" title="Remove">&#x2715;</button>` : ''}
@@ -797,7 +785,6 @@ function renderPanels() {
     // Command drag-and-drop from sidebar is handled by inline ondragover/ondrop
     // handlers on each .panel element (onPanelDragOver/onPanelDrop), which already
     // detect command drops via the 'application/x-cmd' dataTransfer type.
-    // Calling initPanelDropTargets() would add duplicate addEventListener listeners.
 }
 
 /// Update multi-panel UI elements (drag handles, remove buttons, layout toggle)
@@ -903,8 +890,7 @@ function updateSharedToolbar() {
     const freezeBtn = document.getElementById('stFreezeBtn');
     if (freezeBtn) {
         if (panelObj.selectedCmdId) {
-            const inst = state.connections.find(i => i.url === panelObj.selectedInstUrl);
-            const cmd = inst && inst._commands ? inst._commands.find(c => c.id === panelObj.selectedCmdId) : null;
+            const cmd = _findCmd(panelObj.selectedInstUrl, panelObj.selectedCmdId);
             const isAlive = cmd && cmd.alive !== false;
             const isFrozen = cmd && cmd.frozen === true;
             freezeBtn.classList.toggle('hidden', !isAlive);
@@ -969,6 +955,26 @@ function showSpecialKeysHelp() {
     overlay.classList.remove('hidden');
     overlay.onclick = (e) => { if (e.target === overlay) { releaseCurrentFocusTrap(); overlay.remove(); } };
 
+    const rows = [
+        ['Return / Enter', '<code>&lt;Enter&gt;</code> or <code>&lt;Return&gt;</code>', 'Send a newline (carriage return)'],
+        ['Backspace', '<code>&lt;Backspace&gt;</code>', 'Delete character before cursor'],
+        ['Tab', '<code>&lt;Tab&gt;</code>', 'Insert a tab character'],
+        ['Escape', '<code>&lt;Esc&gt;</code>', 'Send the Escape character (0x1B)'],
+        ['Space', '(space character)', 'Type a literal space in the input'],
+        ['Delete', '<code>&lt;Delete&gt;</code>', 'Delete character at cursor (forward delete)'],
+        ['Insert', '<code>&lt;Insert&gt;</code>', 'Toggle insert/overwrite mode'],
+        ['Home / End', '<code>&lt;Home&gt;</code> <code>&lt;End&gt;</code>', 'Jump to beginning / end of line'],
+        ['Page Up / Down', '<code>&lt;PageUp&gt;</code> <code>&lt;PageDown&gt;</code>', 'Scroll up / down one page'],
+        ['Arrow Keys', '<code>&lt;Up&gt;</code> <code>&lt;Down&gt;</code> <code>&lt;Left&gt;</code> <code>&lt;Right&gt;</code>', 'Cursor movement'],
+        ['F1 &ndash; F12', '<code>&lt;F1&gt;</code> &hellip; <code>&lt;F12&gt;</code>', 'Function keys'],
+        ['Ctrl + key', '<code>&lt;C-c&gt;</code> <code>&lt;C-a&gt;</code> <code>&lt;C-d&gt;</code> &hellip;', 'Control modifier (use lowercase letter). <code>&lt;C-c&gt;</code> = SIGINT (interrupt)'],
+        ['Alt + key', '<code>&lt;A-x&gt;</code> <code>&lt;A-enter&gt;</code> &hellip;', 'Alt/Meta modifier prefix (Escape + key)'],
+    ];
+    const tbodyHtml = rows.map((r, i) => {
+        const border = i < rows.length - 1 ? 'border-bottom:1px solid var(--border);' : '';
+        return `<tr style="${border}"><td style="padding:0.25rem 0.5rem;">${r[0]}</td><td style="padding:0.25rem 0.5rem;">${r[1]}</td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">${r[2]}</td></tr>`;
+    }).join('\n            ');
+
     overlay.innerHTML = `<div class="modal" style="max-width:560px;max-height:80vh;overflow-y:auto;">
         <h2 style="margin-bottom:0.5rem;">Special Keys Reference</h2>
         <p style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.75rem;">
@@ -984,19 +990,7 @@ function showSpecialKeysHelp() {
                 </tr>
             </thead>
             <tbody>
-                <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.25rem 0.5rem;">Return / Enter</td><td style="padding:0.25rem 0.5rem;"><code>&lt;Enter&gt;</code> or <code>&lt;Return&gt;</code></td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Send a newline (carriage return)</td></tr>
-                <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.25rem 0.5rem;">Backspace</td><td style="padding:0.25rem 0.5rem;"><code>&lt;Backspace&gt;</code></td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Delete character before cursor</td></tr>
-                <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.25rem 0.5rem;">Tab</td><td style="padding:0.25rem 0.5rem;"><code>&lt;Tab&gt;</code></td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Insert a tab character</td></tr>
-                <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.25rem 0.5rem;">Escape</td><td style="padding:0.25rem 0.5rem;"><code>&lt;Esc&gt;</code></td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Send the Escape character (0x1B)</td></tr>
-                <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.25rem 0.5rem;">Space</td><td style="padding:0.25rem 0.5rem;">(space character)</td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Type a literal space in the input</td></tr>
-                <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.25rem 0.5rem;">Delete</td><td style="padding:0.25rem 0.5rem;"><code>&lt;Delete&gt;</code></td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Delete character at cursor (forward delete)</td></tr>
-                <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.25rem 0.5rem;">Insert</td><td style="padding:0.25rem 0.5rem;"><code>&lt;Insert&gt;</code></td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Toggle insert/overwrite mode</td></tr>
-                <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.25rem 0.5rem;">Home / End</td><td style="padding:0.25rem 0.5rem;"><code>&lt;Home&gt;</code> <code>&lt;End&gt;</code></td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Jump to beginning / end of line</td></tr>
-                <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.25rem 0.5rem;">Page Up / Down</td><td style="padding:0.25rem 0.5rem;"><code>&lt;PageUp&gt;</code> <code>&lt;PageDown&gt;</code></td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Scroll up / down one page</td></tr>
-                <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.25rem 0.5rem;">Arrow Keys</td><td style="padding:0.25rem 0.5rem;"><code>&lt;Up&gt;</code> <code>&lt;Down&gt;</code> <code>&lt;Left&gt;</code> <code>&lt;Right&gt;</code></td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Cursor movement</td></tr>
-                <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.25rem 0.5rem;">F1 &ndash; F12</td><td style="padding:0.25rem 0.5rem;"><code>&lt;F1&gt;</code> &hellip; <code>&lt;F12&gt;</code></td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Function keys</td></tr>
-                <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.25rem 0.5rem;">Ctrl + key</td><td style="padding:0.25rem 0.5rem;"><code>&lt;C-c&gt;</code> <code>&lt;C-a&gt;</code> <code>&lt;C-d&gt;</code> &hellip;</td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Control modifier (use lowercase letter). <code>&lt;C-c&gt;</code> = SIGINT (interrupt)</td></tr>
-                <tr><td style="padding:0.25rem 0.5rem;">Alt + key</td><td style="padding:0.25rem 0.5rem;"><code>&lt;A-x&gt;</code> <code>&lt;A-enter&gt;</code> &hellip;</td><td style="padding:0.25rem 0.5rem;color:var(--text-secondary);">Alt/Meta modifier prefix (Escape + key)</td></tr>
+            ${tbodyHtml}
             </tbody>
         </table>
         <div style="margin-top:0.75rem;text-align:right;">
@@ -1074,12 +1068,7 @@ function copyTerminalSelection(panelId) {
     if (!text) return;
 
     navigator.clipboard.writeText(text).then(() => {
-        // Show "Copied!" feedback
-        const feedback = document.getElementById('copyFeedback-' + panelId);
-        if (feedback) {
-            feedback.classList.add('visible');
-            setTimeout(() => feedback.classList.remove('visible'), 1200);
-        }
+        _showCopyFeedback(panelId);
     }).catch(() => {
         // Clipboard API may fail (e.g. non-HTTPS); fall back to execCommand
         const ta = document.createElement('textarea');
@@ -1089,11 +1078,7 @@ function copyTerminalSelection(panelId) {
         ta.select();
         try { document.execCommand('copy'); } catch (_) { /* ignore */ }
         document.body.removeChild(ta);
-        const feedback = document.getElementById('copyFeedback-' + panelId);
-        if (feedback) {
-            feedback.classList.add('visible');
-            setTimeout(() => feedback.classList.remove('visible'), 1200);
-        }
+        _showCopyFeedback(panelId);
     });
 }
 
@@ -1350,8 +1335,7 @@ function showPanelContextMenu(e, panelId) {
     menu.appendChild(_createCtxMenuItem('Copy URL', () => {
         if (cmdId) {
             // Find the command name from instance data
-            const inst = state.connections.find(i => i.url === instUrl);
-            const cmd = inst && inst._commands ? inst._commands.find(c => c.id === cmdId) : null;
+            const cmd = _findCmd(instUrl, cmdId);
             const cmdName = cmd ? (cmd.name || cmd.id) : cmdId;
             copyCommandUrl(instUrl, cmdId, cmdName);
         } else {
@@ -1537,8 +1521,7 @@ function autoFitActiveTerminal() {
 async function _resizePanelTo(panelId, rows, cols) {
     const panelObj = state.panels.find(p => p.id === panelId);
     if (!panelObj || !panelObj.selectedCmdId) return false;
-    const inst = panelObj.selectedInstUrl ? state.connections.find(i => i.url === panelObj.selectedInstUrl) : null;
-    const cmd = inst && inst._commands ? inst._commands.find(c => c.id === panelObj.selectedCmdId) : null;
+    const cmd = _findCmd(panelObj.selectedInstUrl, panelObj.selectedCmdId);
     if (cmd && cmd.status === 'exited') return false;
     try {
         await api.resize(panelObj.selectedInstUrl, panelObj.selectedCmdId, { rows, cols });
@@ -1588,8 +1571,7 @@ async function toggleMaxFit(panelId) {
         const rect = vttyEl.getBoundingClientRect();
         if (rect.width < 10 || rect.height < 10) return;
 
-        const inst = panelObj.selectedInstUrl ? state.connections.find(i => i.url === panelObj.selectedInstUrl) : null;
-        const cmd = inst && inst._commands ? inst._commands.find(c => c.id === panelObj.selectedCmdId) : null;
+        const cmd = _findCmd(panelObj.selectedInstUrl, panelObj.selectedCmdId);
         if (panelObj.selectedCmdId && cmd && cmd.status === 'exited') {
             return;
         }
@@ -1792,66 +1774,10 @@ function onPanelDragEnd(e) {
     });
 }
 
-
-    // Expose all public functions to global scope
-    /// Close a panel entirely — always removes it.
+/// Close a panel entirely — always removes it.
 function closePanelContent(panelId) {
     removePanel(panelId);
 }
-
-    window.addPanelDirect = addPanelDirect;
-    window.addPanel = addPanel;
-    window.closePanelModal = closePanelModal;
-    window.confirmAddPanel = confirmAddPanel;
-    window.removePanel = removePanel;
-    window.closePanelContent = closePanelContent;
-    window.toggleMinimizePanel = toggleMinimizePanel;
-    window.splitPanel = splitPanel;
-    window.unsplitPanel = unsplitPanel;
-    window.renderPanels = renderPanels;
-    window.focusPanel = focusPanel;
-    window.updateSharedToolbar = updateSharedToolbar;
-    window.sendKeysToPanel = sendKeysToPanel;
-    window.showSpecialKeysHelp = showSpecialKeysHelp;
-    window.closeSpecialKeysModal = function() {
-        releaseCurrentFocusTrap();
-        const modal = document.getElementById('specialKeysModal');
-        if (modal) modal.remove();
-    };
-    window.togglePanelLayout = togglePanelLayout;
-    window.toggleLayoutPresetMenu = toggleLayoutPresetMenu;
-    window.applyLayoutPreset = applyLayoutPreset;
-    window.copyTerminalSelection = copyTerminalSelection;
-    window.exportTerminal = exportTerminal;
-    window.screenshotPanel = screenshotPanel;
-    window.closeContextMenu = closeContextMenu;
-    window.showCmdContextMenu = showCmdContextMenu;
-    window.showPanelContextMenu = showPanelContextMenu;
-    window.startRenamePanel = startRenamePanel;
-    window.finishRenamePanel = finishRenamePanel;
-    window.copyCommandUrl = copyCommandUrl;
-    window.togglePauseCmd = togglePauseCmd;
-    window.autoFitActiveTerminal = autoFitActiveTerminal;
-    window.toggleMaxFit = toggleMaxFit;
-    window.toggleMaxFont = toggleMaxFont;
-    window.onPanelDragStart = onPanelDragStart;
-    window.onPanelDragOver = onPanelDragOver;
-    window.onPanelDragLeave = onPanelDragLeave;
-    window.onPanelDrop = onPanelDrop;
-    window.onPanelDragEnd = onPanelDragEnd;
-    window.onPanelAreaDragOver = onPanelAreaDragOver;
-    window.onPanelAreaDrop = onPanelAreaDrop;
-    window._renderVttyContainer = _renderVttyContainer;
-    window._getServerLabel = _getServerLabel;
-    window._getServerColor = _getServerColor;
-    window._getServerTextColor = _getServerTextColor;
-    window._getPanelCmdLabel = _getPanelCmdLabel;
-    window._updateSplitHeaders = _updateSplitHeaders;
-    window._renderSplitContainer = _renderSplitContainer;
-    window._updateSplitPanelHeader = _updateSplitPanelHeader;
-    window._renderMinimizedPanels = _renderMinimizedPanels;
-    window._applyPanelLayoutClass = _applyPanelLayoutClass;
-    window._updatePanelMultiUI = _updatePanelMultiUI;
 
 // ─── Command Selection: terminal cache, sidebar highlight, panel history, command switching ───
 
@@ -2089,17 +2015,6 @@ function selectCommand(instUrl, cmdId, name) {
     _updatePanelHistoryBtns(panelObj.id);
 }
 
-    window._isTerminalVisible = _isTerminalVisible;
-    window.updateSidebarSelection = updateSidebarSelection;
-    window._cacheTerminalForSwitch = _cacheTerminalForSwitch;
-    window._restoreCachedDom = _restoreCachedDom;
-    window._pushPanelHistory = _pushPanelHistory;
-    window._updatePanelHistoryBtns = _updatePanelHistoryBtns;
-    window.panelHistoryBack = panelHistoryBack;
-    window.panelHistoryForward = panelHistoryForward;
-    window._selectCommandForPanel = _selectCommandForPanel;
-    window.selectCommand = selectCommand;
-
 // ─── Drag-and-Drop ───
 // Sidebar command drag-to-panel, sidebar command reorder (mousedown-based),
 // and open-command-in-new-pane helper.
@@ -2112,33 +2027,6 @@ function onCmdDragStart(e, instUrl, cmdId, cmdName) {
     e.dataTransfer.setData('application/x-cmd', JSON.stringify({ instUrl, cmdId, cmdName }));
     if (e.target && e.target.style) e.target.style.opacity = '0.5';
     setTimeout(() => { if (e.target && e.target.style) e.target.style.opacity = ''; }, 0);
-}
-
-function initPanelDropTargets() {
-    document.querySelectorAll('.panel-header').forEach(headerEl => {
-        const panelEl = headerEl.closest('.panel');
-        if (!panelEl) return;
-        headerEl.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'copy';
-            panelEl.classList.add('drag-over-left');
-        });
-        headerEl.addEventListener('dragleave', (e) => {
-            panelEl.classList.remove('drag-over-left');
-        });
-        headerEl.addEventListener('drop', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            panelEl.classList.remove('drag-over-left');
-            try {
-                const data = JSON.parse(e.dataTransfer.getData('application/x-cmd'));
-                if (data && data.cmdId) {
-                    _openCommandInNewPane(data.instUrl, data.cmdId, data.cmdName);
-                }
-            } catch (err) { /* ignore invalid drops */ }
-            _draggedCmd = null;
-        });
-    });
 }
 
 // ─── Sidebar Command Reorder (mousedown-based) ───
@@ -2293,25 +2181,81 @@ function _cmdReorderMouseUp(e) {
 function _openCommandInNewPane(instUrl, cmdId, cmdName) {
     const newPanel = addPanelDirect();
     if (!newPanel) return;
-    focusPanel(newPanel.id);
-    newPanel.selectedInstUrl = instUrl;
-    newPanel.selectedCmdId = cmdId;
-    state.selectedInstUrl = instUrl;
-    state.selectedCmdId = cmdId;
-    state.bufferView = 'current';
-    _restoreCachedDom(cmdId);
-    updatePanelCommandInfo();
-    updateTerminalDisconnectedOverlay();
-    updateSidebarSelection();
-    loadVttyHttpForPanel(newPanel.id, instUrl, cmdId);
-    startPanelUpdateMode(newPanel.id);
+    _selectCommandForPanel(newPanel, instUrl, cmdId);
 }
 
-window.initPanelDropTargets = initPanelDropTargets;
-window.onCmdDragStart = onCmdDragStart;
-window.getCmdOrder = getCmdOrder;
-window.setCmdOrder = setCmdOrder;
-window.getOrderedCmds = getOrderedCmds;
-window._openCommandInNewPane = _openCommandInNewPane;
+    // ── Consolidated exports ──
+    window.addPanelDirect = addPanelDirect;
+    window.addPanel = addPanel;
+    window.closePanelModal = closePanelModal;
+    window.confirmAddPanel = confirmAddPanel;
+    window.removePanel = removePanel;
+    window.closePanelContent = closePanelContent;
+    window.toggleMinimizePanel = toggleMinimizePanel;
+    window.splitPanel = splitPanel;
+    window.unsplitPanel = unsplitPanel;
+    window.renderPanels = renderPanels;
+    window.focusPanel = focusPanel;
+    window.updateSharedToolbar = updateSharedToolbar;
+    window.sendKeysToPanel = sendKeysToPanel;
+    window.showSpecialKeysHelp = showSpecialKeysHelp;
+    window.closeSpecialKeysModal = function() {
+        releaseCurrentFocusTrap();
+        const modal = document.getElementById('specialKeysModal');
+        if (modal) modal.remove();
+    };
+    window.togglePanelLayout = togglePanelLayout;
+    window.toggleLayoutPresetMenu = toggleLayoutPresetMenu;
+    window.applyLayoutPreset = applyLayoutPreset;
+    window.copyTerminalSelection = copyTerminalSelection;
+    window.exportTerminal = exportTerminal;
+    window.screenshotPanel = screenshotPanel;
+    window.closeContextMenu = closeContextMenu;
+    window.showCmdContextMenu = showCmdContextMenu;
+    window.showPanelContextMenu = showPanelContextMenu;
+    window.startRenamePanel = startRenamePanel;
+    window.finishRenamePanel = finishRenamePanel;
+    window.copyCommandUrl = copyCommandUrl;
+    window.togglePauseCmd = togglePauseCmd;
+    window.autoFitActiveTerminal = autoFitActiveTerminal;
+    window.toggleMaxFit = toggleMaxFit;
+    window.toggleMaxFont = toggleMaxFont;
+    window.onPanelDragStart = onPanelDragStart;
+    window.onPanelDragOver = onPanelDragOver;
+    window.onPanelDragLeave = onPanelDragLeave;
+    window.onPanelDrop = onPanelDrop;
+    window.onPanelDragEnd = onPanelDragEnd;
+    window.onPanelAreaDragOver = onPanelAreaDragOver;
+    window.onPanelAreaDrop = onPanelAreaDrop;
+    window._renderVttyContainer = _renderVttyContainer;
+    window._getServerLabel = _getServerLabel;
+    window._getServerColor = _getServerColor;
+    window._getServerTextColor = _getServerTextColor;
+    window._getPanelCmdLabel = _getPanelCmdLabel;
+    window._updateSplitHeaders = _updateSplitHeaders;
+    window._renderSplitContainer = _renderSplitContainer;
+    window._updateSplitPanelHeader = _updateSplitPanelHeader;
+    window._renderMinimizedPanels = _renderMinimizedPanels;
+    window._applyPanelLayoutClass = _applyPanelLayoutClass;
+    window._updatePanelMultiUI = _updatePanelMultiUI;
+    window._isTerminalVisible = _isTerminalVisible;
+    window.updateSidebarSelection = updateSidebarSelection;
+    window._cacheTerminalForSwitch = _cacheTerminalForSwitch;
+    window._restoreCachedDom = _restoreCachedDom;
+    window._pushPanelHistory = _pushPanelHistory;
+    window._updatePanelHistoryBtns = _updatePanelHistoryBtns;
+    window.panelHistoryBack = panelHistoryBack;
+    window.panelHistoryForward = panelHistoryForward;
+    window._selectCommandForPanel = _selectCommandForPanel;
+    window.selectCommand = selectCommand;
+    window.onCmdDragStart = onCmdDragStart;
+    window.getCmdOrder = getCmdOrder;
+    window.setCmdOrder = setCmdOrder;
+    window.getOrderedCmds = getOrderedCmds;
+    window._openCommandInNewPane = _openCommandInNewPane;
+    window._findCmd = _findCmd;
+    window._renderSearchBar = _renderSearchBar;
+    window._showCopyFeedback = _showCopyFeedback;
+    window._getPanelLabel = _getPanelLabel;
+    window._renderSplitPane = _renderSplitPane;
 })();
-

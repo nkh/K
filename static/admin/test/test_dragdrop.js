@@ -20,12 +20,6 @@ if (typeof onCmdDragStart === 'function') {
     assertEq(evt.dataTransfer['text/plain'], 'cmd-1', 'dataTransfer set with cmd id');
 }
 
-// ── initPanelDropTargets ──
-console.log('initPanelDropTargets tests');
-if (typeof initPanelDropTargets === 'function') {
-    assert(() => { initPanelDropTargets(); }, 'initPanelDropTargets does not throw');
-}
-
 // ── getCmdOrder / setCmdOrder ──
 console.log('cmd order tests');
 if (typeof getCmdOrder === 'function') {

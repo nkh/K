@@ -219,7 +219,7 @@ console.log('REG-BUG-006: all cross-module functions are properly exported');
 const requiredExports = [
     'toggleMaxFit', 'toggleMaxFont',
     'onPanelDrop', 'onPanelDragStart', 'onPanelDragOver', 'onPanelDragEnd',
-    'onCmdDragStart', 'initPanelDropTargets',
+    'onCmdDragStart',
     'addConnection', 'removeConnection',
     'updateInstanceDropdown', 'updatePanelCommandInfo',
     'loadVttyHttpForPanel',

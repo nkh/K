@@ -652,7 +652,7 @@ const _crossDeps = (() => {
     'scrollTerminalBottom', 'vttySearch', 'vttySearchNext', 'vttySearchPrev',
     'vttySearchClose', 'vttyRemoveHighlights', 'vttyApplyHighlights',
     'vttyScrollToMatch', '_updateSearchProgress',
-    'updateSidebarBanner', 'initPanelDropTargets', 'addDiscoveredPeer',
+    'updateSidebarBanner', 'addDiscoveredPeer',
     'navigatePrevCommand', 'navigateNextCommand', 'updateSidebarResourceText',
     'pollResources', 'onCmdDragStart', 'onPanelAreaDragOver', 'onPanelAreaDrop', 'openGlobalSearch', 'closeGlobalSearch', 'executeGlobalSearch',
     'onSearchResultClick', 'updateFrozenIndicator', 'cmdManagerKillAll',
