@@ -7,11 +7,11 @@ resetTestState();
 
 globalThis.renderPanels = function() {};
 globalThis.loadCommands = function() { return Promise.resolve(); };
-globalThis.startUpdateMode = function() {};
+globalThis.startPanelUpdateMode = function() {};
 globalThis.updateTerminalDisconnectedOverlay = function() {};
 globalThis.updateSidebarSelection = function() {};
 globalThis.updatePanelCommandInfo = function() {};
-globalThis.loadVttyHttp = function() {};
+globalThis.loadVttyHttpForPanel = function() {};
 globalThis.updateSharedToolbar = function() {};
 globalThis.updateCmdToolbarVisibility = function() {};
 globalThis.connectPanelWs = function() {};

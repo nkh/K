@@ -23,7 +23,7 @@ _elementRegistry.set('contentArea', contentArea);
 globalThis.renderPanels = function() {};
 globalThis.updateSharedToolbar = function() {};
 globalThis.startRefresh = function() {};
-globalThis.loadVttyHttp = function() {};
+globalThis.loadVttyHttpForPanel = function() {};
 
 // ── saveToken ──
 console.log('saveToken tests');

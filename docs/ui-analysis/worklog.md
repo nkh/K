@@ -251,10 +251,30 @@ Key discovery: api.js (loaded via (0, eval) in setup.js) captures the fetch func
 - Tests: 1818 passed, 3 failed (pre-existing), 0 regressions
 - Commit: ad33559
 
+### Phase 8a: Delete legacy (non-panel) vtty functions + dead scroll-pause mechanism
+- Migrated all callers of legacy functions to per-panel versions across 8 modules:
+  - keyboard.js: `scheduleVttyHttp`→`scheduleVttyHttpForPanel`, `loadVttyHttp`→`loadVttyHttpForPanel` (3 sites)
+  - search.js: `loadVttyHttp`→`loadVttyHttpForPanel` (1 site)
+  - spawn.js: `startUpdateMode`→`startPanelUpdateMode`, `stopUpdateMode`→`stopPanelUpdateMode`, `loadVttyHttp`→`loadVttyHttpForPanel` (3 sites)
+  - sidebar.js: `scheduleVttyHttp`→`scheduleVttyHttpForPanel`, removed `_flushPendingVttyUpdate` call (2 sites)
+  - server-connections.js: `stopUpdateMode`→`stopPanelUpdateMode`, `startUpdateMode`→`startPanelUpdateMode`, `stopPoll`/`startPoll`→direct per-panel calls (4 sites)
+  - commands-core.js: `startUpdateMode`→`startPanelUpdateMode` (1 site)
+  - panels.js: `loadVttyHttp`→`loadVttyHttpForPanel`, deleted `_flushPendingVttyUpdate`, removed 5 `_pendingVttyData`/`_pendingVttyDirty` assignments
+- Deleted 5 legacy functions from vtty.js (~270 lines):
+  - `updateVttyDisplay`, `updateVttyMetadata`, `applyVttyDiff`, `scheduleVttyHttp`, `loadVttyHttp`
+- Deleted 4 legacy wrappers from websocket.js (~26 lines):
+  - `startPoll`, `stopPoll`, `startUpdateMode`, `stopUpdateMode`
+- Removed dead `_userScrolling`/`_pendingVttyData`/`_pendingVttyDirty` mechanism:
+  - The per-panel WS path never set `_pendingVttyData`, making the scroll-pause mechanism non-functional
+  - Removed: scroll event listener in app.js, `_flushPendingVttyUpdate` in panels.js, 3 state properties
+- Updated 15 test files to use per-panel versions
+- vtty.js: 728→457 (−271), websocket.js: 564→538 (−26), panels.js: 2347→2317 (−30), state.js: 109→100 (−9)
+- Tests: 1818 passed (same), 3 failed (pre-existing), 0 regressions
+
 ### Running totals
 - **Start: ~10,700 lines, 24 modules**
-- **Current: 9,019 lines, 14 modules** (−1,681 lines, −10 modules)
+- **Current: 8,677 lines, 14 modules** (−2,023 lines, −10 modules)
 - **Target: ~5,200 lines, ~14 modules**
-- **Remaining: ~3,819 lines to cut**
-- Modules: state(109), utils(272), api(282), delegate(376), commands-core(392), keyboard(490), search(504), server-connections(504), spawn(523), websocket(564), vtty(728), misc(769), sidebar(1159), panels(2347)
-- Biggest targets: panels.js (2347), sidebar.js (1159), vtty.js (728), misc.js (769)
+- **Remaining: ~3,477 lines to cut**
+- Modules: state(100), utils(272), api(282), delegate(376), commands-core(390), vtty(457), keyboard(490), server-connections(502), search(504), spawn(523), websocket(538), misc(769), sidebar(1157), panels(2317)
+- Biggest targets: panels.js (2317), sidebar.js (1157), misc.js (769), websocket.js (538), spawn.js (523)

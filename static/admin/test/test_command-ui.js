@@ -12,8 +12,8 @@ globalThis.updateSharedToolbar = function() {};
 globalThis.disconnectPanelWs = function() {};
 globalThis.stopPanelPoll = function() {};
 globalThis.connectPanelWs = function() {};
-globalThis.loadVttyHttp = function() {};
-globalThis.scheduleVttyHttp = function() {};
+globalThis.loadVttyHttpForPanel = function() {};
+globalThis.scheduleVttyHttpForPanel = function() {};
 globalThis.trapFocus = function() {};
 globalThis.releaseCurrentFocusTrap = function() {};
 

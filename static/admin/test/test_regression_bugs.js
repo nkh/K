@@ -9,9 +9,7 @@ resetTestState();
 
 // Mock functions that depend on network/DOM
 globalThis.renderPanels = function() {};
-globalThis.loadVttyHttp = function() {};
 globalThis.loadVttyHttpForPanel = function() {};
-globalThis.startUpdateMode = function() {};
 globalThis.startPanelUpdateMode = function() {};
 globalThis.stopPanelUpdateMode = function() {};
 globalThis.updateTerminalDisconnectedOverlay = function() {};
@@ -27,7 +25,7 @@ globalThis.loadCommands = function() { return Promise.resolve(); };
 globalThis._cacheTerminalForSwitch = function() {};
 globalThis._restoreCachedDom = function() {};
 globalThis.focusPanel = function(id) { state._focusedPanelId = id; };
-globalThis.scheduleVttyHttp = function() {};
+globalThis.scheduleVttyHttpForPanel = function() {};
 
 // ──────────────────────────────────────────────────────────────
 // REG-BUG-001: maxfit button — _resizePanelTo was missing

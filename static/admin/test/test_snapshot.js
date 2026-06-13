@@ -73,7 +73,7 @@ globalThis.fetch = async function(url) {
 };
 globalThis.buildCellGrid = function() {};
 globalThis.updateVttyMetadataFromHttp = function() {};
-globalThis.startUpdateMode = function() {};
+globalThis.startPanelUpdateMode = function() {};
 globalThis.updatePanelCommandInfo = function() {};
 globalThis.updateTerminalDisconnectedOverlay = function() {};
 

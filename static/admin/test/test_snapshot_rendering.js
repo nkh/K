@@ -42,7 +42,7 @@ function setupSnapshotEnv() {
     globalThis.loadCommands = function() {};
     globalThis.updateDisconnectedUI = function() {};
     globalThis.renderPanels = function() {};
-    globalThis.startUpdateMode = function() {};
+    globalThis.startPanelUpdateMode = function() {};
     globalThis.updatePanelCommandInfo = function() {};
     globalThis.updateTerminalDisconnectedOverlay = function() {};
     globalThis._buildSidebar = function() {};

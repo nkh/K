@@ -171,23 +171,9 @@ if (typeof pollOncePanel === 'function') {
     assert(() => { pollOncePanel(noSelP.id); }, 'pollOncePanel no-selection no crash');
 }
 
-// ── Legacy WS functions ──
-console.log('legacy WS functions');
-if (typeof connectVttyWs === 'function') {
-    assert(() => { connectVttyWs(); }, 'connectVttyWs does not throw');
-}
-if (typeof disconnectVttyWs === 'function') {
-    disconnectVttyWs();
-    assertEq(state._wsReconnectCount, 0, 'disconnectVttyWs resets reconnect count');
-    assertEq(state._wsPingSendTime, 0, 'disconnectVttyWs resets ping send time');
-    assertEq(state._wsLatency, 0, 'disconnectVttyWs resets latency');
-}
-if (typeof startPoll === 'function') {
-    assert(() => { startPoll(); }, 'startPoll does not throw');
-}
-if (typeof stopPoll === 'function') {
-    assert(() => { stopPoll(); }, 'stopPoll does not throw');
-}
+// ── Legacy WS functions removed in Phase 8a ──
+// (connectVttyWs, disconnectVttyWs, startPoll, stopPoll deleted — per-panel versions used instead)
+console.log('legacy WS functions removed (per-panel versions used)');
 
 // ── startPanelUpdateMode / stopPanelUpdateMode ──
 console.log('startPanelUpdateMode / stopPanelUpdateMode tests');

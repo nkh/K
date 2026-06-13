@@ -7,8 +7,8 @@ resetTestState();
 
 // Mock functions that depend on network/DOM
 globalThis.renderPanels = function() {};
-globalThis.loadVttyHttp = function() {};
-globalThis.startUpdateMode = function() {};
+globalThis.loadVttyHttpForPanel = function() {};
+globalThis.startPanelUpdateMode = function() {};
 globalThis.updateTerminalDisconnectedOverlay = function() {};
 globalThis.updateSidebarSelection = function() {};
 globalThis.updatePanelCommandInfo = function() {};
@@ -39,8 +39,7 @@ assert(() => { selectCommand('http://localhost:9090', 'cmd-1', 'htop'); }, 'sele
 assertEq(state.selectedCmdId, 'cmd-1', 'selectedCmdId set');
 assertEq(state.selectedInstUrl, 'http://localhost:9090', 'selectedInstUrl set');
 assertEq(state.bufferView, 'current', 'bufferView reset to current');
-assertEq(state._pendingVttyData, null, 'pending vtty data cleared');
-assertEq(state._pendingVttyDirty, false, 'pending vtty dirty cleared');
+// _pendingVttyData and _pendingVttyDirty removed in Phase 8a (per-panel)
 
 // ── selectCommand: no panels → no-op ──
 console.log('selectCommand edge cases');
@@ -156,16 +155,13 @@ if (typeof _isTerminalVisible === 'function') {
     assert(!_isTerminalVisible(), 'not visible when no command selected');
 }
 
-// ── startUpdateMode ──
-console.log('startUpdateMode tests');
-if (typeof startUpdateMode === 'function') {
-    assert(() => { startUpdateMode(); }, 'startUpdateMode does not throw');
+// ── startPanelUpdateMode / stopPanelUpdateMode ──
+console.log('startPanelUpdateMode / stopPanelUpdateMode tests');
+if (typeof startPanelUpdateMode === 'function') {
+    assert(() => { startPanelUpdateMode('test-panel-id'); }, 'startPanelUpdateMode does not throw');
 }
-
-// ── stopUpdateMode ──
-console.log('stopUpdateMode tests');
-if (typeof stopUpdateMode === 'function') {
-    assert(() => { stopUpdateMode(); }, 'stopUpdateMode does not throw');
+if (typeof stopPanelUpdateMode === 'function') {
+    assert(() => { stopPanelUpdateMode('test-panel-id'); }, 'stopPanelUpdateMode does not throw');
 }
 
 // ── updateSidebarSelection ──

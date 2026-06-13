@@ -59,7 +59,7 @@ if (typeof getOrderedCmds === 'function') {
 console.log('_openCommandInNewPane tests');
 if (typeof _openCommandInNewPane === 'function') {
     globalThis.connectPanelWs = function() {};
-    globalThis.startUpdateMode = function() {};
+    globalThis.startPanelUpdateMode = function() {};
     globalThis.focusPanel = function() {};
     globalThis._restoreCachedDom = function() {};
     globalThis.updatePanelCommandInfo = function() {};

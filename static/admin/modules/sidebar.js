@@ -66,8 +66,6 @@ function toggleLogsView() {
         log.classList.add('hidden');
         if (btn) { btn.style.background = ''; btn.style.color = ''; }
         disconnectLogWs();
-        // Flush any VTTY updates that arrived while logs were shown
-        _flushPendingVttyUpdate();
     } else {
         // Switch to logs
         state.currentView = 'log';
@@ -363,7 +361,7 @@ function _buildSidebar() {
     if (state.selectedInstUrl && state.selectedCmdId) {
         updatePanelCommandInfo();
         if (state.updateMode === 'poll' || state.bufferView !== 'current') {
-            scheduleVttyHttp(state.selectedInstUrl, state.selectedCmdId, 500);
+            scheduleVttyHttpForPanel(state._focusedPanelId, state.selectedInstUrl, state.selectedCmdId, 500);
         }
     }
 }

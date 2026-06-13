@@ -110,9 +110,9 @@ function switchUpdateMode(mode) {
     localStorage.setItem('vrw_update_mode', mode);
     applyUpdateModeUI();
     // Stop existing update mechanism and restart with new mode
-    stopUpdateMode();
+    stopPanelUpdateMode(state._focusedPanelId);
     if (state.selectedInstUrl && state.selectedCmdId) {
-        startUpdateMode();
+        startPanelUpdateMode(state._focusedPanelId);
     }
 }
 
@@ -124,8 +124,8 @@ function applyPollInterval() {
     document.getElementById('pollInterval').value = String(state.pollInterval);
     // If currently polling, restart the timer with new interval
     if (state.updateMode === 'poll') {
-        stopPoll();
-        startPoll();
+        for (const p of state.panels) stopPanelPoll(p.id);
+        if (state._focusedPanelId) startPanelPoll(state._focusedPanelId);
     }
 }
 // ─── Certificates ───
@@ -396,8 +396,6 @@ async function confirmAddServer() {
             focusPanel(panelObj.id);
             state.selectedInstUrl = url;
             state.selectedCmdId = targetCmd.id;
-            state._pendingVttyData = null;
-            state._pendingVttyDirty = false;
             state.bufferView = 'current';
             _restoreCachedDom(targetCmd.id);
             updatePanelCommandInfo();

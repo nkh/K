@@ -112,22 +112,7 @@
         }
     }
 
-    // ── Scroll detection: pause VTTY DOM updates while user is scrolling ──
-    document.addEventListener('scroll', (e) => {
-        const vttyEl = e.target.closest ? e.target.closest('.vtty-container') : null;
-        if (!vttyEl) return;
-        state._userScrolling = true;
-        if (state._userScrollTimer) clearTimeout(state._userScrollTimer);
-        state._userScrollTimer = setTimeout(() => {
-            state._userScrolling = false;
-            state._userScrollTimer = null;
-            if (state._pendingVttyDirty && _isTerminalVisible()) {
-                _flushPendingVttyUpdate();
-            }
-        }, 200);
-    }, true);
-
-    // Start refresh
+    // ── Start refresh ──
     startRefresh();
     loadCertificates();
     fetchServerTemplates();

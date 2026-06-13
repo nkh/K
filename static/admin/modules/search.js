@@ -203,7 +203,7 @@ function scrollTerminalBottom(panelId) {
         const sbIndicator = document.getElementById('scrollbackIndicator');
         if (sbIndicator) sbIndicator.classList.add('hidden');
         if (state.selectedCmdId && panelObj.selectedInstUrl) {
-            loadVttyHttp(panelObj.selectedInstUrl, state.selectedCmdId);
+            loadVttyHttpForPanel(panelObj.id, panelObj.selectedInstUrl, state.selectedCmdId);
         }
     }
 }

@@ -204,7 +204,7 @@ async function sendDirectKey(e, panelObj) {
         const json = await api.sendKeys(panelObj.selectedInstUrl, state.selectedCmdId, { keys: seq });
         if (json.status === 'ok') {
             // Trigger a refresh
-            scheduleVttyHttp(panelObj.selectedInstUrl, state.selectedCmdId, 50);
+            scheduleVttyHttpForPanel(panelObj.id, panelObj.selectedInstUrl, state.selectedCmdId, 50);
         }
     } catch (err) {
         console.error('Direct key send error:', err);
@@ -291,7 +291,7 @@ document.addEventListener('wheel', (e) => {
             e.preventDefault();
             panelObj.scrollbackOffset += 3;
             sessionStorage.setItem('vrw_scrollback_' + state.selectedCmdId, panelObj.scrollbackOffset.toString());
-            loadVttyHttp(panelObj.selectedInstUrl, state.selectedCmdId);
+            loadVttyHttpForPanel(panelObj.id, panelObj.selectedInstUrl, state.selectedCmdId);
             // Show scrollback indicator
             const sbIndicator = document.getElementById('scrollbackIndicator');
             if (sbIndicator) { sbIndicator.classList.remove('hidden'); sbIndicator.textContent = 'SCROLLBACK -' + panelObj.scrollbackOffset + ' rows'; }
@@ -469,7 +469,7 @@ async function sendMouseEvent(panelObj, eventType, button, e) {
             y: y,
         });
         // Refresh display after mouse events (the child may have reacted)
-        scheduleVttyHttp(panelObj.selectedInstUrl, state.selectedCmdId, 30);
+        scheduleVttyHttpForPanel(panelObj.id, panelObj.selectedInstUrl, state.selectedCmdId, 30);
     } catch (err) {
         // Silently ignore — mouse events are best-effort
     }

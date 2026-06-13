@@ -946,7 +946,7 @@ async function sendKeysToPanel(panelId) {
         const json = await api.sendKeys(instUrl, cmdId, { keys: keysValue });
         if (json.status === 'ok') {
             input.value = '';
-            loadVttyHttp(instUrl, cmdId);
+            loadVttyHttpForPanel(panelId, instUrl, cmdId);
         } else {
             console.error('send_keys server error:', json.error);
             input.value = '';
@@ -1861,24 +1861,6 @@ function _isTerminalVisible() {
     return true;
 }
 
-function _flushPendingVttyUpdate() {
-    if (!state._pendingVttyDirty) return;
-    state._pendingVttyDirty = false;
-    if (state._pendingVttyData) {
-        const data = state._pendingVttyData;
-        state._pendingVttyData = null;
-        if (data.cells && data.cells.length > 0) {
-            applyVttyDiff(data);
-        } else {
-            updateVttyDisplay(data);
-        }
-    } else {
-        if (state.selectedInstUrl && state.selectedCmdId) {
-            loadVttyHttp(state.selectedInstUrl, state.selectedCmdId);
-        }
-    }
-}
-
 /// Cache the terminal display DOM for the currently selected command.
 /// Called before switching to a different command.  Moves the <pre> children
 /// into a detached DocumentFragment so they can be re-attached instantly on
@@ -2001,8 +1983,6 @@ function _selectCommandForPanel(panelObj, instUrl, cmdId) {
     focusPanel(panelObj.id);
     state.selectedInstUrl = instUrl;
     state.selectedCmdId = cmdId;
-    state._pendingVttyData = null;
-    state._pendingVttyDirty = false;
     state.bufferView = 'current';
     _restoreCachedDom(cmdId);
     const globalBufferSel = document.getElementById('bufferSelect');
@@ -2047,10 +2027,6 @@ function selectCommand(instUrl, cmdId, name) {
         // Also sync global state so bottom bar etc. work
         state.selectedInstUrl = instUrl;
         state.selectedCmdId = cmdId;
-
-        // Clear any buffered update
-        state._pendingVttyData = null;
-        state._pendingVttyDirty = false;
         state.bufferView = 'current';
 
         // Fetch VTTY content for secondary pane
@@ -2084,9 +2060,6 @@ function selectCommand(instUrl, cmdId, name) {
     // Sync global state
     state.selectedInstUrl = instUrl;
     state.selectedCmdId = cmdId;
-    // Clear any buffered update — we fetch fresh data below
-    state._pendingVttyData = null;
-    state._pendingVttyDirty = false;
     // Restore cached DOM from previous visit if available (instant display).
     // Then loadVttyHttp will check generation — if unchanged, the cached
     // DOM is kept; if changed, a full HTML fetch replaces it.
@@ -2117,7 +2090,6 @@ function selectCommand(instUrl, cmdId, name) {
 }
 
     window._isTerminalVisible = _isTerminalVisible;
-    window._flushPendingVttyUpdate = _flushPendingVttyUpdate;
     window.updateSidebarSelection = updateSidebarSelection;
     window._cacheTerminalForSwitch = _cacheTerminalForSwitch;
     window._restoreCachedDom = _restoreCachedDom;
@@ -2326,8 +2298,6 @@ function _openCommandInNewPane(instUrl, cmdId, cmdName) {
     newPanel.selectedCmdId = cmdId;
     state.selectedInstUrl = instUrl;
     state.selectedCmdId = cmdId;
-    state._pendingVttyData = null;
-    state._pendingVttyDirty = false;
     state.bufferView = 'current';
     _restoreCachedDom(cmdId);
     updatePanelCommandInfo();

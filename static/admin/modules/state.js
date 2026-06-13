@@ -33,15 +33,6 @@ const state = {
     // Whether the user is currently viewing the live buffer (not scrolled
     // into scrollback history). Used for auto-scroll decisions.
     _userAtBottom: true,
-    // Whether the user is actively scrolling the terminal container.
-    // DOM updates are paused while this is true, then flushed on scroll-end.
-    _userScrolling: false,
-    _userScrollTimer: null,
-    // Buffered VTTY update received while terminal was not visible or while
-    // the user was scrolling.  Stored so it can be applied once conditions
-    // allow (terminal visible, user stopped scrolling).
-    _pendingVttyData: null,
-    _pendingVttyDirty: false,
     // Level 3: Cell grid for incremental DOM patching.
     // Maps cmdId → { grid: [[span, ...], ...], rows: number, cols: number }
     // Built after each full HTML replacement; used by applyVttyDiff.

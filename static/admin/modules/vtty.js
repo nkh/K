@@ -1,54 +1,6 @@
 // ─── VTTY Display ───
 (function() {
     'use strict';
-function updateVttyDisplay(data) {
-    // Pause DOM updates while the user is actively scrolling
-    if (state._userScrolling) {
-        state._pendingVttyData = data;
-        state._pendingVttyDirty = true;
-        return;
-    }
-    const panel = getSelectedPanel();
-    if (!panel) return;
-    const vttyEl = panel.querySelector('.vtty-container');
-    const pre = vttyEl ? vttyEl.querySelector('pre') : null;
-    if (!pre) return;
-
-    // Level 2: Skip redundant DOM updates if generation hasn't changed.
-    const cmdId = state.selectedCmdId;
-    if (cmdId && data.generation !== undefined) {
-        if (state._lastGeneration[cmdId] === data.generation) {
-            // Generation unchanged — only update metadata, skip DOM replacement
-            updateVttyMetadata(data, panel, vttyEl);
-            return;
-        }
-        state._lastGeneration[cmdId] = data.generation;
-    }
-
-    if (data.html !== undefined && data.html !== null) {
-        // Level 1: Save scroll position before innerHTML replacement
-        const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
-        const oldScrollHeight = vttyEl.scrollHeight;
-
-        pre.innerHTML = data.html;
-
-        // Level 3: Rebuild cell grid after full HTML replacement
-        if (state._level3Enabled && data.dimensions) {
-            buildCellGrid(cmdId, pre, data.dimensions.rows, data.dimensions.cols);
-        }
-
-        // Level 1: Restore scroll position after DOM replacement.
-        // If user was at bottom, snap to new bottom (auto-scroll).
-        // Otherwise, adjust for content height change to maintain view position.
-        if (wasAtBottom) {
-            vttyEl.scrollTop = vttyEl.scrollHeight;
-        } else {
-            vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
-        }
-    }
-
-    updateVttyMetadata(data, panel, vttyEl);
-}
 
 // ─── Per-Panel VTTY Display ───
 // These functions route VTTY updates to a specific panel's DOM,
@@ -270,54 +222,6 @@ async function loadVttyHttpForPanel(panelId, instUrl, cmdId) {
     }
 }
 
-/// Update cursor, dimensions, mouse state, etc. without touching the DOM content.
-/// Called both after innerHTML replacement and when generation is unchanged (skip path).
-function updateVttyMetadata(data, panel, vttyEl) {
-    // Cursor position
-    const cursor = data.cursor || {};
-    const dims = data.dimensions || {};
-    document.getElementById('cursorPos').textContent = `Cursor: ${cursor.row + 1},${cursor.col + 1}`;
-    document.getElementById('termDims').textContent = `${dims.rows}x${dims.cols}`;
-
-    // Show cursor indicator (hide when in scrollback or app hid it via ?25l)
-    const panelObj = state.panels.find(p => p.id === panel.id);
-    const inScrollback = panelObj && panelObj.scrollbackOffset > 0;
-    const cursorHidden = data.cursor_visible === false;
-    const cursorEl = vttyEl ? vttyEl.querySelector('.cursor-indicator') : null;
-    if (cursorEl && cursor.row !== undefined && !inScrollback && !cursorHidden) {
-        const charW = state.fontSize * 0.6;
-        const charH = state.fontSize * 1.2;
-        cursorEl.style.top = (cursor.row * charH) + 'px';
-        cursorEl.style.left = (cursor.col * charW) + 'px';
-        cursorEl.style.width = charW + 'px';
-        cursorEl.style.height = charH + 'px';
-        cursorEl.classList.remove('hidden');
-    } else if (cursorEl) {
-        cursorEl.classList.add('hidden');
-    }
-
-    // Track mouse state from the server response
-    if (panelObj) {
-        panelObj.mouseTracking = !!data.mouse_tracking;
-        panelObj.mouseSgr = !!data.mouse_sgr;
-    }
-
-    // Toggle selectable class on vtty container (enable text selection when mouse tracking is off)
-    if (vttyEl) {
-        const mt = panelObj ? panelObj.mouseTracking : false;
-        vttyEl.classList.toggle('selectable', !mt);
-        // Store dimensions on <pre> for screenshot filename generation
-        const pre = vttyEl.querySelector('pre');
-        if (pre && dims.rows && dims.cols) {
-            pre._vttyRows = dims.rows;
-            pre._vttyCols = dims.cols;
-        }
-    }
-
-    state._termRows = dims.rows;
-    state._termCols = dims.cols;
-}
-
 // ─── Level 3: Cell Grid for Incremental DOM Patching ───
 // Builds a 2D array of span element references from the <pre> DOM tree,
 // indexed as grid[row][col]. Each row is terminated by a \n text node in
@@ -490,181 +394,11 @@ function _splitAndUpdateCell(cg, row, col, diff) {
     entry.len = 1;
     entry.idx = 0;
 }
-function applyVttyDiff(data) {
-    // Pause DOM updates while the user is actively scrolling
-    if (state._userScrolling) {
-        state._pendingVttyData = data;
-        state._pendingVttyDirty = true;
-        return;
-    }
-    const panel = getSelectedPanel();
-    if (!panel) return;
-    const vttyEl = panel.querySelector('.vtty-container');
-    const pre = vttyEl ? vttyEl.querySelector('pre') : null;
-    if (!pre) return;
-
-    const cmdId = state.selectedCmdId;
-    if (!cmdId) return;
-
-    // Level 2: Skip if generation unchanged
-    if (data.generation !== undefined && state._lastGeneration[cmdId] === data.generation) {
-        updateVttyMetadata(data, panel, vttyEl);
-        return;
-    }
-    if (data.generation !== undefined) {
-        state._lastGeneration[cmdId] = data.generation;
-    }
-
-    // Check if we have a cell grid for this command
-    const cg = state._cellGrids[cmdId];
-    if (!cg || !data.cells || !data.cells.length) {
-        // No grid or no cells — fall back to full HTML fetch
-        scheduleVttyHttp(state.selectedInstUrl, cmdId, 0);
-        return;
-    }
-
-    // Check for dimension mismatch — if dimensions changed, we need a full resync
-    const dims = data.dimensions || {};
-    if (dims.rows !== cg.rows || dims.cols !== cg.cols) {
-        // Dimensions changed — fall back to full HTML fetch
-        delete state._cellGrids[cmdId];
-        scheduleVttyHttp(state.selectedInstUrl, cmdId, 0);
-        return;
-    }
-
-    // Save scroll position (Level 1)
-    const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
-    const oldScrollHeight = vttyEl.scrollHeight;
-
-    // Apply each cell diff
-    for (let i = 0; i < data.cells.length; i++) {
-        const c = data.cells[i];
-        if (c.row < cg.grid.length && c.col < cg.grid[c.row].length) {
-            const entry = cg.grid[c.row][c.col];
-            if (entry) {
-                // Cell grid entries are { span, idx, len } objects from RLE expansion.
-                // If the span contains only this cell (len===1), update directly.
-                // Otherwise, split the merged span so this cell gets its own element.
-                if (entry.len === 1) {
-                    // Fast path: single-char span — update directly
-                    // width=0 → wide-char continuation (zero-width space).
-                    // width=1 with space → normal empty cell (actual space).
-                    const ch = c.width === 0 ? '\u200b' : (c.ch === '\u0000' ? ' ' : c.ch);
-                    entry.span.textContent = _htmlEscapeChar(ch);
-                    entry.span.setAttribute('style', _cellStyle(c));
-                    // Update width class to match new cell width
-                    const wCls = c.width === 0 ? 'c w0' : c.width === 2 ? 'c w2' : 'c w1';
-                    entry.span.className = wCls;
-                } else {
-                    // Slow path: split the merged span at the target position.
-                    _splitAndUpdateCell(cg, c.row, c.col, c);
-                }
-            }
-        }
-    }
-
-    // Level 1: Restore scroll position
-    if (wasAtBottom) {
-        vttyEl.scrollTop = vttyEl.scrollHeight;
-    } else {
-        vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
-    }
-
-    // Update metadata (cursor, dimensions, etc.)
-    updateVttyMetadata(data, panel, vttyEl);
-}
-
-// ─── Debounced VTTY HTTP Fetch ───
-// Prevents request flooding when multiple code paths (dirty signals, onclose,
-// periodic refresh, sendKeys) all want to refresh the VTTY display.
-// Only the last call within the debounce window actually fires.
-function scheduleVttyHttp(instUrl, cmdId, delayMs) {
-    // Legacy wrapper: delegate to per-panel
-    const panelId = getActivePanelId();
-    if (panelId) scheduleVttyHttpForPanel(panelId, instUrl, cmdId, delayMs);
-}
-
-async function loadVttyHttp(instUrl, cmdId) {
-    const panel = getSelectedPanel();
-    if (!panel) return;
-
-    // Get panel state for scrollback offset
-    const panelObj = state.panels.find(p => p.id === panel.id);
-    const sbOffset = panelObj ? panelObj.scrollbackOffset : 0;
-
-    // If viewing a specific buffer, use the buffer endpoint
-    let endpoint;
-    if (state.bufferView !== 'current') {
-        const screenParam = `?screen=${state.bufferView}`;
-        endpoint = `/api/commands/${cmdId}/vtty/buffer${screenParam}`;
-    } else if (sbOffset > 0) {
-        endpoint = `/api/commands/${cmdId}/vtty/html?scrollback_offset=${sbOffset}`;
-    } else {
-        endpoint = `/api/commands/${cmdId}/vtty/html`;
-    }
-
-    try {
-        let json;
-        if (endpoint === `/api/commands/${cmdId}/vtty/html`) {
-            json = await api.getVttyHtml(instUrl, cmdId);
-        } else {
-            json = await api.getJson(endpoint, instUrl);
-        }
-        if (json.status === 'ok' && json.data) {
-            // Level 2: Skip redundant DOM updates if generation hasn't changed.
-            if (json.data.generation !== undefined && state._lastGeneration[cmdId] === json.data.generation) {
-                // Only update metadata (cursor position, dimensions, etc.)
-                updateVttyMetadataFromHttp(json.data, panel, panelObj, sbOffset);
-                return;
-            }
-            if (json.data.generation !== undefined) {
-                state._lastGeneration[cmdId] = json.data.generation;
-            }
-
-            const vttyEl = panel.querySelector('.vtty-container');
-            const pre = vttyEl ? vttyEl.querySelector('pre') : null;
-            if (pre && json.data.html !== undefined) {
-                // Pause DOM updates while the user is actively scrolling
-                if (state._userScrolling) {
-                    state._pendingVttyData = json.data;
-                    state._pendingVttyDirty = true;
-                    return;
-                }
-                // Level 1: Save scroll position before innerHTML replacement
-                const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
-                const oldScrollHeight = vttyEl.scrollHeight;
-
-                pre.innerHTML = json.data.html;
-
-                // Level 3: Rebuild cell grid after full HTML replacement
-                if (state._level3Enabled && json.data.dimensions) {
-                    buildCellGrid(cmdId, pre, json.data.dimensions.rows, json.data.dimensions.cols);
-                } else {
-                    // Clear stale grid if dimensions not available
-                    delete state._cellGrids[cmdId];
-                }
-
-                // Level 1: Restore scroll position.
-                // Only auto-scroll when user was viewing the bottom.
-                if (wasAtBottom) {
-                    vttyEl.scrollTop = vttyEl.scrollHeight;
-                } else {
-                    vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
-                }
-            }
-
-            updateVttyMetadataFromHttp(json.data, panel, panelObj, sbOffset);
-        }
-    } catch (e) {
-        console.error('Failed to load VTTY:', e);
-    }
-}
 
 /// Update cursor, dimensions, mouse state, alt screen badge, and scrollback indicator
-/// from an HTTP response, without touching the DOM content. Shared by both the
-/// generation-skip path and the full-update path in loadVttyHttp.
-function updateVttyMetadataFromHttp(data, panel, panelObj, sbOffset) {
-    const vttyEl = panel.querySelector('.vtty-container');
+/// from an HTTP response, without touching the DOM content.
+function updateVttyMetadataFromHttp(data, panelEl, panelObj, sbOffset) {
+    const vttyEl = panelEl.querySelector('.vtty-container');
     const cursor = data.cursor || {};
     const dims = data.dimensions || {};
     document.getElementById('cursorPos').textContent = `Cursor: ${(cursor.row + 1) || '-'},${(cursor.col + 1) || '-'}`;
@@ -713,16 +447,11 @@ function updateVttyMetadataFromHttp(data, panel, panelObj, sbOffset) {
     }
 }
 
-    window.updateVttyDisplay = updateVttyDisplay;
     window.updateVttyDisplayForPanel = updateVttyDisplayForPanel;
     window.updateVttyMetadataForPanel = updateVttyMetadataForPanel;
     window.applyVttyDiffForPanel = applyVttyDiffForPanel;
     window.scheduleVttyHttpForPanel = scheduleVttyHttpForPanel;
     window.loadVttyHttpForPanel = loadVttyHttpForPanel;
     window.buildCellGrid = buildCellGrid;
-    window.applyVttyDiff = applyVttyDiff;
-    window.scheduleVttyHttp = scheduleVttyHttp;
-    window.loadVttyHttp = loadVttyHttp;
-    window.updateVttyMetadata = updateVttyMetadata;
     window.updateVttyMetadataFromHttp = updateVttyMetadataFromHttp;
 })();

@@ -24,7 +24,7 @@ assert(typeof toggleSidebar === 'function', 'sidebar loaded');
 assert(typeof addPanelDirect === 'function', 'panels loaded');
 assert(typeof selectCommand === 'function', 'commands loaded');
 assert(typeof connectPanelWs === 'function', 'websocket loaded');
-assert(typeof updateVttyDisplay === 'function', 'vtty loaded');
+assert(typeof updateVttyDisplayForPanel === 'function', 'vtty loaded');
 assert(typeof spawnCommand === 'function', 'spawn loaded');
 assert(typeof parseLogLine === 'function', 'logs loaded');
 assert(typeof sendDirectKey === 'function', 'keyboard loaded');
@@ -41,12 +41,12 @@ assert(typeof saveToken === 'function', 'misc loaded');
 console.log('[REG-02] No duplicate function definitions');
 const criticalFunctions = [
     'addPanelDirect', 'addPanel', 'closePanelModal', 'confirmAddPanel',
-    'togglePanelTheme', 'applyPanelTheme', 'escHtml', 'updateVttyDisplay',
+    'togglePanelTheme', 'applyPanelTheme', 'escHtml', 'updateVttyDisplayForPanel',
     '_disconnectSecondaryWs', '_connectSecondaryWs', 'scheduleSecondaryVttyHttp',
     '_loadSecondaryVttyHttp', '_updateSecondaryVttyDisplay', '_updateSecondaryVttyMetadata',
     '_applySecondaryVttyDiff', 'showAddServerModal', 'closeAddServerModal',
-    'confirmAddServer', '_isTerminalVisible', '_flushPendingVttyUpdate',
-    'startUpdateMode', 'startPanelUpdateMode', 'stopPanelUpdateMode', 'stopUpdateMode',
+    'confirmAddServer', '_isTerminalVisible',
+    'startPanelUpdateMode', 'stopPanelUpdateMode',
 ];
 for (const fn of criticalFunctions) {
     assert(typeof globalThis[fn] === 'function', 'critical function ' + fn + ' exists');

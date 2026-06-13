@@ -262,10 +262,7 @@ function createMockState(overrides = {}) {
         globalTheme: 'auto',
 
         // Internal
-        _userScrolling: false,
         _mobileTabbedLayout: false,
-        _pendingVttyDirty: false,
-        _pendingVttyData: null,
         _refreshThrottleTimer: null,
         _lastRenderedPanelCount: -1,
         _lastRenderedPanelIds: '',

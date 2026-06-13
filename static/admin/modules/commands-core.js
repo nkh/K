@@ -357,8 +357,6 @@ async function loadSnapshot() {
         if (vtty && vtty.html !== undefined && firstCmd) {
             state.selectedInstUrl = primaryInst.url;
             state.selectedCmdId = firstCmd.id;
-            state._pendingVttyData = null;
-            state._pendingVttyDirty = false;
             state.bufferView = 'current';
             const panelObj = state.panels.find(p => p.id === (state._focusedPanelId || state.panels[0].id));
             if (panelObj) { panelObj.selectedInstUrl = primaryInst.url; panelObj.selectedCmdId = firstCmd.id; }
@@ -376,7 +374,7 @@ async function loadSnapshot() {
             }
             updatePanelCommandInfo();
             updateTerminalDisconnectedOverlay();
-            startUpdateMode();
+            startPanelUpdateMode(state._focusedPanelId);
         } else { _showingWelcome = shouldShowWelcome; updateDisconnectedUI(); }
         await peersDone;
         _buildSidebar();

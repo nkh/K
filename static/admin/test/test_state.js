@@ -65,14 +65,13 @@ console.log('state connection/VTty fields');
 assertEq(state.selectedInstUrl, null, 'selectedInstUrl defaults to null');
 assertEq(state.selectedCmdId, null, 'selectedCmdId defaults to null');
 assertEq(state.bufferView, 'current', 'bufferView defaults to current');
-assertEq(state._pendingVttyData, null, '_pendingVttyData defaults to null');
-assertEq(state._pendingVttyDirty, false, '_pendingVttyDirty defaults to false');
+// _pendingVttyData and _pendingVttyDirty removed in Phase 8a (per-panel)
 
 // ── state cache/optimization fields ──
 console.log('state cache fields');
 assert(typeof state._lastGeneration === 'object', '_lastGeneration is object');
 assertEq(state._userAtBottom, true, '_userAtBottom defaults to true');
-assertEq(state._userScrolling, false, '_userScrolling defaults to false');
+// _userScrolling removed in Phase 8a (per-panel)
 assert(typeof state._cellGrids === 'object', '_cellGrids is object');
 assert(typeof state._cachedDomPre === 'object', '_cachedDomPre is object');
 assert(typeof state._cachedScrollPos === 'object', '_cachedScrollPos is object');

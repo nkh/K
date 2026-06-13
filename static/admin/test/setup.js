@@ -638,14 +638,14 @@ const _crossDeps = (() => {
     'updateDisconnectedUI', 'getSelectedPanel', 'getActivePanelId', 'loadSnapshot',
     'handlePeerEvent', 'notifyCommandEnded', 'connectLogWs',
     'disconnectLogWs', 'scheduleSecondaryVttyHttp', 'startRefresh',
-    'loadVttyHttp', 'loadCommands', 'updatePanelCommandInfo',
+    'loadCommands', 'updatePanelCommandInfo',
     'updateTerminalDisconnectedOverlay', 'updateSidebarSelection',
     'updateSharedToolbar', 'updateCmdToolbarVisibility',
     'renderPanels', 'focusPanel', 'connectPanelWs', 'disconnectPanelWs',
     'startPanelPoll', 'stopPanelPoll',
-    'startUpdateMode', 'stopUpdateMode', 'startPanelUpdateMode', 'stopPanelUpdateMode',
-    'showSpecialKeysHelp', 'applyVttyDiff',
-    'updateVttyDisplay', 'playExitSound', 'fetchServerTemplates',
+    'startPanelUpdateMode', 'stopPanelUpdateMode',
+    'showSpecialKeysHelp',
+    'playExitSound', 'fetchServerTemplates',
     'loadCertificates', 'fetchEnvironments', 'fetchServerConfig',
     'applyUpdateModeUI', 'updateSidebarTabsVisibility', 'fetchPeers',
     'autoFitActiveTerminal', 'toggleMaxFit', 'toggleMaxFont',
@@ -660,7 +660,7 @@ const _crossDeps = (() => {
     'changePanelFontSize', '_isTerminalVisible', 'savePeersToStorage',
     'disconnectServer', 'closePanelModal', 'confirmAddServer',
     'renderGroups', 'renderTemplates', 'addConnection', 'removeConnection',
-    '_flushPendingVttyUpdate', 'toggleSelectionMode',
+    'toggleSelectionMode',
     'updateVttyDisplayForPanel', 'updateVttyMetadataForPanel', 'applyVttyDiffForPanel',
     'scheduleVttyHttpForPanel', 'loadVttyHttpForPanel',
     'updateVttyMetadataFromHttp', 'buildCellGrid',
@@ -671,7 +671,7 @@ const _crossDeps = (() => {
     'copyCommandUrl', 'togglePauseCmd',
     'selectCommand', 'lookupAndSelectCommand', 'showCommandPicker',
     'pickCommand', 'navigateCommand', 'parseLogLine', 'sendDirectKey',
-    'scheduleVttyHttp', 'sendMouseEvent',
+    'sendMouseEvent',
     'togglePanelTheme', 'applyPanelTheme', 'toggleSoundNotifications',
     'changeFontSize', 'changeRefreshMs', 'showShortcuts', 'closeShortcuts',
     'togglePauseRun', 'togglePauseRunPanel',
@@ -775,10 +775,7 @@ globalThis.resetTestState = function() {
         state.soundEnabled = false;
         state.serverReachable = false;
         state._focusedPanelId = null;
-        state._userScrolling = false;
         state._mobileTabbedLayout = false;
-        state._pendingVttyDirty = false;
-        state._pendingVttyData = null;
         state._refreshThrottleTimer = null;
         state.refreshInterval = null;
         state._resourceInterval = null;

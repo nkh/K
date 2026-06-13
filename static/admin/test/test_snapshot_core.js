@@ -52,7 +52,7 @@ let disconnectUICalled = false;
 globalThis.loadCommands = function() { loadCommandsCalled = true; };
 globalThis.updateDisconnectedUI = function() { disconnectUICalled = true; };
 globalThis.renderPanels = function() {};
-globalThis.startUpdateMode = function() {};
+globalThis.startPanelUpdateMode = function() {};
 globalThis.updatePanelCommandInfo = function() {};
 globalThis.updateTerminalDisconnectedOverlay = function() {};
 
@@ -90,7 +90,7 @@ let panelInfoUpdated = false;
 globalThis.loadCommands = function() { loadCommandsCalled = true; };
 globalThis.updateDisconnectedUI = function() { disconnectUICalled = true; };
 globalThis.renderPanels = function() {};
-globalThis.startUpdateMode = function() { updateModeStarted = true; };
+globalThis.startPanelUpdateMode = function() { updateModeStarted = true; };
 globalThis.updatePanelCommandInfo = function() { panelInfoUpdated = true; };
 globalThis.updateTerminalDisconnectedOverlay = function() {};
 globalThis._buildSidebar = function() { sidebarBuilt = true; };
@@ -175,13 +175,12 @@ assert(state._lastGeneration['cmd-1'] !== undefined, 'generation stored for cmd-
 assertEq(state._lastGeneration['cmd-1'], 42, 'generation value correct');
 
 // Verify VTTY state cleared for fresh start
-assertEq(state._pendingVttyData, null, 'pending VTTY data cleared');
-assertEq(state._pendingVttyDirty, false, 'pending VTTY dirty cleared');
+// _pendingVttyData and _pendingVttyDirty removed in Phase 8a (per-panel)
 assertEq(state.bufferView, 'current', 'bufferView reset to current');
 
 // Verify side effects called
 assert(sidebarBuilt, '_buildSidebar called after snapshot');
-assert(updateModeStarted, 'startUpdateMode called');
+assert(updateModeStarted, 'startPanelUpdateMode called');
 assert(panelInfoUpdated, 'updatePanelCommandInfo called');
 assert(disconnectUICalled, 'updateDisconnectedUI called');
 
@@ -193,7 +192,7 @@ let welcomeShown = false;
 globalThis.loadCommands = function() {};
 globalThis.updateDisconnectedUI = function() {};
 globalThis.renderPanels = function() { welcomeShown = true; };
-globalThis.startUpdateMode = function() {};
+globalThis.startPanelUpdateMode = function() {};
 globalThis.updatePanelCommandInfo = function() {};
 globalThis.updateTerminalDisconnectedOverlay = function() {};
 globalThis._buildSidebar = function() {};
@@ -231,7 +230,7 @@ let welcomeTriggered = false;
 globalThis.loadCommands = function() {};
 globalThis.updateDisconnectedUI = function() {};
 globalThis.renderPanels = function() { welcomeTriggered = true; };
-globalThis.startUpdateMode = function() {};
+globalThis.startPanelUpdateMode = function() {};
 globalThis.updatePanelCommandInfo = function() {};
 globalThis.updateTerminalDisconnectedOverlay = function() {};
 globalThis._buildSidebar = function() {};

@@ -7,10 +7,8 @@ resetTestState();
 
 // Mock network-dependent functions
 globalThis.renderPanels = function() {};
-globalThis.loadVttyHttp = function() {};
 globalThis.loadVttyHttpForPanel = function() {};
 globalThis.startPanelUpdateMode = function() {};
-globalThis.startUpdateMode = function() {};
 globalThis.updateTerminalDisconnectedOverlay = function() {};
 globalThis.updatePanelCommandInfo = function() {};
 globalThis.updateSharedToolbar = function() {};
@@ -18,8 +16,8 @@ globalThis.disconnectPanelWs = function() {};
 globalThis.stopPanelPoll = function() {};
 globalThis.connectPanelWs = function() {};
 globalThis.startPanelPoll = function() {};
-globalThis.applyVttyDiff = function() {};
-globalThis.updateVttyDisplay = function() {};
+globalThis.applyVttyDiffForPanel = function() {};
+globalThis.updateVttyDisplayForPanel = function() {};
 globalThis._restoreCachedDom = function() {};
 globalThis._cacheTerminalForSwitch = function() {};
 globalThis._disconnectSecondaryWs = function() {};
@@ -49,44 +47,7 @@ state.currentView = 'vtty';
 state.selectedCmdId = '';
 assert(!_isTerminalVisible(), 'not visible when selectedCmdId is empty string');
 
-// ── _flushPendingVttyUpdate ──
-console.log('_flushPendingVttyUpdate tests');
-assert(typeof _flushPendingVttyUpdate === 'function', '_flushPendingVttyUpdate is a function');
-
-// No pending update → no-op
-state._pendingVttyDirty = false;
-state._pendingVttyData = null;
-let updateVttyCalled = false;
-globalThis.updateVttyDisplay = function(data) { updateVttyCalled = true; };
-globalThis.applyVttyDiff = function(data) { updateVttyCalled = true; };
-globalThis.loadVttyHttp = function() { updateVttyCalled = true; };
-
-_flushPendingVttyUpdate();
-assert(!updateVttyCalled, '_flushPendingVttyUpdate no-op when not dirty');
-
-// Pending with no data → calls loadVttyHttp
-state._pendingVttyDirty = true;
-state._pendingVttyData = null;
-state.selectedInstUrl = 'http://localhost:9090';
-state.selectedCmdId = 'cmd-1';
-_flushPendingVttyUpdate();
-assert(updateVttyCalled, '_flushPendingVttyUpdate calls loadVttyHttp when dirty but no data');
-assertEq(state._pendingVttyDirty, false, 'dirty flag cleared after flush');
-
-// Pending with data but no cells → calls updateVttyDisplay
-updateVttyCalled = false;
-state._pendingVttyDirty = true;
-state._pendingVttyData = { html: '<span>test</span>' };
-_flushPendingVttyUpdate();
-assert(updateVttyCalled, '_flushPendingVttyUpdate calls updateVttyDisplay when data has no cells');
-assertEq(state._pendingVttyData, null, 'pending data cleared after flush');
-
-// Pending with cells → calls applyVttyDiff
-updateVttyCalled = false;
-state._pendingVttyDirty = true;
-state._pendingVttyData = { cells: [{ row: 0, col: 0, ch: 'a' }] };
-_flushPendingVttyUpdate();
-assert(updateVttyCalled, '_flushPendingVttyUpdate calls applyVttyDiff when data has cells');
+// ── _flushPendingVttyUpdate removed in Phase 8a (dead code) ──
 
 // ── _cacheTerminalForSwitch ──
 console.log('_cacheTerminalForSwitch tests');

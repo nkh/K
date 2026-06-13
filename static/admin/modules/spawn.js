@@ -496,10 +496,10 @@ function switchBufferPanel(panelId, view) {
         state.panels.forEach(p => p.scrollbackOffset = 0);
         sessionStorage.removeItem('vrw_scrollback_' + state.selectedCmdId);
         if (view === 'current') {
-            startUpdateMode();
+            startPanelUpdateMode(panelId);
         } else {
-            stopUpdateMode();
-            loadVttyHttp(panelObj.selectedInstUrl, state.selectedCmdId);
+            stopPanelUpdateMode(panelId);
+            loadVttyHttpForPanel(panelId, panelObj.selectedInstUrl, state.selectedCmdId);
         }
     }
 }

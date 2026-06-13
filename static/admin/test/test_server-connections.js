@@ -97,8 +97,8 @@ assert(pollIntervalWrap.classList.contains('hidden'), 'pollIntervalWrap hidden i
 // ── switchUpdateMode ──
 console.log('switchUpdateMode tests');
 assert(typeof switchUpdateMode === 'function', 'switchUpdateMode is a function');
-globalThis.stopUpdateMode = function() {};
-globalThis.startUpdateMode = function() {};
+globalThis.stopPanelUpdateMode = function() {};
+globalThis.startPanelUpdateMode = function() {};
 
 state.updateMode = 'push';
 state.selectedInstUrl = 'http://localhost:9090';

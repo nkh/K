@@ -202,23 +202,12 @@ function updateWsQualityIndicator() {
 }
 
 // ─── Poll Mode ───
-function startPoll() {
-    // Legacy wrapper for focused panel
-    const panelId = getActivePanelId();
-    if (panelId) startPanelPoll(panelId);
-}
-
 function startPanelPoll(panelId) {
     stopPanelPoll(panelId);
     const panelObj = state.panels.find(p => p.id === panelId);
     if (!panelObj || !panelObj.selectedInstUrl || !panelObj.selectedCmdId) return;
     panelObj.pollTimer = setInterval(() => pollOncePanel(panelId), state.pollInterval);
     pollOncePanel(panelId);
-}
-
-function stopPoll() {
-    // Legacy: stop all panel polls
-    for (const panel of state.panels) stopPanelPoll(panel.id);
 }
 
 function stopPanelPoll(panelId) {
@@ -515,12 +504,6 @@ function _applySecondaryVttyDiff(panelObj, vttyEl, data) {
 
 
 // ─── VTTY Update Mode Start/Stop ───
-function startUpdateMode() {
-    // Legacy wrapper: start update for the focused panel
-    const panelId = getActivePanelId();
-    if (panelId) startPanelUpdateMode(panelId);
-}
-
 function startPanelUpdateMode(panelId) {
     stopPanelUpdateMode(panelId);
     const panelObj = state.panels.find(p => p.id === panelId);
@@ -537,22 +520,13 @@ function stopPanelUpdateMode(panelId) {
     stopPanelPoll(panelId);
 }
 
-function stopUpdateMode() {
-    const panelId = getActivePanelId();
-    if (panelId) stopPanelUpdateMode(panelId);
-}
-
     window.connectPanelWs = connectPanelWs;
     window.disconnectPanelWs = disconnectPanelWs;
     window.updateWsQualityIndicator = updateWsQualityIndicator;
-    window.startPoll = startPoll;
     window.startPanelPoll = startPanelPoll;
-    window.stopPoll = stopPoll;
     window.stopPanelPoll = stopPanelPoll;
     window.pollOncePanel = pollOncePanel;
-    window.startUpdateMode = startUpdateMode;
     window.startPanelUpdateMode = startPanelUpdateMode;
-    window.stopUpdateMode = stopUpdateMode;
     window.stopPanelUpdateMode = stopPanelUpdateMode;
     window._connectSecondaryWs = _connectSecondaryWs;
     window._disconnectSecondaryWs = _disconnectSecondaryWs;
