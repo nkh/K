@@ -145,4 +145,128 @@ function parseSpawnEnvVars(text) {
     window.parseSpawnArgs = parseSpawnArgs;
     window.parseSpawnEnvVars = parseSpawnEnvVars;
     window._hex = _hex;
+
+// ─── Focus Management ───
+const _focusState = {
+    previousElement: null,
+    releaseFn: null,
+};
+
+function _getFocusable(container) {
+    const selector = 'button, input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    return Array.from(container.querySelectorAll(selector))
+        .filter(el => {
+            if (el.offsetParent === null && el.style.position !== 'fixed') return false;
+            if (el.disabled) return false;
+            return true;
+        });
+}
+
+function trapFocus(container) {
+    _focusState.previousElement = document.activeElement;
+    const handler = (e) => {
+        if (e.key !== 'Tab') return;
+        e.preventDefault();
+        const focusable = _getFocusable(container);
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        const active = document.activeElement;
+        const idx = focusable.indexOf(active);
+        if (e.shiftKey) {
+            if (idx <= 0) last.focus();
+            else focusable[idx - 1].focus();
+        } else {
+            if (idx === -1 || idx >= focusable.length - 1) first.focus();
+            else focusable[idx + 1].focus();
+        }
+    };
+    document.addEventListener('keydown', handler, true);
+    const releaseFn = () => {
+        document.removeEventListener('keydown', handler, true);
+        if (_focusState.previousElement && _focusState.previousElement.isConnected) {
+            _focusState.previousElement.focus();
+        }
+        _focusState.previousElement = null;
+        _focusState.releaseFn = null;
+    };
+    _focusState.releaseFn = releaseFn;
+    return releaseFn;
+}
+
+function releaseCurrentFocusTrap() {
+    if (_focusState.releaseFn) _focusState.releaseFn();
+}
+window.trapFocus = trapFocus;
+window.releaseCurrentFocusTrap = releaseCurrentFocusTrap;
+
+// ─── Theme ───
+function initTheme() {
+    const saved = localStorage.getItem('vrw_theme');
+    if (saved) document.documentElement.setAttribute('data-theme', saved);
+    updateThemeButton();
+}
+
+function toggleGlobalTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || '';
+    const next = current === '' ? 'grey' : current === 'grey' ? 'dark' : '';
+    if (next) {
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('vrw_theme', next);
+    } else {
+        document.documentElement.removeAttribute('data-theme');
+        localStorage.removeItem('vrw_theme');
+    }
+    updateThemeButton();
+}
+
+function updateThemeButton() {
+    const btn = document.getElementById('themeToggle');
+    if (!btn) return;
+    const theme = document.documentElement.getAttribute('data-theme') || '';
+    if (!theme) {
+        const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+        btn.textContent = prefersLight ? '☾' : '☀';
+        btn.title = 'Theme: Auto (click to toggle)';
+    } else if (theme === 'grey') {
+        btn.textContent = '◼';
+        btn.title = 'Theme: Grey (click to toggle)';
+    } else if (theme === 'dark') {
+        btn.textContent = '☀';
+        btn.title = 'Theme: Dark (click to toggle)';
+    }
+}
+
+function togglePanelTheme(panelId) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj) return;
+    const next = panelObj.theme === '' ? 'light' : panelObj.theme === 'light' ? 'dark' : '';
+    panelObj.theme = next;
+    localStorage.setItem('vrw_panel_theme_' + panelId, next);
+    applyPanelTheme(panelId, next);
+    if (panelId === getActivePanelId()) {
+        const btn = document.getElementById('stPanelThemeBtn');
+        if (btn) {
+            btn.textContent = next === 'light' ? '\u263E' : next === 'dark' ? '\u2600' : '\u25D0';
+            btn.title = next === 'light' ? 'Panel theme: light (click to toggle)' : next === 'dark' ? 'Panel theme: dark (click to toggle)' : 'Panel theme: inherit (click to toggle)';
+        }
+    }
+}
+
+function applyPanelTheme(panelId, theme) {
+    const vttyEl = document.getElementById('vtty-' + panelId);
+    if (!vttyEl) return;
+    if (theme) vttyEl.setAttribute('data-panel-theme', theme);
+    else vttyEl.removeAttribute('data-panel-theme');
+    const btn = document.getElementById('panelThemeBtn-' + panelId);
+    if (btn) {
+        btn.textContent = theme === 'light' ? '\u263E' : theme === 'dark' ? '\u2600' : '\u25D0';
+        btn.title = theme === 'light' ? 'Panel theme: light (click to toggle)' : theme === 'dark' ? 'Panel theme: dark (click to toggle)' : 'Panel theme: inherit (click to toggle)';
+    }
+}
+window.initTheme = initTheme;
+window.toggleGlobalTheme = toggleGlobalTheme;
+window.updateThemeButton = updateThemeButton;
+window.togglePanelTheme = togglePanelTheme;
+window.applyPanelTheme = applyPanelTheme;
 })();
