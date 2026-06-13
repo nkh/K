@@ -167,7 +167,55 @@ Key discovery: api.js (loaded via (0, eval) in setup.js) captures the fetch func
 
 ### Running totals
 - **Start: ~10,700 lines, 24 modules**
-- **Current: 9,467 lines, 23 modules** (−1,233 lines, −1 module)
+- **Current: 9,151 lines, 19 modules** (−1,549 lines, −5 modules)
 - **Target: ~5,200 lines, ~14 modules**
-- **Remaining: ~4,267 lines to cut**
-- Biggest targets remaining: panels.js (1873), vtty.js (728), websocket.js (564), search.js (504), server-connections.js (506), sidebar.js (548)
+- **Remaining: ~3,951 lines to cut**
+- Biggest targets remaining: panels.js (1856), vtty.js (728), workspaces.js (640), websocket.js (564), search.js (504), server-connections.js (506), sidebar.js (548)
+
+## Session 3: Phase 5b/c, Phase 7a-d module consolidation
+
+### Phase 5b: Remove change-detection vars (−68 lines)
+- Removed 5 pure change-detection module-level vars from state.js:
+  `_lastCommandState`, `_lastRenderedPanelCount`, `_lastRenderedPanelIds`, `_lastSplitState`, `_lastShowingWelcome`
+- sidebar.js: removed fingerprint computation + early-return, kept _pendingSelectId logic
+- panels.js: removed structural-unchanged guard (always rebuild now)
+- Removed 12 writes across spawn.js (8), server-connections.js (2), dragdrop.js (1), workspaces.js (2), app.js (1)
+- Fixed test_regression.js REG-09 (tested unexported internals), fixed test_app.js _showingWelcome reference
+- Tests: 1815 passed, 0 regressions
+- Commit: 56eadaa
+
+### Phase 5c: Migrate display:none to .hidden CSS class
+- Added `.hidden { display: none !important; }` to style.css
+- Replaced ~70 `.style.display = 'none'/''` across 15 modules + 25 `style="display:none"` in index.html
+- Updated 6 test files to use classList.contains('hidden')
+- Net zero line change (same-length replacement) but eliminates inline style mutations
+- Tests: 1815 passed, 0 regressions
+- Commit: 024b0d2
+
+### Phase 6: Verified — 32 test files, 6,554 lines, 1815 tests
+
+### Phase 7a: Merge focus.js + theme.js → utils.js (−638 lines incl extract_modules.py)
+- focus.js (93 lines) and theme.js (86 lines) merged into utils.js
+- Deleted obsolete extract_modules.py (456 lines, referenced non-existent monolith)
+- 22 modules → removed 2 script tags
+- Commit: 6373365
+
+### Phase 7b: Merge notifications.js → misc.js
+- notifications.js (202 lines) merged into misc.js
+- 21 modules
+- Commit: 7649492
+
+### Phase 7c: Merge command-ui.js → commands-core.js
+- command-ui.js (200 lines) merged into commands-core.js
+- 20 modules
+- Commit: 66644d8
+
+### Phase 7d: Merge snapshot.js → commands-core.js
+- snapshot.js (138 lines) merged into commands-core.js
+- loadSnapshot references vtty.js functions but only called at runtime — load order safe
+- 19 modules
+- Commit: 16dff21
+
+### Session 3 totals
+- Net: 9,467 → 9,151 lines (−316), 23 → 19 modules (−4)
+- All changes tested: 1815 passed, 3 failed (pre-existing), 0 regressions
