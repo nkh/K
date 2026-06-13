@@ -160,43 +160,6 @@ mod tests {
         assert_eq!(merged.binary_name, "vrc");
     }
 
-    #[test]
-    fn test_merge_configs_empty_local_handles_uses_global() {
-        let mut global = Config::default();
-        // Add a handle to global — need to check schema for HandleConfig
-        // Default handles is empty vec, so this tests empty→empty
-        let local = Config::default();
-        let merged = merge_configs(global.clone(), local);
-        assert!(merged.handles.is_empty());
-    }
-
-    #[test]
-    fn test_merge_configs_local_handles_overrides() {
-        let global = Config::default();
-        let local = Config::default(); // Both have empty handles
-        let merged = merge_configs(global, local);
-        assert!(merged.handles.is_empty());
-    }
-
-    #[test]
-    fn test_merge_configs_empty_local_templates_uses_global() {
-        let global = Config::default();
-        let local = Config::default();
-        let merged = merge_configs(global, local);
-        // When local.templates is empty, global.templates is used.
-        // Verify the templates field is preserved (not cleared).
-        assert!(merged.templates.is_empty());
-    }
-
-    #[test]
-    fn test_merge_configs_empty_local_environments_uses_global() {
-        let global = Config::default();
-        let local = Config::default();
-        let merged = merge_configs(global, local);
-        // When local.environments is empty, global.environments is used.
-        assert!(merged.environments.is_empty());
-    }
-
     // ─── merge_profiles tests ───
 
     #[test]

@@ -297,21 +297,6 @@ mod tests {
     use super::*;
     use crate::cli::commands::common::http_client;
 
-    #[test]
-    fn test_handle_spawn_command_callable() {
-        let _ = handle_spawn_command;
-    }
-
-    #[test]
-    fn test_handle_freeze_command_callable() {
-        let _ = handle_freeze_command;
-    }
-
-    #[test]
-    fn test_handle_thaw_command_callable() {
-        let _ = handle_thaw_command;
-    }
-
     #[tokio::test]
     async fn test_handle_spawn_command_no_instances() {
         let cli = crate::cli::args::Cli::try_parse_from(["vrw", "spawn", "htop"]).unwrap();

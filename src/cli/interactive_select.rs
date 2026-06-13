@@ -182,34 +182,5 @@ mod tests {
         assert_eq!(result[0].id, "aaa");
     }
 
-    #[test]
-    fn test_print_items_does_not_panic() {
-        let items = vec![
-            SelectItem { label: "test-item".to_string(), id: "id-1".to_string() },
-        ];
-        // Should not panic
-        print_items(&items);
-    }
-
-    #[test]
-    fn test_print_items_empty_does_not_panic() {
-        let items: Vec<SelectItem> = vec![];
-        print_items(&items);
-    }
-
-    #[test]
-    fn test_select_item_clone() {
-        let item = SelectItem { label: "test".to_string(), id: "123".to_string() };
-        let cloned = item.clone();
-        assert_eq!(cloned.label, item.label);
-        assert_eq!(cloned.id, item.id);
-    }
-
-    #[test]
-    fn test_select_item_debug() {
-        let item = SelectItem { label: "test".to_string(), id: "123".to_string() };
-        let debug = format!("{:?}", item);
-        assert!(debug.contains("test"));
-        assert!(debug.contains("123"));
     }
 }

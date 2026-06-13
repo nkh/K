@@ -112,36 +112,6 @@ pub fn daemonize(cfg: &Config) -> Result<()> {
 mod tests {
     use super::*;
 
-    /// Verify the daemonize function compiles and has the correct signature.
-    /// Cannot be run in-process because daemonize() performs a double-fork
-    /// which would orphan the test runner.
-    #[test]
-    fn test_daemonize_function_exists() {
-        // Verify the function type signature: takes &Config, returns Result<()>
-        fn _type_check(_: fn(&Config) -> Result<()>) {}
-        _type_check(daemonize);
-    }
-
-    /// Verify that daemonize can be called with a default config (it will
-    /// fail at the fork stage in tests, but the function compiles and the
-    /// early checks — current_dir and file creation — work).
-    #[test]
-    fn test_daemonize_early_checks_with_temp_files() {
-        let dir = tempfile::tempdir().unwrap();
-        let cfg = Config {
-            daemon: crate::config::daemon::DaemonConfig {
-                enabled: true,
-                stdout_file: dir.path().join("out.log").to_string_lossy().to_string(),
-                stderr_file: dir.path().join("err.log").to_string_lossy().to_string(),
-            },
-            ..Config::default()
-        };
-        // The function starts by getting current_dir and opening log files.
-        // Those parts should succeed; fork will fail in a test sandbox.
-        // We just verify no panic on the pre-fork setup.
-        let _cfg = cfg; // Config is valid and usable
-    }
-
     /// Verify that log files are created before forking.
     #[test]
     fn test_daemonize_creates_log_files() {
@@ -167,14 +137,5 @@ mod tests {
             .append(true)
             .open(&cfg.daemon.stderr_file);
         assert!(stderr_file.is_ok(), "stderr file created");
-    }
-
-    /// Verify that current directory is captured before forking.
-    #[test]
-    fn test_daemonize_captures_cwd() {
-        let cwd = std::env::current_dir().unwrap();
-        assert!(cwd.is_absolute(), "current directory should be absolute");
-        // The daemonize function captures this for restoration after fork
-        let _ = cwd;
     }
 }

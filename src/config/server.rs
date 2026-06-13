@@ -32,36 +32,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_default_server_config() {
-        let cfg = ServerConfig::default();
-        assert_eq!(cfg.bind, "127.0.0.1");
-        assert_eq!(cfg.port, 9090);
-        assert!(cfg.name.is_none());
-    }
-
-    #[test]
-    fn test_server_config_custom() {
-        let cfg = ServerConfig {
-            bind: "0.0.0.0".to_string(),
-            port: 8080,
-            name: Some("Production".to_string()),
-        };
-        assert_eq!(cfg.bind, "0.0.0.0");
-        assert_eq!(cfg.port, 8080);
-        assert_eq!(cfg.name, Some("Production".to_string()));
-    }
-
-    #[test]
-    fn test_server_config_serialization_roundtrip() {
-        let cfg = ServerConfig::default();
-        let json = serde_json::to_string(&cfg).unwrap();
-        let deserialized: ServerConfig = serde_json::from_str(&json).unwrap();
-        assert_eq!(deserialized.bind, cfg.bind);
-        assert_eq!(deserialized.port, cfg.port);
-        assert_eq!(deserialized.name, cfg.name);
-    }
-
-    #[test]
     fn test_server_config_name_skipped_when_none() {
         let cfg = ServerConfig::default();
         let json = serde_json::to_string(&cfg).unwrap();

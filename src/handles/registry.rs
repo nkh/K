@@ -37,18 +37,6 @@ mod tests {
     use crate::handles::null_sink::NullSink;
 
     #[test]
-    fn test_registry_new() {
-        let reg = HandleRegistry::new();
-        assert!(reg.list().is_empty());
-    }
-
-    #[test]
-    fn test_registry_default() {
-        let reg = HandleRegistry::default();
-        assert!(reg.list().is_empty());
-    }
-
-    #[test]
     fn test_registry_add_and_get() {
         let mut reg = HandleRegistry::new();
         reg.add("stdout".to_string(), Box::new(NullSink));

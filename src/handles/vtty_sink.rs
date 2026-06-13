@@ -29,29 +29,4 @@ impl Sink for VttySink {
     async fn flush(&mut self) {}
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
 
-    #[test]
-    fn test_vtty_sink_new() {
-        let _sink = VttySink::new();
-    }
-
-    #[test]
-    fn test_vtty_sink_default() {
-        let _sink = VttySink::default();
-    }
-
-    #[tokio::test]
-    async fn test_vtty_sink_write_does_nothing() {
-        let mut sink = VttySink::new();
-        sink.write(b"hello").await;
-    }
-
-    #[tokio::test]
-    async fn test_vtty_sink_flush_does_nothing() {
-        let mut sink = VttySink::new();
-        sink.flush().await;
-    }
-}

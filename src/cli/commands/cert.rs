@@ -125,46 +125,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_handle_cert_command_signature() {
-        // Verify the function exists and has the right type
-        let _: fn(&crate::cli::args::CertAction) -> anyhow::Result<()> = handle_cert_command;
-    }
-
-    #[test]
-    fn test_handle_cert_command_list_empty_config() {
-        // With a minimal config that has no certificates, list should succeed
-        let dir = std::env::temp_dir().join("vrc_test_cert_empty");
-        std::fs::create_dir_all(&dir).unwrap();
-        let config_path = dir.join("cert.yaml");
-        std::fs::write(&config_path, "vtty:\n  rows: 24\n  cols: 80\n").unwrap();
-
-        // Temporarily set config path is not needed — cert command uses load_config(None)
-        // which loads from default locations. We test with a valid minimal config.
-        // This test verifies the function signature and that it can be called.
-        // Since load_config(None) picks up default locations, we just verify the
-        // command exists and compiles.
-    }
-
-    #[test]
-    fn test_cert_action_variants_compile() {
-        // Verify all CertAction variants can be constructed
-        let generate = CertAction::Generate { name: "test-cert".into() };
-        let list = CertAction::List;
-        let show = CertAction::Show { name: "test-cert".into() };
-        let remove = CertAction::Remove { name: "test-cert".into() };
-        // All should exist and be usable in match arms
-        let _ = match generate {
-            CertAction::Generate { name } => name,
-            CertAction::List => "list".to_string(),
-            CertAction::Show { name } => name,
-            CertAction::Remove { name } => name,
-        };
-        let _ = list;
-        let _ = show;
-        let _ = remove;
-    }
-
-    #[test]
     fn test_cert_store_generate_roundtrip() {
         // Generate a certificate and verify it has required fields
         let dir = tempfile::tempdir().unwrap();

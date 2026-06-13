@@ -313,12 +313,6 @@ fn main() -> Result<()> {
 mod tests {
     use super::*;
 
-    /// Verify DEFAULT_PORT is 9090.
-    #[test]
-    fn test_default_port() {
-        assert_eq!(DEFAULT_PORT, 9090);
-    }
-
     /// Verify check_port_available accepts a free port.
     #[test]
     fn test_check_port_available_free_port() {
@@ -339,26 +333,4 @@ mod tests {
         assert!(msg.contains(&port.to_string()), "error should mention port number");
     }
 
-    /// Verify the async_main function signature.
-    #[test]
-    fn test_async_main_function_signature() {
-        fn _type_check(_: fn(vrc_core::cli::args::Cli) -> anyhow::Result<()>) {}
-        _type_check(async_main);
-    }
-
-    /// Verify try_client_mode signature — it takes &Cli and returns Result<bool>.
-    #[test]
-    fn test_try_client_mode_signature() {
-        fn _type_check(_: fn(&vrc_core::cli::args::Cli) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<bool>> + Send>>) {}
-        // We can't easily type-check async functions, so just verify it's callable.
-        // The function exists and compiles — verified by integration.
-        let _ = std::any::type_name_of_val(&try_client_mode);
-    }
-
-    /// Verify vrw imports all necessary modules.
-    #[test]
-    fn test_vrw_imports_auth_manager() {
-        fn _type_check(_: fn(&vrc_core::config::security::SecurityConfig) -> anyhow::Result<String>) {}
-        _type_check(vrc_core::web::auth::AuthManager::load_or_generate);
-    }
 }

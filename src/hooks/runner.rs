@@ -35,47 +35,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_run_hook_substitution() {
-        // We can't easily test spawning in unit tests, but we can verify
-        // that the substitution logic works correctly by using a known
-        // binary that always succeeds.
-        let mut vars = HashMap::new();
-        vars.insert("name", "test-cmd".to_string());
-        vars.insert("id", "123".to_string());
-        vars.insert("pid", "456".to_string());
-
-        // Use "true" which is a no-op command that always succeeds on Unix
-        let template = "true"; // no placeholders, just verify it doesn't panic
-        run_hook(template, &vars);
-    }
-
-    #[test]
-    fn test_run_hook_with_placeholders() {
-        // Use "echo" to verify substitution happens
-        // Note: we can't capture the output easily, but we verify no panic
-        let mut vars = HashMap::new();
-        vars.insert("name", "my-cmd".to_string());
-        vars.insert("id", "abc".to_string());
-
-        // On any system, "true" should succeed
-        run_hook("true", &vars);
-    }
-
-    #[test]
-    fn test_run_hook_empty_template() {
-        let vars = HashMap::new();
-        run_hook("", &vars);
-        // Should not panic
-    }
-
-    #[test]
-    fn test_run_hook_whitespace_only() {
-        let vars = HashMap::new();
-        run_hook("   ", &vars);
-        // Should not panic
-    }
-
-    #[test]
     fn test_placeholder_substitution_logic() {
         // Test the substitution logic directly
         let mut vars = HashMap::new();

@@ -217,21 +217,6 @@ mod tests {
     use super::*;
     use crate::cli::commands::common::http_client;
 
-    #[test]
-    fn test_resize_command_by_id_callable() {
-        let _ = resize_command_by_id;
-    }
-
-    #[test]
-    fn test_handle_resize_command_callable() {
-        let _ = handle_resize_command;
-    }
-
-    #[test]
-    fn test_handle_resize_by_pid_callable() {
-        let _ = handle_resize_by_pid;
-    }
-
     #[tokio::test]
     async fn test_resize_command_by_id_connection_refused() {
         let client = http_client();

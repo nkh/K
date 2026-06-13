@@ -254,19 +254,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_pty_size_defaults() {
-        let size = PtySize { rows: 24, cols: 80 };
-        assert_eq!(size.rows, 24);
-        assert_eq!(size.cols, 80);
-    }
-
-    #[test]
-    fn test_portable_pty_backend_default() {
-        let _backend = PortablePtyBackend::default();
-        let _backend2 = PortablePtyBackend::new();
-    }
-
-    #[test]
     fn test_portable_pty_backend_openpty() {
         let backend = PortablePtyBackend::new();
         let pair = backend.openpty(PtySize { rows: 24, cols: 80 });

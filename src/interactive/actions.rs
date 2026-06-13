@@ -308,24 +308,4 @@ mod tests {
         let effect = execute_action(&Action::Quit, false, 1, &sample_bindings());
         assert_eq!(effect, ActionEffect::Quit);
     }
-
-    #[test]
-    fn test_action_effect_equality() {
-        assert_eq!(ActionEffect::None, ActionEffect::None);
-        assert_eq!(ActionEffect::Quit, ActionEffect::Quit);
-        assert_ne!(ActionEffect::NextCommand, ActionEffect::PrevCommand);
-    }
-
-    #[test]
-    fn test_action_effect_clone() {
-        let e = ActionEffect::ToggleLog(true);
-        assert_eq!(e.clone(), ActionEffect::ToggleLog(true));
-    }
-
-    #[test]
-    fn test_action_effect_debug() {
-        let e = ActionEffect::Quit;
-        let debug_str = format!("{:?}", e);
-        assert!(debug_str.contains("Quit"));
-    }
 }

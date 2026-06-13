@@ -171,12 +171,6 @@ pub async fn error_handler(req: Request, next: Next) -> Response {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_middleware_module_compiles() {
-        // Middleware functions are tested via integration tests
-        // since they require Axum request/response types.
-    }
-
     // ─── cors_layer tests ───
 
     #[test]
@@ -229,30 +223,5 @@ mod tests {
         let config = CorsConfig::default();
         assert_eq!(config.policy, "any");
         let _layer = cors_layer(&config);
-    }
-
-    // ─── auth_middleware compile test ───
-
-    #[test]
-    fn test_auth_middleware_function_exists() {
-        // Verify auth_middleware has the correct Axum middleware signature
-        fn _type_check(
-            _: fn(axum::extract::Request, axum::middleware::Next) -> std::pin::Pin<
-                Box<dyn std::future::Future<Output = axum::response::Response> + Send>,
-            >,
-        ) {
-        }
-        // Just verify the function name exists
-        let _ = std::any::type_name_of_val(&auth_middleware);
-    }
-
-    #[test]
-    fn test_request_logger_function_exists() {
-        let _ = std::any::type_name_of_val(&request_logger);
-    }
-
-    #[test]
-    fn test_error_handler_function_exists() {
-        let _ = std::any::type_name_of_val(&error_handler);
     }
 }

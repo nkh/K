@@ -429,9 +429,6 @@ mod tests {
         mgr.commands_arc().insert(id.to_string(), handle);
     }
 
-    #[test]
-    fn test_handler_module_compiles() {}
-
     // ─── get_vtty_full ───
 
     #[tokio::test]

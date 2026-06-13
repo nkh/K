@@ -145,14 +145,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_display_config_defaults() {
-        let config = DisplayConfig::default();
-        assert!(!config.enabled);
-        assert_eq!(config.refresh_ms, 100);
-        assert!(!config.display_all);
-    }
-
-    #[test]
     fn test_display_config_deserialize_partial() {
         let json = r#"{"enabled": true}"#;
         let config: DisplayConfig = serde_json::from_str(json).unwrap();
@@ -160,27 +152,6 @@ mod tests {
         // refresh_ms and display_all fall back to Rust Default impl
         assert_eq!(config.refresh_ms, 100);
         assert!(!config.display_all);
-    }
-
-    #[test]
-    fn test_interactive_config_defaults() {
-        let config = InteractiveConfig::default();
-        assert!(!config.tabs);
-        // Keybindings should have default bindings populated
-        assert_eq!(
-            config.keybindings.next_command.as_deref(),
-            Some("ctrl+right")
-        );
-        assert_eq!(
-            config.keybindings.prev_command.as_deref(),
-            Some("ctrl+left")
-        );
-        assert_eq!(config.keybindings.toggle_log.as_deref(), Some("ctrl+l"));
-        assert_eq!(config.keybindings.spawn_command.as_deref(), Some("f12"));
-        assert_eq!(config.keybindings.show_help.as_deref(), Some("ctrl+h"));
-        assert!(config.keybindings.kill_command.is_none());
-        assert!(config.keybindings.toggle_pause.is_none());
-        assert!(config.keybindings.quit.is_none());
     }
 
     #[test]

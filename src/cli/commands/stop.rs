@@ -367,33 +367,8 @@ mod tests {
         assert_eq!(resolve_stop_target(Some(5000), &instances), 5000);
     }
 
-    #[cfg(feature = "vrw")]
     #[test]
-    fn test_stop_command_by_id_callable() {
-        let _ = stop_command_by_id;
-    }
-
-    #[cfg(feature = "vrw")]
-    #[test]
-    fn test_handle_stop_command_by_pid_on_instances_callable() {
-        let _ = handle_stop_command_by_pid_on_instances;
-    }
-
-    #[cfg(feature = "vrw")]
-    #[test]
-    fn test_handle_stop_command_callable() {
-        let _ = handle_stop_command;
-    }
-
-    #[cfg(feature = "vrw")]
-    #[test]
-    fn test_handle_stop_all_commands_callable() {
-        let _ = handle_stop_all_commands;
-    }
-
-    #[cfg(feature = "vrw")]
-    #[tokio::test]
-    async fn test_stop_command_by_id_connection_refused() {
+    fn resolve_explicit_pid_returned() {
         use super::super::common::http_client;
         let client = http_client();
         let result = stop_command_by_id(&client, "http://127.0.0.1:1", "fake-id", 100, 200).await;

@@ -363,54 +363,6 @@ mod tests {
     }
 
     #[test]
-    fn test_logger_new() {
-        let logger = make_logger();
-        assert!(logger.enabled);
-        assert!(logger.read_memory_buffer().is_empty());
-    }
-
-    #[test]
-    fn test_logger_new_with_file() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("test.log");
-        let logger = CommandLogger::new(
-            true,
-            Some(path.to_str().unwrap()),
-            "vrc",
-            false,
-            TerminalLogConfig::default(),
-        )
-        .unwrap();
-        assert!(logger.enabled);
-    }
-
-    #[test]
-    fn test_logger_subscribe() {
-        let logger = make_logger();
-        let _rx = logger.subscribe();
-    }
-
-    #[test]
-    fn test_logger_log_sender() {
-        let logger = make_logger();
-        let _tx = logger.log_sender();
-    }
-
-    #[test]
-    fn test_logger_memory_buffer_arc() {
-        let logger = make_logger();
-        let arc = logger.memory_buffer_arc();
-        let buf = arc.lock().unwrap();
-        assert!(buf.is_empty());
-    }
-
-    #[test]
-    fn test_logger_read_memory_buffer_empty() {
-        let logger = make_logger();
-        assert!(logger.read_memory_buffer().is_empty());
-    }
-
-    #[test]
     fn test_logger_log_populates_memory_buffer() {
         let logger = make_logger();
         logger.log("spawn", "cmd=bash pid=123 id=abc12345");
@@ -481,22 +433,5 @@ mod tests {
         assert!(!result.contains("cmd="));
         assert!(!result.contains("name="));
         assert!(result.contains("extra=val"));
-    }
-
-    #[test]
-    fn test_format_timestamp() {
-        let ts = CommandLogger::format_timestamp();
-        // Should be HH:MM:SS.cc format
-        assert!(ts.len() >= 10);
-        assert!(ts.contains(':'));
-        assert!(ts.contains('.'));
-    }
-
-    #[test]
-    fn test_logger_memory_buffer_arc_is_shared() {
-        let logger = make_logger();
-        let arc1 = logger.memory_buffer_arc();
-        let arc2 = logger.memory_buffer_arc();
-        assert_eq!(Arc::strong_count(&arc1), 3); // arc1, arc2, logger.memory_buffer
     }
 }

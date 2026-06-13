@@ -305,18 +305,4 @@ mod tests {
         let entries = reg.scan_pid_files();
         assert!(entries.is_empty());
     }
-
-    #[test]
-    fn test_socket_path_for_pid() {
-        let path = crate::ipc::socket_path_for_pid(12345);
-        assert!(path.to_string_lossy().contains("12345"));
-        assert!(path.to_string_lossy().contains("control-"));
-        assert!(path.to_string_lossy().contains(".sock"));
-    }
-
-    #[test]
-    fn test_socket_path_for_pid_zero() {
-        let path = crate::ipc::socket_path_for_pid(0);
-        assert!(path.to_string_lossy().contains("control-0"));
-    }
 }

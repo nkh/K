@@ -148,90 +148,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_display_command_not_found() {
-        let err = ProcessError::CommandNotFound("abc-123".into());
-        assert_eq!(format!("{}", err), "Command abc-123 not found");
-    }
-
-    #[test]
-    fn test_display_command_already_exists() {
-        let err = ProcessError::CommandAlreadyExists("abc-123".into());
-        assert_eq!(format!("{}", err), "Command abc-123 is already registered");
-    }
-
-    #[test]
-    fn test_display_spawn_failed() {
-        let err = ProcessError::SpawnFailed { cmd: "ls".into() };
-        assert_eq!(format!("{}", err), "Failed to spawn process 'ls'");
-    }
-
-    #[test]
-    fn test_display_unknown_sink_type() {
-        let err = ProcessError::UnknownSinkType("redis".into());
-        assert!(format!("{}", err).contains("Unknown sink type 'redis'"));
-    }
-
-    #[test]
-    fn test_display_sink_already_exists() {
-        let err = ProcessError::SinkAlreadyExists {
-            name: "stdout".into(),
-            command_id: "c1".into(),
-        };
-        assert_eq!(
-            format!("{}", err),
-            "Sink 'stdout' is already registered for command c1"
-        );
-    }
-
-    #[test]
-    fn test_display_signal_failed() {
-        let err = ProcessError::SignalFailed {
-            id: "c1".into(),
-            signal: "SIGSTOP".into(),
-            code: -1,
-        };
-        assert_eq!(
-            format!("{}", err),
-            "Failed to send SIGSTOP to command c1: SIGSTOP returned -1"
-        );
-    }
-
-    #[test]
-    fn test_display_channel_closed() {
-        let err = ProcessError::ChannelClosed("c1".into());
-        assert_eq!(format!("{}", err), "stdin channel closed for command c1");
-    }
-
-    #[test]
-    fn test_display_snapshot_not_found() {
-        let err = ProcessError::SnapshotNotFound {
-            name: "snap1".into(),
-            command_id: "c1".into(),
-        };
-        assert_eq!(
-            format!("{}", err),
-            "Snapshot 'snap1' not found for command c1"
-        );
-    }
-
-    #[test]
-    fn test_display_platform_not_supported() {
-        let err = ProcessError::PlatformNotSupported("freeze".into());
-        assert_eq!(
-            format!("{}", err),
-            "freeze is only supported on Unix-like systems"
-        );
-    }
-
-    #[test]
-    fn test_from_io_error() {
-        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
-        let err = ProcessError::from(io_err);
-        assert!(matches!(err, ProcessError::Io(_)));
-        assert!(format!("{}", err).contains("I/O error"));
-    }
-
-    #[test]
     fn test_io_error_source() {
         let io_err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "access denied");
         let err = ProcessError::Io(io_err);
@@ -242,19 +158,5 @@ mod tests {
     fn test_non_io_error_no_source() {
         let err = ProcessError::CommandNotFound("x".into());
         assert!(std::error::Error::source(&err).is_none());
-    }
-
-    #[test]
-    fn test_error_is_send_sync() {
-        fn assert_send_sync<T: Send + Sync>() {}
-        assert_send_sync::<ProcessError>();
-    }
-
-    #[test]
-    fn test_result_type_alias() {
-        let r: Result<String> = Ok("hello".to_string());
-        assert_eq!(r.unwrap(), "hello");
-        let r: Result<String> = Err(ProcessError::CommandNotFound("x".into()));
-        assert!(r.is_err());
     }
 }

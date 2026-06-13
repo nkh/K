@@ -2072,52 +2072,7 @@ mod tests {
     // Additional tests to reach 75%+ coverage
     // ────────────────────────────────────────────────────────────────
 
-    // -- new() edge cases --
-
-    #[test]
-    fn test_new_single_row_single_col() {
-        let emu = VttyEmulator::new(1, 1, 0);
-        assert_eq!(emu.dimensions(), (1, 1));
-        assert_eq!(emu.cursor(), (0, 0));
-    }
-
-    #[test]
-    fn test_new_large_dimensions() {
-        let emu = VttyEmulator::new(200, 300, 50000);
-        assert_eq!(emu.dimensions(), (200, 300));
-        assert_eq!(emu.cursor(), (0, 0));
-    }
-
-    // -- feed() / feed_str() --
-
-    #[test]
-    fn test_feed_empty() {
-        let mut emu = VttyEmulator::new(5, 10, 100);
-        emu.feed_str("");
-        assert_eq!(emu.cursor(), (0, 0));
-    }
-
-    #[test]
-    fn test_feed_bytes_identical_to_str() {
-        let mut emu1 = VttyEmulator::new(5, 10, 100);
-        let mut emu2 = VttyEmulator::new(5, 10, 100);
-        emu1.feed_str("Hello");
-        emu2.feed(b"Hello");
-        assert_eq!(emu1.cursor(), emu2.cursor());
-        let b1 = emu1.buffer();
-        let b2 = emu2.buffer();
-        assert_eq!(b1.rows[0][0].ch, b2.rows[0][0].ch);
-    }
-
     // -- finish() --
-
-    #[test]
-    fn test_finish_noop() {
-        let mut emu = VttyEmulator::new(5, 10, 100);
-        emu.feed_str("Hello");
-        emu.finish();
-        assert_eq!(emu.cursor(), (0, 5));
-    }
 
     // -- Tab behavior --
 

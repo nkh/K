@@ -131,25 +131,4 @@ mod tests {
         assert!(path.to_string_lossy().contains("12345"), "socket path includes pid");
     }
 
-    /// Verify the async_main function compiles and accepts Cli.
-    #[test]
-    fn test_async_main_function_signature() {
-        fn _type_check(_: fn(vrc_core::cli::args::Cli) -> anyhow::Result<()>) {}
-        _type_check(async_main);
-    }
-
-    /// Verify vrc imports the right modules.
-    #[test]
-    fn test_vrc_imports_instance_registry() {
-        // InstanceRegistry::new() should be callable
-        fn _type_check(_: fn() -> anyhow::Result<vrc_core::instance::registry::InstanceRegistry>) {}
-        _type_check(vrc_core::instance::registry::InstanceRegistry::new);
-    }
-
-    /// Verify vrc imports CommandManager.
-    #[test]
-    fn test_vrc_imports_command_manager() {
-        fn _type_check(_: fn(vrc_core::config::schema::Config) -> vrc_core::process::manager::CommandManager) {}
-        _type_check(vrc_core::process::manager::CommandManager::new);
-    }
 }

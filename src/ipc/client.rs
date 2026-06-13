@@ -83,12 +83,6 @@ mod tests {
     use super::*;
     use crate::ipc::protocol::{ControlCommand, ControlResponse};
 
-    #[test]
-    fn test_socket_path_for_pid_function() {
-        let path = socket_path_for_pid(12345);
-        assert!(path.to_string_lossy().contains("12345"));
-    }
-
     #[tokio::test]
     async fn test_send_command_to_nonexistent_socket() {
         let result = send_command(999999999, ControlCommand::Ping).await;

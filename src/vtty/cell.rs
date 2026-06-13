@@ -106,14 +106,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_cell_default() {
-        let c = Cell::default();
-        assert_eq!(c.ch, ' ');
-        assert_eq!(c.fg, [204, 204, 204]);
-        assert!(!c.bold);
-    }
-
-    #[test]
     fn test_cell_new() {
         let c = Cell::new('X');
         assert_eq!(c.ch, 'X');

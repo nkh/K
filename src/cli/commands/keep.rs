@@ -283,16 +283,6 @@ mod tests {
     use super::*;
     use crate::cli::commands::common::http_client;
 
-    #[test]
-    fn test_handle_keep_command_callable() {
-        let _ = handle_keep_command;
-    }
-
-    #[test]
-    fn test_handle_unkeep_command_callable() {
-        let _ = handle_unkeep_command;
-    }
-
     #[tokio::test]
     async fn test_keep_command_by_id_connection_refused() {
         let client = http_client();

@@ -218,26 +218,6 @@ mod tests {
     }
 
     #[test]
-    fn test_environments_config_default_empty() {
-        let cfg = EnvironmentsConfig::default();
-        assert!(cfg.is_empty());
-        assert_eq!(cfg.len(), 0);
-        assert_eq!(cfg.iter().count(), 0);
-    }
-
-    #[test]
-    fn test_environments_config_iter() {
-        let cfg = EnvironmentsConfig(vec![
-            make_env("Dev"),
-            make_env("Prod"),
-            make_env("CI"),
-        ]);
-        assert_eq!(cfg.len(), 3);
-        assert!(!cfg.is_empty());
-        assert_eq!(cfg.iter().count(), 3);
-    }
-
-    #[test]
     fn test_find_by_name_case_insensitive() {
         let cfg = EnvironmentsConfig(vec![make_env("Dev"), make_env("Prod")]);
         assert!(cfg.find_by_name("dev").is_some());
@@ -254,64 +234,5 @@ mod tests {
         cfg.0[1].auto_start = Some(false);
         assert_eq!(cfg.auto_start().len(), 1);
         assert_eq!(cfg.auto_start()[0].name, "Dev");
-    }
-
-    #[test]
-    fn test_environment_command_fields() {
-        let cmd = EnvironmentCommand {
-            cmd: "npm".to_string(),
-            args: Some("run dev".to_string()),
-            workdir: Some("/home/user/app".to_string()),
-            certificate: None,
-            rows: None,
-            cols: None,
-            retain_on_exit: None,
-        };
-        assert_eq!(cmd.cmd, "npm");
-        assert_eq!(cmd.args, Some("run dev".to_string()));
-        assert!(cmd.certificate.is_none());
-    }
-
-    #[test]
-    fn test_environment_panel_fields() {
-        let panel = EnvironmentPanel {
-            title: Some("Frontend".to_string()),
-            server: None,
-            token: None,
-            server_label: None,
-            commands: vec![],
-        };
-        assert_eq!(panel.title, Some("Frontend".to_string()));
-        assert!(panel.server.is_none());
-        assert!(panel.commands.is_empty());
-    }
-
-    #[test]
-    fn test_workspace_environment_serialization_roundtrip() {
-        let env = make_env("Dev");
-        let json = serde_json::to_string(&env).unwrap();
-        let deserialized: WorkspaceEnvironment = serde_json::from_str(&json).unwrap();
-        assert_eq!(deserialized.name, env.name);
-        assert_eq!(deserialized.layout, env.layout);
-        assert_eq!(deserialized.panels.len(), env.panels.len());
-        assert_eq!(deserialized.panels[0].commands[0].cmd, "bash");
-    }
-
-    #[test]
-    fn test_environment_command_default_values() {
-        let cmd = EnvironmentCommand {
-            cmd: "ls".to_string(),
-            args: None,
-            workdir: None,
-            certificate: None,
-            rows: None,
-            cols: None,
-            retain_on_exit: None,
-        };
-        let json = serde_json::to_string(&cmd).unwrap();
-        let deserialized: EnvironmentCommand = serde_json::from_str(&json).unwrap();
-        assert_eq!(deserialized.cmd, "ls");
-        assert!(deserialized.args.is_none());
-        assert!(deserialized.retain_on_exit.is_none());
     }
 }

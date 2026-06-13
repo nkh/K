@@ -234,16 +234,6 @@ mod tests {
     use super::*;
     use crate::cli::commands::common::http_client;
 
-    #[test]
-    fn test_purge_command_by_id_callable() {
-        let _ = purge_command_by_id;
-    }
-
-    #[test]
-    fn test_handle_purge_command_callable() {
-        let _ = handle_purge_command;
-    }
-
     #[tokio::test]
     async fn test_purge_command_by_id_connection_refused() {
         let client = http_client();

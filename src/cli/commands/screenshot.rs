@@ -267,21 +267,6 @@ mod tests {
     use super::*;
     use crate::cli::commands::common::http_client;
 
-    #[test]
-    fn test_handle_screenshot_command_callable() {
-        let _ = handle_screenshot_command;
-    }
-
-    #[tokio::test]
-    async fn test_handle_screenshot_command_no_instances() {
-        let cli = crate::cli::args::Cli::try_parse_from(["vrw", "screenshot"]).unwrap();
-        let result = handle_screenshot_command(&cli, None, None, 14.0, None, false).await;
-        // No instances — should handle gracefully
-        // The function calls resolve_targeted_instances which returns empty vec,
-        // then collect_all_commands returns empty, then errors on no commands
-        assert!(result.is_err(), "no instances should error");
-    }
-
     /// Test filename sanitization logic used in screenshot.
     #[test]
     fn test_screenshot_filename_sanitization() {

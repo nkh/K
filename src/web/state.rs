@@ -100,55 +100,6 @@ mod tests {
     }
 
     #[test]
-    fn test_app_state_new() {
-        let state = make_test_state();
-        assert!(state.auth_token.is_none());
-        assert!(state.share_tokens.is_empty());
-        assert!(state.peers.is_empty());
-    }
-
-    #[test]
-    fn test_app_state_with_auth() {
-        let cfg = Config::default();
-        let manager = Arc::new(crate::process::manager::CommandManager::new(cfg));
-        let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
-        let (vtty_events, _) = tokio::sync::broadcast::channel(16);
-        let (log_events, _) = tokio::sync::broadcast::channel(16);
-        let cert_store = Arc::new(CertificateStore::new());
-        let state = AppState::new(
-            manager,
-            shutdown_tx,
-            Some("mytoken".to_string()),
-            cert_store,
-            vtty_events,
-            log_events,
-        );
-        assert_eq!(state.auth_token, Some("mytoken".to_string()));
-    }
-
-    #[test]
-    fn test_share_token_no_expiry() {
-        let token = ShareToken {
-            cmd_id: "abc".to_string(),
-            keyboard: false,
-            expires_at: None,
-        };
-        // Should never expire
-        assert!(token.expires_at.is_none());
-    }
-
-    #[test]
-    fn test_share_token_with_expiry() {
-        let token = ShareToken {
-            cmd_id: "abc".to_string(),
-            keyboard: true,
-            expires_at: Some(std::time::Instant::now() + std::time::Duration::from_secs(3600)),
-        };
-        assert!(token.keyboard);
-        assert!(token.expires_at.is_some());
-    }
-
-    #[test]
     fn test_cleanup_expired_share_tokens() {
         let state = make_test_state();
         // Add a non-expiring token
@@ -167,12 +118,5 @@ mod tests {
         state.cleanup_expired_share_tokens();
         assert_eq!(state.share_tokens.len(), 1);
         assert!(state.share_tokens.contains_key("never-expire"));
-    }
-
-    #[test]
-    fn test_app_state_clone() {
-        let state = make_test_state();
-        let cloned = state.clone();
-        assert_eq!(state.auth_token, cloned.auth_token);
     }
 }

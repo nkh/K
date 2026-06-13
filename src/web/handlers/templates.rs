@@ -37,14 +37,4 @@ pub async fn list_templates(State(state): State<AppState>) -> Json<Value> {
     }))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
 
-    #[test]
-    fn test_handler_module_compiles() {
-        // Verify the handler module compiles successfully.
-        // Handler functions require AppState which is tested separately.
-        // This test ensures the module's types and imports are valid.
-    }
-}
