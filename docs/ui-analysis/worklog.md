@@ -144,9 +144,30 @@ Key discovery: api.js (loaded via (0, eval) in setup.js) captures the fetch func
 - websocket.js: 743→564 lines. Total modules: 9845→9657 lines
 - Commit: d3e4dcc on fix_overcomplicated_ui, pushed to origin
 
-## Running totals
+## Session 2: Keyboard refactor + continued dead code cleanup
+
+### Keyboard lookup table refactor
+- Replaced 12-branch if/else shortcut chain (117 lines) with `_shortcuts` array (42 lines) + 11-line dispatch loop
+- Added `_inInput()` helper to DRY up input-field checks
+- All 12 shortcuts preserved with identical semantics
+- keyboard.js: 552→490 lines (−62)
+- Commit: 790235c, pushed
+
+### Workspaces.js cleanup (−102 lines)
+- 3 dead functions deleted: `toggleWorkspaceDropdown`, `saveCurrentWorkspace`, `openWorkspaceManage` (no callers, no delegate actions)
+- 7 internal-only functions unexported: `renderMarkdown`, `saveCmdGroups`, `getGroupCollapsedState`, `saveGroupCollapsedState`, `getWorkspaces`, `saveWorkspaces`, `renderWorkspaceList`
+- workspaces.js: 744→642 lines
+- Commit: ab4d12a, pushed
+
+### Spawn.js cleanup (−26 lines)
+- 2 dead functions deleted: `sendKeys()` (superseded by `sendKeysToPanel`), `resizeTerminal()` (superseded by `resizeTerminalPanel`)
+- 5 internal-only functions unexported: `_loadSpawnHistory`, `_saveSpawnHistory`, `_addSpawnHistoryEntry`, `_renderSpawnHistoryDropdown`, `_applySpawnHistoryEntry`
+- spawn.js: 561→535 lines
+- Commit: b615900, pushed
+
+### Running totals
 - **Start: ~10,700 lines, 24 modules**
-- **Current: 9,657 lines, 23 modules** (−1,043 lines, −1 module)
+- **Current: 9,467 lines, 23 modules** (−1,233 lines, −1 module)
 - **Target: ~5,200 lines, ~14 modules**
-- **Remaining: ~4,400 lines to cut**
-- Biggest targets remaining: panels.js (1873), workspaces.js (744), vtty.js (728), websocket.js (564), spawn.js (561), keyboard.js (552)
+- **Remaining: ~4,267 lines to cut**
+- Biggest targets remaining: panels.js (1873), vtty.js (728), websocket.js (564), search.js (504), server-connections.js (506), sidebar.js (548)
