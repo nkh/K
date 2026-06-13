@@ -318,4 +318,75 @@ function getActivePanelId() {
     window.autofitTerminalSize = autofitTerminalSize;
     window.getSelectedPanel = getSelectedPanel;
     window.getActivePanelId = getActivePanelId;
+
+// ─── Snapshot (Initial Load) ───
+let _snapshotLoaded = false;
+Object.defineProperty(window, '_snapshotLoaded', {
+    get() { return _snapshotLoaded; },
+    set(v) { _snapshotLoaded = v; },
+    configurable: true,
+});
+
+async function loadSnapshot() {
+    if (_snapshotLoaded) { loadCommands(); return; }
+    _snapshotLoaded = true;
+    const primaryInst = state.connections[0];
+    if (!primaryInst) { loadCommands(); return; }
+    try {
+        const json = await api.getSnapshot(primaryInst.url);
+        if (json.status !== 'ok' || !json.data) throw new Error('bad snapshot');
+        const { commands, vtty, resources } = json.data;
+        primaryInst._commands = commands || [];
+        primaryInst.reachable = true;
+        primaryInst._lastError = null;
+        if (resources) {
+            for (const [cmdId, resData] of Object.entries(resources)) state._resourceCache[cmdId] = resData;
+        }
+        const peerPromises = state.connections.slice(1).map(async (inst) => {
+            try {
+                const j = await api.getCommands(inst.url);
+                inst._commands = j.status === 'ok' ? j.data : [];
+                inst.reachable = true; inst._lastError = null;
+            } catch (e) { inst._commands = inst._commands || []; inst.reachable = false; inst._lastError = 'connection lost'; }
+        });
+        const peersDone = Promise.all(peerPromises).then(() => { updateDisconnectedUI(); });
+        const hasAnyCommands = commands && commands.length > 0;
+        const firstCmd = hasAnyCommands ? (commands.find(c => c.alive) || commands[0]) : null;
+        const shouldShowWelcome = (!hasAnyCommands && !state.selectedCmdId && !state.serverReachable);
+        if (shouldShowWelcome !== _showingWelcome) { _showingWelcome = shouldShowWelcome; renderPanels(); }
+        if (vtty && vtty.html !== undefined && firstCmd) {
+            state.selectedInstUrl = primaryInst.url;
+            state.selectedCmdId = firstCmd.id;
+            state._pendingVttyData = null;
+            state._pendingVttyDirty = false;
+            state.bufferView = 'current';
+            const panelObj = state.panels.find(p => p.id === (state._focusedPanelId || state.panels[0].id));
+            if (panelObj) { panelObj.selectedInstUrl = primaryInst.url; panelObj.selectedCmdId = firstCmd.id; }
+            getSelectedPanel();
+            if (vtty.generation !== undefined) state._lastGeneration[firstCmd.id] = vtty.generation;
+            const panelEl = document.getElementById(panelObj ? panelObj.id : (state._focusedPanelId || (state.panels[0] || {}).id));
+            if (panelEl) {
+                const vttyEl = panelEl.querySelector('.vtty-container');
+                const pre = vttyEl ? vttyEl.querySelector('pre') : null;
+                if (pre) {
+                    pre.innerHTML = vtty.html;
+                    if (state._level3Enabled && vtty.dimensions) buildCellGrid(firstCmd.id, pre, vtty.dimensions.rows, vtty.dimensions.cols);
+                    updateVttyMetadataFromHttp(vtty, panelEl, panelObj, 0);
+                }
+            }
+            updatePanelCommandInfo();
+            updateTerminalDisconnectedOverlay();
+            startUpdateMode();
+        } else { _showingWelcome = shouldShowWelcome; updateDisconnectedUI(); }
+        await peersDone;
+        _buildSidebar();
+    } catch (e) {
+        primaryInst._commands = primaryInst._commands || [];
+        primaryInst.reachable = false;
+        primaryInst._lastError = 'connection lost';
+        updateDisconnectedUI();
+        loadCommands();
+    }
+}
+    window.loadSnapshot = loadSnapshot;
 })();

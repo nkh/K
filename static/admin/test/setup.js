@@ -605,7 +605,7 @@ const moduleOrder = [
     'state.js', 'utils.js', 'api.js',
     'sidebar.js', 'panels.js',
     'commands-core.js', 'command-selection.js', 'server-connections.js',
-    'websocket.js', 'vtty.js', 'snapshot.js',
+    'websocket.js', 'vtty.js',
     'spawn.js', 'logs.js', 'keyboard.js', 'search.js',
     'templates.js', 'dragdrop.js', 'workspaces.js',
     'misc.js', 'delegate.js'
