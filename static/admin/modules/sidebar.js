@@ -100,7 +100,7 @@ function updateCmdToolbarVisibility() {
 function _buildSidebar() {
     const filter = (document.getElementById('cmdFilter') || {}).value || '';
     const filterLower = filter.toLowerCase();
-    if (!_sidebarSort) _sidebarSort = 'name';
+    if (!state._sidebarSort) state._sidebarSort = 'name';
 
     if (state._pendingSelectId) {
         const pendingId = state._pendingSelectId;
@@ -128,9 +128,9 @@ function _buildSidebar() {
 
     if (state.connections.length > 1) {
         html += '<div class="sidebar-sort-bar">';
-        html += `<span class="sidebar-sort-item${_sidebarSort === 'name' ? ' active' : ''}" data-action="SortSidebarBy" data-value="name">All</span>`;
+        html += `<span class="sidebar-sort-item${state._sidebarSort === 'name' ? ' active' : ''}" data-action="SortSidebarBy" data-value="name">All</span>`;
         for (const inst of state.connections) {
-            html += `<span class="sidebar-sort-item${_sidebarSort === inst.url ? ' active' : ''}" data-action="SortSidebarBy" data-value="${escHtml(inst.url)}">${escHtml(inst.label)}</span>`;
+            html += `<span class="sidebar-sort-item${state._sidebarSort === inst.url ? ' active' : ''}" data-action="SortSidebarBy" data-value="${escHtml(inst.url)}">${escHtml(inst.label)}</span>`;
         }
         html += '</div>';
     }
@@ -151,13 +151,13 @@ function _buildSidebar() {
     const navInstUrl = activePanel && activePanel.selectedInstUrl ? activePanel.selectedInstUrl : null;
     const navCmds = (navInstUrl ? allCmds.filter(c => c.inst.url === navInstUrl) : allCmds);
     navCmds.sort((a, b) => (a.cmd.spawn_order ?? 0) - (b.cmd.spawn_order ?? 0));
-    _navCommands = navCmds.map(({ inst, cmd, cmdName }) => ({ instUrl: inst.url, cmdId: cmd.id, name: cmdName }));
+    state._navCommands = navCmds.map(({ inst, cmd, cmdName }) => ({ instUrl: inst.url, cmdId: cmd.id, name: cmdName }));
 
-    if (_sidebarSort === 'name') {
+    if (state._sidebarSort === 'name') {
         allCmds.sort((a, b) => a.cmdName.localeCompare(b.cmdName));
         html += renderCmdList(allCmds, state.connections.length > 1);
     } else {
-        const grouped = _sidebarSort;
+        const grouped = state._sidebarSort;
         for (const inst of state.connections) {
             if (inst.url !== grouped) continue;
             const instCmds = allCmds.filter(c => c.inst.url === inst.url);
@@ -599,12 +599,9 @@ document.addEventListener('click', (e) => {
         switchSidebarTab, updateSidebarTabsVisibility, updateCmdToolbarVisibility,
         updateDisconnectedUI, updateSidebarBanner, updateTerminalDisconnectedOverlay,
         _buildSidebar, getPinnedNames, togglePinCmd, rearrangePinnedCommands,
-        _sortSidebarBy(sortKey) { _sidebarSort = sortKey; if (sortKey !== 'name') window._userSpawnInstUrl = sortKey; loadCommands(); },
+        _sortSidebarBy(sortKey) { state._sidebarSort = sortKey; if (sortKey !== 'name') window._userSpawnInstUrl = sortKey; loadCommands(); },
         togglePauseRunPanelByIdx(instUrl, cmdId) {
-            const inst = state.connections.find(i => i.url === instUrl);
-            if (!inst || !inst._commands) return;
-            const cmd = inst._commands.find(c => c.id === cmdId);
-            (cmd && cmd.frozen ? api.thaw(instUrl, cmdId) : api.freeze(instUrl, cmdId)).then(() => loadCommands()).catch(() => {});
+            _doFreezeThaw(instUrl, cmdId).then(() => loadCommands()).catch(() => {});
         },
         showDocs, fetchEnvironments, activateEnvironment, getCmdGroups, createCmdGroup,
         deleteCmdGroup, renameCmdGroup, toggleCmdInGroup, toggleGroupCollapse, renderGroups,

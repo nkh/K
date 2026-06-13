@@ -157,28 +157,28 @@ function scrollTerminalBottom(panelId) {
 
 // ─── Global Search ───
 function _freezeAllPanelsForSearch() {
-    _searchFrozenPanelIds.clear();
-    _searchFrozenCmdIds = [];
+    state._searchFrozenPanelIds.clear();
+    state._searchFrozenCmdIds = [];
     for (const panel of state.panels) {
         if (panel.selectedInstUrl && panel.selectedCmdId) {
             stopPanelUpdateMode(panel.id);
-            _searchFrozenPanelIds.add(panel.id);
+            state._searchFrozenPanelIds.add(panel.id);
         }
     }
 }
 
 async function _thawAllPanelsFromSearch() {
-    for (const panelId of _searchFrozenPanelIds) {
+    for (const panelId of state._searchFrozenPanelIds) {
         const panelObj = state.panels.find(p => p.id === panelId);
         if (panelObj && panelObj.selectedInstUrl && panelObj.selectedCmdId) {
             startPanelUpdateMode(panelId);
         }
     }
-    _searchFrozenPanelIds.clear();
-    for (const entry of _searchFrozenCmdIds) {
+    state._searchFrozenPanelIds.clear();
+    for (const entry of state._searchFrozenCmdIds) {
         try { await api.thaw(entry.instUrl, entry.cmdId); } catch (e) {}
     }
-    _searchFrozenCmdIds = [];
+    state._searchFrozenCmdIds = [];
 }
 
 // ─── Command Manager Dialog ───
@@ -295,17 +295,17 @@ async function _toggleSearchFreezeCommands() {
                 if (!cmd.alive || cmd.frozen) continue;
                 try {
                     await api.freeze(inst.url, cmd.id);
-                    _searchFrozenCmdIds.push({ instUrl: inst.url, cmdId: cmd.id, wasFrozen: false });
+                    state._searchFrozenCmdIds.push({ instUrl: inst.url, cmdId: cmd.id, wasFrozen: false });
                 } catch (e) {}
             }
         }
     } else {
-        for (const entry of _searchFrozenCmdIds) {
+        for (const entry of state._searchFrozenCmdIds) {
             if (!entry.wasFrozen) {
                 try { await api.thaw(entry.instUrl, entry.cmdId); } catch (e) {}
             }
         }
-        _searchFrozenCmdIds = [];
+        state._searchFrozenCmdIds = [];
     }
 }
 
@@ -315,7 +315,7 @@ function onSearchResultClick(instUrl, cmdId, cmdName) {
     selectCommand(instUrl, cmdId, cmdName);
 
     // Thaw all OTHER panels and commands, but keep the selected panel frozen
-    for (const panelId of _searchFrozenPanelIds) {
+    for (const panelId of state._searchFrozenPanelIds) {
         if (panelId !== activePanelId) {
             const panelObj = state.panels.find(p => p.id === panelId);
             if (panelObj && panelObj.selectedInstUrl && panelObj.selectedCmdId) {
@@ -323,26 +323,26 @@ function onSearchResultClick(instUrl, cmdId, cmdName) {
             }
         }
     }
-    for (const entry of _searchFrozenCmdIds) {
+    for (const entry of state._searchFrozenCmdIds) {
         if (!entry.wasFrozen) api.thaw(entry.instUrl, entry.cmdId).catch(() => {});
     }
-    _searchFrozenCmdIds = [];
-    _searchFrozenPanelIds.clear();
-    if (activePanelId) _searchFrozenPanelIds.add(activePanelId);
+    state._searchFrozenCmdIds = [];
+    state._searchFrozenPanelIds.clear();
+    if (activePanelId) state._searchFrozenPanelIds.add(activePanelId);
 
     updateFrozenIndicator();
 }
 
 function updateFrozenIndicator() {
     document.querySelectorAll('.search-frozen-indicator').forEach(el => el.remove());
-    for (const panelId of _searchFrozenPanelIds) {
+    for (const panelId of state._searchFrozenPanelIds) {
         const panelEl = document.getElementById(panelId);
         if (!panelEl) continue;
         const indicator = document.createElement('div');
         indicator.className = 'search-frozen-indicator';
         indicator.textContent = 'VTTY frozen (click to unfreeze)';
         indicator.onclick = () => {
-            _searchFrozenPanelIds.delete(panelId);
+            state._searchFrozenPanelIds.delete(panelId);
             indicator.remove();
             const panelObj = state.panels.find(p => p.id === panelId);
             if (panelObj && panelObj.selectedInstUrl && panelObj.selectedCmdId) {

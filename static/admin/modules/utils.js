@@ -145,6 +145,7 @@ function parseSpawnEnvVars(text) {
     window.parseSpawnArgs = parseSpawnArgs;
     window.parseSpawnEnvVars = parseSpawnEnvVars;
     window._hex = _hex;
+    window._htmlEscapeChar = _htmlEscapeChar;
 
 // ─── Focus Management ───
 const _focusState = {

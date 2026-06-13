@@ -4,7 +4,6 @@
 //
 // Module dependency graph (load order):
 //   state.js        ← (no deps)
-//   eventbus.js     ← (no deps)
 //   utils.js        ← (no deps)
 //   focus.js        ← (no deps)
 //   theme.js        ← state

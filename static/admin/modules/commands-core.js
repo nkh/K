@@ -61,10 +61,10 @@
     }
 
     function navigateCommand(dir) {
-        if (!_navCommands.length) return;
-        const idx = _navCommands.findIndex(c => c.instUrl === state.selectedInstUrl && c.cmdId === state.selectedCmdId);
-        const n = (idx + dir + _navCommands.length) % _navCommands.length;
-        const t = _navCommands[idx === -1 ? (dir > 0 ? 0 : _navCommands.length - 1) : n];
+        if (!state._navCommands.length) return;
+        const idx = state._navCommands.findIndex(c => c.instUrl === state.selectedInstUrl && c.cmdId === state.selectedCmdId);
+        const n = (idx + dir + state._navCommands.length) % state._navCommands.length;
+        const t = state._navCommands[idx === -1 ? (dir > 0 ? 0 : state._navCommands.length - 1) : n];
         if (t) selectCommand(t.instUrl, t.cmdId, t.name);
     }
 
@@ -88,7 +88,7 @@
 
         const hasAny = state.connections.some(i => i._commands && i._commands.length > 0);
         const showWelcome = !hasAny && !state.selectedCmdId && !state.serverReachable;
-        if (showWelcome !== _showingWelcome) { _showingWelcome = showWelcome; renderPanels(); }
+        if (showWelcome !== state._showingWelcome) { state._showingWelcome = showWelcome; renderPanels(); }
 
         if (hasAny && !state.selectedCmdId) {
             const p = state.panels[0];
@@ -247,7 +247,7 @@
             const hasAny = commands && commands.length > 0;
             const firstCmd = hasAny ? (commands.find(c => c.alive) || commands[0]) : null;
             const showWelcome = !hasAny && !state.selectedCmdId && !state.serverReachable;
-            if (showWelcome !== _showingWelcome) { _showingWelcome = showWelcome; renderPanels(); }
+            if (showWelcome !== state._showingWelcome) { state._showingWelcome = showWelcome; renderPanels(); }
             if (vtty && vtty.html !== undefined && firstCmd) {
                 state.selectedInstUrl = primary.url;
                 state.selectedCmdId = firstCmd.id;
@@ -269,7 +269,7 @@
                 updatePanelCommandInfo();
                 updateTerminalDisconnectedOverlay();
                 startPanelUpdateMode(state._focusedPanelId);
-            } else { _showingWelcome = showWelcome; updateDisconnectedUI(); }
+            } else { state._showingWelcome = showWelcome; updateDisconnectedUI(); }
             await peersDone;
             _buildSidebar();
         } catch (e) {

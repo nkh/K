@@ -1,21 +1,34 @@
+// ─── Event Bus ───
+const Events = {
+    _handlers: {},
+    on(event, handler) {
+        (this._handlers[event] = this._handlers[event] || []).push(handler);
+    },
+    off(event, handler) {
+        const list = this._handlers[event];
+        if (!list) return;
+        this._handlers[event] = list.filter(h => h !== handler);
+    },
+    emit(event, data) {
+        (this._handlers[event] || []).forEach(h => { try { h(data); } catch (e) { console.error('Event handler error:', e); } });
+    },
+};
+
 // ─── State ───
-// Flat list of visible commands for prev/next navigation.
-// Each entry: { instUrl, cmdId, name }
-let _navCommands = [];
-// Whether the welcome panel is currently displayed
-let _showingWelcome = true;
-// Sidebar sort: 'name' sorts all commands alphabetically, 'instance' groups by instance.
-// Clicking an instance header sets it to that instance URL.
-let _sidebarSort = 'name';
-
-// Global search freeze state: tracks which panels had their updates stopped
-// while the search overlay was open, and which commands were frozen.
-let _searchFrozenPanelIds = new Set();
-let _searchFrozenCmdIds = []; // { instUrl, cmdId, wasFrozen }
-
-
-
 const state = {
+    // Flat list of visible commands for prev/next navigation.
+    // Each entry: { instUrl, cmdId, name }
+    _navCommands: [],
+    // Whether the welcome panel is currently displayed
+    _showingWelcome: true,
+    // Sidebar sort: 'name' sorts all commands alphabetically, 'instance' groups by instance.
+    // Clicking an instance header sets it to that instance URL.
+    _sidebarSort: 'name',
+    // Global search freeze state: tracks which panels had their updates stopped
+    // while the search overlay was open, and which commands were frozen.
+    _searchFrozenPanelIds: new Set(),
+    _searchFrozenCmdIds: [], // { instUrl, cmdId, wasFrozen }
+
     panels: [],
     // Store instUrl and cmdId separately to avoid ':' conflicts in URLs.
     selectedInstUrl: null,
@@ -93,8 +106,10 @@ const state = {
 // Expose module-level vars to VRW namespace for cross-module access
 window.VRW = window.VRW || {};
 VRW.state = state;
-VRW._navCommands = _navCommands;
-VRW._showingWelcome = _showingWelcome;
-VRW._sidebarSort = _sidebarSort;
-VRW._searchFrozenPanelIds = _searchFrozenPanelIds;
-VRW._searchFrozenCmdIds = _searchFrozenCmdIds;
+VRW.Events = Events;
+VRW._navCommands = state._navCommands;
+VRW._showingWelcome = state._showingWelcome;
+VRW._sidebarSort = state._sidebarSort;
+VRW._searchFrozenPanelIds = state._searchFrozenPanelIds;
+VRW._searchFrozenCmdIds = state._searchFrozenCmdIds;
+window.VRWEvents = Events;

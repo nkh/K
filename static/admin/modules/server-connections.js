@@ -12,6 +12,7 @@ function _doFreezeThaw(instUrl, cmdId) {
 }
 
 async function togglePauseRun() {
+    if (state._focusedPanelId) { togglePauseRunPanel(state._focusedPanelId); return; }
     if (!state.selectedCmdId) return;
     try { await _doFreezeThaw(state.selectedInstUrl, state.selectedCmdId); loadCommands(); } catch (e) {}
 }
@@ -319,7 +320,7 @@ async function spawnFromWelcome() {
 }
 
     Object.assign(window, {
-        togglePauseRun, togglePauseRunPanel, fetchServerConfig, applyUpdateModeUI,
+        _doFreezeThaw, togglePauseRun, togglePauseRunPanel, fetchServerConfig, applyUpdateModeUI,
         switchUpdateMode, applyPollInterval, loadCertificates, updateCertDropdown,
         updateInstanceDropdown, addConnection, _saveConnections, _restoreConnections,
         healthCheckConnections, _fetchServerName, removeConnection, disconnectServer,

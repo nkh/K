@@ -615,7 +615,10 @@ const moduleDir = path.join(__dirname, '..', 'modules');
 
 const moduleOrder = [
     'state.js', 'utils.js', 'api.js',
-    'sidebar.js', 'panels.js',
+    'sidebar.js',
+    'panels-layout.js', 'panels-toolbar.js', 'panels-context-menu.js',
+    'panels-terminal-ops.js', 'panels-dragdrop.js', 'panels-cmd-select.js',
+    'panels.js',
     'commands-core.js', 'server-connections.js',
     'websocket.js', 'vtty.js',
     'spawn.js', 'keyboard.js', 'search.js',
@@ -630,13 +633,35 @@ const stateCode = fs.readFileSync(path.join(moduleDir, 'state.js'), 'utf8');
 if (typeof VRW !== 'undefined' && VRW.state) {
     globalThis.state = VRW.state;
 }
-// Expose module-level vars from state.js
-if (typeof VRW !== 'undefined') {
-    globalThis._navCommands = VRW._navCommands;
-    globalThis._showingWelcome = VRW._showingWelcome;
-    globalThis._sidebarSort = VRW._sidebarSort;
-    globalThis._searchFrozenPanelIds = VRW._searchFrozenPanelIds;
-    globalThis._searchFrozenCmdIds = VRW._searchFrozenCmdIds;
+// Expose module-level vars from state.js (now stored in state.*)
+// Use defineProperty with getters/setters so that test code like
+// `_navCommands = [...]` also updates `state._navCommands`.
+if (typeof VRW !== 'undefined' && VRW.state) {
+    Object.defineProperty(globalThis, '_navCommands', {
+        get() { return VRW.state._navCommands; },
+        set(v) { VRW.state._navCommands = v; },
+        configurable: true,
+    });
+    Object.defineProperty(globalThis, '_showingWelcome', {
+        get() { return VRW.state._showingWelcome; },
+        set(v) { VRW.state._showingWelcome = v; },
+        configurable: true,
+    });
+    Object.defineProperty(globalThis, '_sidebarSort', {
+        get() { return VRW.state._sidebarSort; },
+        set(v) { VRW.state._sidebarSort = v; },
+        configurable: true,
+    });
+    Object.defineProperty(globalThis, '_searchFrozenPanelIds', {
+        get() { return VRW.state._searchFrozenPanelIds; },
+        set(v) { VRW.state._searchFrozenPanelIds = v; },
+        configurable: true,
+    });
+    Object.defineProperty(globalThis, '_searchFrozenCmdIds', {
+        get() { return VRW.state._searchFrozenCmdIds; },
+        set(v) { VRW.state._searchFrozenCmdIds = v; },
+        configurable: true,
+    });
 }
 
 // Some modules reference functions from other modules that are loaded later.
@@ -696,6 +721,8 @@ const _crossDeps = (() => {
     'saveToken', 'loadToken',
     'togglePanelLayout', 'toggleLayoutPresetMenu', 'applyLayoutPreset',
     '_resizePanelTo', '_hex',
+    '_cacheVtty', '_setupPanelDelegation', '_setToggleBtn',
+    '_doFreezeThaw', '_handleSecondarySelect',
     // Common mocks used by individual test files (consolidated here)
     'startRefresh',
     ]);

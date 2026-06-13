@@ -358,12 +358,18 @@
 </div>
 
 <!-- Modules: load order matters — dependencies must be loaded before dependents.
-     state → utils → api → sidebar → panels → server-connections → commands-core
-     → websocket → vtty → spawn → logs → keyboard → search → templates → dragdrop → workspaces → misc → app.js -->
+     state → utils → api → sidebar → panels-* → server-connections → commands-core
+     → websocket → vtty → spawn → keyboard → search → misc → delegate → app.js -->
 <script src="modules/state.js"></script>
 <script src="modules/utils.js"></script>
 <script src="modules/api.js"></script>
 <script src="modules/sidebar.js"></script>
+<script src="modules/panels-layout.js"></script>
+<script src="modules/panels-toolbar.js"></script>
+<script src="modules/panels-context-menu.js"></script>
+<script src="modules/panels-terminal-ops.js"></script>
+<script src="modules/panels-dragdrop.js"></script>
+<script src="modules/panels-cmd-select.js"></script>
 <script src="modules/panels.js"></script>
 
 <script src="modules/server-connections.js"></script>
