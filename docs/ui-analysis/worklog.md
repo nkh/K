@@ -244,9 +244,17 @@ Key discovery: api.js (loaded via (0, eval) in setup.js) captures the fetch func
 - Tests: 1816 passed, 3 failed (same), 0 regressions
 - Commit: 5343b0f
 
+### Phase 7i: Merge workspaces.js → sidebar.js
+- workspaces.js (640 lines) merged into sidebar.js
+- Includes: docs viewer, environments, command groups, workspaces
+- 14 modules — **target module count reached**
+- Tests: 1818 passed, 3 failed (pre-existing), 0 regressions
+- Commit: ad33559
+
 ### Running totals
 - **Start: ~10,700 lines, 24 modules**
-- **Current: 9,026 lines, 15 modules** (−1,674 lines, −9 modules)
+- **Current: 9,019 lines, 14 modules** (−1,681 lines, −10 modules)
 - **Target: ~5,200 lines, ~14 modules**
-- **Remaining: ~3,826 lines to cut**
-- Biggest targets remaining: panels.js (2347), vtty.js (728), workspaces.js (640), websocket.js (564), spawn.js (523), server-connections.js (504), sidebar.js (526), search.js (504)
+- **Remaining: ~3,819 lines to cut**
+- Modules: state(109), utils(272), api(282), delegate(376), commands-core(392), keyboard(490), search(504), server-connections(504), spawn(523), websocket(564), vtty(728), misc(769), sidebar(1159), panels(2347)
+- Biggest targets: panels.js (2347), sidebar.js (1159), vtty.js (728), misc.js (769)
