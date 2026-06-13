@@ -53,13 +53,13 @@ function vttyApplyHighlights(pre, text, query) {
     let html = pre.innerHTML;
     const escaped = escHtml(query);
     const regex = new RegExp('(?![^<]*>)(' + escaped.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
-    const results = [];
-    let match;
-    while ((match = regex.exec(html)) !== null) results.push(match.index);
+    const matches = [];
+    let m;
+    while ((m = regex.exec(html)) !== null) matches.push({ index: m.index, text: m[1] });
 
-    for (let i = results.length - 1; i >= 0; i--) {
-        const idx = results[i];
-        const endIdx = html.indexOf(match[1], idx) + match[1].length;
+    for (let i = matches.length - 1; i >= 0; i--) {
+        const { index: idx, text: matchText } = matches[i];
+        const endIdx = html.indexOf(matchText, idx) + matchText.length;
         if (endIdx <= idx) continue;
         const cls = i === 0 ? 'vtty-search-highlight current' : 'vtty-search-highlight';
         html = html.substring(0, idx) + '<mark class="' + cls + '" data-match-idx="' + i + '">' + html.substring(idx, endIdx) + '</mark>' + html.substring(endIdx);

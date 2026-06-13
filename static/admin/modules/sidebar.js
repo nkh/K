@@ -106,7 +106,7 @@ function _buildSidebar() {
         const pendingId = state._pendingSelectId;
         state._pendingSelectId = null;
         for (const inst of state.connections) {
-            const cmd = (inst._commands || []).find(c => c.id === pendingId);
+            const cmd = (Array.isArray(inst._commands) ? inst._commands : []).find(c => c.id === pendingId);
             if (cmd) { selectCommand(inst.url, cmd.id, cmd.name || cmd.id); return; }
         }
     }
@@ -137,7 +137,7 @@ function _buildSidebar() {
 
     let allCmds = [];
     for (const inst of state.connections) {
-        for (const cmd of (inst._commands || [])) {
+        for (const cmd of (Array.isArray(inst._commands) ? inst._commands : [])) {
             const cmdName = cmd.name || cmd.id;
             if (filterLower && !cmdName.toLowerCase().includes(filterLower) &&
                 !(cmd.args || []).join(' ').toLowerCase().includes(filterLower) &&
@@ -608,7 +608,7 @@ document.addEventListener('click', (e) => {
         },
         showDocs, fetchEnvironments, activateEnvironment, getCmdGroups, createCmdGroup,
         deleteCmdGroup, renameCmdGroup, toggleCmdInGroup, toggleGroupCollapse, renderGroups,
-        loadWorkspace, deleteWorkspace,
+        loadWorkspace, deleteWorkspace, saveWorkspaces, getWorkspaces,
         _toggleCmdInGroupAndRender(groupName, cmdName) { toggleCmdInGroup(groupName, cmdName); renderGroups(); },
         closeWorkspaceManage() { releaseCurrentFocusTrap(); const o = document.getElementById('workspaceManageOverlay'); if (o) o.remove(); },
     });

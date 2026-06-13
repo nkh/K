@@ -66,7 +66,7 @@ assertOk(sidebarSource.includes('server-connections-bar'), 'sidebar.js source co
 assertOk(sidebarSource.includes('server-conn-item'), 'sidebar.js source contains server-conn-item');
 assertOk(sidebarSource.includes('server-reach-dot'), 'sidebar.js source contains server-reach-dot');
 assertOk(sidebarSource.includes('server-conn-close-btn'), 'sidebar.js source contains server-conn-close-btn');
-assertOk(sidebarSource.includes('disconnectServer'), 'sidebar.js close button calls disconnectServer');
+assertOk(sidebarSource.includes('data-action="DisconnectServer"'), 'sidebar.js close button uses data-action=DisconnectServer delegation');
 assertOk(sidebarSource.includes("window.location.origin"), 'sidebar.js uses window.location.origin to skip origin server');
 
 // Verify the origin server is excluded from the close button bar
@@ -98,8 +98,8 @@ const gridMatch = cssContent.match(/\.panel-container\.grid-2x2\s+\.panel\.focus
 assertOk(gridMatch, 'grid-2x2 focused indicator found');
 assertEq(gridMatch[1], '1', 'grid-2x2 focused indicator is 1px');
 
-// Check panel-header has reduced padding
-const headerMatch = cssContent.match(/\.panel-header\s*\{[^}]*padding:\s*([0-9.]+)rem\s+([0-9.]+)rem/);
+// Check panel-header has minimal padding
+const headerMatch = cssContent.match(/\.panel-header\s*\{[^}]*padding:\s*([0-9.]+)(?:rem)?\s+([0-9.]+)rem/);
 assertOk(headerMatch, 'panel-header padding found in CSS');
 assertOk(parseFloat(headerMatch[1]) <= 0.1, 'panel-header top padding <= 0.1rem (got ' + headerMatch[1] + ')');
 assertOk(parseFloat(headerMatch[2]) <= 0.2, 'panel-header side padding <= 0.2rem (got ' + headerMatch[2] + ')');
@@ -160,8 +160,8 @@ console.log('[4] Sidebar kill buttons always active');
 // Verify the sidebar source code no longer generates disabled attribute
 assertOk(!sidebarSource.includes('killDisabled = (instUnreachable && isAlive)'),
     'sidebar.js no longer sets killDisabled based on unreachable+alive');
-assertOk(sidebarSource.includes("killDisabled = ''"),
-    'sidebar.js sets killDisabled to empty string (always active)');
+assertOk(!sidebarSource.includes('killDisabled'),
+    'sidebar.js no longer uses killDisabled (kill buttons always active via delegation)');
 
 // ═══════════════════════════════════════════════════════════════
 // 5. Health check auto-removes unresponsive connections
@@ -173,8 +173,8 @@ assert(typeof healthCheckConnections === 'function', 'healthCheckConnections is 
 const connSource = require('fs').readFileSync(
     require('path').join(__dirname, '..', 'modules', 'server-connections.js'), 'utf8'
 );
-assertOk(connSource.includes('MAX_RETRIES = 5'), 'healthCheckConnections uses 5 retries');
-assertOk(connSource.includes('RETRY_INTERVAL_MS = 500'), 'healthCheckConnections uses 500ms interval');
+assertOk(connSource.includes('MAX = 5'), 'healthCheckConnections uses 5 retries');
+assertOk(connSource.includes('INTERVAL = 500'), 'healthCheckConnections uses 500ms interval');
 assertOk(connSource.includes('removeConnection(url)'), 'healthCheckConnections removes unreachable connections');
 
 // Test with empty/null inputs — must not throw

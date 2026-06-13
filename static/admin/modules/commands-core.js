@@ -73,7 +73,7 @@
         await Promise.all(state.connections.map(async inst => {
             try {
                 const json = await api.getCommands(inst.url);
-                inst._commands = json.status === 'ok' ? json.data : [];
+                inst._commands = (json.status === 'ok' && Array.isArray(json.data)) ? json.data : [];
                 const was = inst.reachable;
                 inst.reachable = true; inst._lastError = null;
                 if (was !== true) changed = true;

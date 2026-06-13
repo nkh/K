@@ -39,26 +39,17 @@ assertEq(state.panels.length, origLen, 'panels array restored');
 // ── VRW module-level variables ──
 console.log('VRW module-level variables');
 assert(typeof VRW._showingWelcome !== 'undefined', '_showingWelcome exists');
-assert(typeof VRW._lastCommandState !== 'undefined', '_lastCommandState exists');
 assert(typeof VRW._navCommands !== 'undefined', '_navCommands exists');
 assert(typeof VRW._sidebarSort !== 'undefined', '_sidebarSort exists');
 assert(typeof VRW._searchFrozenPanelIds !== 'undefined', '_searchFrozenPanelIds exists');
 assert(typeof VRW._searchFrozenCmdIds !== 'undefined', '_searchFrozenCmdIds exists');
-assert(typeof VRW._lastRenderedPanelCount !== 'undefined', '_lastRenderedPanelCount exists');
-assert(typeof VRW._lastRenderedPanelIds !== 'undefined', '_lastRenderedPanelIds exists');
-assert(typeof VRW._lastSplitState !== 'undefined', '_lastSplitState exists');
-assert(typeof VRW._lastShowingWelcome !== 'undefined', '_lastShowingWelcome exists');
 
 // ── VRW module-level variable types ──
 console.log('VRW module-level variable types');
-assertEq(typeof VRW._lastCommandState, 'string', '_lastCommandState is string');
 assert(Array.isArray(VRW._navCommands), '_navCommands is array');
 assertEq(VRW._sidebarSort, 'name', '_sidebarSort defaults to name');
 assert(VRW._searchFrozenPanelIds instanceof Set, '_searchFrozenPanelIds is a Set');
 assert(Array.isArray(VRW._searchFrozenCmdIds), '_searchFrozenCmdIds is array');
-assertEq(typeof VRW._lastRenderedPanelCount, 'number', '_lastRenderedPanelCount is number');
-assertEq(typeof VRW._lastRenderedPanelIds, 'string', '_lastRenderedPanelIds is string');
-assertEq(typeof VRW._lastSplitState, 'string', '_lastSplitState is string');
 
 // ── state connection/VTty fields ──
 console.log('state connection/VTty fields');

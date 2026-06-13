@@ -98,6 +98,3 @@ if (typeof fetchServerTemplates === 'function') {
 }
 
 console.log('\n[templates.js] Tests complete');
-
-// Prevent async callbacks from crashing after test completion
-process.exit(0);

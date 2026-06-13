@@ -3,6 +3,8 @@ require('./setup');
 
 console.log('\n=== utils.js Tests ===\n');
 
+resetTestState();
+
 // ── formatRuntime ──
 console.log('formatRuntime tests');
 assertEq(formatRuntime(0), '', '0 seconds → empty (not started)');

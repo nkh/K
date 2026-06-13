@@ -14,7 +14,9 @@ assert(typeof state !== 'undefined', 'state accessible after initTheme');
 // ── toggleGlobalTheme ──
 console.log('toggleGlobalTheme tests');
 assert(typeof toggleGlobalTheme === 'function', 'toggleGlobalTheme is a function');
-localStorage.setItem('vrw_theme', 'auto');
+// Reset DOM theme state (previous tests may have set data-theme)
+document.documentElement.setAttribute('data-theme', '');
+localStorage.setItem('vrw_theme', '');
 toggleGlobalTheme();
 // Should cycle auto → grey → dark → auto
 let theme = localStorage.getItem('vrw_theme');

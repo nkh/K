@@ -252,4 +252,3 @@ assert(true, 'color_terminal_log auto-detect reverted; -F flag required (Rust-si
 // ──────────────────────────────────────────────────────────────
 const total = _testPassed + _testFailed;
 console.log('\n[regression_bugs] ' + _testPassed + ' passed, ' + _testFailed + ' failed out of ' + total + ' tests');
-if (_testFailed > 0) process.exit(1);

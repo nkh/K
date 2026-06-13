@@ -18,12 +18,16 @@ console.log('_htmlEscapeChar tests (skipped — see test_utils.js)');
 console.log('buildCellGrid tests');
 if (typeof buildCellGrid === 'function') {
     const pre = document.createElement('pre');
-    // Simple content
-    pre.innerHTML = '<span>hello</span>';
-    const grid = buildCellGrid(pre);
-    assert(grid !== null, 'buildCellGrid returns non-null');
-    // Grid should have rows
-    assert(Array.isArray(grid), 'buildCellGrid returns array of rows');
+    // MockElement doesn't parse innerHTML into childNodes,
+    // so manually create a text node (nodeType 3)
+    const textNode = document.createElement('#text');
+    textNode.textContent = 'hello';
+    textNode.nodeType = 3;
+    pre.appendChild(textNode);
+    state._cellGrids = {};
+    buildCellGrid('test', pre, 24, 80);
+    assert(state._cellGrids['test'] !== undefined, 'buildCellGrid stores grid in state');
+    assert(Array.isArray(state._cellGrids['test'].grid), 'buildCellGrid grid is array of rows');
 }
 
 // ── _cellStyle ──
@@ -46,14 +50,16 @@ console.log('updateVttyDisplayForPanel tests');
 if (typeof updateVttyDisplayForPanel === 'function') {
     state.panels = [];
     const p = addPanelDirect();
+    const panelEl = document.createElement('div');
+    panelEl.id = p.id;
     const vttyEl = document.createElement('div');
-    vttyEl.id = 'vtty-' + p.id;
-    _elementRegistry.set('vtty-' + p.id, vttyEl);
+    vttyEl.className = 'vtty-container';
     const pre = document.createElement('pre');
     vttyEl.appendChild(pre);
+    panelEl.appendChild(vttyEl);
 
     assert(() => {
-        updateVttyDisplayForPanel(p, vttyEl, { html: 'hello world', generation: 1 });
+        updateVttyDisplayForPanel(p, panelEl, { html: 'hello world', generation: 1 });
     }, 'updateVttyDisplayForPanel does not throw');
 }
 
@@ -62,12 +68,16 @@ console.log('updateVttyMetadataForPanel tests');
 if (typeof updateVttyMetadataForPanel === 'function') {
     state.panels = [];
     const p = addPanelDirect();
+    const panelEl = document.createElement('div');
+    panelEl.id = p.id;
     const vttyEl = document.createElement('div');
-    vttyEl.id = 'vtty-' + p.id;
-    _elementRegistry.set('vtty-' + p.id, vttyEl);
+    vttyEl.className = 'vtty-container';
+    const pre = document.createElement('pre');
+    vttyEl.appendChild(pre);
+    panelEl.appendChild(vttyEl);
 
     assert(() => {
-        updateVttyMetadataForPanel(p, vttyEl, {
+        updateVttyMetadataForPanel(p, panelEl, vttyEl, {
             cursor: { row: 5, col: 10 },
             dimensions: { rows: 24, cols: 80 },
             generation: 1
@@ -80,14 +90,16 @@ console.log('applyVttyDiffForPanel tests');
 if (typeof applyVttyDiffForPanel === 'function') {
     state.panels = [];
     const p = addPanelDirect();
+    const panelEl = document.createElement('div');
+    panelEl.id = p.id;
     const vttyEl = document.createElement('div');
-    vttyEl.id = 'vtty-' + p.id;
-    _elementRegistry.set('vtty-' + p.id, vttyEl);
+    vttyEl.className = 'vtty-container';
     const pre = document.createElement('pre');
     pre.innerHTML = '<span>test</span>';
     pre._vttyRows = 24;
     pre._vttyCols = 80;
     vttyEl.appendChild(pre);
+    panelEl.appendChild(vttyEl);
 
     assert(() => {
         applyVttyDiffForPanel(p, vttyEl, {
@@ -120,21 +132,25 @@ console.log('generation skip logic');
 if (typeof updateVttyDisplayForPanel === 'function') {
     state.panels = [];
     const p = addPanelDirect();
+    const panelEl = document.createElement('div');
+    panelEl.id = p.id;
     const vttyEl = document.createElement('div');
-    vttyEl.id = 'vtty-' + p.id;
-    _elementRegistry.set('vtty-' + p.id, vttyEl);
+    vttyEl.className = 'vtty-container';
     const pre = document.createElement('pre');
     vttyEl.appendChild(pre);
+    panelEl.appendChild(vttyEl);
+
+    // Set selectedCmdId so generation dedup works
+    p.selectedCmdId = 'test-cmd';
 
     // First update — generation 1
-    updateVttyDisplayForPanel(p, vttyEl, { html: 'gen1', generation: 1 });
+    updateVttyDisplayForPanel(p, panelEl, { html: 'gen1', generation: 1 });
     // Same generation — should skip
-    updateVttyDisplayForPanel(p, vttyEl, { html: 'gen1-skip', generation: 1 });
+    updateVttyDisplayForPanel(p, panelEl, { html: 'gen1-skip', generation: 1 });
     assertEq(pre.innerHTML, 'gen1', 'same generation skipped (html unchanged)');
     // New generation — should update
-    updateVttyDisplayForPanel(p, vttyEl, { html: 'gen2', generation: 2 });
+    updateVttyDisplayForPanel(p, panelEl, { html: 'gen2', generation: 2 });
     assertEq(pre.innerHTML, 'gen2', 'new generation applied');
 }
 
 console.log('\n[vtty.js] Tests complete');
-process.exit(0);

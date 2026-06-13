@@ -82,7 +82,7 @@ function applyPollInterval() {
 // ─── Certificates ───
 async function loadCertificates() {
     for (const inst of state.connections) {
-        try { const r = await api.getCertificates(inst.url); inst._certs = r.status === 'ok' ? r.data : []; }
+        try { const r = await api.getCertificates(inst.url); inst._certs = (r.status === 'ok' && Array.isArray(r.data)) ? r.data : []; }
         catch (e) { inst._certs = []; }
     }
     let html = '';

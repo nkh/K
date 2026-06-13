@@ -34,7 +34,8 @@ globalThis.assert = function(cond, msg) {
 globalThis.assertEq = function(actual, expected, msg) {
     if (actual !== expected) {
         _testFailed++;
-        console.error('  FAIL: ' + msg + ' — expected ' + JSON.stringify(expected) + ', got ' + JSON.stringify(actual));
+        const _safeStr = v => { try { return JSON.stringify(v); } catch { return String(v); }; };
+        console.error('  FAIL: ' + msg + ' — expected ' + _safeStr(expected) + ', got ' + _safeStr(actual));
     } else { _testPassed++; }
 };
 globalThis.assertOk = function(val, msg) {
@@ -401,6 +402,13 @@ const _doc = {
     },
     querySelector(sel) {
         if (sel.startsWith('#')) return this.getElementById(sel.slice(1));
+        if (sel.startsWith('.') && this.children) {
+            const cls = sel.slice(1);
+            for (let i = 0; i < this.children.length; i++) {
+                const c = this.children[i];
+                if (c.className && c.className.split(/\s+/).includes(cls)) return c;
+            }
+        }
         return null;
     },
     querySelectorAll(sel) { return []; },
@@ -425,6 +433,7 @@ globalThis.addEventListener = addEventListener;
 globalThis.removeEventListener = removeEventListener;
 globalThis.dispatchEvent = emitEvent;
 globalThis.matchMedia = function(query) { return { matches: false, media: query, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} }; };
+globalThis.Node = { ELEMENT_NODE: 1, TEXT_NODE: 3, COMMENT_NODE: 8, DOCUMENT_NODE: 9 };
 globalThis.NodeFilter = { SHOW_ALL: 0xFFFFFFFF, SHOW_ELEMENT: 1, SHOW_TEXT: 4, SHOW_COMMENT: 128, FILTER_ACCEPT: 1, FILTER_REJECT: 2, FILTER_SKIP: 3 };
 globalThis.TreeWalker = class {
     constructor(root, whatToShow, filter) { this.root = root; this.whatToShow = whatToShow; this.filter = filter; this.currentNode = root; }
@@ -469,6 +478,9 @@ class MockWebSocket {
 }
 globalThis.WebSocket = MockWebSocket;
 globalThis.MockWebSocket = MockWebSocket;
+globalThis.WebSocket.OPEN = 1;
+globalThis.WebSocket.CLOSED = 3;
+globalThis.WebSocket.CONNECTING = 0;
 
 // ── Notification mock ──
 globalThis.Notification = class {
