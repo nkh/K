@@ -502,20 +502,6 @@ function saveWorkspaces(workspaces) {
     } catch (e) { /* quota exceeded */ }
 }
 
-/// Toggle the workspace dropdown menu.
-function toggleWorkspaceDropdown(e) {
-    e.stopPropagation();
-    const menu = document.getElementById('workspaceMenu');
-    if (!menu) return;
-    const isVisible = menu.style.display !== 'none';
-    if (isVisible) {
-        menu.style.display = 'none';
-    } else {
-        renderWorkspaceList();
-        menu.style.display = '';
-    }
-}
-
 /// Render the workspace list inside the dropdown.
 function renderWorkspaceList() {
     const container = document.getElementById('workspaceList');
@@ -539,38 +525,6 @@ function renderWorkspaceList() {
         html += '</div>';
     }
     container.innerHTML = html;
-}
-
-/// Save the current workspace configuration.
-function saveCurrentWorkspace() {
-    const name = prompt('Workspace name:');
-    if (!name || !name.trim()) return;
-    const trimmed = name.trim();
-
-    // Capture current panel configuration
-    const panels = state.panels.map(p => ({
-        instUrl: p.selectedInstUrl || null,
-        cmdId: p.selectedCmdId || null,
-        cmdName: _getPanelCmdName(p),
-        fontSize: p.fontSize,
-        theme: p.theme || '',
-        customTitle: p.customTitle || '',
-    }));
-
-    const workspaces = getWorkspaces();
-    workspaces[trimmed] = {
-        panels: panels,
-        layout: state.panelLayout || 'row',
-        timestamp: Date.now(),
-    };
-    saveWorkspaces(workspaces);
-    renderWorkspaceList();
-
-    // Close dropdown after a short delay so user sees the list update
-    setTimeout(() => {
-        const menu = document.getElementById('workspaceMenu');
-        if (menu) menu.style.display = 'none';
-    }, 600);
 }
 
 /// Get the command name for a panel from the current connections.
@@ -650,52 +604,6 @@ function deleteWorkspace(name) {
     renderWorkspaceList();
 }
 
-/// Open the workspace management dialog.
-function openWorkspaceManage() {
-    // Close dropdown
-    const menu = document.getElementById('workspaceMenu');
-    if (menu) menu.style.display = 'none';
-
-    const workspaces = getWorkspaces();
-    const names = Object.keys(workspaces);
-
-    // Create a simple management overlay
-    const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay';
-    overlay.style.display = 'flex';
-    overlay.id = 'workspaceManageOverlay';
-    overlay.onclick = (e) => { if (e.target === overlay) { releaseCurrentFocusTrap(); overlay.remove(); } };
-
-    let content = '<div class="modal">';
-    content += '<h2>Manage Workspaces</h2>';
-    if (names.length === 0) {
-        content += '<p style="font-size:0.75rem;color:var(--text-muted);">No saved workspaces.</p>';
-    } else {
-        content += '<div style="max-height:300px;overflow-y:auto;">';
-        for (const name of names) {
-            const panelCount = (workspaces[name].panels || []).length;
-            const ts = workspaces[name].timestamp ? new Date(workspaces[name].timestamp).toLocaleString() : 'unknown';
-            content += '<div style="display:flex;align-items:center;gap:0.3rem;padding:0.3rem 0;border-bottom:1px solid var(--border);">';
-            content += '<div style="flex:1;min-width:0;">';
-            content += '<div style="font-size:0.75rem;color:var(--text-primary);font-weight:500;">' + escHtml(name) + '</div>';
-            content += '<div style="font-size:0.6rem;color:var(--text-muted);">' + panelCount + ' panels &middot; saved ' + escHtml(ts) + '</div>';
-            content += '</div>';
-            content += '<button class="btn btn-xs" data-action="LoadWorkspace" data-name="' + escHtml(name) + '" title="Load">&#x25B6;</button>';
-            content += '<button class="btn btn-xs" data-action="DeleteWorkspace" data-name="' + escHtml(name) + '" title="Delete">&#x2715;</button>';
-            content += '</div>';
-        }
-        content += '</div>';
-    }
-    content += '<div class="actions" style="margin-top:1rem;">';
-    content += '<button class="btn" data-action="CloseWorkspaceManage">Close</button>';
-    content += '</div>';
-    content += '</div>';
-
-    overlay.innerHTML = content;
-    document.body.appendChild(overlay);
-    trapFocus(overlay.querySelector('.modal'));
-}
-
 // Close workspace menu when clicking outside
 document.addEventListener('click', (e) => {
     const dropdown = document.getElementById('workspaceDropdown');
@@ -708,15 +616,11 @@ document.addEventListener('click', (e) => {
     // Expose to global scope
     // Docs
     window.showDocs = showDocs;
-    window.renderMarkdown = renderMarkdown;
     // Environments
     window.fetchEnvironments = fetchEnvironments;
     window.activateEnvironment = activateEnvironment;
     // Groups
     window.getCmdGroups = getCmdGroups;
-    window.saveCmdGroups = saveCmdGroups;
-    window.getGroupCollapsedState = getGroupCollapsedState;
-    window.saveGroupCollapsedState = saveGroupCollapsedState;
     window.createCmdGroup = createCmdGroup;
     window.deleteCmdGroup = deleteCmdGroup;
     window.renameCmdGroup = renameCmdGroup;
@@ -724,14 +628,8 @@ document.addEventListener('click', (e) => {
     window.toggleGroupCollapse = toggleGroupCollapse;
     window.renderGroups = renderGroups;
     // Workspaces
-    window.getWorkspaces = getWorkspaces;
-    window.saveWorkspaces = saveWorkspaces;
-    window.toggleWorkspaceDropdown = toggleWorkspaceDropdown;
-    window.renderWorkspaceList = renderWorkspaceList;
-    window.saveCurrentWorkspace = saveCurrentWorkspace;
     window.loadWorkspace = loadWorkspace;
     window.deleteWorkspace = deleteWorkspace;
-    window.openWorkspaceManage = openWorkspaceManage;
     window._toggleCmdInGroupAndRender = function(groupName, cmdName) {
         toggleCmdInGroup(groupName, cmdName);
         renderGroups();

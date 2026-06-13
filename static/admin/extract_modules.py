@@ -428,22 +428,13 @@ misc_content += """
     window.hideAddTemplateForm = hideAddTemplateForm;
     window.saveTemplate = saveTemplate;
     // Workspaces
-    window.getWorkspaces = getWorkspaces;
-    window.saveWorkspaces = saveWorkspaces;
-    window.toggleWorkspaceDropdown = toggleWorkspaceDropdown;
-    window.renderWorkspaceList = renderWorkspaceList;
-    window.saveCurrentWorkspace = saveCurrentWorkspace;
     window.loadWorkspace = loadWorkspace;
     window.deleteWorkspace = deleteWorkspace;
-    window.openWorkspaceManage = openWorkspaceManage;
     // Environments
     window.fetchEnvironments = fetchEnvironments;
     window.activateEnvironment = activateEnvironment;
     // Groups
     window.getCmdGroups = getCmdGroups;
-    window.saveCmdGroups = saveCmdGroups;
-    window.getGroupCollapsedState = getGroupCollapsedState;
-    window.saveGroupCollapsedState = saveGroupCollapsedState;
     window.createCmdGroup = createCmdGroup;
     window.deleteCmdGroup = deleteCmdGroup;
     window.renameCmdGroup = renameCmdGroup;
