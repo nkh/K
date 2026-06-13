@@ -650,6 +650,7 @@ const _crossDeps = (() => {
     'updateDisconnectedUI', 'getSelectedPanel', 'getActivePanelId', 'loadSnapshot',
     'handlePeerEvent', 'notifyCommandEnded', 'connectLogWs',
     'disconnectLogWs', 'scheduleSecondaryVttyHttp', 'startRefresh',
+    'updateSecondaryVttyDisplay', 'applySecondaryVttyDiff',
     'loadCommands', 'updatePanelCommandInfo',
     'updateTerminalDisconnectedOverlay', 'updateSidebarSelection',
     'updateSharedToolbar', 'updateCmdToolbarVisibility',

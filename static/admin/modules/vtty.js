@@ -454,4 +454,104 @@ function updateVttyMetadataFromHttp(data, panelEl, panelObj, sbOffset) {
     window.loadVttyHttpForPanel = loadVttyHttpForPanel;
     window.buildCellGrid = buildCellGrid;
     window.updateVttyMetadataFromHttp = updateVttyMetadataFromHttp;
+
+// ─── Secondary Pane VTTY Display ───
+// These mirror the primary functions above but operate on the secondary
+// split pane. They use a separate generation cache key (_secondaryGen_)
+// and write to split-specific state properties (secondaryMouseTracking, etc.)
+
+function _applyScrollHtml(vttyEl, pre, html) {
+    const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
+    const oldScrollHeight = vttyEl.scrollHeight;
+    pre.innerHTML = html;
+    if (wasAtBottom) vttyEl.scrollTop = vttyEl.scrollHeight;
+    else vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
+}
+
+function scheduleSecondaryVttyHttp(panelObj, delayMs) {
+    if (!panelObj || !panelObj.split) return;
+    const s = panelObj.split;
+    if (!s.secondaryCmdId || !s.secondaryInstUrl) return;
+    const timerKey = '_secondaryVttyHttpTimer_' + panelObj.id;
+    if (state[timerKey]) clearTimeout(state[timerKey]);
+    state[timerKey] = setTimeout(() => {
+        state[timerKey] = null;
+        _loadSecondaryVttyHttp(panelObj);
+    }, delayMs);
+}
+
+async function _loadSecondaryVttyHttp(panelObj) {
+    if (!panelObj || !panelObj.split) return;
+    const s = panelObj.split;
+    const vttyEl = document.getElementById('vtty-' + panelObj.id + '-secondary');
+    if (!vttyEl) return;
+    try {
+        const json = await api.getVttyHtml(s.secondaryInstUrl, s.secondaryCmdId);
+        if (json.status === 'ok' && json.data) updateSecondaryVttyDisplay(panelObj, vttyEl, json.data);
+    } catch (e) { /* ignore */ }
+}
+
+function updateSecondaryVttyDisplay(panelObj, vttyEl, data) {
+    const pre = vttyEl ? vttyEl.querySelector('pre') : null;
+    if (!pre) return;
+    const cmdId = panelObj.split.secondaryCmdId;
+    const genKey = '_secondaryGen_' + cmdId;
+    if (cmdId && data.generation !== undefined) {
+        if (state[genKey] === data.generation) { _updateSecondaryVttyMetadata(panelObj, vttyEl, data); return; }
+        state[genKey] = data.generation;
+    }
+    if (data.html !== undefined && data.html !== null) _applyScrollHtml(vttyEl, pre, data.html);
+    _updateSecondaryVttyMetadata(panelObj, vttyEl, data);
+}
+
+function _updateSecondaryVttyMetadata(panelObj, vttyEl, data) {
+    const cursor = data.cursor || {};
+    const dims = data.dimensions || {};
+    const inScrollback = panelObj.split.secondaryScrollbackOffset > 0;
+    const cursorHidden = data.cursor_visible === false;
+    const cursorEl = vttyEl ? vttyEl.querySelector('.cursor-indicator') : null;
+    if (cursorEl && cursor.row !== undefined && !inScrollback && !cursorHidden) {
+        const charW = panelObj.fontSize * 0.6;
+        const charH = panelObj.fontSize * 1.2;
+        cursorEl.style.top = (cursor.row * charH) + 'px';
+        cursorEl.style.left = (cursor.col * charW) + 'px';
+        cursorEl.style.width = charW + 'px';
+        cursorEl.style.height = charH + 'px';
+        cursorEl.classList.remove('hidden');
+    } else if (cursorEl) {
+        cursorEl.classList.add('hidden');
+    }
+    panelObj.split.secondaryMouseTracking = !!data.mouse_tracking;
+    panelObj.split.secondaryMouseSgr = !!data.mouse_sgr;
+    if (vttyEl) {
+        vttyEl.classList.toggle('selectable', !panelObj.split.secondaryMouseTracking);
+        const pre = vttyEl.querySelector('pre');
+        if (pre && dims.rows && dims.cols) { pre._vttyRows = dims.rows; pre._vttyCols = dims.cols; }
+    }
+}
+
+function applySecondaryVttyDiff(panelObj, vttyEl, data) {
+    const cmdId = panelObj.split.secondaryCmdId;
+    if (!cmdId) return;
+    const pre = vttyEl ? vttyEl.querySelector('pre') : null;
+    if (!pre) return;
+    const genKey = '_secondaryGen_' + cmdId;
+    if (data.generation !== undefined && state[genKey] === data.generation) {
+        if (data.cursor || data.dimensions || data.mouse_tracking !== undefined)
+            _updateSecondaryVttyMetadata(panelObj, vttyEl, data);
+        return;
+    }
+    if (data.generation !== undefined) state[genKey] = data.generation;
+    if (data.html !== undefined) {
+        _applyScrollHtml(vttyEl, pre, data.html);
+        _updateSecondaryVttyMetadata(panelObj, vttyEl, data);
+        return;
+    }
+    // Level 3 cell-level incremental diff not supported for secondary — fall back
+    scheduleSecondaryVttyHttp(panelObj, 0);
+}
+
+    window.scheduleSecondaryVttyHttp = scheduleSecondaryVttyHttp;
+    window.updateSecondaryVttyDisplay = updateSecondaryVttyDisplay;
+    window.applySecondaryVttyDiff = applySecondaryVttyDiff;
 })();

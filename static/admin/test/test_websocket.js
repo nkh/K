@@ -244,83 +244,35 @@ if (typeof _disconnectSecondaryWs === 'function') {
     assertEq(splitP2.split.secondaryWsReconnectCount, 0, 'secondary reconnect count reset');
 }
 
-// ── scheduleSecondaryVttyHttp ──
+// ── scheduleSecondaryVttyHttp (now in vtty.js) ──
 console.log('scheduleSecondaryVttyHttp tests');
 if (typeof scheduleSecondaryVttyHttp === 'function') {
     const schedP = addPanelDirect();
     schedP.split = { secondaryCmdId: 's1', secondaryInstUrl: 'http://localhost:9090' };
     assert(() => { scheduleSecondaryVttyHttp(schedP, 50); }, 'scheduleSecondaryVttyHttp does not throw');
 
-    // No split → no-op
     const noSplitSchedP = addPanelDirect();
     assert(() => { scheduleSecondaryVttyHttp(noSplitSchedP, 50); }, 'scheduleSecondaryVttyHttp no-split no crash');
 
-    // No cmd → no-op
     const noCmdSplitP = addPanelDirect();
     noCmdSplitP.split = { secondaryCmdId: null, secondaryInstUrl: null };
     assert(() => { scheduleSecondaryVttyHttp(noCmdSplitP, 50); }, 'scheduleSecondaryVttyHttp no-cmd no crash');
 }
 
-// ── _loadSecondaryVttyHttp ──
-console.log('_loadSecondaryVttyHttp tests');
-if (typeof _loadSecondaryVttyHttp === 'function') {
-    assert(_loadSecondaryVttyHttp.constructor.name === 'AsyncFunction', '_loadSecondaryVttyHttp is async');
-
-    // No split → no-op
-    const noSplitLdP = addPanelDirect();
-    assert(() => { _loadSecondaryVttyHttp(noSplitLdP); }, '_loadSecondaryVttyHttp no-split no crash');
-
-    // No vtty element → no-op
-    const noVttyP = addPanelDirect();
-    noVttyP.split = { secondaryCmdId: 's1', secondaryInstUrl: 'http://localhost:9090' };
-    assert(() => { _loadSecondaryVttyHttp(noVttyP); }, '_loadSecondaryVttyHttp no-vtty no crash');
+// ── updateSecondaryVttyDisplay (now in vtty.js) ──
+console.log('updateSecondaryVttyDisplay tests');
+if (typeof updateSecondaryVttyDisplay === 'function') {
+    const dispP = addPanelDirect();
+    dispP.split = { secondaryCmdId: 's1', secondaryInstUrl: 'http://localhost:9090' };
+    const dispVtty = document.createElement('div');
+    const dispPre = document.createElement('pre');
+    dispVtty.appendChild(dispPre);
+    assert(() => { updateSecondaryVttyDisplay(dispP, dispVtty, { html: '<span>hi</span>', generation: 1 }); }, 'updateSecondaryVttyDisplay does not throw');
 }
 
-// ── _updateSecondaryVttyMetadata ──
-console.log('_updateSecondaryVttyMetadata tests');
-if (typeof _updateSecondaryVttyMetadata === 'function') {
-    const metaP = addPanelDirect();
-    metaP.split = { secondaryCmdId: 's1', secondaryScrollbackOffset: 0, secondaryMouseTracking: false, secondaryMouseSgr: false };
-    metaP.fontSize = 10;
-
-    const vttyEl = document.createElement('div');
-    vttyEl.className = 'vtty-container';
-    const cursorEl = document.createElement('div');
-    cursorEl.className = 'cursor-indicator';
-    cursorEl.classList.add('hidden');
-    const pre = document.createElement('pre');
-    vttyEl.appendChild(cursorEl);
-    vttyEl.appendChild(pre);
-
-    // With cursor data
-    _updateSecondaryVttyMetadata(metaP, vttyEl, {
-        cursor: { row: 5, col: 10, cursor_visible: true },
-        dimensions: { rows: 24, cols: 80 },
-        mouse_tracking: true,
-        mouse_sgr: true,
-    });
-    assert(!cursorEl.classList.contains('hidden'), 'cursor shown when visible');
-    assert(cursorEl.style.top.includes('px'), 'cursor top set');
-    assert(cursorEl.style.left.includes('px'), 'cursor left set');
-    assertEq(metaP.split.secondaryMouseTracking, true, 'mouse tracking updated');
-    assertEq(metaP.split.secondaryMouseSgr, true, 'mouse sgr updated');
-    assertEq(pre._vttyRows, 24, 'vttyRows stored');
-    assertEq(pre._vttyCols, 80, 'vttyCols stored');
-
-    // Cursor hidden
-    _updateSecondaryVttyMetadata(metaP, vttyEl, { cursor_visible: false });
-    assert(cursorEl.classList.contains('hidden'), 'cursor hidden when cursor_visible false');
-
-    // In scrollback → cursor hidden
-    metaP.split.secondaryScrollbackOffset = 10;
-    _updateSecondaryVttyMetadata(metaP, vttyEl, { cursor: { row: 1, col: 1, cursor_visible: true } });
-    assert(cursorEl.classList.contains('hidden'), 'cursor hidden in scrollback');
-    metaP.split.secondaryScrollbackOffset = 0;
-}
-
-// ── _applySecondaryVttyDiff ──
-console.log('_applySecondaryVttyDiff tests');
-if (typeof _applySecondaryVttyDiff === 'function') {
+// ── applySecondaryVttyDiff (now in vtty.js) ──
+console.log('applySecondaryVttyDiff tests');
+if (typeof applySecondaryVttyDiff === 'function') {
     const diffP = addPanelDirect();
     diffP.split = { secondaryCmdId: 's1' };
     const diffVtty = document.createElement('div');
@@ -328,14 +280,12 @@ if (typeof _applySecondaryVttyDiff === 'function') {
     const diffPre = document.createElement('pre');
     diffVtty.appendChild(diffPre);
 
-    // No cmdId → no-op
     const noCmdDiffP = addPanelDirect();
     noCmdDiffP.split = { secondaryCmdId: null };
-    assert(() => { _applySecondaryVttyDiff(noCmdDiffP, diffVtty, {}); }, '_applySecondaryVttyDiff no-cmd no crash');
+    assert(() => { applySecondaryVttyDiff(noCmdDiffP, diffVtty, {}); }, 'applySecondaryVttyDiff no-cmd no crash');
 
-    // With full HTML fallback
     const htmlData = { html: '<span>test</span>', generation: 1 };
-    assert(() => { _applySecondaryVttyDiff(diffP, diffVtty, htmlData); }, '_applySecondaryVttyDiff with html does not throw');
+    assert(() => { applySecondaryVttyDiff(diffP, diffVtty, htmlData); }, 'applySecondaryVttyDiff with html does not throw');
 }
 
 console.log('\n[websocket.js] Tests complete');

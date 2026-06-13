@@ -43,8 +43,8 @@ const criticalFunctions = [
     'addPanelDirect', 'addPanel', 'closePanelModal', 'confirmAddPanel',
     'togglePanelTheme', 'applyPanelTheme', 'escHtml', 'updateVttyDisplayForPanel',
     '_disconnectSecondaryWs', '_connectSecondaryWs', 'scheduleSecondaryVttyHttp',
-    '_loadSecondaryVttyHttp', '_updateSecondaryVttyDisplay', '_updateSecondaryVttyMetadata',
-    '_applySecondaryVttyDiff', 'showAddServerModal', 'closeAddServerModal',
+    'updateSecondaryVttyDisplay', 'applySecondaryVttyDiff',
+    'showAddServerModal', 'closeAddServerModal',
     'confirmAddServer', '_isTerminalVisible',
     'startPanelUpdateMode', 'stopPanelUpdateMode',
 ];

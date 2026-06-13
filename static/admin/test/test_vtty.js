@@ -153,4 +153,74 @@ if (typeof updateVttyDisplayForPanel === 'function') {
     assertEq(pre.innerHTML, 'gen2', 'new generation applied');
 }
 
+// ── Secondary pane VTTY display (moved from websocket.js) ──
+console.log('secondary VTTY display tests');
+if (typeof updateSecondaryVttyDisplay === 'function') {
+    const metaP = addPanelDirect();
+    metaP.split = { secondaryCmdId: 's1', secondaryScrollbackOffset: 0, secondaryMouseTracking: false, secondaryMouseSgr: false };
+    metaP.fontSize = 10;
+
+    const vttyEl = document.createElement('div');
+    vttyEl.className = 'vtty-container';
+    const cursorEl = document.createElement('div');
+    cursorEl.className = 'cursor-indicator';
+    cursorEl.classList.add('hidden');
+    const pre = document.createElement('pre');
+    vttyEl.appendChild(cursorEl);
+    vttyEl.appendChild(pre);
+
+    // Full display with cursor + metadata
+    updateSecondaryVttyDisplay(metaP, vttyEl, {
+        html: '<span>hello</span>', generation: 1,
+        cursor: { row: 5, col: 10, cursor_visible: true },
+        dimensions: { rows: 24, cols: 80 },
+        mouse_tracking: true, mouse_sgr: true,
+    });
+    assertEq(pre.innerHTML, '<span>hello</span>', 'secondary display html set');
+    assert(!cursorEl.classList.contains('hidden'), 'secondary cursor shown');
+    assert(cursorEl.style.top.includes('px'), 'secondary cursor top set');
+    assertEq(metaP.split.secondaryMouseTracking, true, 'secondary mouse tracking set');
+    assertEq(metaP.split.secondaryMouseSgr, true, 'secondary mouse sgr set');
+    assertEq(pre._vttyRows, 24, 'secondary vttyRows stored');
+    assertEq(pre._vttyCols, 80, 'secondary vttyCols stored');
+
+    // Same generation → skip HTML, still update metadata
+    updateSecondaryVttyDisplay(metaP, vttyEl, { generation: 1, cursor_visible: false });
+    assertEq(pre.innerHTML, '<span>hello</span>', 'same gen skips html');
+    assert(cursorEl.classList.contains('hidden'), 'cursor hidden via metadata-only update');
+
+    // Cursor hidden in scrollback
+    metaP.split.secondaryScrollbackOffset = 10;
+    updateSecondaryVttyDisplay(metaP, vttyEl, { html: '<span>scroll</span>', generation: 2, cursor: { row: 1, col: 1, cursor_visible: true } });
+    assert(cursorEl.classList.contains('hidden'), 'cursor hidden in scrollback');
+    metaP.split.secondaryScrollbackOffset = 0;
+}
+
+if (typeof applySecondaryVttyDiff === 'function') {
+    const diffP = addPanelDirect();
+    diffP.split = { secondaryCmdId: 's1' };
+    const diffVtty = document.createElement('div');
+    diffVtty.className = 'vtty-container';
+    const diffPre = document.createElement('pre');
+    diffVtty.appendChild(diffPre);
+
+    // No cmdId → no-op
+    const noCmdP = addPanelDirect();
+    noCmdP.split = { secondaryCmdId: null };
+    assert(() => { applySecondaryVttyDiff(noCmdP, diffVtty, {}); }, 'applySecondaryVttyDiff no-cmd no crash');
+
+    // HTML fallback
+    assert(() => { applySecondaryVttyDiff(diffP, diffVtty, { html: '<span>diff</span>', generation: 1 }); }, 'applySecondaryVttyDiff html fallback does not throw');
+    assertEq(diffPre.innerHTML, '<span>diff</span>', 'diff html applied');
+}
+
+if (typeof scheduleSecondaryVttyHttp === 'function') {
+    const schedP = addPanelDirect();
+    schedP.split = { secondaryCmdId: 's1', secondaryInstUrl: 'http://localhost:9090' };
+    assert(() => { scheduleSecondaryVttyHttp(schedP, 50); }, 'scheduleSecondaryVttyHttp does not throw');
+
+    const noSplitP = addPanelDirect();
+    assert(() => { scheduleSecondaryVttyHttp(noSplitP, 50); }, 'scheduleSecondaryVttyHttp no-split no crash');
+}
+
 console.log('\n[vtty.js] Tests complete');
