@@ -219,3 +219,34 @@ Key discovery: api.js (loaded via (0, eval) in setup.js) captures the fetch func
 ### Session 3 totals
 - Net: 9,467 → 9,151 lines (−316), 23 → 19 modules (−4)
 - All changes tested: 1815 passed, 3 failed (pre-existing), 0 regressions
+
+## Session 4: Phase 7e-h continued module consolidation
+
+### Phase 7e: Merge command-selection.js → panels.js
+- command-selection.js (277 lines) merged into panels.js
+- 18 modules, 9,151 lines (net -0 lines, -1 module — content moved, wrapper removed)
+- Tests: 1815 passed, 3 failed (same), 0 regressions
+- Commit: 12df994
+
+### Phase 7f: Merge templates.js → misc.js
+- templates.js (194 lines) merged into misc.js
+- misc.js loads after all callers (panels.js, server-connections.js, sidebar.js) — safe
+- 17 modules
+
+### Phase 7g: Merge logs.js → misc.js
+- logs.js (233 lines) merged into misc.js
+- 16 modules
+
+### Phase 7h: Merge dragdrop.js → panels.js
+- dragdrop.js (290 lines) merged into panels.js
+- All dragdrop callers are panel-related functions — natural fit
+- 15 modules
+- Tests: 1816 passed, 3 failed (same), 0 regressions
+- Commit: 5343b0f
+
+### Running totals
+- **Start: ~10,700 lines, 24 modules**
+- **Current: 9,026 lines, 15 modules** (−1,674 lines, −9 modules)
+- **Target: ~5,200 lines, ~14 modules**
+- **Remaining: ~3,826 lines to cut**
+- Biggest targets remaining: panels.js (2347), vtty.js (728), workspaces.js (640), websocket.js (564), spawn.js (523), server-connections.js (504), sidebar.js (526), search.js (504)
