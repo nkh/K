@@ -607,7 +607,6 @@ const moduleOrder = [
     'commands-core.js', 'server-connections.js',
     'websocket.js', 'vtty.js',
     'spawn.js', 'keyboard.js', 'search.js',
-    'workspaces.js',
     'misc.js', 'delegate.js'
 ];
 
