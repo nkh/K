@@ -389,3 +389,381 @@ function savePeersToStorage() {
         localStorage.removeItem('vrw_peers');
     }
 }
+
+// ─── Command Templates ───
+// Server-side templates (from vrw config [[templates]]) and user-defined templates
+// (stored in localStorage). Templates provide one-click command spawning.
+let _serverTemplates = []; // cached from /api/templates
+
+function getServerTemplates() {
+    return _serverTemplates;
+}
+
+async function fetchServerTemplates() {
+    try {
+        const json = await api.getTemplates();
+        if (json.status === 'ok') {
+            _serverTemplates = json.data || [];
+        }
+    } catch { /* ignore — use cached */ }
+}
+
+function getUserTemplates() {
+    try {
+        return JSON.parse(localStorage.getItem('vrw_templates') || '[]');
+    } catch { return []; }
+}
+
+function saveUserTemplates(templates) {
+    localStorage.setItem('vrw_templates', JSON.stringify(templates));
+}
+
+function renderTemplates() {
+    const container = document.getElementById('templateList');
+    if (!container) return;
+
+    const server = getServerTemplates();
+    const user = getUserTemplates();
+    const hasAny = server.length > 0 || user.length > 0;
+
+    if (!hasAny) {
+        container.innerHTML = '<div style="padding:0.5rem;color:var(--text-muted);font-size:0.7rem;text-align:center;">No templates configured. Add templates in your config file under [[templates]].</div>';
+        return;
+    }
+
+    let html = '';
+
+    if (server.length > 0) {
+        html += '<div style="font-size:0.6rem;color:var(--text-muted);padding:0.2rem 0.3rem;text-transform:uppercase;letter-spacing:0.05em;">From config</div>';
+        html += server.map((t, i) => {
+            const detail = [t.cmd, t.args].filter(Boolean).join(' ');
+            const extras = [];
+            if (t.workdir) extras.push('dir: ' + t.workdir);
+            if (t.certificate) extras.push('cert: ' + t.certificate);
+            if (t.rows || t.cols) extras.push((t.rows || '?') + 'x' + (t.cols || '?'));
+            const extraStr = extras.length > 0 ? extras.join(' | ') : '';
+            return `<div class="template-card" data-action="SpawnServerTemplate" data-index="${i}" title="Click to spawn this command">
+                <div style="display:flex;align-items:center;gap:0.3rem;">
+                    <div class="template-name">${escHtml(t.name)}</div>
+                    <span style="font-size:0.5rem;background:var(--accent);color:#fff;padding:0 0.25rem;border-radius:2px;">config</span>
+                </div>
+                <div class="template-cmd">${escHtml(detail)}</div>
+                ${extraStr ? `<div style="font-size:0.6rem;color:var(--text-muted);padding-left:0.2rem;">${escHtml(extraStr)}</div>` : ''}
+            </div>`;
+        }).join('');
+    }
+
+    if (user.length > 0) {
+        html += '<div style="font-size:0.6rem;color:var(--text-muted);padding:0.3rem 0.3rem 0.1rem;text-transform:uppercase;letter-spacing:0.05em;">Custom</div>';
+        html += user.map((t, i) => `
+            <div class="template-card" data-action="SpawnUserTemplate" data-index="${i}" title="Click to spawn this command">
+                <div class="template-name">${escHtml(t.name)}</div>
+                <div class="template-cmd">${escHtml(t.cmd)}${t.args ? ' ' + escHtml(t.args) : ''}</div>
+                <div class="template-actions">
+                    <button class="btn btn-xs btn-danger" data-action="DeleteUserTemplate" data-index="${i}" title="Delete">&#x2715;</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    container.innerHTML = html;
+}
+
+function spawnServerTemplate(index) {
+    const t = getServerTemplates()[index];
+    if (!t) return;
+    const instSelect = document.getElementById('spawnInstance');
+    const instUrl = instSelect ? instSelect.value : (window._userSpawnInstUrl || getBaseUrl());
+    const args = t.args ? t.args.split(/\s+/) : [];
+    const body = { cmd: t.cmd, args };
+    if (t.env && t.env.length > 0) {
+        const envObj = {};
+        for (const entry of t.env) {
+            const eqIdx = entry.indexOf('=');
+            if (eqIdx > 0) envObj[entry.substring(0, eqIdx)] = entry.substring(eqIdx + 1);
+        }
+        body.env = envObj;
+    }
+    if (t.workdir) body.workdir = t.workdir;
+    if (t.certificate) body.certificate = t.certificate;
+    if (t.rows) body.rows = t.rows;
+    if (t.cols) body.cols = t.cols;
+    api.spawnCommand(instUrl, body).then(json => {
+        if (json.status === 'ok') {
+            const newId = json.data && json.data.id ? json.data.id : null;
+            if (newId) {
+                state.selectedInstUrl = instUrl;
+                _cacheTerminalForSwitch();
+                state._pendingSelectId = newId;
+            }
+            loadCommands();
+            const cmdTab = document.querySelector('.sidebar-tab');
+            if (cmdTab) switchSidebarTab('commands', cmdTab);
+        } else {
+            alert('Spawn failed: ' + (json.error || 'unknown'));
+        }
+    }).catch(e => alert('Spawn failed: ' + e.message));
+}
+
+function spawnUserTemplate(index) {
+    const user = getUserTemplates();
+    const t = user[index];
+    if (!t) return;
+    const instSelect = document.getElementById('spawnInstance');
+    const instUrl = instSelect ? instSelect.value : (window._userSpawnInstUrl || getBaseUrl());
+    const args = t.args ? t.args.split(/\s+/) : [];
+    const body = { cmd: t.cmd, args };
+    api.spawnCommand(instUrl, body).then(json => {
+        if (json.status === 'ok') {
+            const newId = json.data && json.data.id ? json.data.id : null;
+            if (newId) {
+                state.selectedInstUrl = instUrl;
+                _cacheTerminalForSwitch();
+                state._pendingSelectId = newId;
+            }
+            loadCommands();
+            const cmdTab = document.querySelector('.sidebar-tab');
+            if (cmdTab) switchSidebarTab('commands', cmdTab);
+        } else {
+            alert('Spawn failed: ' + (json.error || 'unknown'));
+        }
+    }).catch(e => alert('Spawn failed: ' + e.message));
+}
+
+function deleteUserTemplate(index) {
+    const templates = getUserTemplates();
+    templates.splice(index, 1);
+    saveUserTemplates(templates);
+    renderTemplates();
+}
+
+function showAddTemplateForm() {
+    const form = document.getElementById('templateAddForm');
+    if (form) form.classList.remove('hidden');
+}
+
+function hideAddTemplateForm() {
+    const form = document.getElementById('templateAddForm');
+    if (form) form.classList.add('hidden');
+    document.getElementById('templateName').value = '';
+    document.getElementById('templateCmd').value = '';
+    document.getElementById('templateArgs').value = '';
+}
+
+function saveTemplate() {
+    const name = document.getElementById('templateName').value.trim();
+    const cmd = document.getElementById('templateCmd').value.trim();
+    const args = document.getElementById('templateArgs').value.trim();
+    if (!name || !cmd) { alert('Name and command are required'); return; }
+    const templates = getUserTemplates();
+    templates.push({ name, cmd, args });
+    saveUserTemplates(templates);
+    hideAddTemplateForm();
+    renderTemplates();
+}
+
+window.fetchServerTemplates = fetchServerTemplates;
+window.getServerTemplates = getServerTemplates;
+window.getUserTemplates = getUserTemplates;
+window.saveUserTemplates = saveUserTemplates;
+window.renderTemplates = renderTemplates;
+window.spawnServerTemplate = spawnServerTemplate;
+window.spawnUserTemplate = spawnUserTemplate;
+window.deleteUserTemplate = deleteUserTemplate;
+window.showAddTemplateForm = showAddTemplateForm;
+window.hideAddTemplateForm = hideAddTemplateForm;
+window.saveTemplate = saveTemplate;
+
+// ─── Log Viewer ───
+// Log WebSocket connection, HTTP log loading, log line parsing, search.
+
+function _updateLogTransportIndicator(mode) {
+    const el = document.getElementById('logTransportIndicator');
+    if (!el) return;
+    el.textContent = mode.toUpperCase();
+    el.dataset.mode = mode;
+}
+
+function connectLogWs() {
+    if (state.logWs && state.logWs.readyState === WebSocket.OPEN) return;
+    disconnectLogWs();
+
+    const wsUrl = getBaseUrl().replace(/^http/, 'ws');
+    const token = state.authToken || (state.connections[0] || {}).token || '';
+    const sep = token ? '?' : '';
+    const url = `${wsUrl}/api/ws/logs${sep}${token ? 'token=' + encodeURIComponent(token) : ''}`;
+
+    try {
+        const ws = new WebSocket(url);
+        state.logWs = ws;
+
+        ws.onopen = () => {
+            state._logWsReconnectAttempts = 0;
+            _updateLogTransportIndicator('ws');
+            const container = document.getElementById('logContent');
+            if (container && container.querySelector('.log-line')) {
+                const indicator = document.createElement('div');
+                indicator.className = 'log-line log-ws-indicator';
+                indicator.innerHTML = '<span class="timestamp">[' + new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '') + ']</span> <span class="details" style="color:var(--green);">Connected to log stream</span>';
+                container.appendChild(indicator);
+                _autoScrollLog(container);
+            }
+            clearInterval(state._logWsPingTimer);
+            state._logWsPingTimer = setInterval(() => {
+                if (state.logWs && state.logWs.readyState === WebSocket.OPEN) {
+                    state.logWs.send(JSON.stringify({ type: 'ping' }));
+                }
+            }, 30000);
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'log_entry' && msg.data) {
+                    const container = document.getElementById('logContent');
+                    if (!container) return;
+                    const placeholder = container.querySelector('[style*="text-align:center"]');
+                    if (placeholder && !placeholder.classList.contains('log-line')) {
+                        placeholder.remove();
+                    }
+                    const parsed = parseLogLine(msg.data);
+                    const div = document.createElement('div');
+                    div.className = 'log-line';
+                    div.innerHTML = formatLogLine(parsed, msg.data);
+                    container.appendChild(div);
+                    _autoScrollLog(container);
+                    const countEl = document.getElementById('logCount');
+                    if (countEl) {
+                        const current = container.querySelectorAll('.log-line').length;
+                        countEl.textContent = `${current} lines (streaming)`;
+                    }
+                }
+            } catch (e) {
+                console.error('Log WS message parse error:', e);
+            }
+        };
+
+        ws.onclose = () => {
+            _updateLogTransportIndicator('http');
+            clearInterval(state._logWsPingTimer);
+            state._logWsPingTimer = null;
+            if (state.logWs === ws) state.logWs = null;
+            _scheduleLogWsReconnect();
+        };
+
+        ws.onerror = () => {
+            _updateLogTransportIndicator('http');
+            clearInterval(state._logWsPingTimer);
+            state._logWsPingTimer = null;
+            if (state.logWs === ws) state.logWs = null;
+            _scheduleLogWsReconnect();
+        };
+    } catch (e) {
+        console.error('Log WebSocket connect failed:', e);
+        _updateLogTransportIndicator('http');
+        _scheduleLogWsReconnect();
+    }
+}
+
+function _scheduleLogWsReconnect() {
+    if (state.logWsReconnectTimer) return;
+    if (state.currentView !== 'log') return;
+    const delay = Math.min(1000 * Math.pow(2, state._logWsReconnectAttempts), 30000);
+    state._logWsReconnectAttempts++;
+    state.logWsReconnectTimer = setTimeout(() => {
+        state.logWsReconnectTimer = null;
+        if (state.currentView === 'log') connectLogWs();
+    }, delay);
+}
+
+function disconnectLogWs() {
+    if (state.logWsReconnectTimer) {
+        clearTimeout(state.logWsReconnectTimer);
+        state.logWsReconnectTimer = null;
+    }
+    clearInterval(state._logWsPingTimer);
+    state._logWsPingTimer = null;
+    if (state.logWs) {
+        state.logWs.onclose = null;
+        state.logWs.onerror = null;
+        state.logWs.close();
+        state.logWs = null;
+    }
+    _updateLogTransportIndicator('http');
+}
+
+function _autoScrollLog(container) {
+    if (container.scrollHeight - container.scrollTop - container.clientHeight < 50) {
+        container.scrollTop = container.scrollHeight;
+    }
+}
+
+async function loadLog() {
+    _updateLogTransportIndicator('http');
+    try {
+        const search = document.getElementById('logSearch').value;
+        const params = new URLSearchParams();
+        if (search) params.set('search', search);
+        params.set('limit', '500');
+        const json = await api.getLog(undefined, Object.fromEntries(params));
+        if (json.status === 'ok' && json.data) {
+            const container = document.getElementById('logContent');
+            const lines = json.data.lines || [];
+            document.getElementById('logCount').textContent = `${json.data.filtered_lines}/${json.data.total_lines} lines`;
+            if (lines.length === 0) {
+                container.innerHTML = '<div style="padding:1rem;color:var(--text-muted);text-align:center;">No log entries found.' + (json.data.message ? ' ' + json.data.message : '') + '</div>';
+            } else {
+                container.innerHTML = lines.map(line => {
+                    const parsed = parseLogLine(line);
+                    if (search && line.toLowerCase().includes(search.toLowerCase())) {
+                        return `<div class="log-line highlight">${formatLogLine(parsed, line)}</div>`;
+                    }
+                    return `<div class="log-line">${formatLogLine(parsed, line)}</div>`;
+                }).join('');
+                container.scrollTop = container.scrollHeight;
+            }
+            if (!search) connectLogWs();
+        }
+    } catch (e) {
+        document.getElementById('logContent').innerHTML = `<div style="padding:1rem;color:var(--red);">Failed to load log: ${escHtml(e.message)}</div>`;
+    }
+}
+
+function parseLogLine(line) {
+    const match = line.match(/^\[([^\]]+)\]\s+(\w+):\s+(.*)$/);
+    if (match) {
+        return { timestamp: match[1], command: match[2], details: match[3], raw: line };
+    }
+    return { timestamp: '', command: '', details: line, raw: line };
+}
+
+function formatLogLine(parsed, raw) {
+    if (parsed.timestamp) {
+        return `<span class="timestamp">[${escHtml(parsed.timestamp)}]</span> <span class="cmd-type">${escHtml(parsed.command)}</span> <span class="details">${escHtml(parsed.details)}</span>`;
+    }
+    return escHtml(raw);
+}
+
+function searchLogs() {
+    disconnectLogWs();
+    state._logWsReconnectAttempts = 0;
+    loadLog();
+}
+
+function clearLogSearch() {
+    document.getElementById('logSearch').value = '';
+    loadLog();
+    clearTimeout(state._logSearchReconnectTimer);
+    state._logSearchReconnectTimer = setTimeout(() => {
+        state._logSearchReconnectTimer = null;
+        if (state.currentView === 'log') connectLogWs();
+    }, 500);
+}
+
+window.connectLogWs = connectLogWs;
+window.disconnectLogWs = disconnectLogWs;
+window.loadLog = loadLog;
+window.searchLogs = searchLogs;
+window.clearLogSearch = clearLogSearch;
+window._updateLogTransportIndicator = _updateLogTransportIndicator;
+window._scheduleLogWsReconnect = _scheduleLogWsReconnect;

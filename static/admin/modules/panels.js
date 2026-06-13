@@ -2127,5 +2127,221 @@ function selectCommand(instUrl, cmdId, name) {
     window.panelHistoryForward = panelHistoryForward;
     window._selectCommandForPanel = _selectCommandForPanel;
     window.selectCommand = selectCommand;
+
+// ─── Drag-and-Drop ───
+// Sidebar command drag-to-panel, sidebar command reorder (mousedown-based),
+// and open-command-in-new-pane helper.
+let _draggedCmd = null; // { instUrl, cmdId, cmdName }
+
+function onCmdDragStart(e, instUrl, cmdId, cmdName) {
+    _draggedCmd = { instUrl, cmdId, cmdName };
+    e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.setData('text/plain', cmdId);
+    e.dataTransfer.setData('application/x-cmd', JSON.stringify({ instUrl, cmdId, cmdName }));
+    if (e.target && e.target.style) e.target.style.opacity = '0.5';
+    setTimeout(() => { if (e.target && e.target.style) e.target.style.opacity = ''; }, 0);
+}
+
+function initPanelDropTargets() {
+    document.querySelectorAll('.panel-header').forEach(headerEl => {
+        const panelEl = headerEl.closest('.panel');
+        if (!panelEl) return;
+        headerEl.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+            panelEl.classList.add('drag-over-left');
+        });
+        headerEl.addEventListener('dragleave', (e) => {
+            panelEl.classList.remove('drag-over-left');
+        });
+        headerEl.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            panelEl.classList.remove('drag-over-left');
+            try {
+                const data = JSON.parse(e.dataTransfer.getData('application/x-cmd'));
+                if (data && data.cmdId) {
+                    _openCommandInNewPane(data.instUrl, data.cmdId, data.cmdName);
+                }
+            } catch (err) { /* ignore invalid drops */ }
+            _draggedCmd = null;
+        });
+    });
+}
+
+// ─── Sidebar Command Reorder (mousedown-based) ───
+function getCmdOrder() {
+    try { return JSON.parse(localStorage.getItem('vrw_cmd_order') || '{}'); } catch { return {}; }
+}
+function setCmdOrder(order) {
+    localStorage.setItem('vrw_cmd_order', JSON.stringify(order));
+}
+function getOrderedCmds(instUrl, items) {
+    const order = getCmdOrder();
+    const instOrder = order[instUrl];
+    if (!instOrder) return items;
+    const ordered = [];
+    const remaining = [];
+    for (const item of items) {
+        const idx = instOrder.indexOf(item.cmd.id);
+        if (idx >= 0) {
+            ordered.push({ item, idx });
+        } else {
+            remaining.push(item);
+        }
+    }
+    ordered.sort((a, b) => a.idx - b.idx);
+    return [...ordered.map(x => x.item), ...remaining];
+}
+
+let _reorderState = null;
+
+function _cmdReorderMouseDown(e, instUrl, cmdId, cmdName) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const srcEl = e.target.closest('.cmd-item');
+    if (!srcEl) return;
+    const rect = srcEl.getBoundingClientRect();
+    _reorderState = {
+        instUrl, cmdId, cmdName: cmdName || cmdId,
+        srcEl, startY: e.clientY, startRect: rect,
+        placeholder: null, offsetY: e.clientY - rect.top, overPane: false,
+    };
+    document.addEventListener('mousemove', _cmdReorderMouseMove);
+    document.addEventListener('mouseup', _cmdReorderMouseUp);
+}
+
+function _cmdReorderMouseMove(e) {
+    if (!_reorderState) return;
+    const dy = e.clientY - _reorderState.startY;
+    if (Math.abs(dy) < 4 && !_reorderState.placeholder) return;
+    const container = document.getElementById('commandList');
+    if (!container) return;
+    if (!_reorderState.placeholder) {
+        const srcEl = _reorderState.srcEl;
+        _reorderState.placeholder = document.createElement('div');
+        _reorderState.placeholder.style.cssText = 'border-top:2px solid var(--accent);margin:0;pointer-events:none;';
+        _reorderState.placeholder.className = 'cmd-reorder-placeholder';
+        srcEl.parentNode.insertBefore(_reorderState.placeholder, srcEl);
+        srcEl.style.position = 'fixed';
+        srcEl.style.left = _reorderState.startRect.left + 'px';
+        srcEl.style.top = (e.clientY - _reorderState.offsetY) + 'px';
+        srcEl.style.width = _reorderState.startRect.width + 'px';
+        srcEl.style.zIndex = '1000';
+        srcEl.style.opacity = '0.85';
+        srcEl.style.pointerEvents = 'none';
+        srcEl.classList.add('cmd-dragging');
+    }
+    _reorderState.srcEl.style.top = (e.clientY - _reorderState.offsetY) + 'px';
+    _reorderState.srcEl.classList.add('hidden');
+    const underEl = document.elementFromPoint(e.clientX, e.clientY);
+    _reorderState.srcEl.classList.remove('hidden');
+    const overPanel = underEl ? underEl.closest('.panel') : null;
+    const overPanelArea = underEl ? underEl.closest('#view-vtty') : null;
+    const wasOverPane = _reorderState.overPane;
+    _reorderState.overPane = !!(overPanel || (overPanelArea && !underEl.closest('#sidebar')));
+    if (_reorderState.overPane && !wasOverPane) {
+        document.querySelectorAll('.panel').forEach(p => p.classList.add('drag-over-left'));
+        container.querySelectorAll('.cmd-item').forEach(el => {
+            el.classList.remove('cmd-drag-over-top', 'cmd-drag-over-bottom');
+        });
+    } else if (!_reorderState.overPane && wasOverPane) {
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('drag-over-left'));
+    }
+    if (_reorderState.overPane) return;
+    container.querySelectorAll('.cmd-item').forEach(el => {
+        el.classList.remove('cmd-drag-over-top', 'cmd-drag-over-bottom');
+    });
+    const target = underEl ? underEl.closest('.cmd-item') : null;
+    if (!target || target === _reorderState.srcEl) return;
+    const rect = target.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    if (e.clientY < midY) {
+        target.classList.add('cmd-drag-over-top');
+        target.parentNode.insertBefore(_reorderState.placeholder, target);
+    } else {
+        target.classList.add('cmd-drag-over-bottom');
+        const next = target.nextElementSibling;
+        target.parentNode.insertBefore(_reorderState.placeholder, next);
+    }
+}
+
+function _cmdReorderMouseUp(e) {
+    document.removeEventListener('mousemove', _cmdReorderMouseMove);
+    document.removeEventListener('mouseup', _cmdReorderMouseUp);
+    if (!_reorderState) return;
+    const container = document.getElementById('commandList');
+    const placeholder = _reorderState.placeholder;
+    const srcEl = _reorderState.srcEl;
+    const droppedOnPane = _reorderState.overPane;
+    if (srcEl) {
+        srcEl.style.position = '';
+        srcEl.style.left = '';
+        srcEl.style.top = '';
+        srcEl.style.width = '';
+        srcEl.style.zIndex = '';
+        srcEl.style.opacity = '';
+        srcEl.style.pointerEvents = '';
+        srcEl.classList.remove('cmd-dragging');
+    }
+    if (container) {
+        container.querySelectorAll('.cmd-item').forEach(el => {
+            el.classList.remove('cmd-drag-over-top', 'cmd-drag-over-bottom');
+        });
+    }
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('drag-over-left'));
+    if (droppedOnPane && placeholder) {
+        placeholder.remove();
+        _openCommandInNewPane(_reorderState.instUrl, _reorderState.cmdId, _reorderState.cmdName);
+        _reorderState = null;
+        return;
+    }
+    if (placeholder && container) {
+        const targetItem = placeholder.nextElementSibling;
+        const targetCmdId = targetItem && targetItem.classList.contains('cmd-item')
+            ? targetItem.dataset.cmdId : null;
+        placeholder.remove();
+        if (targetCmdId && targetCmdId !== _reorderState.cmdId) {
+            const order = getCmdOrder();
+            let instOrder = order[_reorderState.instUrl] || [];
+            instOrder = instOrder.filter(id => id !== _reorderState.cmdId);
+            const targetIdx = instOrder.indexOf(targetCmdId);
+            instOrder.splice(targetIdx >= 0 ? targetIdx : instOrder.length, 0, _reorderState.cmdId);
+            order[_reorderState.instUrl] = instOrder;
+            setCmdOrder(order);
+            loadCommands();
+        } else if (placeholder.parentNode) {
+            placeholder.remove();
+        }
+    }
+    _reorderState = null;
+}
+
+function _openCommandInNewPane(instUrl, cmdId, cmdName) {
+    const newPanel = addPanelDirect();
+    if (!newPanel) return;
+    focusPanel(newPanel.id);
+    newPanel.selectedInstUrl = instUrl;
+    newPanel.selectedCmdId = cmdId;
+    state.selectedInstUrl = instUrl;
+    state.selectedCmdId = cmdId;
+    state._pendingVttyData = null;
+    state._pendingVttyDirty = false;
+    state.bufferView = 'current';
+    _restoreCachedDom(cmdId);
+    updatePanelCommandInfo();
+    updateTerminalDisconnectedOverlay();
+    updateSidebarSelection();
+    loadVttyHttpForPanel(newPanel.id, instUrl, cmdId);
+    startPanelUpdateMode(newPanel.id);
+}
+
+window.initPanelDropTargets = initPanelDropTargets;
+window.onCmdDragStart = onCmdDragStart;
+window.getCmdOrder = getCmdOrder;
+window.setCmdOrder = setCmdOrder;
+window.getOrderedCmds = getOrderedCmds;
+window._openCommandInNewPane = _openCommandInNewPane;
 })();
 

@@ -606,8 +606,8 @@ const moduleOrder = [
     'sidebar.js', 'panels.js',
     'commands-core.js', 'server-connections.js',
     'websocket.js', 'vtty.js',
-    'spawn.js', 'logs.js', 'keyboard.js', 'search.js',
-    'templates.js', 'dragdrop.js', 'workspaces.js',
+    'spawn.js', 'keyboard.js', 'search.js',
+    'workspaces.js',
     'misc.js', 'delegate.js'
 ];
 
