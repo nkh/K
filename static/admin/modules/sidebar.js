@@ -1,6 +1,15 @@
 // ─── Sidebar ───
 (function() {
     'use strict';
+
+// ── localStorage JSON helpers ──
+function _lsGet(key, fallback) {
+    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
+}
+function _lsSet(key, val) {
+    try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+}
+
 // ─── Sidebar ───
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
@@ -166,11 +175,8 @@ function _buildSidebar() {
         html += '<div class="server-connections-bar">';
         for (const inst of nonOriginConns) {
             const reachClass = inst.reachable === true ? 'reachable' : inst.reachable === false ? 'unreachable' : 'unknown';
-            html += `<div class="server-conn-item" title="${escHtml(inst.url)} — ${inst.reachable === true ? 'connected' : inst.reachable === false ? 'unreachable' : 'checking...'}">`;
-            html += `<span class="server-reach-dot ${reachClass}"></span>`;
-            html += `<span class="server-conn-label">${escHtml(inst.label)}</span>`;
-            html += `<button class="server-conn-close-btn" data-action="DisconnectServer" data-inst-url="${escHtml(inst.url)}" title="Disconnect from ${escHtml(inst.label)}">&#x2715;</button>`;
-            html += '</div>';
+            const reachLabel = inst.reachable === true ? 'connected' : inst.reachable === false ? 'unreachable' : 'checking...';
+            html += `<div class="server-conn-item" title="${escHtml(inst.url)} — ${reachLabel}"><span class="server-reach-dot ${reachClass}"></span><span class="server-conn-label">${escHtml(inst.label)}</span><button class="server-conn-close-btn" data-action="DisconnectServer" data-inst-url="${escHtml(inst.url)}" title="Disconnect from ${escHtml(inst.label)}">&#x2715;</button></div>`;
         }
         html += '</div>';
     }
@@ -328,18 +334,6 @@ function _buildSidebar() {
     // initPanelDropTargets() intentionally NOT called — panel inline handlers
     // (onPanelDragOver/onPanelDrop) already handle command drag-and-drop from sidebar.
 
-    if (state._pendingSelectId) {
-        const pendingId = state._pendingSelectId;
-        state._pendingSelectId = null;
-        for (const inst of state.connections) {
-            if (inst._commands && inst._commands.find(c => c.id === pendingId)) {
-                const cmd = inst._commands.find(c => c.id === pendingId);
-                selectCommand(inst.url, cmd.id, cmd.name || cmd.id);
-                return;
-            }
-        }
-    }
-
     if (!state.selectedCmdId) {
         // Auto-select only from the focused panel's server (if set).
         // This prevents assigning a command from server X to a panel
@@ -366,17 +360,9 @@ function _buildSidebar() {
     }
 }
 
-
 // ─── Command Pinning / Favorites ───
-function getPinnedNames() {
-    try {
-        return JSON.parse(localStorage.getItem('vrw_pinned_cmds') || '[]');
-    } catch { return []; }
-}
-
-function setPinnedNames(names) {
-    localStorage.setItem('vrw_pinned_cmds', JSON.stringify(names));
-}
+function getPinnedNames() { return _lsGet('vrw_pinned_cmds', []); }
+function setPinnedNames(names) { _lsSet('vrw_pinned_cmds', names); }
 
 function togglePinCmd(cmdName) {
     const pinned = getPinnedNames();
@@ -442,8 +428,6 @@ function rearrangePinnedCommands(container) {
     }, 0);
 }
 
-
-
 // ─── Disconnected UI ───
 function updateDisconnectedUI() {
     updateSidebarBanner();
@@ -491,36 +475,6 @@ function updateTerminalDisconnectedOverlay() {
     }
 }
 
-    window.initBottombar = initBottombar;
-    window.toggleSidebar = toggleSidebar;
-    window.toggleBottombar = toggleBottombar;
-    window.toggleLogsView = toggleLogsView;
-    window.toggleResources = toggleResources;
-    window.switchSidebarTab = switchSidebarTab;
-    window.updateSidebarTabsVisibility = updateSidebarTabsVisibility;
-    window.updateCmdToolbarVisibility = updateCmdToolbarVisibility;
-    window.updateDisconnectedUI = updateDisconnectedUI;
-    window.updateSidebarBanner = updateSidebarBanner;
-    window.updateTerminalDisconnectedOverlay = updateTerminalDisconnectedOverlay;
-    window._buildSidebar = _buildSidebar;
-    window.getPinnedNames = getPinnedNames;
-    window.setPinnedNames = setPinnedNames;
-    window.togglePinCmd = togglePinCmd;
-    window.rearrangePinnedCommands = rearrangePinnedCommands;
-    window._sortSidebarBy = function(sortKey) {
-        _sidebarSort = sortKey;
-        if (sortKey !== 'name') window._userSpawnInstUrl = sortKey;
-        loadCommands();
-    };
-    window.togglePauseRunPanelByIdx = function(instUrl, cmdId) {
-        // Like togglePauseRunPanel but without touching focus/selection state
-        const inst = state.connections.find(i => i.url === instUrl);
-        if (!inst || !inst._commands) return;
-        const cmd = inst._commands.find(c => c.id === cmdId);
-        const isFrozen = cmd && cmd.frozen;
-        (isFrozen ? api.thaw(instUrl, cmdId) : api.freeze(instUrl, cmdId))
-            .then(() => loadCommands()).catch(() => {});
-    };
 // ─── Documentation ───
 function showDocs() {
     const btn = document.getElementById('docsBtn');
@@ -580,85 +534,52 @@ function renderMarkdown(md) {
 }
 
 function renderEmbeddedDocs() {
-    return `
-<h1>vrw Administration</h1>
-
+    return `<h1>vrw Administration</h1>
 <h2>Overview</h2>
 <p>vrw is a virtual terminal runner with a web control plane. It manages terminal applications, exposing their output through a web interface and REST API. This admin panel provides real-time monitoring and control of all running commands.</p>
-
 <h2>Getting Started</h2>
 <p>The admin panel connects to one or more vrw instances. Each instance manages its own set of terminal commands. Use the <strong>+ Panel</strong> button in the top bar to add connections to additional vrw instances.</p>
-
 <h3>Connecting to an Instance</h3>
 <p>By default, the admin panel connects to the vrw instance serving it. To add more instances:</p>
-<ol>
-    <li>Click <strong>+ Panel</strong> in the top bar</li>
-    <li>Enter the instance URL (e.g., <code>http://localhost:9090</code>)</li>
-    <li>Optionally set a label and auth token</li>
-    <li>Click <strong>Add Panel</strong></li>
-</ol>
+<ol><li>Click <strong>+ Panel</strong> in the top bar</li><li>Enter the instance URL (e.g., <code>http://localhost:9090</code>)</li><li>Optionally set a label and auth token</li><li>Click <strong>Add Panel</strong></li></ol>
 <p>You can also use URL arguments: <code>?instance=http://host:8080&label=Prod&instance=http://host:9090&label=Dev</code></p>
-
 <h2>URL Arguments for Multi-Instance</h2>
 <p>The admin page accepts query parameters to pre-configure multi-panel views:</p>
 <table>
-    <tr><th>Parameter</th><th>Description</th><th>Example</th></tr>
-    <tr><td><code>instance</code></td><td>vrw instance URL (repeatable)</td><td><code>?instance=http://host:8080</code></td></tr>
-    <tr><td><code>label</code></td><td>Panel label (matches instance order)</td><td><code>&label=Production</code></td></tr>
-    <tr><td><code>token</code></td><td>Auth token for instance (matches order)</td><td><code>&token=abc123</code></td></tr>
+<tr><th>Parameter</th><th>Description</th><th>Example</th></tr>
+<tr><td><code>instance</code></td><td>vrw instance URL (repeatable)</td><td><code>?instance=http://host:8080</code></td></tr>
+<tr><td><code>label</code></td><td>Panel label (matches instance order)</td><td><code>&label=Production</code></td></tr>
+<tr><td><code>token</code></td><td>Auth token for instance (matches order)</td><td><code>&token=abc123</code></td></tr>
 </table>
 <p><strong>Full example:</strong> <code>/admin?instance=http://prod:8080&label=Production&instance=http://dev:9090&label=Development</code></p>
-
 <h2>Managing Commands</h2>
-
 <h3>Viewing Terminal Output</h3>
 <p>Click on a command in the sidebar to view its real-time ANSI-rendered terminal output. The terminal emulator supports:</p>
-<ul>
-    <li>Full ANSI color rendering (16, 256, and 24-bit truecolor)</li>
-    <li>Cursor position indicator (blue highlight)</li>
-    <li>Text attributes: bold, italic, underline, strikethrough</li>
-    <li>Scrollback buffer navigation via scrollbar</li>
-</ul>
-
+<ul><li>Full ANSI color rendering (16, 256, and 24-bit truecolor)</li><li>Cursor position indicator (blue highlight)</li><li>Text attributes: bold, italic, underline, strikethrough</li><li>Scrollback buffer navigation via scrollbar</li></ul>
 <h3>Spawning Commands</h3>
 <p>Switch to the <strong>Spawn</strong> tab in the sidebar to create new commands. Specify the command path, optional arguments, an optional certificate for access control, and the target vrw instance.</p>
-
 <h3>Sending Keystrokes</h3>
 <p>Use the key input field in the panel header to send keystrokes to the selected command. Press <strong>Enter</strong> or click <strong>Send</strong> to transmit. Supports special keys using angle bracket notation:</p>
-<ul>
-    <li><code>&lt;Enter&gt;</code>, <code>&lt;Esc&gt;</code>, <code>&lt;Tab&gt;</code>, <code>&lt;Backspace&gt;</code></li>
-    <li><code>&lt;Up&gt;</code>, <code>&lt;Down&gt;</code>, <code>&lt;Left&gt;</code>, <code>&lt;Right&gt;</code></li>
-    <li><code>&lt;C-c&gt;</code> (Ctrl+C), <code>&lt;C-d&gt;</code> (Ctrl+D)</li>
-    <li><code>&lt;F1&gt;</code> through <code>&lt;F12&gt;</code></li>
-</ul>
-
+<ul><li><code>&lt;Enter&gt;</code>, <code>&lt;Esc&gt;</code>, <code>&lt;Tab&gt;</code>, <code>&lt;Backspace&gt;</code></li><li><code>&lt;Up&gt;</code>, <code>&lt;Down&gt;</code>, <code>&lt;Left&gt;</code>, <code>&lt;Right&gt;</code></li><li><code>&lt;C-c&gt;</code> (Ctrl+C), <code>&lt;C-d&gt;</code> (Ctrl+D)</li><li><code>&lt;F1&gt;</code> through <code>&lt;F12&gt;</code></li></ul>
 <h3>Resizing the Terminal</h3>
 <p>Use the <strong>R</strong> (rows) and <strong>C</strong> (columns) inputs in the top bar to resize the virtual terminal. Click <strong>Resize</strong> to apply. Valid ranges: rows 1-200, columns 1-500.</p>
-
 <h3>Killing Commands</h3>
 <p>Click the <strong>&#x2715;</strong> button next to a command in the sidebar to send SIGINT (Ctrl+C) to the process.</p>
-
 <h2>Certificates</h2>
 <p>The <strong>Certs</strong> tab in the sidebar shows all certificates configured in the connected instances' certificate pools. Certificates provide per-command access control — only clients presenting a certificate's derived token can interact with commands bound to that certificate.</p>
 <p>When spawning a command, you can select a certificate to bind it. The certificate badge next to each command in the sidebar shows its binding status.</p>
-
 <h2>Log Viewer</h2>
 <p>The <strong>Logs</strong> tab provides access to the vrw command log. Use the search bar to filter log entries by content. Each entry shows a timestamp, the command type (spawn, kill, send_keys, etc.), and relevant details.</p>
-
 <h2>Font Size</h2>
 <p>Use the <strong>A-</strong> and <strong>A+</strong> buttons in the top bar to adjust the terminal font size (8px-28px). Your preference is saved in localStorage.</p>
-
 <h2>VTTY Update Modes</h2>
-<p>The web UI supports two modes for detecting when a terminal buffer has changed. You can switch between them using the <strong>Update</strong> dropdown in the bottom status bar. Your choice is saved in localStorage and will be restored on the next visit.</p>
-
+<p>The web UI supports two modes for detecting when a terminal buffer has changed. Switch between them using the <strong>Update</strong> dropdown in the bottom status bar. Saved in localStorage and restored on next visit.</p>
 <h3>Push Mode (default)</h3>
 <p>In push mode, the server monitors each command's VTTY buffer at a configurable interval (default 200ms). When changes are detected, the server sends a lightweight <code>vtty_dirty</code> signal over the existing WebSocket connection. The signal contains only the command ID — no cell data, no HTML. The web UI then fetches the full HTML via <code>GET /api/commands/:id/vtty/html</code> at its own pace (debounced at 50ms). This is the most efficient mode because no polling is required; the server only sends when something actually changed.</p>
 <p>Push mode is the default and is recommended for most use cases. It provides the lowest latency and lowest bandwidth overhead.</p>
-
 <h3>Poll Mode</h3>
 <p>In poll mode, the web client periodically calls <code>GET /api/commands/:id/vtty/changed</code> to ask "has the buffer changed since the last check?". The response is a simple <code>{ "changed": true/false }</code> with no HTML or diff data. If changed, the client then fetches the full HTML via the standard endpoint. The poll interval is configurable via the input next to the mode dropdown (50ms–5000ms, default 500ms).</p>
-<p>Poll mode is useful when WebSocket connections are unreliable — for example, when a reverse proxy buffers WebSocket frames, when network conditions cause frequent WS reconnections, or when the client wants full control over refresh timing. The bandwidth overhead is slightly higher than push mode because the changed-check runs continuously even when nothing is changing.</p>
-
+<p>Poll mode is useful when WebSocket connections are unreliable — for example, when a reverse proxy buffers WebSocket frames, when network conditions cause frequent WS reconnections, or when the client wants full control over refresh timing.</p>
 <h3>Server Configuration</h3>
 <p>The server-side update settings can be configured in the vrw config file under the <code>web</code> section:</p>
 <pre><code>web:
@@ -666,45 +587,31 @@ function renderEmbeddedDocs() {
   dirty_check_ms: 200     # server dirty-check interval (push mode)
   default_poll_ms: 500    # suggested client poll interval (poll mode)
 </code></pre>
-<p>The <code>dirty_check_ms</code> controls how often the server compares the VTTY buffer against the last-known snapshot in push mode. Lower values provide faster updates but increase CPU usage slightly. The <code>default_poll_ms</code> is the suggested interval that the web UI will use when in poll mode, but the user can override it via the UI controls at any time.</p>
-
+<p>The <code>dirty_check_ms</code> controls how often the server compares the VTTY buffer against the last-known snapshot in push mode. The <code>default_poll_ms</code> is the suggested interval that the web UI will use when in poll mode.</p>
 <h2>API Reference</h2>
 <table>
-    <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
-    <tr><td>GET</td><td><code>/api/commands</code></td><td>List all running commands</td></tr>
-    <tr><td>POST</td><td><code>/api/commands</code></td><td>Spawn a new command</td></tr>
-    <tr><td>GET</td><td><code>/api/commands/:id/vtty</code></td><td>Get VTTY output as ANSI text</td></tr>
-    <tr><td>GET</td><td><code>/api/commands/:id/vtty/html</code></td><td>Get VTTY as rendered HTML + cursor</td></tr>
-    <tr><td>GET</td><td><code>/api/commands/:id/vtty/changed</code></td><td>Check if VTTY buffer changed (poll mode)</td></tr>
-    <tr><td>POST</td><td><code>/api/commands/:id/keys</code></td><td>Send keystrokes to a command</td></tr>
-    <tr><td>POST</td><td><code>/api/commands/:id/kill</code></td><td>Kill a running command</td></tr>
-    <tr><td>POST</td><td><code>/api/commands/:id/resize</code></td><td>Resize virtual terminal</td></tr>
-    <tr><td>GET</td><td><code>/api/commands/:id/handles</code></td><td>List handles for a command</td></tr>
-    <tr><td>GET</td><td><code>/api/certificates</code></td><td>List certificate pool</td></tr>
-    <tr><td>GET</td><td><code>/api/info</code></td><td>Instance info and stats</td></tr>
-    <tr><td>GET</td><td><code>/api/log</code></td><td>Command log with search</td></tr>
-    <tr><td>POST</td><td><code>/api/shutdown</code></td><td>Graceful shutdown</td></tr>
+<tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+<tr><td>GET</td><td><code>/api/commands</code></td><td>List all running commands</td></tr>
+<tr><td>POST</td><td><code>/api/commands</code></td><td>Spawn a new command</td></tr>
+<tr><td>GET</td><td><code>/api/commands/:id/vtty</code></td><td>Get VTTY output as ANSI text</td></tr>
+<tr><td>GET</td><td><code>/api/commands/:id/vtty/html</code></td><td>Get VTTY as rendered HTML + cursor</td></tr>
+<tr><td>GET</td><td><code>/api/commands/:id/vtty/changed</code></td><td>Check if VTTY buffer changed (poll mode)</td></tr>
+<tr><td>POST</td><td><code>/api/commands/:id/keys</code></td><td>Send keystrokes to a command</td></tr>
+<tr><td>POST</td><td><code>/api/commands/:id/kill</code></td><td>Kill a running command</td></tr>
+<tr><td>POST</td><td><code>/api/commands/:id/resize</code></td><td>Resize virtual terminal</td></tr>
+<tr><td>GET</td><td><code>/api/commands/:id/handles</code></td><td>List handles for a command</td></tr>
+<tr><td>GET</td><td><code>/api/certificates</code></td><td>List certificate pool</td></tr>
+<tr><td>GET</td><td><code>/api/info</code></td><td>Instance info and stats</td></tr>
+<tr><td>GET</td><td><code>/api/log</code></td><td>Command log with search</td></tr>
+<tr><td>POST</td><td><code>/api/shutdown</code></td><td>Graceful shutdown</td></tr>
 </table>
-
 <h2>Keyboard Shortcuts</h2>
-<table>
-    <tr><th>Shortcut</th><th>Action</th></tr>
-    <tr><td><code>Enter</code> in key input</td><td>Send keystrokes</td></tr>
-</table>
-`;
+<table><tr><th>Shortcut</th><th>Action</th></tr>
+<tr><td><code>Enter</code> in key input</td><td>Send keystrokes</td></tr></table>`;
 }
 
-
 // ─── Workspace Environments ──
-// Environments are named sets of [panels, servers, commands] defined in
-// the server config file ([[environments]]).  They allow the user to
-// switch between predefined workspaces with a single click.
-//
-// On the CLI, environments can be specified in separate config files or
-// inline in the main config.  The server exposes them via /api/environments.
-// Environments with auto_start=true are pre-spawned when the server loads.
-
-// Server-side environments fetched from /api/environments.
+// Named sets of [panels, servers, commands] from the server config ([[environments]]).
 let _serverEnvironments = [];
 
 /// Fetch workspace environments from the server.
@@ -808,39 +715,10 @@ async function activateEnvironment(name) {
 // Groups are stored in localStorage as vrw_cmd_groups = { "group-name": ["cmdName1", ...], ... }
 
 /// Load command groups from localStorage.
-function getCmdGroups() {
-    try {
-        const raw = localStorage.getItem('vrw_cmd_groups');
-        if (!raw) return {};
-        return JSON.parse(raw);
-    } catch (e) {
-        return {};
-    }
-}
-
-/// Save command groups to localStorage.
-function saveCmdGroups(groups) {
-    try {
-        localStorage.setItem('vrw_cmd_groups', JSON.stringify(groups));
-    } catch (e) { /* quota exceeded */ }
-}
-
-/// Load collapsed state for group sections.
-function getGroupCollapsedState() {
-    try {
-        const raw = localStorage.getItem('vrw_group_collapsed');
-        if (!raw) return {};
-        return JSON.parse(raw);
-    } catch (e) {
-        return {};
-    }
-}
-
-function saveGroupCollapsedState(state) {
-    try {
-        localStorage.setItem('vrw_group_collapsed', JSON.stringify(state));
-    } catch (e) { /* ignore */ }
-}
+function getCmdGroups() { return _lsGet('vrw_cmd_groups', {}); }
+function saveCmdGroups(groups) { _lsSet('vrw_cmd_groups', groups); }
+function getGroupCollapsedState() { return _lsGet('vrw_group_collapsed', {}); }
+function saveGroupCollapsedState(s) { _lsSet('vrw_group_collapsed', s); }
 
 /// Create a new command group.
 function createCmdGroup() {
@@ -947,16 +825,14 @@ function renderGroups() {
     for (const gName of groupNames) {
         const isCollapsed = collapsed[gName] === true;
         const cmdNames = groups[gName] || [];
-        html += '<div class="group-section">';
-        html += '<div class="group-header" data-action="ToggleGroupCollapse" data-name="' + escHtml(gName) + '">';
-        html += '<span class="group-caret">' + (isCollapsed ? '&#x25B6;' : '&#x25BC;') + '</span>';
-        html += '<span class="group-name">' + escHtml(gName) + '</span>';
-        html += '<span class="group-count">' + cmdNames.length + '</span>';
-        html += '<span class="group-actions">';
-        html += '<button class="btn btn-xs" data-action="RenameCmdGroup" data-name="' + escHtml(gName) + '" title="Rename group">&#9998;</button>';
-        html += '<button class="btn btn-xs btn-danger" data-action="DeleteCmdGroup" data-name="' + escHtml(gName) + '" title="Delete group">&#x2715;</button>';
-        html += '</span>';
-        html += '</div>';
+        html += `<div class="group-section"><div class="group-header" data-action="ToggleGroupCollapse" data-name="${escHtml(gName)}">` +
+            `<span class="group-caret">${isCollapsed ? '&#x25B6;' : '&#x25BC;'}</span>` +
+            `<span class="group-name">${escHtml(gName)}</span>` +
+            `<span class="group-count">${cmdNames.length}</span>` +
+            `<span class="group-actions">` +
+            `<button class="btn btn-xs" data-action="RenameCmdGroup" data-name="${escHtml(gName)}" title="Rename group">&#9998;</button>` +
+            `<button class="btn btn-xs btn-danger" data-action="DeleteCmdGroup" data-name="${escHtml(gName)}" title="Delete group">&#x2715;</button>` +
+            `</span></div>`;
         if (!isCollapsed) {
             if (cmdNames.length === 0) {
                 html += '<div style="padding:0.3rem 0.5rem 0.3rem 1.5rem;color:var(--text-muted);font-size:0.65rem;font-style:italic;">Empty — right-click a command to add it here</div>';
@@ -967,26 +843,17 @@ function renderGroups() {
                         const isAlive = entry.cmd.alive !== false;
                         const isFrozen = entry.cmd.frozen === true;
                         const isUnreachable = entry.inst.reachable === false;
-                        const statusDot = isAlive ? '<span class="status-dot status-running"></span>' :
-                            (isFrozen ? '<span class="status-dot status-frozen"></span>' : '<span class="status-dot status-exited"></span>');
+                        const dot = isAlive ? 'running' : (isFrozen ? 'frozen' : 'exited');
                         const selected = (state.selectedInstUrl === entry.inst.url && state.selectedCmdId === entry.cmd.id) ? ' group-cmd-selected' : '';
-                        html += '<div class="group-cmd-item' + selected + '"' +
-                            ' data-inst-url="' + escHtml(entry.inst.url) + '"' +
-                            ' data-cmd-id="' + escHtml(entry.cmd.id) + '"' +
-                            ' data-cmd-name="' + escHtml(cmdName) + '"' +
-                            (isUnreachable ? ' style="opacity:0.4;"' : '') +
-                            ' data-action="SelectCommand"' +
-                            ' title="' + escHtml(entry.inst.label) + ' / ' + escHtml(cmdName) + '">' +
-                            statusDot +
-                            '<span class="group-cmd-name">' + escHtml(cmdName) + '</span>' +
-                            '<button class="btn btn-xs" data-action="ToggleCmdInGroup" data-name="' + escHtml(gName) + '" data-cmd-name="' + escHtml(cmdName) + '" title="Remove from group" style="margin-left:auto;padding:0 0.2rem;font-size:0.55rem;">&#x2715;</button>' +
-                            '</div>';
+                        html += `<div class="group-cmd-item${selected}" data-inst-url="${escHtml(entry.inst.url)}" data-cmd-id="${escHtml(entry.cmd.id)}" data-cmd-name="${escHtml(cmdName)}"${isUnreachable ? ' style="opacity:0.4;"' : ''} data-action="SelectCommand" title="${escHtml(entry.inst.label)} / ${escHtml(cmdName)}">` +
+                            `<span class="status-dot status-${dot}"></span>` +
+                            `<span class="group-cmd-name">${escHtml(cmdName)}</span>` +
+                            `<button class="btn btn-xs" data-action="ToggleCmdInGroup" data-name="${escHtml(gName)}" data-cmd-name="${escHtml(cmdName)}" title="Remove from group" style="margin-left:auto;padding:0 0.2rem;font-size:0.55rem;">&#x2715;</button></div>`;
                     } else {
-                        html += '<div class="group-cmd-item" style="opacity:0.4;cursor:default;">' +
-                            '<span class="group-cmd-name" style="text-decoration:line-through;">' + escHtml(cmdName) + '</span>' +
-                            '<span style="font-size:0.55rem;color:var(--text-muted);margin-left:auto;">(not running)</span>' +
-                            '<button class="btn btn-xs" data-action="ToggleCmdInGroup" data-name="' + escHtml(gName) + '" data-cmd-name="' + escHtml(cmdName) + '" title="Remove from group" style="margin-left:auto;padding:0 0.2rem;font-size:0.55rem;">&#x2715;</button>' +
-                            '</div>';
+                        html += `<div class="group-cmd-item" style="opacity:0.4;cursor:default;">` +
+                            `<span class="group-cmd-name" style="text-decoration:line-through;">${escHtml(cmdName)}</span>` +
+                            `<span style="font-size:0.55rem;color:var(--text-muted);margin-left:auto;">(not running)</span>` +
+                            `<button class="btn btn-xs" data-action="ToggleCmdInGroup" data-name="${escHtml(gName)}" data-cmd-name="${escHtml(cmdName)}" title="Remove from group" style="margin-left:auto;padding:0 0.2rem;font-size:0.55rem;">&#x2715;</button></div>`;
                     }
                 }
             }
@@ -1000,23 +867,8 @@ function renderGroups() {
 // Workspaces save/restore the current panel configuration.
 // Stored in localStorage as vrw_workspaces = { "name": { panels: [...], layout: "row", ... }, ... }
 
-/// Load workspaces from localStorage.
-function getWorkspaces() {
-    try {
-        const raw = localStorage.getItem('vrw_workspaces');
-        if (!raw) return {};
-        return JSON.parse(raw);
-    } catch (e) {
-        return {};
-    }
-}
-
-/// Save workspaces to localStorage.
-function saveWorkspaces(workspaces) {
-    try {
-        localStorage.setItem('vrw_workspaces', JSON.stringify(workspaces));
-    } catch (e) { /* quota exceeded */ }
-}
+function getWorkspaces() { return _lsGet('vrw_workspaces', {}); }
+function saveWorkspaces(ws) { _lsSet('vrw_workspaces', ws); }
 
 /// Render the workspace list inside the dropdown.
 function renderWorkspaceList() {
@@ -1033,23 +885,11 @@ function renderWorkspaceList() {
     let html = '';
     for (const name of names) {
         const panelCount = (workspaces[name].panels || []).length;
-        html += '<div style="display:flex;align-items:center;gap:0.3rem;">';
-        html += '<button class="ws-load-btn" data-action="LoadWorkspace" data-name="' + escHtml(name) + '" style="flex:1;text-align:left;">' +
-            '<span style="color:var(--accent);">&#x1F4C2;</span> ' + escHtml(name) +
-            ' <span style="color:var(--text-muted);font-size:0.55rem;">(' + panelCount + ' panels)</span></button>';
-        html += '<button class="btn btn-xs" data-action="DeleteWorkspace" data-name="' + escHtml(name) + '" title="Delete" style="font-size:0.55rem;">&#x2715;</button>';
-        html += '</div>';
+        html += `<div style="display:flex;align-items:center;gap:0.3rem;">` +
+            `<button class="ws-load-btn" data-action="LoadWorkspace" data-name="${escHtml(name)}" style="flex:1;text-align:left;"><span style="color:var(--accent);">&#x1F4C2;</span> ${escHtml(name)} <span style="color:var(--text-muted);font-size:0.55rem;">(${panelCount} panels)</span></button>` +
+            `<button class="btn btn-xs" data-action="DeleteWorkspace" data-name="${escHtml(name)}" title="Delete" style="font-size:0.55rem;">&#x2715;</button></div>`;
     }
     container.innerHTML = html;
-}
-
-/// Get the command name for a panel from the current connections.
-function _getPanelCmdName(panel) {
-    if (!panel.selectedInstUrl || !panel.selectedCmdId) return null;
-    const inst = state.connections.find(i => i.url === panel.selectedInstUrl);
-    if (!inst || !inst._commands) return null;
-    const cmd = inst._commands.find(c => c.id === panel.selectedCmdId);
-    return cmd ? (cmd.name || cmd.id) : null;
 }
 
 /// Load a workspace and restore panel configuration.
@@ -1129,12 +969,37 @@ document.addEventListener('click', (e) => {
 });
 
     // Expose to global scope
-    // Docs
+    window.initBottombar = initBottombar;
+    window.toggleSidebar = toggleSidebar;
+    window.toggleBottombar = toggleBottombar;
+    window.toggleLogsView = toggleLogsView;
+    window.toggleResources = toggleResources;
+    window.switchSidebarTab = switchSidebarTab;
+    window.updateSidebarTabsVisibility = updateSidebarTabsVisibility;
+    window.updateCmdToolbarVisibility = updateCmdToolbarVisibility;
+    window.updateDisconnectedUI = updateDisconnectedUI;
+    window.updateSidebarBanner = updateSidebarBanner;
+    window.updateTerminalDisconnectedOverlay = updateTerminalDisconnectedOverlay;
+    window._buildSidebar = _buildSidebar;
+    window.getPinnedNames = getPinnedNames;
+    window.togglePinCmd = togglePinCmd;
+    window.rearrangePinnedCommands = rearrangePinnedCommands;
+    window._sortSidebarBy = function(sortKey) {
+        _sidebarSort = sortKey;
+        if (sortKey !== 'name') window._userSpawnInstUrl = sortKey;
+        loadCommands();
+    };
+    window.togglePauseRunPanelByIdx = function(instUrl, cmdId) {
+        const inst = state.connections.find(i => i.url === instUrl);
+        if (!inst || !inst._commands) return;
+        const cmd = inst._commands.find(c => c.id === cmdId);
+        const isFrozen = cmd && cmd.frozen;
+        (isFrozen ? api.thaw(instUrl, cmdId) : api.freeze(instUrl, cmdId))
+            .then(() => loadCommands()).catch(() => {});
+    };
     window.showDocs = showDocs;
-    // Environments
     window.fetchEnvironments = fetchEnvironments;
     window.activateEnvironment = activateEnvironment;
-    // Groups
     window.getCmdGroups = getCmdGroups;
     window.createCmdGroup = createCmdGroup;
     window.deleteCmdGroup = deleteCmdGroup;
@@ -1142,7 +1007,6 @@ document.addEventListener('click', (e) => {
     window.toggleCmdInGroup = toggleCmdInGroup;
     window.toggleGroupCollapse = toggleGroupCollapse;
     window.renderGroups = renderGroups;
-    // Workspaces
     window.loadWorkspace = loadWorkspace;
     window.deleteWorkspace = deleteWorkspace;
     window._toggleCmdInGroupAndRender = function(groupName, cmdName) {
