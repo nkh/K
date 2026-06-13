@@ -273,8 +273,8 @@ Key discovery: api.js (loaded via (0, eval) in setup.js) captures the fetch func
 
 ### Running totals
 - **Start: ~10,700 lines, 24 modules**
-- **Current: 8,677 lines, 14 modules** (−2,023 lines, −10 modules)
+- **Current: 7,919 lines, 14 modules** (−2,781 lines, −10 modules)
 - **Target: ~5,200 lines, ~14 modules**
-- **Remaining: ~3,477 lines to cut**
-- Modules: state(100), utils(272), api(282), delegate(376), commands-core(390), vtty(457), keyboard(490), server-connections(502), search(504), spawn(523), websocket(538), misc(769), sidebar(1157), panels(2317)
-- Biggest targets: panels.js (2317), sidebar.js (1157), misc.js (769), websocket.js (538), spawn.js (523)
+- **Remaining: ~2,719 lines to cut**
+- Modules: state(100), utils(272), api(282), delegate(376), commands-core(390), search(409), spawn(409), vtty(457), websocket(472), misc(479), keyboard(490), server-connections(502), sidebar(1021), panels(2260)
+- Biggest targets: panels.js (2260), sidebar.js (1021)
