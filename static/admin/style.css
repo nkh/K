@@ -1,3 +1,4 @@
+.hidden { display: none !important; }
 :root {
     --bg-primary: #0d1117;
     --bg-secondary: #161b22;
@@ -193,7 +194,7 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .vtty-container .search-bar input { width: 160px; font-size: var(--ui-fs); padding: 2px 6px; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 3px; }
 .vtty-container .search-bar input:focus { outline: none; border-color: var(--accent); }
 .vtty-container .search-bar .search-count { font-size: var(--ui-fs); color: var(--text-muted); min-width: 30px; text-align: center; cursor: pointer; }
-.search-progress-bar { width: 40px; height: 3px; border-radius: 1.5px; display: none; flex-shrink: 0; }
+.search-progress-bar { width: 40px; height: 3px; border-radius: 1.5px; flex-shrink: 0; }
 .vtty-container .search-bar button { padding: 1px 5px; font-size: var(--ui-fs); background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 3px; cursor: pointer; }
 .vtty-container .search-bar button:hover { background: #30363d; }
 .vtty-search-highlight { background: rgba(210, 153, 34, 0.4); border-radius: 2px; }
@@ -643,7 +644,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 }
 
 /* Auto-restart indicator */
-.auto-restart-indicator { position: fixed; bottom: 2.5rem; left: 50%; transform: translateX(-50%); z-index: 100; background: var(--bg-secondary); border: 1px solid var(--accent); color: var(--accent); font-size: var(--ui-fs); padding: 0.2rem 0.8rem; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); pointer-events: none; }
+.auto-restart-indicator { position: fixed; bottom: 2.5rem; left: 50%; transform: translateX(-50%); z-index: 100; background: var(--bg-secondary); border: 1px solid var(--accent); color: var(--accent); font-size: var(--ui-fs); padding: 0.2rem 0.8rem; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); pointer-events: none; display: flex; }
 
 /* Mobile tabbed panel layout */
 .mobile-tab-bar { display: flex; background: var(--bg-tertiary); border-bottom: 1px solid var(--border); overflow-x: auto; flex-shrink: 0; scrollbar-width: none; }

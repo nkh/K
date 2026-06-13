@@ -16,15 +16,14 @@ function toggleSidebar() {
 function toggleResources() {
     state.showResources = !state.showResources;
     localStorage.setItem('vrw_show_resources', state.showResources.toString());
-    const display = state.showResources ? '' : 'none';
     document.querySelectorAll('.resource-badge, .instance-url').forEach(el => {
-        el.style.display = display;
+        el.classList.toggle('hidden', !state.showResources);
     });
     // Also toggle shared toolbar elements
     const stBadge = document.getElementById('stResourceBadge');
-    if (stBadge && !state.showResources) stBadge.style.display = 'none';
+    if (stBadge && !state.showResources) stBadge.classList.add('hidden');
     const stUrl = document.getElementById('stInstanceUrl');
-    if (stUrl) stUrl.style.display = display;
+    if (stUrl) stUrl.classList.toggle('hidden', !state.showResources);
     // If toggling on, refresh the badge
     if (state.showResources) updateSharedToolbar();
 }
@@ -63,8 +62,8 @@ function toggleLogsView() {
     if (state.currentView === 'log') {
         // Switch back to terminal
         state.currentView = 'vtty';
-        vtty.style.display = 'flex';
-        log.style.display = 'none';
+        vtty.classList.remove('hidden');
+        log.classList.add('hidden');
         if (btn) { btn.style.background = ''; btn.style.color = ''; }
         disconnectLogWs();
         // Flush any VTTY updates that arrived while logs were shown
@@ -72,8 +71,8 @@ function toggleLogsView() {
     } else {
         // Switch to logs
         state.currentView = 'log';
-        vtty.style.display = 'none';
-        log.style.display = 'flex';
+        vtty.classList.add('hidden');
+        log.classList.remove('hidden');
         if (btn) { btn.style.background = 'var(--accent)'; btn.style.color = '#fff'; }
         loadLog();
         if (!document.getElementById('logSearch').value) {
@@ -85,11 +84,11 @@ function toggleLogsView() {
 function switchSidebarTab(tab, el) {
     document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
     el.classList.add('active');
-    document.getElementById('tab-servers').style.display = tab === 'servers' ? '' : 'none';
-    document.getElementById('tab-spawn').style.display = tab === 'spawn' ? '' : 'none';
-    document.getElementById('tab-templates').style.display = tab === 'templates' ? '' : 'none';
-    document.getElementById('tab-certs').style.display = tab === 'certs' ? '' : 'none';
-    document.getElementById('tab-groups').style.display = tab === 'groups' ? '' : 'none';
+    document.getElementById('tab-servers').classList.toggle('hidden', tab !== 'servers');
+    document.getElementById('tab-spawn').classList.toggle('hidden', tab !== 'spawn');
+    document.getElementById('tab-templates').classList.toggle('hidden', tab !== 'templates');
+    document.getElementById('tab-certs').classList.toggle('hidden', tab !== 'certs');
+    document.getElementById('tab-groups').classList.toggle('hidden', tab !== 'groups');
     if (tab === 'templates') renderTemplates();
     if (tab === 'groups') renderGroups();
 }
@@ -101,15 +100,15 @@ function updateSidebarTabsVisibility() {
     const spawnContent = document.getElementById('tab-spawn');
     const anyReachable = state.connections.some(i => i.reachable === true);
     if (anyReachable) {
-        if (spawnTab) spawnTab.style.display = '';
+        if (spawnTab) spawnTab.classList.remove('hidden');
         // Only show spawn content if the spawn tab is currently active;
         // otherwise let switchSidebarTab() manage content visibility.
         if (spawnContent && spawnTab && spawnTab.classList.contains('active')) {
-            spawnContent.style.display = '';
+            spawnContent.classList.remove('hidden');
         }
     } else {
-        if (spawnTab) spawnTab.style.display = 'none';
-        if (spawnContent) spawnContent.style.display = 'none';
+        if (spawnTab) spawnTab.classList.add('hidden');
+        if (spawnContent) spawnContent.classList.add('hidden');
         // If spawn tab was active, switch to commands
         const activeTab = document.querySelector('.sidebar-tab.active');
         if (activeTab && activeTab === spawnTab) {
@@ -129,9 +128,9 @@ function updateCmdToolbarVisibility() {
     const anyCommands = state.connections.some(
         i => i._commands && i._commands.length > 0
     );
-    killAllBtn.style.display = (anyReachable && anyCommands) ? '' : 'none';
+    killAllBtn.classList.toggle('hidden', !(anyReachable && anyCommands));
     const freezeAllBtn = document.getElementById('freezeAllBtn');
-    if (freezeAllBtn) freezeAllBtn.style.display = (anyReachable && anyCommands) ? '' : 'none';
+    if (freezeAllBtn) freezeAllBtn.classList.toggle('hidden', !(anyReachable && anyCommands));
 }
 
 /// Extract sidebar-building logic into a reusable function so both

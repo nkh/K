@@ -31,7 +31,7 @@ console.log('toggleWorkspaceDropdown tests');
 if (typeof toggleWorkspaceDropdown === 'function') {
     const menu = document.createElement('div');
     menu.id = 'workspaceMenu';
-    menu.style.display = 'none';
+    menu.classList.add('hidden');
     assert(() => { toggleWorkspaceDropdown({ stopPropagation() {} }); }, 'toggleWorkspaceDropdown does not throw');
 }
 

@@ -204,20 +204,20 @@ hbPanel.cmdHistoryIdx = 1;
 
 const backBtn = document.createElement('button');
 backBtn.id = 'histBack-' + hbPanel.id;
-backBtn.style.display = 'none';
+backBtn.classList.add('hidden');
 const fwdBtn = document.createElement('button');
 fwdBtn.id = 'histFwd-' + hbPanel.id;
-fwdBtn.style.display = 'none';
+fwdBtn.classList.add('hidden');
 
 _updatePanelHistoryBtns(hbPanel.id);
-assertEq(backBtn.style.display, '', 'back button visible when history has prev');
-assertEq(fwdBtn.style.display, 'none', 'fwd button hidden at end of history');
+assert(!backBtn.classList.contains('hidden'), 'back button visible when history has prev');
+assert(fwdBtn.classList.contains('hidden'), 'fwd button hidden at end of history');
 
 // At beginning of history
 hbPanel.cmdHistoryIdx = 0;
 _updatePanelHistoryBtns(hbPanel.id);
-assertEq(backBtn.style.display, 'none', 'back button hidden at start');
-assertEq(fwdBtn.style.display, '', 'fwd button visible when history has next');
+assert(backBtn.classList.contains('hidden'), 'back button hidden at start');
+assert(!fwdBtn.classList.contains('hidden'), 'fwd button visible when history has next');
 
 // No panel found → no crash
 assert(() => { _updatePanelHistoryBtns('nonexistent'); }, '_updatePanelHistoryBtns no-crash on missing panel');

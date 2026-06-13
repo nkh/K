@@ -13,18 +13,18 @@ function showDocs() {
     if (state.currentView === 'docs') {
         // Switch back to terminal
         state.currentView = 'vtty';
-        vtty.style.display = 'flex';
-        docs.style.display = 'none';
+        vtty.classList.remove('hidden');
+        docs.classList.add('hidden');
         if (btn) { btn.style.background = ''; btn.style.color = ''; }
     } else {
         // Disconnect log WS if active
         if (state.currentView === 'log') {
             disconnectLogWs();
-            if (log) log.style.display = 'none';
+            if (log) log.classList.add('hidden');
         }
         state.currentView = 'docs';
-        vtty.style.display = 'none';
-        docs.style.display = 'block';
+        vtty.classList.add('hidden');
+        docs.classList.remove('hidden');
         if (btn) { btn.style.background = 'var(--accent)'; btn.style.color = '#fff'; }
         loadDocs();
     }
@@ -388,7 +388,7 @@ function toggleCmdInGroup(groupName, cmdName) {
     }
     saveCmdGroups(groups);
     // Re-render groups if the tab is visible
-    if (document.getElementById('tab-groups').style.display !== 'none') {
+    if (document.getElementById('tab-groups') && !document.getElementById('tab-groups').classList.contains('hidden')) {
         renderGroups();
     }
 }
@@ -591,7 +591,7 @@ function loadWorkspace(name) {
 
     // Close the workspace menu
     const menu = document.getElementById('workspaceMenu');
-    if (menu) menu.style.display = 'none';
+    if (menu) menu.classList.add('hidden');
 }
 
 /// Delete a workspace.
@@ -606,8 +606,8 @@ function deleteWorkspace(name) {
 document.addEventListener('click', (e) => {
     const dropdown = document.getElementById('workspaceDropdown');
     const menu = document.getElementById('workspaceMenu');
-    if (dropdown && menu && menu.style.display !== 'none' && !dropdown.contains(e.target)) {
-        menu.style.display = 'none';
+    if (dropdown && menu && !menu.classList.contains('hidden') && !dropdown.contains(e.target)) {
+        menu.classList.add('hidden');
     }
 });
 

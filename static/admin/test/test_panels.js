@@ -292,7 +292,7 @@ if (typeof applyLayoutPreset === 'function') {
     // Create layout preset menu element
     const layoutMenu = document.createElement('div');
     layoutMenu.id = 'layoutPresetMenu';
-    layoutMenu.style.display = 'block';
+    layoutMenu.classList.remove('hidden');
 
     state.panels = [];
     const lp1 = addPanelDirect();
@@ -303,7 +303,7 @@ if (typeof applyLayoutPreset === 'function') {
     applyLayoutPreset('grid-2x2');
     assertEq(state.panelLayout, 'grid-2x2', 'layout preset applied');
     assertEq(state.panels.length, 4, 'panels added to match preset count');
-    assertEq(layoutMenu.style.display, 'none', 'menu closed after preset applied');
+    assert(layoutMenu.classList.contains('hidden'), 'menu closed after preset applied');
     // First panel should be focused since none was focused
     assertEq(state._focusedPanelId, state.panels[0].id, 'first panel focused when none focused');
 
@@ -351,9 +351,9 @@ console.log('closePanelModal tests');
 if (typeof closePanelModal === 'function') {
     const modal = document.createElement('div');
     modal.id = 'panelModal';
-    modal.style.display = 'block';
+    modal.classList.remove('hidden');
     closePanelModal();
-    assertEq(modal.style.display, 'none', 'closePanelModal hides modal');
+    assert(modal.classList.contains('hidden'), 'closePanelModal hides modal');
 }
 
 // ── _renderMinimizedPanels ──

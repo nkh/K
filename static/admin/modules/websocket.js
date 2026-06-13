@@ -459,9 +459,9 @@ function _updateSecondaryVttyMetadata(panelObj, vttyEl, data) {
         cursorEl.style.left = (cursor.col * charW) + 'px';
         cursorEl.style.width = charW + 'px';
         cursorEl.style.height = charH + 'px';
-        cursorEl.style.display = '';
+        cursorEl.classList.remove('hidden');
     } else if (cursorEl) {
-        cursorEl.style.display = 'none';
+        cursorEl.classList.add('hidden');
     }
     panelObj.split.secondaryMouseTracking = !!data.mouse_tracking;
     panelObj.split.secondaryMouseSgr = !!data.mouse_sgr;

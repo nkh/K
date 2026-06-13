@@ -139,10 +139,10 @@ function _updateSearchProgress(panelId, currentIdx, totalMatches) {
     const bar = document.getElementById('searchProgress-' + panelId);
     if (!bar) return;
     if (totalMatches <= 1) {
-        bar.style.display = 'none';
+        bar.classList.add('hidden');
         return;
     }
-    bar.style.display = '';
+    bar.classList.remove('hidden');
     const pct = ((currentIdx + 1) / totalMatches) * 100;
     bar.style.background = `linear-gradient(to right, var(--accent) ${pct}%, var(--border) ${pct}%)`;
 }
@@ -201,7 +201,7 @@ function scrollTerminalBottom(panelId) {
             sessionStorage.removeItem('vrw_scrollback_' + state.selectedCmdId);
         }
         const sbIndicator = document.getElementById('scrollbackIndicator');
-        if (sbIndicator) sbIndicator.style.display = 'none';
+        if (sbIndicator) sbIndicator.classList.add('hidden');
         if (state.selectedCmdId && panelObj.selectedInstUrl) {
             loadVttyHttp(panelObj.selectedInstUrl, state.selectedCmdId);
         }
@@ -245,7 +245,7 @@ async function _thawAllPanelsFromSearch() {
 
 // ─── Command Manager Dialog ───
 function closeCmdManager() {
-    document.getElementById('cmdManagerModal').style.display = 'none';
+    document.getElementById('cmdManagerModal').classList.add('hidden');
 }
 
 function renderCmdManagerList() {
@@ -341,7 +341,7 @@ async function cmdManagerKillAll() {
 function openGlobalSearch() {
     _freezeAllPanelsForSearch();
     const modal = document.getElementById('globalSearchModal');
-    modal.style.display = '';
+    modal.classList.remove('hidden');
     const input = document.getElementById('globalSearchInput');
     input.value = '';
     input.focus();
@@ -351,7 +351,7 @@ function openGlobalSearch() {
 
 function closeGlobalSearch() {
     const modal = document.getElementById('globalSearchModal');
-    modal.style.display = 'none';
+    modal.classList.add('hidden');
     _thawAllPanelsFromSearch();
 }
 
@@ -384,7 +384,7 @@ async function _toggleSearchFreezeCommands() {
 
 function onSearchResultClick(instUrl, cmdId, cmdName) {
     const modal = document.getElementById('globalSearchModal');
-    modal.style.display = 'none';
+    modal.classList.add('hidden');
 
     // Select the command in the focused panel
     const activePanelId = getActivePanelId();

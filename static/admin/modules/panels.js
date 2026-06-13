@@ -40,7 +40,7 @@ function addPanel() {
 
 function closePanelModal() {
     releaseCurrentFocusTrap();
-    document.getElementById('panelModal').style.display = 'none';
+    document.getElementById('panelModal').classList.add('hidden');
 }
 
 function confirmAddPanel() {
@@ -182,17 +182,17 @@ function unsplitPanel(panelId) {
 /// Render a single vtty-container (non-split panel).
 function _renderVttyContainer(panel) {
     return `<div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px;">
-                        <div class="exited-banner" id="exitedBanner-${panel.id}" style="display:none;"></div>
+                        <div class="exited-banner hidden" id="exitedBanner-${panel.id}"></div>
                         <div class="search-bar" id="searchBar-${panel.id}">
                             <input type="text" id="searchInput-${panel.id}" placeholder="Search terminal..." oninput="vttySearch('${panel.id}')" onkeydown="if(event.key==='Enter'){event.shiftKey?vttySearchPrev('${panel.id}'):vttySearchNext('${panel.id}')}">
                             <span class="search-count" id="searchCount-${panel.id}" title="Click to jump: Shift+Click to reverse"></span>
-                            <div class="search-progress-bar" id="searchProgress-${panel.id}"></div>
+                            <div class="search-progress-bar hidden" id="searchProgress-${panel.id}"></div>
                             <button data-action="VttySearchNext" data-panel="${panel.id}" title="Next match (Enter)">&#x25BC;</button>
                             <button data-action="VttySearchPrev" data-panel="${panel.id}" title="Previous match (Shift+Enter)">&#x25B2;</button>
                             <button data-action="VttySearchClose" data-panel="${panel.id}" title="Close search">&#x2715;</button>
                         </div>
                         <pre style="color:#484f58;">No command selected — select a command from the sidebar to view its output</pre>
-                        <div class="cursor-indicator" style="display:none;"></div>
+                        <div class="cursor-indicator hidden"></div>
                         <div class="copy-feedback" id="copyFeedback-${panel.id}">Copied!</div>
                         <button class="scroll-bottom-btn" id="scrollBtn-${panel.id}" data-action="ScrollTerminalBottom" data-panel="${panel.id}" title="Scroll to bottom">&#x25BC;</button>
                     </div>`;
@@ -340,17 +340,17 @@ function _renderSplitContainer(panel) {
                 <button class="btn btn-xs btn-danger" data-action="UnsplitPanel" data-panel="${panel.id}" title="Close split">&#x2715;</button>
             </div>
             <div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" data-split-side="primary" data-panel="${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px; flex:1; min-height:0;">
-                <div class="exited-banner" id="exitedBanner-${panel.id}" style="display:none;"></div>
+                <div class="exited-banner hidden" id="exitedBanner-${panel.id}"></div>
                 <div class="search-bar" id="searchBar-${panel.id}">
                     <input type="text" id="searchInput-${panel.id}" placeholder="Search terminal..." oninput="vttySearch('${panel.id}')" onkeydown="if(event.key==='Enter'){event.shiftKey?vttySearchPrev('${panel.id}'):vttySearchNext('${panel.id}')}">
                     <span class="search-count" id="searchCount-${panel.id}" title="Click to jump: Shift+Click to reverse"></span>
-                    <div class="search-progress-bar" id="searchProgress-${panel.id}"></div>
+                    <div class="search-progress-bar hidden" id="searchProgress-${panel.id}"></div>
                     <button data-action="VttySearchNext" data-panel="${panel.id}" title="Next match (Enter)">&#x25BC;</button>
                     <button data-action="VttySearchPrev" data-panel="${panel.id}" title="Previous match (Shift+Enter)">&#x25B2;</button>
                     <button data-action="VttySearchClose" data-panel="${panel.id}" title="Close search">&#x2715;</button>
                 </div>
                 <pre>${panel.selectedCmdId ? '' : '<span style="color:#484f58;">No command selected — select a command from the sidebar</span>'}</pre>
-                <div class="cursor-indicator" style="display:none;"></div>
+                <div class="cursor-indicator hidden"></div>
                 <div class="copy-feedback" id="copyFeedback-${panel.id}">Copied!</div>
                 <button class="scroll-bottom-btn" id="scrollBtn-${panel.id}" data-action="ScrollTerminalBottom" data-panel="${panel.id}" title="Scroll to bottom">&#x25BC;</button>
             </div>
@@ -366,7 +366,7 @@ function _renderSplitContainer(panel) {
             <div class="vtty-container" id="vtty-${secondaryId}" data-split-side="secondary" data-panel="${panel.id}" ${panel.theme ? 'data-panel-theme="' + panel.theme + '"' : ''} style="font-size: ${panel.fontSize}px; flex:1; min-height:0;">
                 <div class="exited-banner" id="exitedBanner-${secondaryId}" style="display:none;"></div>
                 <pre>${split.secondaryCmdId ? '' : '<span style="color:#484f58;">No command selected — select a command from the sidebar</span>'}</pre>
-                <div class="cursor-indicator" style="display:none;"></div>
+                <div class="cursor-indicator hidden"></div>
                 <button class="scroll-bottom-btn" id="scrollBtn-${secondaryId}" data-action="ScrollTerminalBottom" data-panel="${secondaryId}" title="Scroll to bottom">&#x25BC;</button>
             </div>
         </div>`;
@@ -451,14 +451,14 @@ function togglePanelLayout() {
 function toggleLayoutPresetMenu(event) {
     event.stopPropagation();
     const menu = document.getElementById('layoutPresetMenu');
-    const isVisible = menu.style.display !== 'none';
-    menu.style.display = isVisible ? 'none' : 'block';
+    const isVisible = !menu.classList.contains('hidden');
+    menu.classList.toggle('hidden', isVisible);
     // Close on outside click
     if (!isVisible) {
         setTimeout(() => {
             document.addEventListener('click', function closeMenu(e) {
                 document.removeEventListener('click', closeMenu);
-                menu.style.display = 'none';
+                menu.classList.add('hidden');
             }, { once: true });
         }, 0);
     }
@@ -468,7 +468,7 @@ function toggleLayoutPresetMenu(event) {
 function applyLayoutPreset(preset) {
     // Close the menu
     const menu = document.getElementById('layoutPresetMenu');
-    if (menu) menu.style.display = 'none';
+    if (menu) menu.classList.add('hidden');
 
     // Determine how many panels this preset needs
     const panelCounts = { 'row': null, 'column': null, 'grid-2x2': 4, 'grid-1-2': 3, 'grid-2-1': 3 };
@@ -585,7 +585,7 @@ function renderPanels() {
         _showingWelcome = true;
         // Hide shared toolbar in welcome state
         const toolbar = document.getElementById('sharedToolbar');
-        if (toolbar) toolbar.style.display = 'none';
+        if (toolbar) toolbar.classList.add('hidden');
         // Server is unreachable — vrw is not running
         html += `
             <div class="welcome-panel">
@@ -600,7 +600,7 @@ function renderPanels() {
         _showingWelcome = false;
         // Show the shared toolbar when panels are visible
         const toolbar = document.getElementById('sharedToolbar');
-        if (toolbar) toolbar.style.display = '';
+        if (toolbar) toolbar.classList.remove('hidden');
 
         // On mobile: render tab bar for multiple panels
         const isMobile = state._mobileTabbedLayout;
@@ -638,15 +638,15 @@ function renderPanels() {
             const resizeHandle = hasMultiplePanels ? `<div class="panel-resize-handle" data-panel="${panel.id}"></div>` : '';
             const dragHandle = hasMultiplePanels ? `<span class="drag-handle" draggable="true" ondragstart="onPanelDragStart(event,'${panel.id}')" ondragend="onPanelDragEnd(event)" title="Drag to reorder">&#x2840;</span>` : '';
             const isFocused = panel.id === state._focusedPanelId;
-            const mobileHidden = isMobile && hasMultiplePanels && !isFocused ? ' style="display:none;"' : '';
+            const mobileHidden = isMobile && hasMultiplePanels && !isFocused ? ' hidden' : '';
             html += `
                 <div class="panel${isFocused ? ' focused' : ''}" id="${panel.id}" draggable="false" ondragover="onPanelDragOver(event)" ondrop="onPanelDrop(event,'${panel.id}')" ondragleave="onPanelDragLeave(event)"${mobileHidden}>
                     <div class="panel-header" data-panel-id="${panel.id}" oncontextmenu="showPanelContextMenu(event,'${panel.id}')" tabindex="0" role="button" aria-label="Panel: ${escHtml(panel.selectedInstUrl || 'empty')}" style="background:${serverColor};color:${serverTextColor};">
                         ${dragHandle}
                         <button class="btn btn-xs btn-danger panel-close-btn" data-action="ClosePanelContent" data-panel="${panel.id}" title="Close panel">&#x2715;</button>
                         <span class="panel-server-badge" style="font-size:var(--ui-fs);opacity:0.7;flex-shrink:0;">${escHtml(serverLabel)}</span>
-                        <button class="btn btn-xs cmd-history-btn" id="histBack-${panel.id}" data-action="PanelHistoryBack" data-panel="${panel.id}" title="Back in command history" style="display:none;">&#x25C0;</button>
-                        <button class="btn btn-xs cmd-history-btn" id="histFwd-${panel.id}" data-action="PanelHistoryForward" data-panel="${panel.id}" title="Forward in command history" style="display:none;">&#x25B6;</button>
+                        <button class="btn btn-xs cmd-history-btn hidden" id="histBack-${panel.id}" data-action="PanelHistoryBack" data-panel="${panel.id}" title="Back in command history">&#x25C0;</button>
+                        <button class="btn btn-xs cmd-history-btn hidden" id="histFwd-${panel.id}" data-action="PanelHistoryForward" data-panel="${panel.id}" title="Forward in command history">&#x25B6;</button>
                         <div class="cmd-info" id="cmdInfo-${panel.id}">
                             <span class="cmd-fullname" id="cmdName-${panel.id}" ondblclick="event.stopPropagation();startRenamePanel('${panel.id}')" title="Double-click to rename"></span>
                             <span class="cmd-args" id="cmdArgs-${panel.id}"></span>
@@ -805,12 +805,12 @@ function renderPanels() {
 function _updatePanelMultiUI() {
     const hasMultiplePanels = state.panels.length > 1;
     const isGrid = state.panelLayout.startsWith('grid-');
-    document.querySelectorAll('.drag-handle').forEach(el => el.style.display = hasMultiplePanels ? '' : 'none');
-    document.querySelectorAll('.panel-resize-handle').forEach(el => el.style.display = (hasMultiplePanels && !isGrid) ? '' : 'none');
+    document.querySelectorAll('.drag-handle').forEach(el => el.classList.toggle('hidden', !hasMultiplePanels));
+    document.querySelectorAll('.panel-resize-handle').forEach(el => el.classList.toggle('hidden', !(hasMultiplePanels && !isGrid)));
     const layoutBtn = document.getElementById('stLayoutBtn');
-    if (layoutBtn) layoutBtn.style.display = hasMultiplePanels ? '' : 'none';
+    if (layoutBtn) layoutBtn.classList.toggle('hidden', !hasMultiplePanels);
     const presetBtn = document.getElementById('stLayoutPresetBtn');
-    if (presetBtn) presetBtn.style.display = hasMultiplePanels ? '' : 'none';
+    if (presetBtn) presetBtn.classList.toggle('hidden', !hasMultiplePanels);
 }
 
 
@@ -825,7 +825,7 @@ function focusPanel(panelId) {
     // Mobile: show focused panel, hide others
     if (state._mobileTabbedLayout) {
         document.querySelectorAll('.panel').forEach(el => {
-            el.style.display = el.id === panelId ? '' : 'none';
+            el.classList.toggle('hidden', el.id !== panelId);
         });
         // Update mobile tab bar
         document.querySelectorAll('.mobile-tab').forEach(el => {
@@ -885,18 +885,18 @@ function updateSharedToolbar() {
     if (resourceBadge && panelObj.selectedCmdId) {
         const res = state._resourceCache[panelObj.selectedCmdId];
         if (state.showResources && res && (res.cpu_percent != null || res.memory_mb != null)) {
-            resourceBadge.style.display = '';
+            resourceBadge.classList.remove('hidden');
             resourceBadge.textContent = (res.cpu_percent != null ? 'CPU ' + res.cpu_percent.toFixed(1) + '%' : '') +
                 (res.memory_mb != null ? ' MEM ' + res.memory_mb.toFixed(1) + 'MB' : '');
         } else {
-            resourceBadge.style.display = 'none';
+            resourceBadge.classList.add('hidden');
         }
     }
 
     // Restart button visibility
     const restartBtn = document.getElementById('stRestartBtn');
     if (restartBtn) {
-        restartBtn.style.display = panelObj.selectedCmdId ? '' : 'none';
+        restartBtn.classList.toggle('hidden', !panelObj.selectedCmdId);
     }
 
     // Freeze/thaw button
@@ -907,12 +907,12 @@ function updateSharedToolbar() {
             const cmd = inst && inst._commands ? inst._commands.find(c => c.id === panelObj.selectedCmdId) : null;
             const isAlive = cmd && cmd.alive !== false;
             const isFrozen = cmd && cmd.frozen === true;
-            freezeBtn.style.display = isAlive ? '' : 'none';
+            freezeBtn.classList.toggle('hidden', !isAlive);
             freezeBtn.textContent = isFrozen ? '\u25B6' : '\u23F8';
             freezeBtn.title = isFrozen ? 'Thaw command' : 'Freeze command';
             freezeBtn.classList.toggle('btn-primary', isFrozen);
         } else {
-            freezeBtn.style.display = 'none';
+            freezeBtn.classList.add('hidden');
         }
     }
 
@@ -965,7 +965,8 @@ function showSpecialKeysHelp() {
     const overlay = document.createElement('div');
     overlay.id = 'specialKeysModal';
     overlay.className = 'modal-overlay';
-    overlay.style.display = 'flex';
+    // .modal-overlay CSS already has display:flex; just ensure not hidden
+    overlay.classList.remove('hidden');
     overlay.onclick = (e) => { if (e.target === overlay) { releaseCurrentFocusTrap(); overlay.remove(); } };
 
     overlay.innerHTML = `<div class="modal" style="max-width:560px;max-height:80vh;overflow-y:auto;">

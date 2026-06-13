@@ -114,8 +114,8 @@ function _updatePanelHistoryBtns(panelId) {
     const panelObj = state.panels.find(p => p.id === panelId);
     const backBtn = document.getElementById('histBack-' + panelId);
     const fwdBtn = document.getElementById('histFwd-' + panelId);
-    if (backBtn) backBtn.style.display = (panelObj && panelObj.cmdHistoryIdx > 0) ? '' : 'none';
-    if (fwdBtn) fwdBtn.style.display = (panelObj && panelObj.cmdHistoryIdx < panelObj.cmdHistory.length - 1) ? '' : 'none';
+    if (backBtn) backBtn.classList.toggle('hidden', !(panelObj && panelObj.cmdHistoryIdx > 0));
+    if (fwdBtn) fwdBtn.classList.toggle('hidden', !(panelObj && panelObj.cmdHistoryIdx < panelObj.cmdHistory.length - 1));
 }
 
 /// Navigate back in panel's command history.

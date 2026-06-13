@@ -113,9 +113,9 @@ function updateVttyMetadataForPanel(panelObj, panelEl, vttyEl, data) {
         cursorEl.style.left = (cursor.col * charW) + 'px';
         cursorEl.style.width = charW + 'px';
         cursorEl.style.height = charH + 'px';
-        cursorEl.style.display = '';
+        cursorEl.classList.remove('hidden');
     } else if (cursorEl) {
-        cursorEl.style.display = 'none';
+        cursorEl.classList.add('hidden');
     }
     panelObj.mouseTracking = !!data.mouse_tracking;
     panelObj.mouseSgr = !!data.mouse_sgr;
@@ -291,9 +291,9 @@ function updateVttyMetadata(data, panel, vttyEl) {
         cursorEl.style.left = (cursor.col * charW) + 'px';
         cursorEl.style.width = charW + 'px';
         cursorEl.style.height = charH + 'px';
-        cursorEl.style.display = '';
+        cursorEl.classList.remove('hidden');
     } else if (cursorEl) {
-        cursorEl.style.display = 'none';
+        cursorEl.classList.add('hidden');
     }
 
     // Track mouse state from the server response
@@ -699,16 +699,16 @@ function updateVttyMetadataFromHttp(data, panel, panelObj, sbOffset) {
     const cursorEl = vttyEl ? vttyEl.querySelector('.cursor-indicator') : null;
     if (cursorEl) {
         if (sbOffset > 0 || !cursorVisible) {
-            cursorEl.style.display = 'none';
+            cursorEl.classList.add('hidden');
         } else {
-            cursorEl.style.display = '';
+            cursorEl.classList.remove('hidden');
         }
     }
 
     // Show/hide scrollback indicator in bottom bar
     const sbIndicator = document.getElementById('scrollbackIndicator');
     if (sbIndicator) {
-        sbIndicator.style.display = sbOffset > 0 ? '' : 'none';
+        sbIndicator.classList.toggle('hidden', sbOffset <= 0);
         sbIndicator.textContent = sbOffset > 0 ? 'SCROLLBACK -' + sbOffset + ' rows' : 'SCROLLBACK';
     }
 }

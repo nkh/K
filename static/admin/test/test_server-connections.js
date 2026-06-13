@@ -87,12 +87,12 @@ assertEq(pollIntervalEl.value, '500', 'pollInterval value set');
 // Poll mode: pollIntervalWrap should be visible
 state.updateMode = 'poll';
 applyUpdateModeUI();
-assertEq(pollIntervalWrap.style.display, '', 'pollIntervalWrap visible in poll mode');
+assert(!pollIntervalWrap.classList.contains('hidden'), 'pollIntervalWrap visible in poll mode');
 
 // Push mode: pollIntervalWrap should be hidden
 state.updateMode = 'push';
 applyUpdateModeUI();
-assertEq(pollIntervalWrap.style.display, 'none', 'pollIntervalWrap hidden in push mode');
+assert(pollIntervalWrap.classList.contains('hidden'), 'pollIntervalWrap hidden in push mode');
 
 // ── switchUpdateMode ──
 console.log('switchUpdateMode tests');
@@ -284,7 +284,7 @@ assert(typeof showAddServerModal === 'function', 'showAddServerModal is a functi
 
 const modal = document.createElement('div');
 modal.id = 'addServerModal';
-modal.style.display = 'none';
+modal.classList.add('hidden');
 const urlInput = document.createElement('input');
 urlInput.id = 'addServerUrl';
 const labelInput = document.createElement('input');
@@ -296,7 +296,7 @@ openPane.id = 'addServerOpenPane';
 openPane.type = 'checkbox';
 
 assert(() => { showAddServerModal(); }, 'showAddServerModal does not throw');
-assertEq(modal.style.display, '', 'modal displayed');
+assert(!modal.classList.contains('hidden'), 'modal displayed');
 assertEq(urlInput.value, 'http://localhost:9090', 'default URL set');
 assertEq(openPane.checked, true, 'open pane checkbox checked by default');
 
@@ -304,9 +304,9 @@ assertEq(openPane.checked, true, 'open pane checkbox checked by default');
 console.log('closeAddServerModal tests');
 assert(typeof closeAddServerModal === 'function', 'closeAddServerModal is a function');
 
-modal.style.display = '';
+modal.classList.remove('hidden');
 assert(() => { closeAddServerModal(); }, 'closeAddServerModal does not throw');
-assertEq(modal.style.display, 'none', 'modal hidden');
+assert(modal.classList.contains('hidden'), 'modal hidden');
 
 // ── restartCommand ──
 console.log('restartCommand tests');

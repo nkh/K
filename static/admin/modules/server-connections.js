@@ -101,7 +101,7 @@ async function fetchServerConfig() {
 function applyUpdateModeUI() {
     document.getElementById('updateMode').value = state.updateMode;
     document.getElementById('pollInterval').value = String(state.pollInterval);
-    document.getElementById('pollIntervalWrap').style.display = state.updateMode === 'poll' ? '' : 'none';
+    document.getElementById('pollIntervalWrap').classList.toggle('hidden', state.updateMode !== 'poll');
 }
 
 /// Switch update mode (called from the dropdown).
@@ -348,7 +348,7 @@ function disconnectServer(url) {
 // ─── Add Server Modal (sidebar only, no panel) ───
 function showAddServerModal() {
     const modal = document.getElementById('addServerModal');
-    modal.style.display = '';
+    modal.classList.remove('hidden');
     document.getElementById('addServerUrl').value = 'http://localhost:9090';
     document.getElementById('addServerLabel').value = '';
     document.getElementById('addServerToken').value = '';
@@ -360,7 +360,7 @@ function showAddServerModal() {
 
 function closeAddServerModal() {
     releaseCurrentFocusTrap();
-    document.getElementById('addServerModal').style.display = 'none';
+    document.getElementById('addServerModal').classList.add('hidden');
 }
 
 async function confirmAddServer() {

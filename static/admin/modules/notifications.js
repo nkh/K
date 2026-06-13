@@ -73,8 +73,8 @@ function _autoRestartCommand(instUrl, cmd, cmdName) {
         const indicator = document.getElementById('autoRestartIndicator');
         if (indicator) {
             indicator.textContent = 'Auto-restarted: ' + cmdName;
-            indicator.style.display = 'flex';
-            setTimeout(() => { indicator.style.display = 'none'; }, 3000);
+            indicator.classList.remove('hidden');
+            setTimeout(() => { indicator.classList.add('hidden'); }, 3000);
         }
     }).catch(() => {
         // Restart failed — remove debounce lock so it can retry

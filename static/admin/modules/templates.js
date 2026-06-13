@@ -156,12 +156,12 @@ function deleteUserTemplate(index) {
 
 function showAddTemplateForm() {
     const form = document.getElementById('templateAddForm');
-    if (form) form.style.display = '';
+    if (form) form.classList.remove('hidden');
 }
 
 function hideAddTemplateForm() {
     const form = document.getElementById('templateAddForm');
-    if (form) form.style.display = 'none';
+    if (form) form.classList.add('hidden');
     document.getElementById('templateName').value = '';
     document.getElementById('templateCmd').value = '';
     document.getElementById('templateArgs').value = '';

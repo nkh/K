@@ -275,7 +275,7 @@ function _dispatchAction(event) {
     if (def.sig === '__builtin__') {
         if (action === 'ToggleBufferDropdown') {
             const select = document.getElementById('stBufferSelect');
-            if (select) select.style.display = select.style.display === 'none' ? '' : 'none';
+            if (select) select.classList.toggle('hidden');
             return true;
         }
         return false;

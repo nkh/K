@@ -210,18 +210,18 @@ for (const sig of expectedSigs) {
 // 11. ToggleBufferDropdown (builtin handler) toggles select visibility
 {
     const select = document.getElementById('stBufferSelect');
-    select.style.display = 'none';
+    select.classList.add('hidden');
 
     const btn = document.createElement('button');
     btn.setAttribute('data-action', 'ToggleBufferDropdown');
     const ev = createMockEvent({ target: btn });
     _dispatchAction(ev);
-    assertEq(select.style.display, '', 'buffer dropdown: toggles from none to visible');
+    assert(!select.classList.contains('hidden'), 'buffer dropdown: toggles from none to visible');
 
     _dispatchAction(ev);
-    assertEq(select.style.display, 'none', 'buffer dropdown: toggles back to none');
+    assert(select.classList.contains('hidden'), 'buffer dropdown: toggles back to none');
 
-    select.style.display = '';
+    select.classList.remove('hidden');
 }
 
 // 12. closest() traversal — action on child element finds parent [data-action]

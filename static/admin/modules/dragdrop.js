@@ -139,9 +139,9 @@ function _cmdReorderMouseMove(e) {
 
     // Find the element we're hovering over (use elementFromPoint to see what's
     // under the floating ghost).
-    _reorderState.srcEl.style.display = 'none';
+    _reorderState.srcEl.classList.add('hidden');
     const underEl = document.elementFromPoint(e.clientX, e.clientY);
-    _reorderState.srcEl.style.display = '';
+    _reorderState.srcEl.classList.remove('hidden');
 
     // Check if hovering over the pane area (for drop-to-open feature)
     const overPanel = underEl ? underEl.closest('.panel') : null;

@@ -26,7 +26,7 @@ function updatePanelCommandInfo() {
         if (serverBadge) {
             const sLabel = _getServerLabel(inst, panelObj.selectedInstUrl);
             serverBadge.textContent = sLabel;
-            serverBadge.style.display = sLabel ? '' : 'none';
+            serverBadge.classList.toggle('hidden', !sLabel);
         }
 
         if (nameEl && cmd) {
@@ -46,18 +46,18 @@ function updatePanelCommandInfo() {
                 const isAlive = cmd.alive !== false;
                 const isFrozen = cmd.frozen === true;
                 if (isAlive) {
-                    pauseBtn.style.display = '';
+                    pauseBtn.classList.remove('hidden');
                     pauseBtn.textContent = isFrozen ? '\u25B6 Run' : '\u23F8 Pause';
                     pauseBtn.className = 'btn btn-xs' + (isFrozen ? ' btn-primary' : '');
                 } else {
-                    pauseBtn.style.display = 'none';
+                    pauseBtn.classList.add('hidden');
                 }
             }
 
             // Show/hide restart button
             const restartBtn = panelEl.querySelector(`[id^="restartBtn-"]`);
             if (restartBtn) {
-                restartBtn.style.display = '';
+                restartBtn.classList.remove('hidden');
             }
 
             // Update resource badge
@@ -65,13 +65,13 @@ function updatePanelCommandInfo() {
             if (resourceBadgeEl) {
                 const res = state._resourceCache[cmd.id];
                 if (state.showResources && res && (res.cpu_percent != null || res.memory_mb != null)) {
-                    resourceBadgeEl.style.display = '';
+                    resourceBadgeEl.classList.remove('hidden');
                     resourceBadgeEl.textContent = (res.cpu_percent != null ? 'CPU ' + res.cpu_percent.toFixed(1) + '%' : '') +
                         (res.cpu_percent != null && res.memory_mb != null ? ' | ' : '') +
                         (res.memory_mb != null ? res.memory_mb.toFixed(1) + 'MB' : '');
                 } else {
                     resourceBadgeEl.textContent = '';
-                    if (!state.showResources) resourceBadgeEl.style.display = 'none';
+                    if (!state.showResources) resourceBadgeEl.classList.add('hidden');
                 }
             }
 
@@ -84,9 +84,9 @@ function updatePanelCommandInfo() {
                     const exitCode = cmd.exit_code != null ? cmd.exit_code : '?';
                     const exitClass = cmd.exit_code === 0 ? 'success' : 'failure';
                     exitedBanner.innerHTML = `<span class="exited-banner-icon">&#9632;</span> Command exited <span class="exit-badge ${exitClass}">exit ${exitCode}</span>`;
-                    exitedBanner.style.display = 'flex';
+                    exitedBanner.classList.remove('hidden');
                 } else {
-                    exitedBanner.style.display = 'none';
+                    exitedBanner.classList.add('hidden');
                 }
             }
         } else if (nameEl) {
@@ -94,11 +94,11 @@ function updatePanelCommandInfo() {
             nameEl.textContent = panelObj.customTitle || '';
             if (argsEl) argsEl.textContent = '';
             const pauseBtn = panelEl.querySelector(`[id^="pauseRunBtn-"]`);
-            if (pauseBtn) pauseBtn.style.display = 'none';
+            if (pauseBtn) pauseBtn.classList.add('hidden');
             const restartBtn = panelEl.querySelector(`[id^="restartBtn-"]`);
-            if (restartBtn) restartBtn.style.display = 'none';
+            if (restartBtn) restartBtn.classList.add('hidden');
             const exitedBanner = panelEl.querySelector(`[id^="exitedBanner-"]`);
-            if (exitedBanner) exitedBanner.style.display = 'none';
+            if (exitedBanner) exitedBanner.classList.add('hidden');
         }
     }
 

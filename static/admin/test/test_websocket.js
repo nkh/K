@@ -293,7 +293,7 @@ if (typeof _updateSecondaryVttyMetadata === 'function') {
     vttyEl.className = 'vtty-container';
     const cursorEl = document.createElement('div');
     cursorEl.className = 'cursor-indicator';
-    cursorEl.style.display = 'none';
+    cursorEl.classList.add('hidden');
     const pre = document.createElement('pre');
     vttyEl.appendChild(cursorEl);
     vttyEl.appendChild(pre);
@@ -305,7 +305,7 @@ if (typeof _updateSecondaryVttyMetadata === 'function') {
         mouse_tracking: true,
         mouse_sgr: true,
     });
-    assertEq(cursorEl.style.display, '', 'cursor shown when visible');
+    assert(!cursorEl.classList.contains('hidden'), 'cursor shown when visible');
     assert(cursorEl.style.top.includes('px'), 'cursor top set');
     assert(cursorEl.style.left.includes('px'), 'cursor left set');
     assertEq(metaP.split.secondaryMouseTracking, true, 'mouse tracking updated');
@@ -315,12 +315,12 @@ if (typeof _updateSecondaryVttyMetadata === 'function') {
 
     // Cursor hidden
     _updateSecondaryVttyMetadata(metaP, vttyEl, { cursor_visible: false });
-    assertEq(cursorEl.style.display, 'none', 'cursor hidden when cursor_visible false');
+    assert(cursorEl.classList.contains('hidden'), 'cursor hidden when cursor_visible false');
 
     // In scrollback → cursor hidden
     metaP.split.secondaryScrollbackOffset = 10;
     _updateSecondaryVttyMetadata(metaP, vttyEl, { cursor: { row: 1, col: 1, cursor_visible: true } });
-    assertEq(cursorEl.style.display, 'none', 'cursor hidden in scrollback');
+    assert(cursorEl.classList.contains('hidden'), 'cursor hidden in scrollback');
     metaP.split.secondaryScrollbackOffset = 0;
 }
 

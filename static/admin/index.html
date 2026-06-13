@@ -56,13 +56,13 @@
                     <div style="padding:0.2rem 0.3rem;display:flex;gap:0.2rem;align-items:center;">
                         <input type="text" id="cmdFilter" placeholder="Filter commands..." oninput="loadCommands()" style="flex:1;min-width:0;font-size:var(--ui-fs);padding:0.1rem 0.3rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:2px;">
                         <button class="btn btn-xs" data-action="ShowAddServerModal" title="Add server connection">+ Server</button>
-                        <button class="btn btn-xs btn-danger" id="killAllBtn" data-action="KillAllCommands" title="Kill all running commands" style="display:none;">&#x2715; All</button>
-                        <button class="btn btn-xs" id="freezeAllBtn" data-action="FreezeAllCommands" title="Freeze/thaw all running commands" style="display:none;">&#9208; All</button>
+                        <button class="btn btn-xs btn-danger hidden" id="killAllBtn" data-action="KillAllCommands" title="Kill all running commands">&#x2715; All</button>
+                        <button class="btn btn-xs hidden" id="freezeAllBtn" data-action="FreezeAllCommands" title="Freeze/thaw all running commands">&#9208; All</button>
                     </div>
                     <div id="commandList"></div>
                 </div>
                 <!-- Spawn tab -->
-                <div id="tab-spawn" style="display:none;">
+                <div id="tab-spawn" class="hidden">
                     <div class="spawn-form">
                         <div class="field">
                             <label>Target Instance</label>
@@ -109,13 +109,13 @@
                     </div>
                 </div>
                 <!-- Templates tab -->
-                <div id="tab-templates" style="display:none;">
+                <div id="tab-templates" class="hidden">
                     <div style="padding:0.3rem;">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.3rem;">
                             <span style="font-size:var(--ui-fs);color:var(--text-secondary);">Saved Templates</span>
                             <button class="btn btn-xs" data-action="ShowAddTemplateForm" title="Add template">+ Add</button>
                         </div>
-                        <div id="templateAddForm" style="display:none;margin-bottom:0.4rem;">
+                        <div id="templateAddForm" class="hidden" style="margin-bottom:0.4rem;">
                             <div class="field" style="margin-bottom:0.3rem;">
                                 <input type="text" id="templateName" placeholder="Template name" style="width:100%;font-size:var(--ui-fs);">
                             </div>
@@ -134,11 +134,11 @@
                     </div>
                 </div>
                 <!-- Certs tab -->
-                <div id="tab-certs" style="display:none;">
+                <div id="tab-certs" class="hidden">
                     <div id="certList"></div>
                 </div>
                 <!-- Groups tab -->
-                <div id="tab-groups" style="display:none;">
+                <div id="tab-groups" class="hidden">
                     <div style="padding:0.3rem;">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.3rem;">
                             <span style="font-size:var(--ui-fs);color:var(--text-secondary);">Command Groups</span>
@@ -157,12 +157,12 @@
         <!-- Content area -->
         <div class="content-area" id="contentArea">
             <!-- Shared toolbar for terminal controls (acts on the focused panel) -->
-            <div class="shared-toolbar" id="sharedToolbar" style="display:none;">
+            <div class="shared-toolbar hidden" id="sharedToolbar">
                 <div class="shared-toolbar-row shared-toolbar-main">
-                    <button class="btn btn-xs restart-btn" id="stRestartBtn" data-action="RestartCommand" title="Restart this command" style="display:none;">&#x21BB;</button>
+                    <button class="btn btn-xs restart-btn hidden" id="stRestartBtn" data-action="RestartCommand" title="Restart this command">&#x21BB;</button>
                     <button class="btn btn-xs" data-action="ToggleResources" title="Toggle resource info">&#x2699;</button>
-                    <span class="resource-badge" id="stResourceBadge" style="display:none;"></span>
-                    <span class="instance-url" id="stInstanceUrl" style="display:none;"></span>
+                    <span class="resource-badge hidden" id="stResourceBadge"></span>
+                    <span class="instance-url hidden" id="stInstanceUrl"></span>
                     <span class="shared-toolbar-sep"></span>
                     <span class="panel-font-size-ctrl">
                         <button class="btn btn-xs" data-action="ChangePanelFontSize" data-delta="-1" title="Decrease font size">A-</button>
@@ -178,7 +178,7 @@
                     </span>
                     <span class="shared-toolbar-sep"></span>
                     <button class="btn btn-xs" id="stBufferBtn" data-action="ToggleBufferDropdown" title="Terminal buffer">&#x2630;</button>
-                    <select id="stBufferSelect" class="select-xs" data-action="SwitchBufferPanel" title="Which terminal buffer to view" style="display:none;">
+                    <select id="stBufferSelect" class="select-xs hidden" data-action="SwitchBufferPanel" title="Which terminal buffer to view">
                         <option value="current">Current</option>
                         <option value="main">Main</option>
                         <option value="alt">Alt</option>
@@ -195,10 +195,10 @@
                         <button class="btn btn-xs" data-action="ShowSpecialKeysHelp" title="Special keys reference">&#63;</button>
                     </div>
                     <span class="shared-toolbar-sep"></span>
-                    <button class="btn btn-xs" data-action="TogglePanelLayout" id="stLayoutBtn" title="Toggle horizontal/vertical layout" style="display:none;">&#x21C4;</button>
-                    <div class="layout-preset-dropdown" id="stLayoutPresetBtn" style="display:none;" title="Panel layout presets">
+                    <button class="btn btn-xs hidden" data-action="TogglePanelLayout" id="stLayoutBtn" title="Toggle horizontal/vertical layout">&#x21C4;</button>
+                    <div class="layout-preset-dropdown hidden" id="stLayoutPresetBtn" title="Panel layout presets">
                         <button class="btn btn-xs" data-action="ToggleLayoutPresetMenu">&#x25A3;</button>
-                        <div class="layout-preset-menu" id="layoutPresetMenu" style="display:none;">
+                        <div class="layout-preset-menu hidden" id="layoutPresetMenu">
                             <button data-action="ApplyLayoutPreset" data-preset="row">Side by Side</button>
                             <button data-action="ApplyLayoutPreset" data-preset="column">Stacked</button>
                             <button data-action="ApplyLayoutPreset" data-preset="grid-2x2">2x2 Grid</button>
@@ -207,7 +207,7 @@
                         </div>
                     </div>
                     <button class="btn btn-xs" data-action="ToggleSelectionMode" id="stSelectBtn" title="Toggle text selection mode">Select</button>
-                    <button class="btn btn-xs" data-action="TogglePauseRunPanel" id="stFreezeBtn" title="Freeze/Thaw command" style="display:none;">&#9208;</button>
+                    <button class="btn btn-xs hidden" data-action="TogglePauseRunPanel" id="stFreezeBtn" title="Freeze/Thaw command">&#9208;</button>
                     <button class="btn btn-xs" data-action="CopyTerminalSelection" title="Copy selected text to clipboard">Copy</button>
                     <button class="btn btn-xs" data-action="ExportTerminal" title="Export terminal as text">&#x2913;</button>
                     <button class="btn btn-xs" data-action="ScreenshotPanel" title="Download screenshot as PNG">&#x1F4F7;</button>
@@ -220,7 +220,7 @@
             </div>
 
             <!-- Log view -->
-            <div id="view-log" class="log-viewer" style="display:none;">
+            <div id="view-log" class="log-viewer hidden">
                 <div class="log-toolbar">
                     <input type="text" id="logSearch" placeholder="Search logs..." oninput="searchLogs()">
                     <button class="btn btn-xs" data-action="ClearLogSearch">Clear</button>
@@ -232,7 +232,7 @@
             </div>
 
             <!-- Docs view -->
-            <div id="view-docs" class="docs-page" style="display:none;"></div>
+            <div id="view-docs" class="docs-page hidden"></div>
         </div>
     </div>
 
@@ -241,14 +241,14 @@
         <span class="cmd-label" id="cmdLabel"></span>
         <span class="cursor-pos" id="cursorPos">Cursor: --</span>
         <span class="dims" id="termDims">--</span>
-        <span class="cursor-pos" id="scrollbackIndicator" style="color:var(--yellow);display:none;">SCROLLBACK</span>
+        <span class="cursor-pos" id="scrollbackIndicator" class="hidden" style="color:var(--yellow);">SCROLLBACK</span>
         <span class="spacer"></span>
         <label for="updateMode" style="font-size:var(--ui-fs);color:var(--text-muted);">Update:</label>
         <select id="updateMode" data-action="SwitchUpdateMode" title="How the web UI detects VTTY buffer changes" style="font-size:var(--ui-fs);padding:0.05rem 0.15rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:2px;">
             <option value="push">Push (WS)</option>
             <option value="poll">Poll</option>
         </select>
-        <span id="pollIntervalWrap" style="display:none;">
+        <span id="pollIntervalWrap" class="hidden">
             <input type="number" id="pollInterval" value="500" min="50" max="5000" step="50" style="width:50px;font-size:var(--ui-fs);text-align:center;padding:0.1rem 0.15rem;" title="Poll interval in milliseconds" data-action="ApplyPollInterval">
             <span style="font-size:var(--ui-fs);color:var(--text-muted);">ms</span>
         </span>
@@ -260,11 +260,11 @@
     </div>
 
     <!-- Auto-restart indicator (hidden by default) -->
-    <div id="autoRestartIndicator" class="auto-restart-indicator" style="display:none;"></div>
+    <div id="autoRestartIndicator" class="auto-restart-indicator hidden"></div>
 </div>
 
 <!-- Global search overlay -->
-<div class="search-modal" id="globalSearchModal" style="display:none;" data-close-action="CloseGlobalSearch">
+<div class="search-modal hidden" id="globalSearchModal" data-close-action="CloseGlobalSearch">
     <div class="search-modal-content">
         <div class="search-modal-toolbar">
             <input type="text" id="globalSearchInput" placeholder="Search command output..." onkeydown="if(event.key==='Enter'){event.preventDefault();executeGlobalSearch()}" autofocus>
@@ -281,7 +281,7 @@
 </div>
 
 <!-- Add panel modal -->
-<div class="modal-overlay" id="panelModal" style="display:none;" data-close-action="ClosePanelModal">
+<div class="modal-overlay hidden" id="panelModal" data-close-action="ClosePanelModal">
     <div class="modal">
         <h2>Add Server &amp; Panel</h2>
         <div class="field">
@@ -312,7 +312,7 @@
 </div>
 
 <!-- Add Server modal (add connection without panel) -->
-<div class="modal-overlay" id="addServerModal" style="display:none;" data-close-action="CloseAddServerModal">
+<div class="modal-overlay hidden" id="addServerModal" data-close-action="CloseAddServerModal">
     <div class="modal">
         <h2>Add Server Connection</h2>
         <div class="field">
@@ -338,7 +338,7 @@
 </div>
 
 <!-- Command Manager Dialog -->
-<div class="modal-overlay" id="cmdManagerModal" style="display:none;" data-close-action="CloseCmdManager">
+<div class="modal-overlay hidden" id="cmdManagerModal" data-close-action="CloseCmdManager">
     <div class="modal modal-lg">
         <h2>Command Manager</h2>
         <div class="cmd-manager-toolbar">

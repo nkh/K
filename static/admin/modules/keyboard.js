@@ -13,7 +13,7 @@ function _inInput(e) { return _INPUT_TAGS.includes(e.target.tagName); }
 const _shortcuts = [
     { key: 'Escape', action() {
         const pm = document.getElementById('panelModal');
-        if (pm && pm.style.display !== 'none') { closePanelModal(); return; }
+        if (pm && !pm.classList.contains('hidden')) { closePanelModal(); return; }
         const cp = document.getElementById('cmdPicker');
         if (cp) { releaseCurrentFocusTrap(); cp.remove(); return; }
         const panel = getSelectedPanel();
@@ -71,7 +71,7 @@ document.addEventListener('keydown', (e) => {
                 } else if (e.key === 'Escape') {
                     // Close modals/search when terminal focused and Escape pressed
                     const panelModal = document.getElementById('panelModal');
-                    if (panelModal && panelModal.style.display !== 'none') { closePanelModal(); return; }
+                    if (panelModal && !panelModal.classList.contains('hidden')) { closePanelModal(); return; }
                     const cmdPicker = document.getElementById('cmdPicker');
                     if (cmdPicker) { releaseCurrentFocusTrap(); cmdPicker.remove(); return; }
                     vttySearchClose(panel.id);
@@ -294,7 +294,7 @@ document.addEventListener('wheel', (e) => {
             loadVttyHttp(panelObj.selectedInstUrl, state.selectedCmdId);
             // Show scrollback indicator
             const sbIndicator = document.getElementById('scrollbackIndicator');
-            if (sbIndicator) { sbIndicator.style.display = ''; sbIndicator.textContent = 'SCROLLBACK -' + panelObj.scrollbackOffset + ' rows'; }
+            if (sbIndicator) { sbIndicator.classList.remove('hidden'); sbIndicator.textContent = 'SCROLLBACK -' + panelObj.scrollbackOffset + ' rows'; }
             const btn = panelEl.querySelector('.scroll-bottom-btn');
             if (btn) btn.classList.add('visible');
         }
@@ -352,7 +352,7 @@ document.addEventListener('wheel', (e) => {
         if (btn) btn.classList.toggle('visible', p.scrollbackOffset > 0);
         const sbIndicator = document.getElementById('scrollbackIndicator');
         if (sbIndicator) {
-            sbIndicator.style.display = p.scrollbackOffset > 0 ? '' : 'none';
+            sbIndicator.classList.toggle('hidden', p.scrollbackOffset <= 0);
             if (p.scrollbackOffset > 0) sbIndicator.textContent = 'SCROLLBACK -' + p.scrollbackOffset + ' rows';
         }
     });
