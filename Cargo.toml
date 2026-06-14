@@ -35,6 +35,7 @@ vrw = [
     "dep:rcgen",
     "dep:sysinfo",
     "dep:rust-embed",
+    "dep:bytes",
     "dep:futures",
     "dep:sha2",
     "dep:hex",
@@ -60,8 +61,6 @@ portable-pty = "0.8"
 crossterm = "0.27"
 libc = "0.2"
 dirs = "5"
-thiserror = "2"
-daemonize = "0.5"
 
 dashmap = "5"
 parking_lot = "0.12"
@@ -80,6 +79,7 @@ rustls-pemfile = { version = "2", optional = true }
 rcgen = { version = "0.13", optional = true }
 sysinfo = { version = "0.29", optional = true }
 rust-embed = { version = "8", features = ["axum", "mime-guess"], optional = true }
+bytes = { version = "1", optional = true }
 futures = { version = "0.3", optional = true }
 sha2 = { version = "0.10", optional = true }
 hex = { version = "0.4", optional = true }

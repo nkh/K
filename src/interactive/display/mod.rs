@@ -80,7 +80,7 @@ pub async fn run_display_loop(
     display_all: bool,
     shutdown_tx: broadcast::Sender<()>,
     keybindings: &crate::config::schema::KeybindingsConfig,
-    log_entries: &Arc<std::sync::Mutex<Vec<String>>>,
+    log_entries: &Arc<std::sync::Mutex<std::collections::VecDeque<String>>>,
     show_tabs: bool,
     handle_sigwinch: bool,
 ) -> bool {

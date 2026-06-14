@@ -606,7 +606,7 @@ pub(crate) fn render_exited_watermark(tab_offset: u16, exit_code: Option<i32>) {
 /// Shows the most recent log entries, with the newest at the bottom.
 pub fn render_log_overlay(
     _manager: &Arc<CommandManager>,
-    log_entries: &Arc<std::sync::Mutex<Vec<String>>>,
+    log_entries: &Arc<std::sync::Mutex<std::collections::VecDeque<String>>>,
     scroll_offset: usize,
     stdout: &mut std::io::Stdout,
 ) {

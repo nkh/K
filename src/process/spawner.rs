@@ -12,6 +12,7 @@ use super::handle::CommandHandle;
 use crate::config::schema::{ExitConfig, HandleConfig, HooksConfig, VttyConfig};
 use crate::handles::{
     file_sink::FileSink, null_sink::NullSink, registry::HandleRegistry, sink::Sink,
+    vtty_sink::VttySink,
 };
 use crate::hooks::runner::run_hook;
 use crate::process::manager::CommandManager;
@@ -82,7 +83,7 @@ impl ProcessSpawner {
                     let path = path.replace("{id}", command_id).replace("{name}", cmd);
                     Box::new(FileSink::new(&path)?)
                 }
-                "vtty" => Box::new(NullSink),
+                "vtty" => Box::new(VttySink::new()),
                 "null" => Box::new(NullSink),
                 _ => Box::new(NullSink),
             };

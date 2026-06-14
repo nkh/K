@@ -87,7 +87,7 @@ async fn fetch_screenshot_bytes(
     cmd_id: &str,
     font_size: f32,
     font_name: Option<&str>,
-) -> Result<Vec<u8>> {
+) -> Result<bytes::Bytes> {
     let mut url = format!(
         "/api/commands/{}/vtty/png?font_size={}",
         cmd_id, font_size

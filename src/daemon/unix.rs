@@ -1,3 +1,5 @@
+use std::fs::OpenOptions;
+
 use anyhow::{Context, Result};
 
 use crate::config::schema::Config;
@@ -17,10 +19,21 @@ use crate::config::schema::Config;
 pub fn daemonize(cfg: &Config) -> Result<()> {
     let saved_cwd = std::env::current_dir().context("Failed to determine current directory")?;
 
+    let stdout = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&cfg.daemon.stdout_file)
+        .with_context(|| format!("Failed to open stdout log file: {}", cfg.daemon.stdout_file))?;
+    let stderr = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&cfg.daemon.stderr_file)
+        .with_context(|| format!("Failed to open stderr log file: {}", cfg.daemon.stderr_file))?;
+
     let daemonize = daemonize::Daemonize::new()
-        .stdout_file(&cfg.daemon.stdout_file)
-        .stderr_file(&cfg.daemon.stderr_file)
-        .chdir_dir(&saved_cwd);
+        .stdout(stdout)
+        .stderr(stderr)
+        .working_directory(&saved_cwd);
 
     daemonize.start().context("daemonize failed")?;
 

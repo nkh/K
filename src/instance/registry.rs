@@ -6,9 +6,6 @@ use std::path::PathBuf;
 #[cfg(feature = "vrw")]
 use sysinfo::{ProcessExt, SystemExt};
 
-#[cfg(feature = "vrw")]
-use crate::cli::commands::common::format_instance_list;
-
 use super::info::InstanceInfo;
 use crate::config::schema::Config;
 
@@ -200,7 +197,22 @@ impl InstanceRegistry {
             println!("No running vrw instances.");
             return;
         }
-        print!("{}", format_instance_list(&instances));
+        println!(
+            "{:<10} {:<8} {:<20} {:<10} {:<10} {:<15} COMMAND",
+            "PID", "PORT", "BIND", "DAEMON", "DISPLAY", "NAME"
+        );
+        for info in instances {
+            println!(
+                "{:<10} {:<8} {:<20} {:<10} {:<10} {:<15} {}",
+                info.pid,
+                info.port,
+                info.bind,
+                if info.daemon { "yes" } else { "no" },
+                if info.display { "yes" } else { "no" },
+                info.name.as_deref().unwrap_or("-"),
+                info.command.as_deref().unwrap_or("(idle)")
+            );
+        }
     }
 
     /// Stop an instance via HTTP (vrw only).

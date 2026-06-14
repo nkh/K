@@ -9,7 +9,7 @@ use super::error::{ProcessError, Result};
 use super::handle::CommandHandle;
 use super::spawner::ProcessSpawner;
 use crate::config::schema::{Config, ExitConfig};
-use crate::handles::{file_sink::FileSink, null_sink::NullSink, sink::Sink};
+use crate::handles::{file_sink::FileSink, null_sink::NullSink, sink::Sink, vtty_sink::VttySink};
 use crate::hooks::runner::run_hook;
 use crate::logging::command_log::CommandLogger;
 use crate::vtty::buffer::Buffer;
@@ -240,7 +240,7 @@ impl CommandManager {
                 let resolved = resolved.replace("{id}", id).replace("{name}", &handle.name);
                 Box::new(FileSink::new(&resolved)?)
             }
-            "vtty" => Box::new(NullSink),
+            "vtty" => Box::new(VttySink::new()),
             "null" => Box::new(NullSink),
             _ => return Err(ProcessError::UnknownSinkType(sink_type.to_string())),
         };
