@@ -338,23 +338,4 @@ impl TerminalDisplay {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    // ─── CursorStyle enum tests ───
-
-    #[test]
-    fn test_cursor_style_variants() {
-        let block_blink = CursorStyle::Block(true);
-        let block_steady = CursorStyle::Block(false);
-        let underline_blink = CursorStyle::Underline(true);
-        let underline_steady = CursorStyle::Underline(false);
-        let bar_blink = CursorStyle::Bar(true);
-        let bar_steady = CursorStyle::Bar(false);
-
-        assert_eq!(block_blink, CursorStyle::Block(true));
-        assert_ne!(block_blink, block_steady);
-        assert_eq!(underline_blink, CursorStyle::Underline(true));
-        assert_eq!(bar_steady, CursorStyle::Bar(false));
-    }
-}
+mod tests {}

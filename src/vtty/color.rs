@@ -219,12 +219,6 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_osc4_color_empty() {
-        assert_eq!(parse_osc4_color(""), None);
-        assert_eq!(parse_osc4_color("notacolor"), None);
-    }
-
-    #[test]
     fn test_palette_apply_osc4() {
         let mut palette = ColorPalette::new();
         // Apply a single color

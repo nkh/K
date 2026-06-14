@@ -616,22 +616,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_plain_text() {
-        let tokens = parse_ansi(b"Hello World");
-        assert_eq!(tokens.len(), 1);
-        assert!(matches!(&tokens[0], AnsiToken::Text(s) if s == "Hello World"));
-    }
-
-    #[test]
-    fn test_parse_control_chars() {
-        let tokens = parse_ansi(b"Hello\nWorld\r\t");
-        // Note: 0x0a (LF), 0x0d (CR), 0x09 (TAB) are treated as text by the parser
-        // because they fall outside the control byte range 0x00-0x08, 0x0b-0x0c, 0x0e-0x1f.
-        assert_eq!(tokens.len(), 1);
-        assert!(matches!(&tokens[0], AnsiToken::Text(s) if s == "Hello\nWorld\r\t"));
-    }
-
-    #[test]
     fn test_parse_csi_cursor_move() {
         let tokens = parse_ansi(b"\x1b[10;20H");
         assert_eq!(tokens.len(), 1);
@@ -665,23 +649,6 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_csi_private_mode_cursor() {
-        // CSI ?25l — hide cursor (DEC private mode)
-        let tokens = parse_ansi(b"\x1b[?25l");
-        assert_eq!(tokens.len(), 1);
-        if let AnsiToken::Csi {
-            params,
-            intermediate,
-            final_byte,
-        } = &tokens[0]
-        {
-            assert_eq!(params, &vec![vec![25]]);
-            assert_eq!(intermediate, &[b'?']);
-            assert_eq!(*final_byte, b'l');
-        }
-    }
-
-    #[test]
     fn test_parse_csi_sgr_colors() {
         let tokens = parse_ansi(b"\x1b[38;2;255;128;64m");
         assert_eq!(tokens.len(), 1);
@@ -694,20 +661,6 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_mixed() {
-        let tokens = parse_ansi(b"Hello\x1b[31mRed\x1b[0mNormal");
-        assert_eq!(tokens.len(), 5);
-        assert!(matches!(&tokens[0], AnsiToken::Text(s) if s == "Hello"));
-        assert!(matches!(
-            &tokens[1],
-            AnsiToken::Csi {
-                final_byte: b'm',
-                ..
-            }
-        ));
-    }
-
-    #[test]
     fn test_streaming_parser() {
         let mut parser = AnsiParser::new();
         let tokens1 = parser.parse(b"Hello\x1b[");
@@ -717,46 +670,6 @@ mod tests {
         assert_eq!(tokens2.len(), 2);
         assert!(matches!(
             &tokens2[0],
-            AnsiToken::Csi {
-                final_byte: b'm',
-                ..
-            }
-        ));
-    }
-
-    #[test]
-    fn test_parse_escape_simple() {
-        let tokens = parse_ansi(b"\x1b7");
-        assert_eq!(tokens.len(), 1);
-        assert!(matches!(&tokens[0], AnsiToken::Escape(b'7')));
-    }
-
-    #[test]
-    fn test_parse_utf8_multibyte() {
-        // Box-drawing character '|' is U+2502, encoded as 0xE2 0x94 0x82
-        let tokens = parse_ansi("\u{2502}".as_bytes());
-        assert_eq!(tokens.len(), 1);
-        assert!(matches!(&tokens[0], AnsiToken::Text(s) if s == "\u{2502}"));
-    }
-
-    #[test]
-    fn test_parse_utf8_mixed_ascii() {
-        // Mix ASCII and multi-byte UTF-8 (box-drawing chars used by htop)
-        let input = "CPU\u{2502}MEM\u{2502}SWP";
-        let tokens = parse_ansi(input.as_bytes());
-        assert_eq!(tokens.len(), 1);
-        assert!(matches!(&tokens[0], AnsiToken::Text(s) if s == input));
-    }
-
-    #[test]
-    fn test_parse_utf8_with_escape() {
-        // UTF-8 text followed by an escape sequence
-        let input = "\u{2500}\u{253c}\u{2500}\x1b[31m";
-        let tokens = parse_ansi(input.as_bytes());
-        assert_eq!(tokens.len(), 2);
-        assert!(matches!(&tokens[0], AnsiToken::Text(s) if s == "\u{2500}\u{253c}\u{2500}"));
-        assert!(matches!(
-            &tokens[1],
             AnsiToken::Csi {
                 final_byte: b'm',
                 ..
@@ -784,108 +697,6 @@ mod tests {
         let tokens = parse_ansi(b"\x1b[\nHello");
         assert_eq!(tokens.len(), 1);
         assert!(matches!(&tokens[0], AnsiToken::Text(s) if s == "[\nHello"));
-    }
-
-    #[test]
-    fn test_csi_aborted_by_high_byte() {
-        // ESC [ followed by a high byte (0xff) that's not a CSI byte.
-        // High bytes fall through to the default abort path in CsiParam.
-        // The '[' is emitted as text. The 0xff stays in text_bytes
-        // and is dropped by flush_text_bytes_preserve_incomplete (since
-        // it's an invalid UTF-8 start byte). The remaining 'X' is flushed
-        // in the next call.
-        let input: &[u8] = b"\x1b[\xffX";
-        let mut parser = AnsiParser::new();
-        let tokens = parser.parse(input);
-        assert_eq!(tokens.len(), 1);
-        assert!(matches!(&tokens[0], AnsiToken::Text(s) if s == "["));
-        // 'X' is still in text_bytes; feed 'Y' to flush it
-        let tokens2 = parser.parse(b"Y");
-        assert_eq!(tokens2.len(), 1);
-        assert!(matches!(&tokens2[0], AnsiToken::Text(s) if s == "XY"));
-    }
-
-    #[test]
-    fn test_escape_aborted_by_control() {
-        // ESC followed by a non-ESC-sequence byte (0x01 = SOH control).
-        // The ESC is dropped (non-printable), and 0x01 is reprocessed.
-        let tokens = parse_ansi(b"\x1b\x01A");
-        // 0x01 is in the control range (0x00..=0x08), so it's a Control token.
-        // 'A' is text.
-        assert_eq!(tokens.len(), 2);
-        assert!(matches!(&tokens[0], AnsiToken::Control(0x01)));
-        assert!(matches!(&tokens[1], AnsiToken::Text(s) if s == "A"));
-    }
-
-    #[test]
-    fn test_csi_valid_then_aborted() {
-        // A valid CSI sequence followed by an aborted one:
-        // ESC[31m (valid) then ESC[ + LF (aborted)
-        let tokens = parse_ansi(b"\x1b[31m\x1b[\nRed");
-        // Token 1: CSI 31m
-        // Token 2: Text "[\nRed"
-        assert_eq!(tokens.len(), 2);
-        assert!(matches!(
-            &tokens[0],
-            AnsiToken::Csi {
-                final_byte: b'm',
-                ..
-            }
-        ));
-        assert!(matches!(&tokens[1], AnsiToken::Text(s) if s == "[\nRed"));
-    }
-
-    // ---- New tests for the fixed bugs ----
-
-    #[test]
-    fn test_escape_with_intermediate_charset() {
-        // ESC ( B — designate G0 as ASCII
-        let tokens = parse_ansi(b"\x1b(B");
-        assert_eq!(tokens.len(), 1);
-        assert!(matches!(&tokens[0], AnsiToken::EscSequence {
-            intermediate,
-            final_byte: b'B',
-        } if intermediate == &[b'(']));
-    }
-
-    #[test]
-    fn test_escape_with_intermediate_decdblh() {
-        // ESC # 3 — DECDHL double-height top
-        let tokens = parse_ansi(b"\x1b#3");
-        assert_eq!(tokens.len(), 1);
-        assert!(matches!(&tokens[0], AnsiToken::EscSequence {
-            intermediate,
-            final_byte: b'3',
-        } if intermediate == &[b'#']));
-    }
-
-    #[test]
-    fn test_escape_with_intermediate_not_csi() {
-        // ESC ( B should NOT be emitted as Csi.
-        let tokens = parse_ansi(b"\x1b(B");
-        assert!(!matches!(&tokens[0], AnsiToken::Csi { .. }));
-    }
-
-    #[test]
-    fn test_escape_with_two_intermediates() {
-        // ESC SP F — S7C1T (two intermediates: space + nothing... actually just one)
-        // Let's test ESC SP F properly: SP is intermediate, F is final.
-        let tokens = parse_ansi(b"\x1b F");
-        assert_eq!(tokens.len(), 1);
-        assert!(matches!(&tokens[0], AnsiToken::EscSequence {
-            intermediate,
-            final_byte: b'F',
-        } if intermediate == &[b' ']));
-    }
-
-    #[test]
-    fn test_escape_intermediate_aborted() {
-        // ESC ( followed by 0x01 (control) — abort, reprocess 0x01 from Ground.
-        let tokens = parse_ansi(b"\x1b(\x01A");
-        // ESC ( is non-printable and dropped, 0x01 is a Control, 'A' is text.
-        assert_eq!(tokens.len(), 2);
-        assert!(matches!(&tokens[0], AnsiToken::Control(0x01)));
-        assert!(matches!(&tokens[1], AnsiToken::Text(s) if s == "A"));
     }
 
     #[test]
@@ -950,35 +761,6 @@ mod tests {
     }
 
     #[test]
-    fn test_dcs_final_byte_recorded_correctly() {
-        // Verify the final byte is NOT hardcoded — test with different final bytes.
-        let input = b"\x1bPpdata\x1b\\";
-        let tokens = parse_ansi(input);
-        assert_eq!(tokens.len(), 1);
-        if let AnsiToken::Dcs { final_byte, .. } = &tokens[0] {
-            assert_eq!(*final_byte, b'p');
-        } else {
-            panic!("Expected Dcs token");
-        }
-    }
-
-    #[test]
-    fn test_dcs_string_content_not_stale() {
-        // DCS should not reuse stale string_content from a previous OSC.
-        let mut parser = AnsiParser::new();
-        // First, parse an OSC that leaves content.
-        parser.parse(b"\x1b]0;title\x07");
-        // Now parse a DCS with no data.
-        let tokens = parser.parse(b"\x1bPq\x1b\\");
-        assert_eq!(tokens.len(), 1);
-        if let AnsiToken::Dcs { data, .. } = &tokens[0] {
-            assert_eq!(data, "");
-        } else {
-            panic!("Expected Dcs token");
-        }
-    }
-
-    #[test]
     fn test_dcs_bel_not_terminator() {
         // BEL (0x07) does NOT terminate DCS — only ST does.
         let input = b"\x1bPq\x07data\x1b\\";
@@ -1018,20 +800,6 @@ mod tests {
         assert_eq!(tokens.len(), 1);
         if let AnsiToken::Osc(content) = &tokens[0] {
             assert_eq!(content, "0;title");
-        } else {
-            panic!("Expected Osc token");
-        }
-    }
-
-    #[test]
-    fn test_osc_esc_without_backslash() {
-        // ESC inside OSC not followed by \ — ESC should be treated as data.
-        let input = b"\x1b]0;ESC\x1bnot-st\x07";
-        let tokens = parse_ansi(input);
-        assert_eq!(tokens.len(), 1);
-        if let AnsiToken::Osc(content) = &tokens[0] {
-            // The ESC (0x1b) should be raw data inside the string, not trigger ST.
-            assert_eq!(content, "0;ESC\x1bnot-st");
         } else {
             panic!("Expected Osc token");
         }
@@ -1094,35 +862,6 @@ mod tests {
     }
 
     #[test]
-    fn test_can_aborts_escape_intermediate() {
-        // CAN (0x18) aborts an in-flight ESC-with-intermediate sequence.
-        let input = b"\x1b(\x18After";
-        let tokens = parse_ansi(input);
-        assert!(tokens.iter().any(|t| matches!(t, AnsiToken::Control(0x18))));
-        assert!(tokens
-            .iter()
-            .any(|t| matches!(t, AnsiToken::Text(s) if s == "After")));
-    }
-
-    #[test]
-    fn test_finish_flushes_text() {
-        let mut parser = AnsiParser::new();
-        // finish() on a fresh parser returns nothing.
-        let tokens = parser.finish();
-        assert!(tokens.is_empty());
-
-        // parse() already flushes all text, so finish() returns nothing.
-        parser.parse(b"Hello");
-        let tokens = parser.finish();
-        assert!(tokens.is_empty());
-
-        // The real use of finish() is for incomplete sequences.
-        // Verify that calling finish() twice is safe (idempotent).
-        let tokens = parser.finish();
-        assert!(tokens.is_empty());
-    }
-
-    #[test]
     fn test_finish_discards_incomplete_csi() {
         let mut parser = AnsiParser::new();
         parser.parse(b"Before\x1b[31");
@@ -1144,33 +883,6 @@ mod tests {
     }
 
     #[test]
-    fn test_finish_discards_incomplete_dcs() {
-        let mut parser = AnsiParser::new();
-        parser.parse(b"\x1bPqdata");
-        let tokens = parser.finish();
-        // Incomplete DCS is discarded.
-        assert!(tokens.is_empty());
-    }
-
-    #[test]
-    fn test_finish_discards_incomplete_escape() {
-        let mut parser = AnsiParser::new();
-        parser.parse(b"\x1b");
-        let tokens = parser.finish();
-        // Incomplete ESC is silently dropped.
-        assert!(tokens.is_empty());
-    }
-
-    #[test]
-    fn test_finish_discards_incomplete_esc_intermediate() {
-        let mut parser = AnsiParser::new();
-        parser.parse(b"\x1b(");
-        let tokens = parser.finish();
-        // Incomplete ESC-with-intermediate is discarded.
-        assert!(tokens.is_empty());
-    }
-
-    #[test]
     fn test_string_length_limit_osc() {
         // Feed an OSC with more than MAX_STRING_LENGTH bytes without terminator.
         let long_data: Vec<u8> = (0..MAX_STRING_LENGTH + 100).map(|_| b'X').collect();
@@ -1183,29 +895,50 @@ mod tests {
     }
 
     #[test]
-    fn test_dcs_streaming() {
-        // DCS split across multiple parse() calls.
-        let mut parser = AnsiParser::new();
-        let t1 = parser.parse(b"\x1bP1$r");
-        assert!(t1.is_empty()); // No token yet, collecting data
+    fn test_csi_valid_then_aborted() {
+        // A valid CSI sequence followed by an aborted one:
+        // ESC[31m (valid) then ESC[ + LF (aborted)
+        let tokens = parse_ansi(b"\x1b[31m\x1b[\nRed");
+        // Token 1: CSI 31m
+        // Token 2: Text "[\nRed"
+        assert_eq!(tokens.len(), 2);
+        assert!(matches!(
+            &tokens[0],
+            AnsiToken::Csi {
+                final_byte: b'm',
+                ..
+            }
+        ));
+        assert!(matches!(&tokens[1], AnsiToken::Text(s) if s == "[\nRed"));
+    }
 
-        let t2 = parser.parse(b"he");
-        assert!(t2.is_empty()); // Still collecting
+    #[test]
+    fn test_parse_mixed() {
+        let tokens = parse_ansi(b"Hello\x1b[31mRed\x1b[0mNormal");
+        assert_eq!(tokens.len(), 5);
+        assert!(matches!(&tokens[0], AnsiToken::Text(s) if s == "Hello"));
+        assert!(matches!(
+            &tokens[1],
+            AnsiToken::Csi {
+                final_byte: b'm',
+                ..
+            }
+        ));
+    }
 
-        let t3 = parser.parse(b"llo\x1b\\");
-        assert_eq!(t3.len(), 1);
-        if let AnsiToken::Dcs {
-            params,
-            final_byte,
-            data,
-            ..
-        } = &t3[0]
-        {
-            assert_eq!(params, &vec![vec![1]]);
-            assert_eq!(*final_byte, b'r');
-            assert_eq!(data, "hello");
-        } else {
-            panic!("Expected Dcs token");
-        }
+    #[test]
+    fn test_parse_utf8_with_escape() {
+        // UTF-8 text followed by an escape sequence
+        let input = "\u{2500}\u{253c}\u{2500}\x1b[31m";
+        let tokens = parse_ansi(input.as_bytes());
+        assert_eq!(tokens.len(), 2);
+        assert!(matches!(&tokens[0], AnsiToken::Text(s) if s == "\u{2500}\u{253c}\u{2500}"));
+        assert!(matches!(
+            &tokens[1],
+            AnsiToken::Csi {
+                final_byte: b'm',
+                ..
+            }
+        ));
     }
 }

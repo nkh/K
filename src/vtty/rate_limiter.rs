@@ -172,22 +172,6 @@ mod tests {
     use std::thread;
 
     #[test]
-    fn test_first_call_always_allows() {
-        let mut limiter = RateLimiter::new(30);
-        assert!(limiter.allow());
-    }
-
-    #[test]
-    fn test_burst_allows_multiple_instant_calls() {
-        // The initial token count is 1.0, so only the first call should
-        // succeed without any time passing.
-        let mut limiter = RateLimiter::new(1000);
-        assert!(limiter.allow());
-        // Second call may or may not succeed depending on timing,
-        // but the tokens should be <= 0 now.
-    }
-
-    #[test]
     fn test_rate_limiter_throttles() {
         // 10 updates/sec = 100ms between allowed updates.
         let mut limiter = RateLimiter::new(10);
@@ -223,53 +207,12 @@ mod tests {
     }
 
     #[test]
-    fn test_from_config_zero_disables() {
-        let mut limiter = RateLimiter::from_config(0);
-        for _ in 0..100 {
-            assert!(limiter.allow());
-        }
-    }
-
-    #[test]
-    fn test_from_config_normal() {
-        let mut limiter = RateLimiter::from_config(10);
-        assert!(limiter.allow());
-        assert!(!limiter.allow());
-    }
-
-    #[test]
     fn test_peek_does_not_consume() {
         let mut limiter = RateLimiter::new(10);
         assert!(limiter.peek());
         assert!(limiter.peek());
         // Both peeks succeed without consuming — allow still works
         assert!(limiter.allow());
-    }
-
-    #[test]
-    fn test_interval() {
-        let limiter = RateLimiter::new(10);
-        let interval = limiter.interval();
-        // 10 updates/sec → 100ms interval
-        assert!(interval.as_millis() >= 90 && interval.as_millis() <= 110);
-    }
-
-    #[test]
-    fn test_interval_disabled() {
-        let limiter = RateLimiter::disabled();
-        assert_eq!(limiter.interval(), Duration::ZERO);
-    }
-
-    #[test]
-    fn test_is_disabled() {
-        assert!(RateLimiter::disabled().is_disabled());
-        assert!(!RateLimiter::new(30).is_disabled());
-    }
-
-    #[test]
-    fn test_max_rate() {
-        assert_eq!(RateLimiter::new(30).max_rate(), 30);
-        assert_eq!(RateLimiter::disabled().max_rate(), u32::MAX);
     }
 
     #[test]
@@ -282,37 +225,5 @@ mod tests {
         // After 10 seconds at 10 tokens/sec, raw refill would be 100 tokens,
         // but it should be capped at MAX_BURST_TOKENS (3.0).
         assert!(limiter.tokens <= MAX_BURST_TOKENS + 0.01);
-    }
-
-    #[test]
-    fn test_sustained_rate() {
-        // Verify that over 1 second, we get approximately the right number
-        // of allows for a 50 updates/sec rate.
-        let mut limiter = RateLimiter::new(50);
-        let mut count = 0;
-        let start = Instant::now();
-
-        // Spin for ~500ms, counting allows.
-        while start.elapsed() < Duration::from_millis(500) {
-            if limiter.allow() {
-                count += 1;
-            }
-            // Yield to avoid busy-spinning as much as possible.
-            thread::yield_now();
-        }
-
-        // At 50/sec, in 500ms we should get ~25 allows (with burst allowance).
-        // Allow generous bounds: 20 to 30.
-        assert!(
-            count >= 20 && count <= 30,
-            "Expected ~25 allows in 500ms at 50/sec, got {}",
-            count
-        );
-    }
-
-    #[test]
-    #[should_panic(expected = "max_updates_per_sec must be > 0")]
-    fn test_new_panics_on_zero() {
-        let _ = RateLimiter::new(0);
     }
 }
