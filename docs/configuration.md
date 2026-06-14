@@ -454,8 +454,8 @@ certificates:
   directory: "~/.config/vrw/certs"
   entries:
     - name: "webapp-frontend"
-      cert: "~/.config/vrw/certs/webapp-frontend.pem"
-      key: "~/.config/vrw/certs/webapp-frontend.key"
+      cert_file: "~/.config/vrw/certs/webapp-frontend.pem"
+      key_file: "~/.config/vrw/certs/webapp-frontend.key"
 ```
 
 ### `web` *(vrw only)*
