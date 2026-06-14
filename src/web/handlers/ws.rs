@@ -61,6 +61,18 @@ async fn build_vtty_full_json(
 // ---------------------------------------------------------------------------
 
 /// Upgrade an HTTP request to a WebSocket for real-time VTTY streaming.
+///
+/// # Security Note
+///
+/// WebSocket connections cannot set custom HTTP headers from browser JavaScript,
+/// so the auth token is accepted as a query parameter (`?token=...`). This is a
+/// known limitation of the WebSocket API. The token will appear in:
+/// - Server access logs (if request logging is enabled)
+/// - Browser history (if the URL was manually entered)
+/// - Referrer headers (if the page links elsewhere)
+///
+/// Mitigations: use short-lived tokens, clear access logs, and prefer TLS
+/// to prevent network-level token leakage.
 pub async fn ws_vtty_stream(
     State(state): State<AppState>,
     Path(id): Path<String>,
