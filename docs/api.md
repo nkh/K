@@ -8,11 +8,11 @@ Complete reference for the vrw REST API and WebSocket endpoints.
 http://<host>:<port>
 ```
 
-Default port: **9090** (configurable via `--port` or `web.port` in config).
+Default port: **9090** (configurable via `--port` or `server.port` in config).
 
 ## Authentication
 
-When a bearer token is configured (via `--token <token>` or `web.token` in config),
+When a bearer token is configured (via `--token-file <path>` or `security.token_file` in config),
 all API endpoints require an `Authorization` header:
 
 ```
@@ -929,6 +929,110 @@ Forward a mouse event to a command's PTY. Used by the web UI to send mouse click
 ```json
 { "status": "ok", "data": { "id": "...", "kind": "press", "button": "left", "row": 10, "col": 20 } }
 ```
+
+---
+
+### Peers
+
+#### `GET /api/peers`
+
+List all registered peer instances.
+
+**Response:**
+
+```json
+{
+  "status": "ok",
+  "data": ["https://peer1:9090", "https://peer2:9090"]
+}
+```
+
+---
+
+#### `POST /api/peers`
+
+Register a new peer instance.
+
+**Request body:**
+
+```json
+{ "url": "https://peer1:9090" }
+```
+
+---
+
+#### `DELETE /api/peers/:url`
+
+Unregister a peer instance by URL.
+
+---
+
+### Templates
+
+#### `GET /api/templates`
+
+List configured command templates.
+
+**Response:**
+
+```json
+{
+  "status": "ok",
+  "data": [
+    { "name": "dev", "cmd": "cargo", "args": ["run"], "env": {}, "rows": null, "cols": null, "certificate": null }
+  ]
+}
+```
+
+---
+
+### Completions
+
+#### `GET /api/completions?input=<prefix>`
+
+Get tab completions for command names based on a partial input string.
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `input` | string | Partial command name to complete |
+
+---
+
+### Resources
+
+#### `GET /api/commands/{id}/resources`
+
+Get resource usage (CPU, memory) for a running command.
+
+---
+
+### Share
+
+#### `POST /api/commands/{id}/share`
+
+Create a share token for a command's VTTY output. Returns a token that can be used to access the command output without authentication.
+
+#### `GET /api/share/{token}`
+
+Access a shared command's VTTY output using a share token.
+
+---
+
+### Other Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/snapshot` | Legacy full system snapshot |
+| `GET` | `/api/info` | Instance info (version, uptime, PID) |
+| `GET` | `/api/environments` | List configured environments |
+| `POST` | `/api/commands/kill-all` | Kill all running commands |
+| `POST` | `/api/commands/{id}/restart` | Restart a command (spawn same cmd+args, purge old) |
+| `POST` | `/api/commands/{id}/keep` | Tag command to retain on exit |
+| `POST` | `/api/commands/{id}/unkeep` | Remove retain tag |
+| `GET` | `/api/commands/{id}/vtty/buffer` | Get VTTY buffer with screen selection |
+| `POST` | `/api/shutdown` | Gracefully shut down the vrw server |
 
 ---
 
