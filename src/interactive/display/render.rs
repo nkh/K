@@ -63,6 +63,51 @@ pub(crate) async fn render_vtty(
     }
 }
 
+/// Set the background and foreground colors for a tab based on its state.
+///
+/// The six combinations of `is_active`, `is_frozen`, and `is_exited` map to
+/// distinct color pairs used throughout the tab bar.
+fn set_tab_style(
+    stdout: &mut std::io::Stdout,
+    is_active: bool,
+    is_frozen: bool,
+    is_exited: bool,
+) -> std::io::Result<()> {
+    use crossterm::QueueableCommand;
+    use crossterm::style::{Color, SetBackgroundColor, SetForegroundColor};
+
+    let (bg, fg) = match (is_active, is_frozen, is_exited) {
+        (true, true, _) => (
+            Color::Rgb { r: 80, g: 60, b: 20 },
+            Color::Rgb { r: 255, g: 220, b: 100 },
+        ),
+        (true, false, true) => (
+            Color::Rgb { r: 68, g: 71, b: 90 },
+            Color::Rgb { r: 255, g: 120, b: 120 },
+        ),
+        (true, false, false) => (
+            Color::Rgb { r: 68, g: 71, b: 90 },
+            Color::Rgb { r: 255, g: 255, b: 255 },
+        ),
+        (false, true, _) => (
+            Color::Rgb { r: 60, g: 45, b: 15 },
+            Color::Rgb { r: 210, g: 180, b: 80 },
+        ),
+        (false, false, true) => (
+            Color::Rgb { r: 40, g: 42, b: 54 },
+            Color::Rgb { r: 180, g: 100, b: 100 },
+        ),
+        (false, false, false) => (
+            Color::Rgb { r: 40, g: 42, b: 54 },
+            Color::Rgb { r: 140, g: 140, b: 140 },
+        ),
+    };
+    stdout
+        .queue(SetBackgroundColor(bg))?
+        .queue(SetForegroundColor(fg))?;
+    Ok(())
+}
+
 /// Render a tab bar at the top of the terminal listing all running commands.
 /// The active command is highlighted with reverse video.
 /// Returns a vector of (id, start_col, end_col) for mouse hit-testing.
@@ -125,103 +170,15 @@ pub(crate) fn render_tab_bar(
             });
             ec_opt.map(|c| format!(" [exit {}]", c)).unwrap_or_default()
         };
-        if is_active {
-            if is_frozen {
-                stdout
-                    .queue(SetBackgroundColor(Color::Rgb {
-                        r: 80,
-                        g: 60,
-                        b: 20,
-                    }))
-                    .ok();
-                stdout
-                    .queue(SetForegroundColor(Color::Rgb {
-                        r: 255,
-                        g: 220,
-                        b: 100,
-                    }))
-                    .ok();
-            } else if is_exited {
-                stdout
-                    .queue(SetBackgroundColor(Color::Rgb {
-                        r: 68,
-                        g: 71,
-                        b: 90,
-                    }))
-                    .ok();
-                stdout
-                    .queue(SetForegroundColor(Color::Rgb {
-                        r: 255,
-                        g: 120,
-                        b: 120,
-                    }))
-                    .ok();
+
+        let _ = set_tab_style(&mut stdout, is_active, is_frozen, is_exited);
+        stdout
+            .queue(style::SetAttribute(if is_active {
+                Attribute::Bold
             } else {
-                stdout
-                    .queue(SetBackgroundColor(Color::Rgb {
-                        r: 68,
-                        g: 71,
-                        b: 90,
-                    }))
-                    .ok();
-                stdout
-                    .queue(SetForegroundColor(Color::Rgb {
-                        r: 255,
-                        g: 255,
-                        b: 255,
-                    }))
-                    .ok();
-            }
-            stdout.queue(style::SetAttribute(Attribute::Bold)).ok();
-        } else if is_frozen {
-            stdout
-                .queue(SetBackgroundColor(Color::Rgb {
-                    r: 60,
-                    g: 45,
-                    b: 15,
-                }))
-                .ok();
-            stdout
-                .queue(SetForegroundColor(Color::Rgb {
-                    r: 210,
-                    g: 180,
-                    b: 80,
-                }))
-                .ok();
-            stdout.queue(style::SetAttribute(Attribute::NoBold)).ok();
-        } else if is_exited {
-            stdout
-                .queue(SetBackgroundColor(Color::Rgb {
-                    r: 40,
-                    g: 42,
-                    b: 54,
-                }))
-                .ok();
-            stdout
-                .queue(SetForegroundColor(Color::Rgb {
-                    r: 180,
-                    g: 100,
-                    b: 100,
-                }))
-                .ok();
-            stdout.queue(style::SetAttribute(Attribute::NoBold)).ok();
-        } else {
-            stdout
-                .queue(SetBackgroundColor(Color::Rgb {
-                    r: 40,
-                    g: 42,
-                    b: 54,
-                }))
-                .ok();
-            stdout
-                .queue(SetForegroundColor(Color::Rgb {
-                    r: 140,
-                    g: 140,
-                    b: 140,
-                }))
-                .ok();
-            stdout.queue(style::SetAttribute(Attribute::NoBold)).ok();
-        }
+                Attribute::NoBold
+            }))
+            .ok();
 
         // Build display label with optional exit code
         let tab_start = col;
@@ -439,6 +396,68 @@ pub(crate) fn render_search_highlights(
     let _ = stdout.flush();
 }
 
+/// Render a single pane of a split-pane view.
+///
+/// `start_col` is the 1-indexed column where the pane begins.
+/// `pane_width` is the maximum number of columns to render.
+/// When `always_clear` is true the right-edge clear is emitted unconditionally
+/// (used by the right pane); otherwise it is only emitted when the row content
+/// is shorter than `pane_width` (used by the left pane).
+fn render_pane(
+    manager: &Arc<CommandManager>,
+    id: &String,
+    tab_offset: u16,
+    available_rows: u16,
+    start_col: u16,
+    pane_width: usize,
+    always_clear: bool,
+) {
+    use std::io::Write;
+    let mut stdout = std::io::stdout();
+    if let Some(handle) = manager.get(id) {
+        let buf = handle.vtty_snapshot_blocking();
+        let render_cols = pane_width.min(buf.width);
+        let total_lines = buf.total_lines();
+        let viewport_start = total_lines.saturating_sub(available_rows as usize);
+        let mut last_sgr = String::new();
+        for screen_row in 0..(available_rows as usize) {
+            let line_idx = viewport_start + screen_row;
+            let row: &[crate::vtty::cell::Cell] = match buf.get_line(line_idx) {
+                Some(r) => r,
+                None => continue,
+            };
+            let _ = write!(
+                stdout,
+                "\x1b[{};{}H",
+                screen_row as u16 + tab_offset + 1,
+                start_col
+            );
+            let visible_len = render_cols.min(row.len());
+            for cell in &row[..visible_len] {
+                let sgr = build_cell_sgr(cell);
+                if sgr != last_sgr {
+                    let _ = write!(stdout, "{}", sgr);
+                    last_sgr = sgr;
+                }
+                let _ = write!(stdout, "{}", cell.ch);
+            }
+            // Clear remaining cells in this row within the pane
+            if always_clear || (visible_len as u16) < pane_width as u16 {
+                let _ = write!(stdout, "\x1b[0m\x1b[K");
+                last_sgr = String::new();
+            }
+        }
+        // Show pane label
+        let label = format!(" {} ", id);
+        let _ = write!(
+            stdout,
+            "\x1b[1;{}H\x1b[48;5;238m\x1b[38;5;255m{}\x1b[0m",
+            start_col,
+            label
+        );
+    }
+}
+
 /// Render a split-pane view with two VTTYs side-by-side.
 /// The left pane shows `left_id`'s buffer, the right shows `right_id`'s.
 /// A vertical divider line separates the two panes.
@@ -463,89 +482,16 @@ pub(crate) fn render_split_pane(
     }
     let _ = write!(stdout, "\x1b[0m");
 
-    // Render left pane
+    // Render left pane (column 1, width = half_col, conditional clear)
     if let Some(ref id) = left_id {
-        if let Some(handle) = manager.get(id) {
-            let buf = handle.vtty_snapshot_blocking();
-            let render_cols = (buf.width as u16).min(div_col as u16) as usize;
-            let total_lines = buf.total_lines();
-            let viewport_start = total_lines.saturating_sub(available_rows as usize);
-            let mut last_sgr = String::new();
-            for screen_row in 0..(available_rows as usize) {
-                let line_idx = viewport_start + screen_row;
-                let row: &[crate::vtty::cell::Cell] = match buf.get_line(line_idx) {
-                    Some(r) => r,
-                    None => continue,
-                };
-                let _ = write!(stdout, "\x1b[{};1H", screen_row as u16 + tab_offset + 1);
-                let visible_len = render_cols.min(row.len());
-                for cell in &row[..visible_len] {
-                    let sgr = build_cell_sgr(cell);
-                    if sgr != last_sgr {
-                        let _ = write!(stdout, "{}", sgr);
-                        last_sgr = sgr;
-                    }
-                    let _ = write!(stdout, "{}", cell.ch);
-                }
-                // Clear to divider
-                if (visible_len as u16) < div_col as u16 {
-                    let _ = write!(stdout, "\x1b[0m\x1b[K");
-                    last_sgr = String::new();
-                }
-            }
-            // Show pane label
-            let label = format!(" {} ", id);
-            let _ = write!(
-                stdout,
-                "\x1b[1;1H\x1b[48;5;238m\x1b[38;5;255m{}\x1b[0m",
-                label
-            );
-        }
+        render_pane(manager, id, tab_offset, available_rows, 1, div_col, false);
     }
 
-    // Render right pane
+    // Render right pane (column half_col + 2, width = phys_cols - half_col - 1, always clear)
     if let Some(ref id) = right_id {
-        if let Some(handle) = manager.get(id) {
-            let buf = handle.vtty_snapshot_blocking();
-            let render_cols = ((phys_cols - half_col as u16 - 1) as usize).min(buf.width);
-            let total_lines = buf.total_lines();
-            let viewport_start = total_lines.saturating_sub(available_rows as usize);
-            let mut last_sgr = String::new();
-            let col_start = half_col + 1;
-            for screen_row in 0..(available_rows as usize) {
-                let line_idx = viewport_start + screen_row;
-                let row: &[crate::vtty::cell::Cell] = match buf.get_line(line_idx) {
-                    Some(r) => r,
-                    None => continue,
-                };
-                let _ = write!(
-                    stdout,
-                    "\x1b[{};{}H",
-                    screen_row as u16 + tab_offset + 1,
-                    col_start + 1
-                );
-                let visible_len = render_cols.min(row.len());
-                for cell in &row[..visible_len] {
-                    let sgr = build_cell_sgr(cell);
-                    if sgr != last_sgr {
-                        let _ = write!(stdout, "{}", sgr);
-                        last_sgr = sgr;
-                    }
-                    let _ = write!(stdout, "{}", cell.ch);
-                }
-                // Clear to end of line
-                let _ = write!(stdout, "\x1b[0m\x1b[K");
-                last_sgr = String::new();
-            }
-            // Show pane label
-            let label = format!(" {} ", id);
-            let _ = write!(
-                stdout,
-                "\x1b[1;{}H\x1b[48;5;238m\x1b[38;5;255m{}\x1b[0m",
-                col_start + 1,
-                label
-            );
-        }
+        let right_start = (half_col + 2) as u16;
+        let right_width = (phys_cols - half_col as u16 - 1) as usize;
+        render_pane(manager, id, tab_offset, available_rows, right_start, right_width, true);
     }
 
     let _ = stdout.flush();
