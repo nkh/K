@@ -7,7 +7,7 @@ use crate::instance::info::InstanceInfo;
 use crate::instance::registry::InstanceRegistry;
 use crate::interactive::display::detect_terminal_size;
 
-use super::common::{collect_all_commands, http_client, instance_url, resolve_pid_to_id};
+use super::common::{build_command_select_items, collect_all_commands, http_client, instance_url, resolve_pid_to_id, SelectLabelStyle};
 
 /// Handle the `vrw resize-command` subcommand.
 ///
@@ -50,13 +50,7 @@ pub async fn handle_resize_command(_cli: &Cli, target: Option<&str>, rows: u16, 
         if all_commands.is_empty() {
             anyhow::bail!("No running commands found. Use `vrw list` to see running commands.");
         }
-        let items: Vec<_> = all_commands
-            .iter()
-            .map(|(_, id, pid, _, full)| crate::cli::interactive_select::SelectItem {
-                label: format!("{} (PID {})", full, pid),
-                id: id.clone(),
-            })
-            .collect();
+        let items = build_command_select_items(&all_commands, SelectLabelStyle::FullWithPid);
         let selected = crate::cli::interactive_select::select_items(
             &items,
             "Select commands to resize [space-separated numbers]",

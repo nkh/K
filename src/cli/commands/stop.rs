@@ -84,7 +84,12 @@ fn resolve_stop_target_impl(
 // ── vrw (HTTP-based) implementation ──
 
 #[cfg(feature = "vrw")]
-use super::common::{collect_all_commands, http_client, instance_url, resolve_pid_to_id};
+use super::common::{
+    build_command_select_items, collect_all_commands, http_client, instance_url,
+    post_command_action_bool, resolve_target_command, SelectLabelStyle,
+};
+#[cfg(feature = "vrw")]
+use crate::cli::interactive_select::select_items;
 
 /// Stop a specific command by PID or name on any running instance (vrw).
 #[cfg(feature = "vrw")]
@@ -97,28 +102,20 @@ pub async fn handle_stop_command(_cli: &crate::cli::args::Cli, target: Option<&s
     }
 
     let client = http_client();
+    let all_commands = collect_all_commands(&client, &instances).await;
+
+    if all_commands.is_empty() {
+        tracing::warn!("No commands running.");
+        return Ok(false);
+    }
 
     // Interactive mode: list all commands and let user select
     if interactive && target.is_none() {
-        let all_commands = collect_all_commands(&client, &instances).await;
-        if all_commands.is_empty() {
-            tracing::warn!("No commands running.");
-            return Ok(false);
-        }
-        let items: Vec<_> = all_commands
-            .iter()
-            .map(|(_, id, pid, _name, full)| crate::cli::interactive_select::SelectItem {
-                label: format!("{} (PID {})", full, pid),
-                id: id.clone(),
-            })
-            .collect();
-        let selected = crate::cli::interactive_select::select_items(
-            &items, "Select commands to stop [space-separated numbers]",
-        )?;
+        let items = build_command_select_items(&all_commands, SelectLabelStyle::FullWithPid);
+        let selected = select_items(&items, "Select commands to stop [space-separated numbers]")?;
         let mut any_stopped = false;
         for item in &selected {
-            let all_cmds = collect_all_commands(&client, &instances).await;
-            if let Some((inst_pid, cmd_id, cmd_pid, _, _)) = all_cmds.iter().find(|(_, id, _, _, _)| id == &item.id) {
+            if let Some((inst_pid, cmd_id, cmd_pid, _, _)) = all_commands.iter().find(|(_, id, _, _, _)| id == &item.id) {
                 let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
                 let url = instance_url(info, &None);
                 if stop_command_by_id(&client, &url, cmd_id, *cmd_pid, *inst_pid).await? {
@@ -129,57 +126,16 @@ pub async fn handle_stop_command(_cli: &crate::cli::args::Cli, target: Option<&s
         return Ok(any_stopped);
     }
 
-    let target = match target {
-        Some(t) => t,
-        None => {
-            let all_commands = collect_all_commands(&client, &instances).await;
-            match all_commands.len() {
-                0 => {
-                    tracing::warn!("No commands running.");
-                    return Ok(false);
-                }
-                1 => {
-                    let (inst_pid, ref cmd_id, cmd_pid, _, ref full) = all_commands[0];
-                    let info = instances.iter().find(|i| i.pid == inst_pid).unwrap();
-                    let url = instance_url(info, &None);
-                    tracing::info!("Stopping only command: {} (PID {})", full, cmd_pid);
-                    return stop_command_by_id(&client, &url, cmd_id, cmd_pid, inst_pid).await;
-                }
-                _ => {
-                    tracing::warn!("Multiple commands running. Specify which one to stop:");
-                    for (_, _, cmd_pid, _, full) in &all_commands {
-                        tracing::warn!("  PID {} — {}", cmd_pid, full);
-                    }
-                    tracing::warn!("Usage: vrw stop-command <PID or name>");
-                    return Ok(false);
-                }
-            }
+    // Use standard target resolution (PID, name, prefix)
+    match resolve_target_command(target, &all_commands, "No running command") {
+        Ok((inst_pid, cmd_id, cmd_pid, _, full)) => {
+            let info = instances.iter().find(|i| i.pid == inst_pid).unwrap();
+            let url = instance_url(info, &None);
+            tracing::info!("Stopping: {} (PID {})", full, cmd_pid);
+            stop_command_by_id(&client, &url, &cmd_id, cmd_pid, inst_pid).await
         }
-    };
-
-    if let Ok(pid) = target.parse::<u32>() {
-        return handle_stop_command_by_pid_on_instances(&client, &instances, pid).await;
+        Err(_) => Ok(false),
     }
-
-    let all_commands = collect_all_commands(&client, &instances).await;
-    if all_commands.is_empty() {
-        return Ok(false);
-    }
-
-    // Try exact match on name or full string
-    let exact: Vec<_> = all_commands
-        .iter()
-        .filter(|(_, _, _, name, full)| name == target || full == target)
-        .collect();
-
-    if exact.len() == 1 {
-        let (inst_pid, ref cmd_id, cmd_pid, _, _) = exact[0];
-        let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
-        let url = instance_url(info, &None);
-        return stop_command_by_id(&client, &url, cmd_id, *cmd_pid, *inst_pid).await;
-    }
-
-    Ok(false)
 }
 
 /// Stop all commands across all running instances (vrw).
@@ -216,93 +172,20 @@ pub async fn stop_command_by_id(
     cmd_pid: u32,
     inst_pid: u32,
 ) -> Result<bool> {
-    let resp = client
-        .post(format!("{}/api/commands/{}/kill", url, cmd_id))
-        .json(&serde_json::json!({}))
-        .send()
-        .await;
-
-    match resp {
-        Ok(resp) => {
-            let status = resp.status();
-            let body: serde_json::Value = resp
-                .json()
-                .await
-                .unwrap_or(serde_json::json!({"status": "unknown"}));
-            if status.is_success() && body.get("status").and_then(|s| s.as_str()) == Some("ok") {
-                println!(
-                    "Command with PID {} stopped on instance {} (PID {})",
-                    cmd_pid, inst_pid, inst_pid
-                );
-                Ok(true)
-            } else {
-                let err_msg = body
-                    .get("error")
-                    .and_then(|e| e.as_str())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| format!("HTTP {}", status));
-                tracing::error!("Failed to stop command with PID {}: {}", cmd_pid, err_msg);
-                Ok(false)
-            }
-        }
-        Err(e) => {
-            tracing::error!("Failed to stop command with PID {}: {}", cmd_pid, e);
-            Ok(false)
-        }
-    }
-}
-
-#[cfg(feature = "vrw")]
-pub async fn handle_stop_command_by_pid_on_instances(
-    client: &reqwest::Client,
-    instances: &[InstanceInfo],
-    pid: u32,
-) -> Result<bool> {
-    for info in instances {
-        let url = instance_url(info, &None);
-        let cmd_id = match resolve_pid_to_id(client, &url, pid).await {
-            Ok(id) => id,
-            Err(_) => continue,
-        };
-
-        let resp = client
-            .post(format!("{}/api/commands/{}/kill", url, cmd_id))
-            .json(&serde_json::json!({}))
-            .send()
-            .await;
-
-        match resp {
-            Ok(resp) => {
-                let status = resp.status();
-                let body: serde_json::Value = resp
-                    .json()
-                    .await
-                    .unwrap_or(serde_json::json!({"status": "unknown"}));
-                if status.is_success() && body.get("status").and_then(|s| s.as_str()) == Some("ok")
-                {
-                    println!(
-                        "Command with PID {} stopped on instance {} (PID {})",
-                        pid, info.pid, info.pid
-                    );
-                    return Ok(true);
-                } else {
-                    let err_msg = body
-                        .get("error")
-                        .and_then(|e| e.as_str())
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| format!("HTTP {}", status));
-                    tracing::error!("Failed to stop command with PID {}: {}", pid, err_msg);
-                    return Ok(false);
-                }
-            }
-            Err(e) => {
-                tracing::error!("Failed to stop command with PID {}: {}", pid, e);
-                return Ok(false);
-            }
-        }
-    }
-
-    Ok(false)
+    post_command_action_bool(
+        client,
+        url,
+        &format!("/api/commands/{}/kill", cmd_id),
+        Some(&serde_json::json!({})),
+        reqwest::Method::POST,
+        &format!("command with PID {}", cmd_pid),
+        "stop",
+        &format!(
+            "Command with PID {} stopped on instance {} (PID {})",
+            cmd_pid, inst_pid, inst_pid
+        ),
+    )
+    .await
 }
 
 #[cfg(test)]
@@ -367,8 +250,9 @@ mod tests {
         assert_eq!(resolve_stop_target(Some(5000), &instances), 5000);
     }
 
-    #[test]
-    fn resolve_explicit_pid_returned() {
+    #[cfg(feature = "vrw")]
+    #[tokio::test]
+    async fn test_stop_command_by_id_connection_refused() {
         use super::super::common::http_client;
         let client = http_client();
         let result = stop_command_by_id(&client, "http://127.0.0.1:1", "fake-id", 100, 200).await;
@@ -392,16 +276,5 @@ mod tests {
         let result = handle_stop_command(&cli, None, false).await;
         assert!(result.is_ok());
         assert!(!result.unwrap(), "no instances should return false");
-    }
-
-    #[cfg(feature = "vrw")]
-    #[tokio::test]
-    async fn test_handle_stop_command_by_pid_on_instances_empty() {
-        use super::super::common::http_client;
-        let client = http_client();
-        let instances: Vec<InstanceInfo> = vec![];
-        let result = handle_stop_command_by_pid_on_instances(&client, &instances, 9999).await;
-        assert!(result.is_ok());
-        assert!(!result.unwrap(), "empty instances should return false");
     }
 }

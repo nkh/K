@@ -392,30 +392,8 @@ pub async fn handle_subcommands(cli: &Cli) -> Result<bool> {
             subcommands::handle_list_commands_command(cli).await?;
             Ok(true)
         }
-        Some(Commands::StopCommand { target, interactive, all }) => {
-            if *all {
-                let stopped = subcommands::handle_stop_all_commands(cli).await?;
-                if !stopped {
-                    tracing::error!("No commands to stop.");
-                    std::process::exit(1);
-                }
-                return Ok(true);
-            }
-            let stopped = subcommands::handle_stop_command(cli, target.as_deref(), *interactive).await?;
-            if !stopped {
-                match target {
-                    Some(t) => tracing::error!(
-                        "No matching command found for '{}'. Use `vrw list` to see running commands.", t
-                    ),
-                    None => tracing::error!(
-                        "No command to stop. Use `vrw list` to see running commands."
-                    ),
-                }
-                std::process::exit(1);
-            }
-            Ok(true)
-        }
-        Some(Commands::Kill { target, interactive, all }) => {
+        Some(Commands::StopCommand { target, interactive, all })
+        | Some(Commands::Kill { target, interactive, all }) => {
             if *all {
                 let stopped = subcommands::handle_stop_all_commands(cli).await?;
                 if !stopped {
@@ -572,20 +550,6 @@ mod tests {
         let cli = Cli::try_parse_from([BINARY_NAME, "--config", "/nonexistent/path.yaml"]).unwrap();
         let result = resolve_config(&cli);
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn resolve_config_invalid_yaml_errors() {
-        let dir = std::env::temp_dir().join("vrc_test_resolve_config_invalid");
-        std::fs::create_dir_all(&dir).unwrap();
-        let config_path = dir.join("bad.yaml");
-        // Empty config with CLI override to negative rows should fail validation
-        std::fs::write(&config_path, "").unwrap();
-
-        // Use an invalid vtty_rows via CLI — the resolve_config function
-        // applies CLI overrides then validates. We test that overrides work.
-        std::fs::remove_dir_all(&dir).unwrap();
-        // This test is superseded by the overrides test below
     }
 
     #[test]

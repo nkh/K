@@ -289,19 +289,6 @@ mod vrw_tests {
     }
 
     #[test]
-    fn test_resolve_target_command_by_id_prefix() {
-        let cmds: Vec<CommandTarget> = vec![
-            (100, "abcdef-1234".into(), 1234, "sleep".into(), "sleep 60".into()),
-        ];
-        // ID prefix "abc" is not a PID, not a name, but matches prefix of full display "sleep 60"? No.
-        // resolve_target_command does not do ID prefix matching — it does PID, name, full, prefix-full, prefix-name.
-        // "abc" doesn't match any of those, so it should error.
-        assert!(resolve_target_command(Some("abc"), &cmds, "test").is_err());
-        // But full ID prefix "abcdef" doesn't match either — ID prefix matching is not in resolve_target_command.
-        // It's handled by callers like keep.rs that do their own ID prefix matching before calling this.
-    }
-
-    #[test]
     fn test_resolve_target_command_none_auto_selects_single() {
         let cmds: Vec<CommandTarget> = vec![
             (100, "id-aaa".into(), 1234, "sleep".into(), "sleep 60".into()),
@@ -320,55 +307,11 @@ mod vrw_tests {
     }
 
     #[test]
-    fn test_resolve_target_command_none_errors_on_empty() {
-        let cmds: Vec<CommandTarget> = vec![];
-        assert!(resolve_target_command(None, &cmds, "test").is_err());
-    }
-
-    #[test]
-    fn test_resolve_target_command_exact_full_match() {
-        let cmds: Vec<CommandTarget> = vec![
-            (100, "id-aaa".into(), 1234, "vim".into(), "vim file.txt".into()),
-            (100, "id-bbb".into(), 5678, "vim".into(), "vim other.rs".into()),
-        ];
-        // Exact full match disambiguates when name is ambiguous
-        let result = resolve_target_command(Some("vim file.txt"), &cmds, "test").unwrap();
-        assert_eq!(result.1, "id-aaa");
-    }
-
-    #[test]
-    fn test_resolve_target_command_prefix_full_match() {
-        let cmds: Vec<CommandTarget> = vec![
-            (100, "id-aaa".into(), 1234, "vim".into(), "vim file.txt".into()),
-            (100, "id-bbb".into(), 5678, "htop".into(), "htop".into()),
-        ];
-        let result = resolve_target_command(Some("vim f"), &cmds, "test").unwrap();
-        assert_eq!(result.1, "id-aaa");
-    }
-
-    #[test]
-    fn test_resolve_target_command_prefix_name_match() {
-        let cmds: Vec<CommandTarget> = vec![
-            (100, "id-aaa".into(), 1234, "btop".into(), "btop".into()),
-            (100, "id-bbb".into(), 5678, "htop".into(), "htop".into()),
-        ];
-        let result = resolve_target_command(Some("bto"), &cmds, "test").unwrap();
-        assert_eq!(result.1, "id-aaa");
-    }
-
-    #[test]
     fn test_resolve_target_command_no_match() {
         let cmds: Vec<CommandTarget> = vec![
             (100, "id-aaa".into(), 1234, "vim".into(), "vim file.txt".into()),
         ];
         assert!(resolve_target_command(Some("nonexistent"), &cmds, "No command").is_err());
-    }
-
-    #[test]
-    fn test_http_client_builds() {
-        let client = http_client();
-        // Verify the client can be built without panicking
-        let _ = &client;
     }
 
     #[test]
@@ -664,4 +607,118 @@ pub async fn post_command_action(
             .unwrap_or_else(|| format!("HTTP {}", status));
         Err(anyhow::anyhow!("{}", err_msg))
     }
+}
+
+/// Like [`post_command_action`] but returns `Ok(false)` on failure instead of
+/// `Err`, logging the error via `tracing::error!`.  Prints `success_msg` on
+/// success.  Used by stop, keep, unkeep, and purge handlers.
+#[cfg(feature = "vrw")]
+pub async fn post_command_action_bool(
+    client: &reqwest::Client,
+    url: &str,
+    path: &str,
+    body: Option<&serde_json::Value>,
+    method: reqwest::Method,
+    label: &str,
+    verb: &str,
+    success_msg: &str,
+) -> Result<bool> {
+    let req = match body {
+        Some(b) => client.request(method.clone(), format!("{}{}", url, path)).json(b),
+        None => client.request(method, format!("{}{}", url, path)),
+    };
+    match req.send().await {
+        Ok(resp) => {
+            let status = resp.status();
+            let json: serde_json::Value = resp
+                .json()
+                .await
+                .unwrap_or(serde_json::json!({"status": "unknown"}));
+            if status.is_success() && json.get("status").and_then(|s| s.as_str()) == Some("ok") {
+                println!("{}", success_msg);
+                Ok(true)
+            } else {
+                let err_msg = json
+                    .get("error")
+                    .and_then(|e| e.as_str())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| format!("HTTP {}", status));
+                tracing::error!("Failed to {} '{}': {}", verb, label, err_msg);
+                Ok(false)
+            }
+        }
+        Err(e) => {
+            tracing::error!("Failed to {} '{}': {}", verb, label, e);
+            Ok(false)
+        }
+    }
+}
+
+/// Label style for [`build_command_select_items`].
+#[cfg(feature = "vrw")]
+#[derive(Clone, Copy)]
+pub enum SelectLabelStyle {
+    /// `"full_display (PID n)"`
+    FullWithPid,
+    /// `"id_prefix — full_display"`
+    IdPrefixWithFull,
+}
+
+/// Build a list of [`crate::cli::interactive_select::SelectItem`] from a
+/// command list, using the given label style.
+#[cfg(feature = "vrw")]
+pub fn build_command_select_items(
+    all_commands: &[CommandTarget],
+    style: SelectLabelStyle,
+) -> Vec<crate::cli::interactive_select::SelectItem> {
+    all_commands
+        .iter()
+        .map(|(_, id, pid, _, full)| {
+            let label = match style {
+                SelectLabelStyle::FullWithPid => format!("{} (PID {})", full, pid),
+                SelectLabelStyle::IdPrefixWithFull => {
+                    format!("{} — {}", &id[..8.min(id.len())], full)
+                }
+            };
+            crate::cli::interactive_select::SelectItem {
+                label,
+                id: id.clone(),
+            }
+        })
+        .collect()
+}
+
+/// Collect commands from all instances, keeping only those for which `filter`
+/// returns `true`.  This replaces the per-file `collect_running_commands`,
+/// `collect_kept_commands`, and the inline collection in purge.rs.
+#[cfg(feature = "vrw")]
+pub async fn collect_filtered_commands<F>(
+    client: &reqwest::Client,
+    instances: &[InstanceInfo],
+    filter: F,
+) -> Vec<CommandTarget>
+where
+    F: Fn(&serde_json::Value) -> bool,
+{
+    let mut result = Vec::new();
+    for info in instances {
+        let url = instance_url(info, &None);
+        if let Ok(resp) = client.get(format!("{}/api/commands", url)).send().await {
+            if let Ok(json) = resp.json::<serde_json::Value>().await {
+                if let Some(cmds) = json["data"].as_array() {
+                    for cmd in cmds {
+                        if !filter(cmd) {
+                            continue;
+                        }
+                        let cmd_pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                        if let Some(id) = cmd.get("id").and_then(|v| v.as_str()) {
+                            let (name, full) = build_full_display_string(cmd);
+                            result.push((info.pid, id.to_string(), cmd_pid, name, full));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    result
 }

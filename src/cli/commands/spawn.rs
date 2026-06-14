@@ -130,42 +130,41 @@ pub async fn handle_spawn_command(
     Ok(())
 }
 
-/// Handle the `vrw freeze` subcommand.
-pub async fn handle_freeze_command(cli: &Cli, pid: Option<u32>, interactive: bool) -> Result<()> {
+/// Shared implementation for freeze and thaw commands.
+///
+/// `signal` is the API path segment (`"freeze"` or `"thaw"`).
+/// `signal_desc` is the human-readable description (`"SIGSTOP"` or `"SIGCONT"`).
+async fn handle_signal_command(cli: &Cli, pid: Option<u32>, interactive: bool, signal: &str, signal_desc: &str) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let info = resolve_instance(cli, &registry)?;
     let url = instance_url(&info, &None);
     let client = http_client();
 
     if interactive {
-        // Fetch all commands and present interactive selection
         let all_commands = super::common::collect_all_commands(
             &client,
             std::slice::from_ref(&info),
         )
         .await;
-        let items: Vec<_> = all_commands
-            .iter()
-            .map(|(_, id, p, _name, full)| crate::cli::interactive_select::SelectItem {
-                label: format!("{} (PID {})", full, p),
-                id: id.clone(),
-            })
-            .collect();
+        let items = super::common::build_command_select_items(
+            &all_commands,
+            super::common::SelectLabelStyle::FullWithPid,
+        );
         let selected = crate::cli::interactive_select::select_items(
-            &items, "Select commands to freeze [space-separated numbers]",
+            &items, &format!("Select commands to {} [space-separated numbers]", signal),
         )?;
         for item in &selected {
             let resp = client
-                .post(format!("{}/api/commands/{}/freeze", url, item.id))
+                .post(format!("{}/api/commands/{}/{}", url, item.id, signal))
                 .send()
                 .await?;
             let status = resp.status();
             let result: serde_json::Value = resp.json().await?;
             if status.is_success() {
-                println!("Command {} frozen (SIGSTOP)", item.id);
+                println!("Command {} {} ({})", item.id, signal, signal_desc);
             } else {
                 let error = result["error"].as_str().unwrap_or("Unknown error");
-                tracing::error!("Failed to freeze {}: {}", item.id, error);
+                tracing::error!("Failed to {} {}: {}", signal, item.id, error);
             }
         }
         return Ok(());
@@ -190,7 +189,7 @@ pub async fn handle_freeze_command(cli: &Cli, pid: Option<u32>, interactive: boo
     let cmd_id = resolve_pid_to_id(&client, &url, pid).await?;
 
     let resp = client
-        .post(format!("{}/api/commands/{}/freeze", url, cmd_id))
+        .post(format!("{}/api/commands/{}/{}", url, cmd_id, signal))
         .send()
         .await?;
 
@@ -199,96 +198,26 @@ pub async fn handle_freeze_command(cli: &Cli, pid: Option<u32>, interactive: boo
 
     if status.is_success() {
         println!(
-            "Command with PID {} frozen (SIGSTOP) on instance {}",
-            pid, info.pid
+            "Command with PID {} {} ({}) on instance {}",
+            pid, signal, signal_desc, info.pid
         );
     } else {
         let error = result["error"].as_str().unwrap_or("Unknown error");
-        tracing::error!("Failed to freeze command: {}", error);
+        tracing::error!("Failed to {} command: {}", signal, error);
         std::process::exit(1);
     }
 
     Ok(())
 }
 
+/// Handle the `vrw freeze` subcommand.
+pub async fn handle_freeze_command(cli: &Cli, pid: Option<u32>, interactive: bool) -> Result<()> {
+    handle_signal_command(cli, pid, interactive, "freeze", "SIGSTOP").await
+}
+
 /// Handle the `vrw thaw` subcommand.
 pub async fn handle_thaw_command(cli: &Cli, pid: Option<u32>, interactive: bool) -> Result<()> {
-    let registry = InstanceRegistry::new()?;
-    let info = resolve_instance(cli, &registry)?;
-    let url = instance_url(&info, &None);
-    let client = http_client();
-
-    if interactive {
-        let all_commands = super::common::collect_all_commands(
-            &client,
-            std::slice::from_ref(&info),
-        )
-        .await;
-        let items: Vec<_> = all_commands
-            .iter()
-            .map(|(_, id, p, _name, full)| crate::cli::interactive_select::SelectItem {
-                label: format!("{} (PID {})", full, p),
-                id: id.clone(),
-            })
-            .collect();
-        let selected = crate::cli::interactive_select::select_items(
-            &items, "Select commands to thaw [space-separated numbers]",
-        )?;
-        for item in &selected {
-            let resp = client
-                .post(format!("{}/api/commands/{}/thaw", url, item.id))
-                .send()
-                .await?;
-            let status = resp.status();
-            let result: serde_json::Value = resp.json().await?;
-            if status.is_success() {
-                println!("Command {} thawed (SIGCONT)", item.id);
-            } else {
-                let error = result["error"].as_str().unwrap_or("Unknown error");
-                tracing::error!("Failed to thaw {}: {}", item.id, error);
-            }
-        }
-        return Ok(());
-    }
-
-    let pid = match pid {
-        Some(p) => p,
-        None => {
-            let all_commands = super::common::collect_all_commands(&client, std::slice::from_ref(&info)).await;
-            if all_commands.len() == 1 {
-                all_commands[0].2
-            } else {
-                anyhow::bail!(
-                    "No PID specified and {} commands running. Use --interactive or specify a PID.",
-                    all_commands.len()
-                );
-            }
-        }
-    };
-
-    // Look up the command ID by PID via the instance's API
-    let cmd_id = resolve_pid_to_id(&client, &url, pid).await?;
-
-    let resp = client
-        .post(format!("{}/api/commands/{}/thaw", url, cmd_id))
-        .send()
-        .await?;
-
-    let status = resp.status();
-    let result: serde_json::Value = resp.json().await?;
-
-    if status.is_success() {
-        println!(
-            "Command with PID {} thawed (SIGCONT) on instance {}",
-            pid, info.pid
-        );
-    } else {
-        let error = result["error"].as_str().unwrap_or("Unknown error");
-        tracing::error!("Failed to thaw command: {}", error);
-        std::process::exit(1);
-    }
-
-    Ok(())
+    handle_signal_command(cli, pid, interactive, "thaw", "SIGCONT").await
 }
 
 #[cfg(test)]
@@ -324,4 +253,3 @@ mod tests {
         assert!(msg.contains("No running vrw instances"), "unexpected: {}", msg);
     }
 }
-

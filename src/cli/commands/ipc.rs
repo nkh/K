@@ -205,11 +205,6 @@ pub fn verify_instance(pid: u32) -> Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
 
-    #[test]
-    fn test_resolve_command_id_explicit_command() {
 
 

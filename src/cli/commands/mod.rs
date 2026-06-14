@@ -33,7 +33,7 @@ pub use ipc::{
 pub use list::{format_command, format_instance_header, handle_list_command};
 #[cfg(feature = "vrw")]
 pub use list::fetch_cmd_dimensions;
-pub use stop::{handle_stop_command, resolve_stop_target};
+pub use stop::handle_stop_command;
 
 // Re-export vrw-only handlers
 #[cfg(feature = "vrw")]
@@ -59,4 +59,4 @@ pub use screenshot::handle_screenshot_command;
 #[cfg(feature = "vrw")]
 pub use spawn::{handle_freeze_command as handle_freeze_command_http, handle_spawn_command, handle_thaw_command as handle_thaw_command_http};
 #[cfg(feature = "vrw")]
-pub use stop::{handle_stop_command_by_pid_on_instances, stop_command_by_id};
+pub use stop::{handle_stop_all_commands, stop_command_by_id};

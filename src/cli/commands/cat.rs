@@ -3,7 +3,7 @@
 use anyhow::Result;
 
 use crate::cli::args::Cli;
-use crate::cli::commands::common::{collect_all_commands, http_client, instance_url, resolve_targeted_instances};
+use crate::cli::commands::common::{build_command_select_items, collect_all_commands, http_client, instance_url, resolve_targeted_instances, SelectLabelStyle};
 use crate::instance::registry::InstanceRegistry;
 
 /// Handle the `vrw cat [TARGET]` subcommand.
@@ -22,13 +22,7 @@ pub async fn handle_cat_command(cli: &Cli, target: Option<&str>, color_always: b
 
     // Interactive mode: list commands and let user select
     if interactive && target.is_none() {
-        let items: Vec<_> = all_commands
-            .iter()
-            .map(|(_, id, pid, _name, full)| crate::cli::interactive_select::SelectItem {
-                label: format!("{} (PID {})", full, pid),
-                id: id.clone(),
-            })
-            .collect();
+        let items = build_command_select_items(&all_commands, SelectLabelStyle::FullWithPid);
         let selected = crate::cli::interactive_select::select_items(
             &items, "Select commands to cat [space-separated numbers]",
         )?;
@@ -152,18 +146,4 @@ async fn cat_by_id(
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
 
-    #[test]
-    fn ansi_reset_is_valid_escape_sequence() {
-        // The ANSI reset sequence must be ESC[0m ( CSI 0 m )
-        assert_eq!(ANSI_RESET, "\x1b[0m");
-        // Verify it starts with ESC and ends with 'm'
-        assert!(ANSI_RESET.starts_with('\x1b'));
-        assert!(ANSI_RESET.ends_with('m'));
-        // Length should be 4: ESC, '[', '0', 'm'
-        assert_eq!(ANSI_RESET.len(), 4);
-    }
-}

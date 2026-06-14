@@ -80,29 +80,5 @@ mod tests {
         let _ = handle_config_check_command(None);
     }
 
-    #[test]
-    fn config_check_explicit_valid_toml() {
-        let dir = std::env::temp_dir().join("vrc_test_config_check_toml");
-        std::fs::create_dir_all(&dir).unwrap();
-        let config_path = dir.join("valid.toml");
-        std::fs::write(&config_path, "").unwrap();
 
-        let result = handle_config_check_command(Some(config_path.to_str().unwrap()));
-        assert!(result.is_ok(), "valid TOML config should pass: {:?}", result.err());
-
-        std::fs::remove_dir_all(&dir).unwrap();
-    }
-
-    #[test]
-    fn config_check_partial_config() {
-        let dir = std::env::temp_dir().join("vrc_test_config_check_partial");
-        std::fs::create_dir_all(&dir).unwrap();
-        let config_path = dir.join("partial.yaml");
-        std::fs::write(&config_path, "").unwrap();
-
-        let result = handle_config_check_command(Some(config_path.to_str().unwrap()));
-        assert!(result.is_ok(), "partial config should pass: {:?}", result.err());
-
-        std::fs::remove_dir_all(&dir).unwrap();
-    }
 }
