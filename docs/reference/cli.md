@@ -226,8 +226,8 @@ Run as a background daemon process.
 | Flag | Default | Config Key | Description |
 |------|---------|------------|-------------|
 | `--daemon` | `false` | `daemon.enabled` | Fork into the background after initialization. Conflicts with `--display` and `--tabs`. |
-| `--stdout-file <path>` | `vrc.out` | `daemon.stdout_file` | File to which the daemon's stdout is redirected. |
-| `--stderr-file <path>` | `vrc.err` | `daemon.stderr_file` | File to which the daemon's stderr is redirected. |
+| `--stdout-file <path>` | `/tmp/vrc.out` | `daemon.stdout_file` | File to which the daemon's stdout is redirected. |
+| `--stderr-file <path>` | `/tmp/vrc.err` | `daemon.stderr_file` | File to which the daemon's stderr is redirected. |
 
 **Example**
 
@@ -274,9 +274,7 @@ vrc list
 
 Output includes instance PID, status, daemon/display flags, uptime, and commands with their PIDs, names, and running status.
 
-```bash
-vrc list --target 12345
-```
+> **Note:** `--target` is a top-level flag, not a subcommand flag. Use `vrc --target 12345 list`.
 
 ---
 
@@ -349,17 +347,15 @@ vrc keys <pid> <keys>
 Print the VTTY buffer of a running command to stdout.
 
 ```bash
-vrc cat
-vrc cat --color-always
+vrc cat <pid>
 vrc cat 12345
-vrc cat --color-always htop
 ```
+
+> **Note:** `--color-always` is available on `vrw cat`, not `vrc cat`. The `pid` argument is required for `vrc cat`.
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--color-always` | `false` | Preserve ANSI color escape sequences in the output. |
-
----
+| *(none for vrc cat)* | — | `pid` is a required positional argument. |
 
 ### `freeze`
 
@@ -455,14 +451,11 @@ vrw spawn [OPTIONS] CMD [ARGS...]
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--env <k=v>` | — | Environment variables for the command. |
 | `--rows <n>` | config default | VTTY rows for the spawned command. |
 | `--cols <n>` | config default | VTTY columns for the spawned command. |
-| `--dir <path>` | — | Working directory for the command. |
 
 ```bash
 vrw spawn htop
-vrw spawn --env RUST_LOG=debug -- cargo run
 vrw --target 12345 spawn npm run dev
 ```
 

@@ -195,10 +195,10 @@ Yes. The UDS socket is created with `0600` permissions (owner read/write only). 
 Use `vrc cat`:
 
 ```bash
-vrc cat           # auto-select if only one command
-vrc cat 12345      # by PID
-vrc cat --color-always htop  # with ANSI colors
+vrc cat <pid>       # by PID (required)
 ```
+
+> **Note:** `pid` is a required argument. `--color-always` is available on `vrw cat`, not `vrc cat`.
 
 ### How do I send keystrokes to a command?
 
