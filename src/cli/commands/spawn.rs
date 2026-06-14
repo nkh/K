@@ -229,7 +229,6 @@ pub async fn handle_thaw_command(cli: &Cli, pid: Option<u32>, interactive: bool)
 mod tests {
     use clap::Parser;
     use super::*;
-    use crate::cli::commands::common::http_client;
 
     #[tokio::test]
     async fn test_handle_spawn_command_no_instances() {

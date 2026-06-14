@@ -118,7 +118,6 @@ fn main() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     /// Verify that DEFAULT_PORT is not defined in vrc (vrc uses UDS, not HTTP).
     /// vrc.rs does not bind to a TCP port — it uses Unix domain sockets exclusively.

@@ -454,7 +454,7 @@ mod tests {
     async fn test_vtty_changed_no_change() {
         let state = make_app_state();
         insert_mock_cmd(&state.manager, "cmd-1", 1);
-        vtty_changed(State(state.clone()), Path("cmd-1".into())).await;
+        let _ = vtty_changed(State(state.clone()), Path("cmd-1".into())).await;
         let result = vtty_changed(State(state), Path("cmd-1".into())).await;
         assert_eq!(result.0["status"], "ok");
         assert_eq!(result.0["data"]["changed"], false);

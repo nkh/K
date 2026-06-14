@@ -241,7 +241,7 @@ mod tests {
             label: Some("visible-peer".to_string()),
             token: "".to_string(),
         };
-        register_peer(State(state.clone()), Json(body)).await;
+        let _ = register_peer(State(state.clone()), Json(body)).await;
         let result = list_peers(State(state)).await;
         assert_eq!(result.0["status"], "ok");
         let data = result.0["data"].as_array().unwrap();

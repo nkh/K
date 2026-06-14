@@ -98,7 +98,7 @@ mod tests {
     #[test]
     fn test_cert_store_generate_roundtrip() {
         // Generate a certificate and verify it has required fields
-        let dir = tempfile::tempdir().unwrap();
+        let _dir = tempfile::tempdir().unwrap();
         let mut store = CertificateStore::new();
         let entry = store.generate("roundtrip-test").unwrap();
         assert_eq!(entry.name, "roundtrip-test");
