@@ -5,6 +5,4 @@ pub mod pty;
 pub mod spawner;
 
 pub use error::ProcessError;
-pub use pty::{
-    ChildProcess, PortablePtyBackend, PtyBackend, PtyMaster, PtyPair, PtySize, PtySlave,
-};
+pub use pty::{ChildProcess, PtyMaster, PtyPair, PtySize, PtySlave};

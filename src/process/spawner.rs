@@ -2,7 +2,7 @@ use std::fmt::Write as FmtWrite;
 use std::io::{Read, Write};
 
 use super::error::Result;
-use super::pty::{PortablePtyBackend, PtyBackend, PtySize};
+use super::pty::openpty;
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 
@@ -28,8 +28,6 @@ const DEFAULT_RATE_LIMIT: u32 = 30;
 pub struct ProcessSpawner {
     vtty_cfg: VttyConfig,
     max_updates_per_sec: u32,
-    /// The PTY backend used to open pseudo-terminals.
-    pty_backend: Box<dyn PtyBackend>,
 }
 
 pub enum StdinMessage {
@@ -65,19 +63,6 @@ impl ProcessSpawner {
         Self {
             vtty_cfg: vtty_cfg.clone(),
             max_updates_per_sec: DEFAULT_RATE_LIMIT,
-            pty_backend: Box::new(PortablePtyBackend::new()),
-        }
-    }
-
-    /// Create a spawner with a custom PTY backend.
-    pub fn with_backend(
-        vtty_cfg: &VttyConfig,
-        backend: Box<dyn PtyBackend>,
-    ) -> Self {
-        Self {
-            vtty_cfg: vtty_cfg.clone(),
-            max_updates_per_sec: DEFAULT_RATE_LIMIT,
-            pty_backend: backend,
         }
     }
 
@@ -138,7 +123,7 @@ impl ProcessSpawner {
         let rows = rows.unwrap_or(self.vtty_cfg.rows);
         let cols = cols.unwrap_or(self.vtty_cfg.cols);
 
-        let pair = self.pty_backend.openpty(PtySize { rows, cols })?;
+        let pair = openpty(rows, cols)?;
 
         // Spawn the child process via the PTY slave
         let child = pair
@@ -186,7 +171,7 @@ impl ProcessSpawner {
         let writer = pair.master.take_writer()?;
 
         // Store the PTY master handle for later resize (e.g. WINCH handling).
-        let pty_master: Arc<parking_lot::Mutex<Box<dyn crate::process::pty::PtyMaster + Send>>> =
+        let pty_master: Arc<parking_lot::Mutex<crate::process::pty::PtyMaster>> =
             Arc::new(parking_lot::Mutex::new(pair.master));
 
         // Spawn PTY reader task (blocking thread)
@@ -259,7 +244,7 @@ impl ProcessSpawner {
             certificate: None,
             exit_config,
             spawn_time: std::time::Instant::now(),
-            pty_master,
+            pty_master: Some(pty_master),
             vtty_output,
             exit_rx: child_exit_rx,
             exit_code: std::sync::Mutex::new(None),
@@ -459,7 +444,7 @@ fn spawn_stdin_writer(
 /// cleans up the command from the manager unless `retain_on_exit` is set.
 #[allow(clippy::too_many_arguments)]
 fn spawn_process_waiter(
-    mut child: Box<dyn crate::process::pty::ChildProcess + Send>,
+    mut child: crate::process::pty::ChildProcess,
     watch_id: String,
     on_exit: Option<String>,
     on_error: Option<String>,

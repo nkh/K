@@ -852,18 +852,10 @@ mod tests {
     use crate::process::manager::CommandManager;
     use crate::web::certs::CertificateStore;
     use crate::process::handle::CommandHandle;
-    use crate::process::pty::PtyMaster;
     use crate::handles::registry::HandleRegistry;
     use crate::vtty::emulator::VttyEmulator;
     use crate::vtty::sink::VttyOutput;
     use std::sync::Arc;
-
-    struct MockPty;
-    impl PtyMaster for MockPty {
-        fn clone_reader(&self) -> crate::process::error::Result<Box<dyn std::io::Read + Send>> { Ok(Box::new(std::io::empty())) }
-        fn take_writer(&self) -> crate::process::error::Result<Box<dyn std::io::Write + Send>> { Ok(Box::new(std::io::sink())) }
-        fn resize(&self, _: u16, _: u16) -> crate::process::error::Result<()> { Ok(()) }
-    }
 
     fn make_app_state() -> AppState {
         let mut config = Config::default();
@@ -892,7 +884,7 @@ mod tests {
             certificate: None,
             exit_config: crate::config::schema::ExitConfig::default(),
             spawn_time: std::time::Instant::now(),
-            pty_master: std::sync::Arc::new(parking_lot::Mutex::new(Box::new(MockPty) as Box<dyn PtyMaster + Send>)),
+            pty_master: None,
             vtty_output: std::sync::Arc::new(VttyOutput::new()),
             exit_rx: watch_rx,
             exit_code: std::sync::Mutex::new(None),

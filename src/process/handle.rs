@@ -27,8 +27,8 @@ pub struct CommandHandle {
     pub spawn_time: std::time::Instant,
     /// PTY master handle for resizing the child PTY (e.g. on SIGWINCH).
     /// Wrapped in a Mutex because `PtyMaster` methods may not be thread-safe.
-    /// Uses the `PtyMaster` trait for backend independence.
-    pub pty_master: Arc<parking_lot::Mutex<Box<dyn PtyMaster + Send>>>,
+    /// `None` in test contexts where no real PTY is available.
+    pub pty_master: Option<Arc<parking_lot::Mutex<PtyMaster>>>,
     /// Output sink manager — notified after each emulator feed.
     /// Sinks receive push notifications when the VTTY buffer changes,
     /// replacing the need for polling-based change detection.
@@ -276,8 +276,8 @@ impl CommandHandle {
     ///   2. Resize the in-memory VTTY buffer to match
     pub async fn resize_pty(&self, rows: u16, cols: u16) -> Result<()> {
         // Resize the PTY master first — this sends SIGWINCH to the child.
-        {
-            let master = self.pty_master.lock();
+        if let Some(master) = &self.pty_master {
+            let master = master.lock();
             master.resize(rows, cols)?;
         }
 
@@ -399,22 +399,6 @@ impl CommandHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{Read, Write};
-
-    /// A mock PtyMaster for testing — all operations are no-ops.
-    struct MockPtyMaster;
-
-    impl PtyMaster for MockPtyMaster {
-        fn clone_reader(&self) -> Result<Box<dyn Read + Send>> {
-            Ok(Box::new(std::io::empty()))
-        }
-        fn take_writer(&self) -> Result<Box<dyn Write + Send>> {
-            Ok(Box::new(std::io::sink()))
-        }
-        fn resize(&self, _rows: u16, _cols: u16) -> Result<()> {
-            Ok(())
-        }
-    }
 
     /// Build a CommandHandle for testing with a live stdin channel.
     fn make_test_handle(cmd_id: &str) -> (CommandHandle, mpsc::Receiver<StdinMessage>) {
@@ -434,7 +418,7 @@ mod tests {
             certificate: None,
             exit_config: ExitConfig::default(),
             spawn_time: std::time::Instant::now(),
-            pty_master: Arc::new(parking_lot::Mutex::new(Box::new(MockPtyMaster) as Box<dyn PtyMaster + Send>)),
+            pty_master: None,
             vtty_output: Arc::new(VttyOutput::new()),
             exit_rx: watch_rx,
             exit_code: std::sync::Mutex::new(None),
@@ -467,7 +451,7 @@ mod tests {
             certificate: None,
             exit_config: ExitConfig::default(),
             spawn_time: std::time::Instant::now(),
-            pty_master: Arc::new(parking_lot::Mutex::new(Box::new(MockPtyMaster) as Box<dyn PtyMaster + Send>)),
+            pty_master: None,
             vtty_output: Arc::new(VttyOutput::new()),
             exit_rx: watch_rx,
             exit_code: std::sync::Mutex::new(None),

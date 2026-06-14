@@ -1,30 +1,4 @@
-//! PTY backend abstraction.
-//!
-//! This module provides the [`PtyBackend`] trait, which abstracts the
-//! pseudo-terminal implementation so that alternate backends can be
-//! swapped without changing the spawning logic.
-//!
-//! # Available Backends
-//!
-//! - [`PortablePtyBackend`] — wraps [`portable_pty::native_pty_system()`],
-//!   which selects the best PTY implementation for the current platform
-//!   (Unix PTY on Linux/macOS, ConPTY on Windows).
-//!
-//! # Adding Custom Backends
-//!
-//! Implement [`PtyBackend`] to provide an alternative PTY implementation.
-//! The trait returns concrete types that implement [`PtyMaster`],
-//! [`PtySlave`], and [`ChildProcess`].
-//!
-//! # Windows ConPTY Reference
-//!
-//! On Windows, the `portable_pty` crate uses the Windows Pseudo Console
-//! (ConPTY) API introduced in Windows 10 version 1809.  ConPTY provides
-//! a pseudo-terminal layer that enables console applications to work
-//! over terminal emulators and multiplexers.
-//!
-//! For more information, see the official Microsoft documentation:
-//! <https://devblogs.microsoft.com/commandline/windows-command-line-introducing-the-windows-pseudo-console-conpty/>
+//! Pseudo-terminal support via [`portable_pty`].
 
 use std::io::{Read, Write};
 
@@ -34,9 +8,9 @@ use super::error::{ProcessError, Result};
 pub struct PtyPair {
     /// The master side — used to read child output and write stdin.
     /// Also supports resize operations.
-    pub master: Box<dyn PtyMaster + Send>,
+    pub master: PtyMaster,
     /// The slave side — used to spawn the child process.
-    pub slave: Box<dyn PtySlave + Send>,
+    pub slave: PtySlave,
 }
 
 /// Size of the pseudo-terminal.
@@ -46,107 +20,38 @@ pub struct PtySize {
     pub cols: u16,
 }
 
-/// Abstraction over the PTY master fd/handle.
-pub trait PtyMaster: Send {
-    /// Clone the reader side of the master PTY for concurrent reads.
-    fn clone_reader(&self) -> Result<Box<dyn Read + Send>>;
-    /// Take the writer side of the master PTY.
-    fn take_writer(&self) -> Result<Box<dyn Write + Send>>;
-    /// Resize the PTY (sends SIGWINCH on Unix, equivalent on Windows).
-    fn resize(&self, rows: u16, cols: u16) -> Result<()>;
-}
-
-/// Abstraction over the PTY slave side, used to spawn a child process.
-pub trait PtySlave: Send {
-    /// Spawn a command attached to this PTY, setting the given TERM value.
-    /// If `dir` is provided, the child process will be started in that directory.
-    fn spawn_command(
-        &self,
-        cmd: &str,
-        args: &[String],
-        term: &str,
-        env: &std::collections::HashMap<String, String>,
-        dir: Option<&str>,
-    ) -> Result<Box<dyn ChildProcess + Send>>;
-}
-
-/// Abstraction over a spawned child process.
-pub trait ChildProcess: Send {
-    /// Get the OS process ID.
-    fn process_id(&self) -> Option<u32>;
-    /// Wait for the child to exit, returning the exit code (if available).
-    fn wait(&mut self) -> std::io::Result<Option<i32>>;
-}
-
-/// A PTY backend provides the ability to open PTY pairs and spawn processes.
+/// Open a new PTY pair with the given dimensions.
 ///
-/// This trait abstracts the platform-specific PTY implementation so that
-/// different backends (portable-pty, Unix native pty, ConPTY, etc.) can
-/// be used interchangeably.
-pub trait PtyBackend: Send + Sync {
-    /// Open a new PTY pair with the given dimensions.
-    fn openpty(&self, size: PtySize) -> Result<PtyPair>;
-}
-
-// ---------------------------------------------------------------------------
-// PortablePtyBackend — wraps portable-pty (default implementation)
-// ---------------------------------------------------------------------------
-
-/// Default PTY backend using [`portable_pty`].
-///
-/// This backend automatically selects the best platform implementation:
-/// - **Unix** (Linux, macOS, BSD): uses the standard Unix PTY (`posix_openpt`
-///   or equivalent).
-/// - **Windows**: uses the Windows Pseudo Console (ConPTY) API.
-///
-/// Reference for ConPTY:
-/// <https://devblogs.microsoft.com/commandline/windows-command-line-introducing-the-windows-pseudo-console-conpty/>
-pub struct PortablePtyBackend;
-
-impl PortablePtyBackend {
-    /// Create a new portable PTY backend.
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-impl Default for PortablePtyBackend {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl PtyBackend for PortablePtyBackend {
-    fn openpty(&self, size: PtySize) -> Result<PtyPair> {
-        let pty_system = portable_pty::native_pty_system();
-        let pair = pty_system
-            .openpty(portable_pty::PtySize {
-                rows: size.rows,
-                cols: size.cols,
-                pixel_width: 0,
-                pixel_height: 0,
-            })
-            .map_err(|e| {
-                ProcessError::Io(std::io::Error::other(format!("openpty failed: {}", e)))
-            })?;
-
-        Ok(PtyPair {
-            master: Box::new(PortablePtyMaster { inner: pair.master }),
-            slave: Box::new(PortablePtySlave { inner: pair.slave }),
+/// Uses [`portable_pty::native_pty_system()`] which selects the best
+/// platform implementation (Unix PTY on Linux/macOS, ConPTY on Windows).
+pub fn openpty(rows: u16, cols: u16) -> Result<PtyPair> {
+    let pty_system = portable_pty::native_pty_system();
+    let pair = pty_system
+        .openpty(portable_pty::PtySize {
+            rows,
+            cols,
+            pixel_width: 0,
+            pixel_height: 0,
         })
-    }
+        .map_err(|e| ProcessError::Io(std::io::Error::other(format!("openpty failed: {}", e))))?;
+
+    Ok(PtyPair {
+        master: PtyMaster { inner: pair.master },
+        slave: PtySlave { inner: pair.slave },
+    })
 }
 
 // ---------------------------------------------------------------------------
-// PortablePtyMaster
+// PtyMaster
 // ---------------------------------------------------------------------------
 
-struct PortablePtyMaster {
+pub struct PtyMaster {
     inner: Box<dyn portable_pty::MasterPty + Send>,
 }
 
-impl PtyMaster for PortablePtyMaster {
-    fn clone_reader(&self) -> Result<Box<dyn Read + Send>> {
+impl PtyMaster {
+    /// Clone the reader side of the master PTY for concurrent reads.
+    pub fn clone_reader(&self) -> Result<Box<dyn Read + Send>> {
         self.inner
             .try_clone_reader()
             .map(|r| Box::new(r) as Box<dyn Read + Send>)
@@ -155,14 +60,16 @@ impl PtyMaster for PortablePtyMaster {
             })
     }
 
-    fn take_writer(&self) -> Result<Box<dyn Write + Send>> {
+    /// Take the writer side of the master PTY.
+    pub fn take_writer(&self) -> Result<Box<dyn Write + Send>> {
         self.inner
             .take_writer()
             .map(|w| Box::new(w) as Box<dyn Write + Send>)
             .map_err(|e| ProcessError::Io(std::io::Error::other(format!("take PTY writer: {}", e))))
     }
 
-    fn resize(&self, rows: u16, cols: u16) -> Result<()> {
+    /// Resize the PTY (sends SIGWINCH on Unix, equivalent on Windows).
+    pub fn resize(&self, rows: u16, cols: u16) -> Result<()> {
         self.inner
             .resize(portable_pty::PtySize {
                 rows,
@@ -176,26 +83,25 @@ impl PtyMaster for PortablePtyMaster {
     }
 }
 
-// Safety: portable_pty::MasterPty is Send on all supported platforms.
-unsafe impl Send for PortablePtyMaster {}
-
 // ---------------------------------------------------------------------------
-// PortablePtySlave
+// PtySlave
 // ---------------------------------------------------------------------------
 
-struct PortablePtySlave {
+pub struct PtySlave {
     inner: Box<dyn portable_pty::SlavePty + Send>,
 }
 
-impl PtySlave for PortablePtySlave {
-    fn spawn_command(
+impl PtySlave {
+    /// Spawn a command attached to this PTY, setting the given TERM value.
+    /// If `dir` is provided, the child process will be started in that directory.
+    pub fn spawn_command(
         &self,
         cmd: &str,
         args: &[String],
         term: &str,
         env: &std::collections::HashMap<String, String>,
         dir: Option<&str>,
-    ) -> Result<Box<dyn ChildProcess + Send>> {
+    ) -> Result<ChildProcess> {
         let mut cmd_builder = portable_pty::CommandBuilder::new(cmd);
         for arg in args {
             cmd_builder.arg(arg);
@@ -220,43 +126,38 @@ impl PtySlave for PortablePtySlave {
                 .map_err(|_| ProcessError::SpawnFailed {
                     cmd: cmd.to_string(),
                 })?;
-        Ok(Box::new(PortableChild { inner: child }))
+        Ok(ChildProcess { inner: child })
     }
 }
 
-// Safety: portable_pty::SlavePty is Send on all supported platforms.
-unsafe impl Send for PortablePtySlave {}
-
 // ---------------------------------------------------------------------------
-// PortableChild
+// ChildProcess
 // ---------------------------------------------------------------------------
 
-struct PortableChild {
+pub struct ChildProcess {
     inner: Box<dyn portable_pty::Child + Send>,
 }
 
-impl ChildProcess for PortableChild {
-    fn process_id(&self) -> Option<u32> {
+impl ChildProcess {
+    /// Get the OS process ID.
+    pub fn process_id(&self) -> Option<u32> {
         self.inner.process_id()
     }
 
-    fn wait(&mut self) -> std::io::Result<Option<i32>> {
+    /// Wait for the child to exit, returning the exit code (if available).
+    pub fn wait(&mut self) -> std::io::Result<Option<i32>> {
         let status = self.inner.wait()?;
         Ok(Some(status.exit_code() as i32))
     }
 }
-
-// Safety: portable_pty::Child is Send on all supported platforms.
-unsafe impl Send for PortableChild {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_portable_pty_backend_openpty() {
-        let backend = PortablePtyBackend::new();
-        let pair = backend.openpty(PtySize { rows: 24, cols: 80 });
+    fn test_openpty() {
+        let pair = openpty(24, 80);
         // Should succeed on Unix; may fail in restricted CI environments
         match pair {
             Ok(_pair) => {

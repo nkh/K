@@ -972,19 +972,9 @@ mod tests {
     // ─── Helper infrastructure for CommandManager tests ───
 
     use crate::process::handle::CommandHandle;
-    use crate::process::pty::PtyMaster;
     use crate::handles::registry::HandleRegistry;
     use crate::vtty::emulator::VttyEmulator;
     use crate::vtty::sink::VttyOutput;
-    use std::io::{Read, Write};
-
-    struct MockPtyMaster;
-
-    impl PtyMaster for MockPtyMaster {
-        fn clone_reader(&self) -> Result<Box<dyn Read + Send>> { Ok(Box::new(std::io::empty())) }
-        fn take_writer(&self) -> Result<Box<dyn Write + Send>> { Ok(Box::new(std::io::sink())) }
-        fn resize(&self, _rows: u16, _cols: u16) -> Result<()> { Ok(()) }
-    }
 
     fn make_manager() -> CommandManager {
         let mut config = Config::default();
@@ -1008,7 +998,7 @@ mod tests {
             certificate: None,
             exit_config: crate::config::schema::ExitConfig::default(),
             spawn_time: std::time::Instant::now(),
-            pty_master: std::sync::Arc::new(parking_lot::Mutex::new(Box::new(MockPtyMaster) as Box<dyn PtyMaster + Send>)),
+            pty_master: None,
             vtty_output: std::sync::Arc::new(VttyOutput::new()),
             exit_rx: watch_rx,
             exit_code: std::sync::Mutex::new(None),
