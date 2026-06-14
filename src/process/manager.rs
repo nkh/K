@@ -283,30 +283,35 @@ impl CommandManager {
                 let need_full = dims_changed || prev_buffer.is_none();
 
                 if !need_full {
-                    // Compute diff between previous and current buffer
-                    let prev = prev_buffer.as_ref().unwrap();
-                    let diff = current_buf.diff(prev);
-                    // If too many cells changed (>90%), fall back to full HTML
-                    if diff.changed_count <= (rows * cols) * 9 / 10 {
-                        let msg = serde_json::json!({
-                            "type": "vtty_diff",
-                            "data": {
-                                "id": &watch_id,
-                                "generation": current_gen,
-                                "cursor": {"row": cursor_row, "col": cursor_col},
-                                "dimensions": {"rows": rows, "cols": cols},
-                                "alternate_screen": alt_screen,
-                                "cursor_visible": cursor_visible,
-                                "changed_count": diff.changed_count,
-                                "cells": diff.cells,
-                            }
-                        })
-                        .to_string();
-                        let _ = watch_tx.send((watch_id.clone(), msg));
-                        prev_buffer = Some(current_buf);
-                        prev_dims = Some((rows, cols));
-                        continue;
+                    // Compute diff between previous and current buffer.
+                    // prev_buffer is guaranteed Some when !need_full (see check above),
+                    // but use if-let for defense-in-depth — falls through to full HTML
+                    // if the invariant is somehow violated.
+                    if let Some(prev) = prev_buffer.as_ref() {
+                        let diff = current_buf.diff(prev);
+                        // If too many cells changed (>90%), fall back to full HTML
+                        if diff.changed_count <= (rows * cols) * 9 / 10 {
+                            let msg = serde_json::json!({
+                                "type": "vtty_diff",
+                                "data": {
+                                    "id": &watch_id,
+                                    "generation": current_gen,
+                                    "cursor": {"row": cursor_row, "col": cursor_col},
+                                    "dimensions": {"rows": rows, "cols": cols},
+                                    "alternate_screen": alt_screen,
+                                    "cursor_visible": cursor_visible,
+                                    "changed_count": diff.changed_count,
+                                    "cells": diff.cells,
+                                }
+                            })
+                            .to_string();
+                            let _ = watch_tx.send((watch_id.clone(), msg));
+                            prev_buffer = Some(current_buf);
+                            prev_dims = Some((rows, cols));
+                            continue;
+                        }
                     }
+                    // prev_buffer unexpectedly None or >90% changed — fall through to full HTML
                 }
 
                 // Send vtty_full (resync or >90% changed)
