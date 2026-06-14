@@ -2,7 +2,7 @@
 
 Learn how to capture terminal state at specific moments, list saved snapshots, compute differences between them, and use them for automated testing and debugging.
 
-> **This guide covers the vrw HTTP API for snapshots and diffs.** This feature requires vrw (the HTTP server + web dashboard binary). For local-only terminal capture in vrc, use `vrc cat --color-always > output.txt` to save VTTY output manually.
+> **This guide covers the vrw HTTP API for snapshots and diffs.** This feature requires vrw (the HTTP server + web dashboard binary). For local-only terminal capture in vrc, use `vrc cat <pid>` to view VTTY output.
 
 ## What Are Snapshots?
 
@@ -13,99 +13,48 @@ A snapshot is a point-in-time capture of a command's terminal buffer — includi
 Capture a snapshot of a running command via the API:
 
 ```bash
-curl -X POST http://localhost:8080/api/commands/cmd_a1b2c3/snapshots \
+curl -X POST http://localhost:9090/api/commands/cmd_a1b2c3/snapshot \
   -H "Content-Type: application/json" \
-  -d '{"label": "initial-state"}'
+  -d '{"name": "initial-state"}'
 ```
 
 Response:
 
 ```json
 {
-  "id": "snap_xyz789",
-  "label": "initial-state",
-  "command_id": "cmd_a1b2c3",
-  "created_at": "2025-01-15T10:30:00Z",
-  "rows": 24,
-  "cols": 80
+  "status": "ok",
+  "data": {
+    "id": "snap_xyz789",
+    "name": "initial-state",
+    "command_name": "my-command",
+    "command_args": [],
+    "pid": 12345,
+    "timestamp": "2025-01-15T10:30:00Z",
+    "runtime_secs": 30
+  }
 }
 ```
 
-You can also take a snapshot from the web UI by right-clicking a terminal pane and selecting **Take Snapshot**, or by pressing `Ctrl+Shift+S` in the focused terminal.
+You can also take a snapshot from the web UI by right-clicking a terminal pane and selecting **Take Snapshot**.
+
+> **Note:** `Ctrl+Shift+S` / `Alt+S` toggles text selection mode, not snapshot capture. Use the context menu or panel header for snapshots.
 
 ## Listing Snapshots
 
 Retrieve all snapshots for a command:
 
 ```bash
-curl -s http://localhost:8080/api/commands/cmd_a1b2c3/snapshots | jq .
-```
-
-Response:
-
-```json
-[
-  {
-    "id": "snap_xyz789",
-    "label": "initial-state",
-    "created_at": "2025-01-15T10:30:00Z",
-    "rows": 24,
-    "cols": 80
-  },
-  {
-    "id": "snap_abc456",
-    "label": "after-build",
-    "created_at": "2025-01-15T10:35:00Z",
-    "rows": 24,
-    "cols": 80
-  }
-]
+curl -s http://localhost:9090/api/commands/cmd_a1b2c3/snapshots | jq .
 ```
 
 ## Computing a Diff
 
-Compare two snapshots to see what changed between them:
+Compare a snapshot to the current live terminal state:
 
 ```bash
-curl -s "http://localhost:8080/api/commands/cmd_a1b2c3/snapshots/diff?from=initial-state&to=after-build"
-```
-
-Response:
-
-```json
-{
-  "from": "initial-state",
-  "to": "after-build",
-  "added": [
-    {"row": 5, "text": "Build completed successfully in 12.3s"}
-  ],
-  "removed": [
-    {"row": 3, "text": "Building..."}
-  ],
-  "changed": [
-    {
-      "row": 10,
-      "old_text": "Tests: 0 passed",
-      "new_text": "Tests: 42 passed, 0 failed"
-    }
-  ]
-}
-```
-
-### Comparing by Snapshot ID
-
-You can also use snapshot IDs instead of labels:
-
-```bash
-curl -s "http://localhost:8080/api/commands/cmd_a1b2c3/snapshots/diff?from=snap_xyz789&to=snap_abc456"
-```
-
-### Comparing to Live State
-
-Omit the `to` parameter to compare a snapshot to the current terminal state:
-
-```bash
-curl -s "http://localhost:8080/api/commands/cmd_a1b2c3/snapshots/diff?from=initial-state"
+curl -s -X POST http://localhost:9090/api/commands/cmd_a1b2c3/diff \
+  -H "Content-Type: application/json" \
+  -d '{"name": "initial-state"}' | jq .
 ```
 
 ## Deleting Snapshots
@@ -113,13 +62,7 @@ curl -s "http://localhost:8080/api/commands/cmd_a1b2c3/snapshots/diff?from=initi
 Remove a single snapshot:
 
 ```bash
-curl -X DELETE http://localhost:8080/api/commands/cmd_a1b2c3/snapshots/initial-state
-```
-
-Remove all snapshots for a command:
-
-```bash
-curl -X DELETE http://localhost:8080/api/commands/cmd_a1b2c3/snapshots
+curl -X DELETE http://localhost:9090/api/commands/cmd_a1b2c3/snapshots/initial-state
 ```
 
 ## Use Case: Automated Testing
@@ -130,19 +73,16 @@ Snapshots are useful for verifying that a command produces expected output. Here
 #!/usr/bin/env bash
 set -euo pipefail
 
-SERVER="http://localhost:8080"
-CMD_NAME="build"
-
-# Get the command ID
-CMD_ID=$(curl -s "$SERVER/api/commands" | jq -r ".[] | select(.name==\"$CMD_NAME\") | .id")
+SERVER="http://localhost:9090"
+CMD_ID="cmd_a1b2c3"
 
 # Take a "before" snapshot
-curl -s -X POST "$SERVER/api/commands/$CMD_ID/snapshots" \
+curl -s -X POST "$SERVER/api/commands/$CMD_ID/snapshot" \
   -H "Content-Type: application/json" \
-  -d '{"label": "before-build"}' > /dev/null
+  -d '{"name": "before-build"}' > /dev/null
 
 # Trigger the build by sending Enter
-curl -s -X POST "$SERVER/api/commands/$CMD_ID/input" \
+curl -s -X POST "$SERVER/api/commands/$CMD_ID/keys" \
   -H "Content-Type: application/json" \
   -d '{"data": "\n"}' > /dev/null
 
@@ -150,15 +90,17 @@ curl -s -X POST "$SERVER/api/commands/$CMD_ID/input" \
 sleep 30
 
 # Take an "after" snapshot
-curl -s -X POST "$SERVER/api/commands/$CMD_ID/snapshots" \
+curl -s -X POST "$SERVER/api/commands/$CMD_ID/snapshot" \
   -H "Content-Type: application/json" \
-  -d '{"label": "after-build"}' > /dev/null
+  -d '{"name": "after-build"}' > /dev/null
 
-# Compute the diff
-DIFF=$(curl -s "$SERVER/api/commands/$CMD_ID/snapshots/diff?from=before-build&to=after-build")
+# Compute the diff (compare snapshot to live state)
+DIFF=$(curl -s -X POST "$SERVER/api/commands/$CMD_ID/diff" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "before-build"}')
 
 # Check for "Build completed successfully"
-if echo "$DIFF" | jq -r '.added[].text' | grep -q "Build completed successfully"; then
+if echo "$DIFF" | jq -r '.data.added[].text' 2>/dev/null | grep -q "Build completed successfully"; then
   echo "PASS: Build succeeded"
 else
   echo "FAIL: Expected 'Build completed successfully' not found"
@@ -180,32 +122,33 @@ When debugging an interactive command, take snapshots at key points:
 # ... send keystrokes ...
 
 # Capture the state
-curl -X POST http://localhost:8080/api/commands/cmd_abc/snapshots \
-  -d '{"label": "screen-main-menu"}'
+curl -X POST http://localhost:9090/api/commands/cmd_abc/snapshot \
+  -d '{"name": "screen-main-menu"}'
 
 # Navigate deeper
 # ... send more keystrokes ...
 
 # Capture again
-curl -X POST http://localhost:8080/api/commands/cmd_abc/snapshots \
-  -d '{"label": "screen-settings"}'
+curl -X POST http://localhost:9090/api/commands/cmd_abc/snapshot \
+  -d '{"name": "screen-settings"}'
 
-# Compare the two screens
-curl -s "http://localhost:8080/api/commands/cmd_abc/snapshots/diff?from=screen-main-menu&to=screen-settings" | jq .
+# Compare the earlier snapshot to live state
+curl -s -X POST "http://localhost:9090/api/commands/cmd_abc/diff" \
+  -d '{"name": "screen-main-menu"}' | jq .
 ```
 
 This helps you see exactly what changed on screen between interactions.
 
 ## Best Practices
 
-- **Use descriptive labels** — `before-deploy`, `after-migration`, `error-state` are more useful than `snap1`, `snap2`.
+- **Use descriptive names** — `before-deploy`, `after-migration`, `error-state` are more useful than `snap1`, `snap2`.
 - **Clean up after testing** — Delete snapshots when you no longer need them to free memory.
 - **Freeze output before snapshotting** — Use the freeze endpoint to pause output and ensure a clean capture:
 
   ```bash
-  curl -X POST http://localhost:8080/api/commands/cmd_abc/freeze
-  curl -X POST http://localhost:8080/api/commands/cmd_abc/snapshots -d '{"label": "frozen-state"}'
-  curl -X POST http://localhost:8080/api/commands/cmd_abc/thaw
+  curl -X POST http://localhost:9090/api/commands/cmd_abc/freeze
+  curl -X POST http://localhost:9090/api/commands/cmd_abc/snapshot -d '{"name": "frozen-state"}'
+  curl -X POST http://localhost:9090/api/commands/cmd_abc/thaw
   ```
 
 For the full API reference, see [`../api.md`](../api.md). For sending keystrokes, see [`api-usage.md`](api-usage.md).
