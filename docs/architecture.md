@@ -143,8 +143,7 @@ Manages a directory of JSON pidfiles (`~/.local/share/vrc/instances/<PID>.json`)
 
 | Component | Responsibility |
 |-----------|-------------|
-| `emulator.rs` | Terminal state machine supporting cursor movement, erase operations, scroll, SGR attributes, DEC private modes, alternate screen. |
-| `parser.rs` | Streaming ANSI parser with state machine (CSI, OSC, DCS, simple escapes). |
+| `emulator.rs` | Terminal state machine (VTE-based ANSI parser with CSI, OSC, DCS, simple escapes), cursor movement, erase operations, scroll, SGR attributes, DEC private modes, alternate screen. |
 | `buffer.rs` | 2D cell grid with scrollback, insert/delete lines/cells, clear operations. |
 | `display.rs` | `TerminalDisplay`: renders the buffer to the local terminal using `crossterm` (only when `--display` is active). |
 
@@ -276,7 +275,6 @@ CLI: vrc stop 12345
 | `libc` | Raw Unix syscalls for daemonization and signals |
 | `dirs` | Standard directories |
 | `dashmap` | Concurrent hash map |
-| `async-trait` | Async trait support |
 | `unicode-width` | Terminal column width calculation |
 | `regex` | Pattern matching in display/keybindings |
 
