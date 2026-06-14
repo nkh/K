@@ -38,19 +38,7 @@ pub async fn send_keys(
 }
 
 /// POST /api/commands/:id/mouse
-///
 /// Forward a mouse event to the child process's PTY.
-/// The event is translated to the appropriate escape sequence based on
-/// the current mouse protocol mode (SGR ?1006, or legacy encoding).
-///
-/// Request body:
-///   `event`:  "down" | "up" | "move" | "wheel_up" | "wheel_down"
-///   `button`: 0=left, 1=middle, 2=right (for down/up events)
-///   `x`:      column (1-based)
-///   `y`:      row (1-based)
-///   `ctrl`:   boolean (Shift/Ctrl modifiers — currently unused by most apps)
-///
-/// If the child has not enabled mouse tracking, the event is silently discarded.
 pub async fn send_mouse(
     State(state): State<AppState>,
     Path(id): Path<String>,

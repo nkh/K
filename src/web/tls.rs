@@ -22,18 +22,11 @@ impl TlsManager {
     }
 
     /// Load or generate a TLS rustls ServerConfig.
-    ///
-    /// If `cert_file` and `key_file` are provided and exist, they are loaded.
-    /// Otherwise, defaults are used, and if they don't exist, a new self-signed
-    /// certificate is generated and saved.
     pub fn load_or_generate_config(
         cert_file: Option<&str>,
         key_file: Option<&str>,
     ) -> Result<Arc<rustls::ServerConfig>> {
-        // rustls 0.23 requires an explicit process-level CryptoProvider.
-        // The `ring` feature is enabled in Cargo.toml but the default
-        // provider is not set automatically — calling `install_default()`
-        // before any TLS operation prevents the runtime panic.
+        // Install rustls crypto provider (required by rustls 0.23).
         rustls::crypto::ring::default_provider()
             .install_default()
             .expect("failed to install rustls crypto provider");
@@ -67,7 +60,6 @@ impl TlsManager {
             _ => Self::default_paths(),
         };
 
-        // If both files exist, load them
         if cert_path.exists() && key_path.exists() {
             tracing::info!("Loading TLS certificate from {}", cert_path.display());
             let cert_pem = std::fs::read(&cert_path)
@@ -77,32 +69,15 @@ impl TlsManager {
             return Ok((cert_pem, key_pem));
         }
 
-        // Generate self-signed certificate
         tracing::info!("Generating self-signed TLS certificate...");
-        let (cert_pem_str, key_pem_str) = Self::generate_certificate()?;
+        let (cert_pem, key_pem) = super::cert_helpers::generate_self_signed_cert(
+            super::cert_helpers::CertGenerationConfig::localhost("vrw", vec![]),
+        )?;
 
-        // Ensure parent directory exists
-        if let Some(parent) = cert_path.parent() {
-            std::fs::create_dir_all(parent)
-                .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
-        }
-
-        // Write certificate
-        std::fs::write(&cert_path, &cert_pem_str)
-            .with_context(|| format!("Failed to write certificate: {}", cert_path.display()))?;
-
-        // Write private key
-        std::fs::write(&key_path, &key_pem_str)
-            .with_context(|| format!("Failed to write private key: {}", key_path.display()))?;
-
-        // Set restrictive permissions on the key file (owner read/write only)
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let perms = std::fs::Permissions::from_mode(0o600);
-            std::fs::set_permissions(&key_path, perms)
-                .with_context(|| format!("Failed to set permissions on: {}", key_path.display()))?;
-        }
+        super::cert_helpers::write_cert_pair(
+            &cert_path, &key_path,
+            cert_pem.as_bytes(), key_pem.as_bytes(),
+        )?;
 
         tracing::info!(
             "TLS certificate saved to: {}\n\
@@ -116,37 +91,7 @@ impl TlsManager {
             "{PORT}"
         );
 
-        Ok((cert_pem_str.into_bytes(), key_pem_str.into_bytes()))
-    }
-
-    /// Generate a self-signed X.509 certificate using the shared helper.
-    /// Returns (cert_pem_string, key_pem_string).
-    fn generate_certificate() -> Result<(String, String)> {
-        super::cert_helpers::generate_self_signed_cert(
-            super::cert_helpers::CertGenerationConfig {
-                common_name: "vrw".to_string(),
-                organization: "vrw".to_string(),
-                key_usages: vec![
-                    rcgen::KeyUsagePurpose::DigitalSignature,
-                    rcgen::KeyUsagePurpose::KeyEncipherment,
-                ],
-                extended_key_usages: vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth],
-                is_ca: rcgen::IsCa::NoCa,
-                not_before: rcgen::date_time_ymd(2025, 1, 1),
-                not_after: rcgen::date_time_ymd(2030, 1, 1),
-                subject_alt_names: vec![
-                    rcgen::SanType::DnsName(
-                        rcgen::Ia5String::try_from("localhost").unwrap(),
-                    ),
-                    rcgen::SanType::IpAddress(std::net::IpAddr::V4(
-                        std::net::Ipv4Addr::LOCALHOST,
-                    )),
-                    rcgen::SanType::IpAddress(std::net::IpAddr::V6(
-                        std::net::Ipv6Addr::LOCALHOST,
-                    )),
-                ],
-            },
-        )
+        Ok((cert_pem.into_bytes(), key_pem.into_bytes()))
     }
 }
 
@@ -165,7 +110,9 @@ mod tests {
 
     #[test]
     fn test_tls_manager_generate_certificate() {
-        let (cert_pem, key_pem) = TlsManager::generate_certificate().unwrap();
+        let (cert_pem, key_pem) = super::super::cert_helpers::generate_self_signed_cert(
+            super::super::cert_helpers::CertGenerationConfig::localhost("vrw", vec![]),
+        ).unwrap();
         assert!(cert_pem.contains("BEGIN CERTIFICATE"));
         assert!(key_pem.contains("BEGIN PRIVATE KEY"));
     }

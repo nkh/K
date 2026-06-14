@@ -21,6 +21,32 @@ pub struct CertGenerationConfig {
     pub subject_alt_names: Vec<rcgen::SanType>,
 }
 
+impl CertGenerationConfig {
+    /// Convenience: build a `CertGenerationConfig` for a local dev certificate.
+    /// Includes localhost DNS, loopback IPs, and the given `extra_dns` names.
+    pub fn localhost(common_name: &str, extra_dns: Vec<rcgen::SanType>) -> Self {
+        let mut sans = vec![
+            rcgen::SanType::DnsName(rcgen::Ia5String::try_from("localhost").unwrap()),
+            rcgen::SanType::IpAddress(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)),
+            rcgen::SanType::IpAddress(std::net::IpAddr::V6(std::net::Ipv6Addr::LOCALHOST)),
+        ];
+        sans.extend(extra_dns);
+        Self {
+            common_name: common_name.to_string(),
+            organization: "vrw".to_string(),
+            key_usages: vec![
+                rcgen::KeyUsagePurpose::DigitalSignature,
+                rcgen::KeyUsagePurpose::KeyEncipherment,
+            ],
+            extended_key_usages: vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth],
+            is_ca: rcgen::IsCa::NoCa,
+            not_before: rcgen::date_time_ymd(2025, 1, 1),
+            not_after: rcgen::date_time_ymd(2030, 1, 1),
+            subject_alt_names: sans,
+        }
+    }
+}
+
 /// Generate a self-signed X.509 certificate and private key using `rcgen`.
 ///
 /// Returns `(cert_pem, key_pem)` as PEM-encoded strings.
@@ -58,4 +84,35 @@ pub fn generate_self_signed_cert(config: CertGenerationConfig) -> Result<(String
         .context("Failed to create self-signed certificate")?;
 
     Ok((cert.pem(), key_pair.serialize_pem()))
+}
+
+/// Write a certificate/key PEM pair to disk.
+///
+/// Creates parent directories if needed, writes both files, and sets
+/// restrictive permissions (0600) on the key file on Unix.
+pub fn write_cert_pair(
+    cert_path: &std::path::Path,
+    key_path: &std::path::Path,
+    cert_pem: &[u8],
+    key_pem: &[u8],
+) -> Result<()> {
+    if let Some(parent) = cert_path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
+    }
+
+    std::fs::write(cert_path, cert_pem)
+        .with_context(|| format!("Failed to write certificate: {}", cert_path.display()))?;
+    std::fs::write(key_path, key_pem)
+        .with_context(|| format!("Failed to write key: {}", key_path.display()))?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = std::fs::Permissions::from_mode(0o600);
+        std::fs::set_permissions(key_path, perms)
+            .with_context(|| format!("Failed to set permissions on: {}", key_path.display()))?;
+    }
+
+    Ok(())
 }

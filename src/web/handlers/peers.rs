@@ -1,17 +1,6 @@
 #![cfg(feature = "vrw")]
 #![allow(dead_code, unused_imports)]
 //! Peer instance registration and discovery.
-//!
-//! Allows vrw instances to register with each other so the web UI
-//! can display commands from multiple servers. When the primary server
-//! exits, the browser can fail over to a registered peer.
-//!
-//! Registration flow:
-//! 1. Server B starts with `--register-with 9090`
-//! 2. After binding, Server B POSTs to `http://localhost:9090/api/peers`
-//! 3. Server A stores the peer info and broadcasts to connected WS clients
-//! 4. The JS client adds the peer to its instance list
-//! 5. When Server A exits, the JS tries peers in order
 
 use axum::{extract::{Path, State}, Json};
 use serde::{Deserialize, Serialize};

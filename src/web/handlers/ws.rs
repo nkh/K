@@ -18,17 +18,6 @@ use crate::web::state::AppState;
 // ---------------------------------------------------------------------------
 
 /// Upgrade an HTTP request to a WebSocket for real-time VTTY streaming.
-///
-/// After upgrade, the server:
-/// 1. Sends a `{"type":"connected","id":"..."}` welcome message.
-/// 2. Sends an initial full HTML snapshot via `{"type":"vtty_full",...}`.
-/// 3. Subscribes to VTTY change notifications and forwards
-///    `{"type":"vtty_dirty","data":{"id":"..."}}` messages when the buffer changes.
-///    The client then fetches fresh HTML via HTTP at its own pace.
-/// 4. Listens for incoming client messages:
-///    - `{"type":"keys","keys":"..."}` — send keystrokes to the command.
-///    - `{"type":"resize","rows":N,"cols":N}` — resize the VTTY.
-///    - `{"type":"ping"}` — respond with `{"type":"pong"}`.
 pub async fn ws_vtty_stream(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -359,12 +348,6 @@ async fn handle_vtty_client_message(
 // ---------------------------------------------------------------------------
 
 /// Upgrade an HTTP request to a WebSocket for real-time log streaming.
-///
-/// After upgrade, the server:
-/// 1. Sends a `{"type":"connected","stream":"logs"}` welcome message.
-/// 2. Subscribes to the command logger's broadcast channel and forwards
-///    `{"type":"log_entry","data":"..."}` messages as log entries arrive.
-/// 3. Handles pings from the client.
 pub async fn ws_log_stream(State(state): State<AppState>, ws: WebSocketUpgrade) -> Response {
     ws.on_upgrade(move |socket| handle_log_socket(socket, state))
 }

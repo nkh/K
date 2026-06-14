@@ -32,10 +32,6 @@ impl CertificateEntry {
 }
 
 /// Manages a pool of named certificates for per-command access control.
-///
-/// Each certificate in the pool can be bound to a running command. When a command
-/// is bound to a certificate, only clients presenting that certificate (via mTLS)
-/// or its derived bearer token can interact with the command's endpoints.
 pub struct CertificateStore {
     /// Map from certificate name to its entry (paths + metadata).
     entries: HashMap<String, CertificateEntry>,
@@ -59,10 +55,7 @@ impl CertificateStore {
         }
     }
 
-    /// Load certificates from config entries and ensure the store is ready.
-    ///
-    /// For entries where both files exist, they are loaded as-is.
-    /// For entries where files are missing, new certificates are auto-generated.
+    /// Load certificates from config entries; auto-generate if missing.
     pub fn load_or_generate(entries: Vec<CertificateEntry>) -> Result<Self> {
         let certs_dir = dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("/tmp"))
@@ -135,57 +128,21 @@ impl CertificateStore {
         cert_path: &std::path::Path,
         key_path: &std::path::Path,
     ) -> Result<()> {
-        // Ensure parent directory exists
-        if let Some(parent) = cert_path.parent() {
-            std::fs::create_dir_all(parent)
-                .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
-        }
+        use super::cert_helpers::{CertGenerationConfig, generate_self_signed_cert};
 
-        let (cert_pem, key_pem) = super::cert_helpers::generate_self_signed_cert(
-            super::cert_helpers::CertGenerationConfig {
-                common_name: name.to_string(),
-                organization: "vrw".to_string(),
-                key_usages: vec![
-                    rcgen::KeyUsagePurpose::DigitalSignature,
-                    rcgen::KeyUsagePurpose::KeyEncipherment,
-                ],
-                extended_key_usages: vec![
-                    rcgen::ExtendedKeyUsagePurpose::ServerAuth,
-                    rcgen::ExtendedKeyUsagePurpose::ClientAuth,
-                ],
-                is_ca: rcgen::IsCa::NoCa,
-                not_before: rcgen::date_time_ymd(2025, 1, 1),
-                not_after: rcgen::date_time_ymd(2030, 1, 1),
-                subject_alt_names: vec![
-                    rcgen::SanType::DnsName(
-                        rcgen::Ia5String::try_from("localhost").unwrap(),
-                    ),
-                    rcgen::SanType::DnsName(
-                        rcgen::Ia5String::try_from(name)
-                            .unwrap_or(rcgen::Ia5String::try_from("localhost").unwrap()),
-                    ),
-                    rcgen::SanType::IpAddress(std::net::IpAddr::V4(
-                        std::net::Ipv4Addr::LOCALHOST,
-                    )),
-                    rcgen::SanType::IpAddress(std::net::IpAddr::V6(
-                        std::net::Ipv6Addr::LOCALHOST,
-                    )),
-                ],
-            },
+        let extra_dns = vec![rcgen::SanType::DnsName(
+            rcgen::Ia5String::try_from(name)
+                .unwrap_or(rcgen::Ia5String::try_from("localhost").unwrap()),
+        )];
+        let mut config = CertGenerationConfig::localhost(name, extra_dns);
+        config.extended_key_usages.push(rcgen::ExtendedKeyUsagePurpose::ClientAuth);
+
+        let (cert_pem, key_pem) = generate_self_signed_cert(config)?;
+
+        super::cert_helpers::write_cert_pair(
+            cert_path, key_path,
+            cert_pem.as_bytes(), key_pem.as_bytes(),
         )?;
-
-        std::fs::write(cert_path, &cert_pem)
-            .with_context(|| format!("Failed to write certificate: {}", cert_path.display()))?;
-        std::fs::write(key_path, &key_pem)
-            .with_context(|| format!("Failed to write key: {}", key_path.display()))?;
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let perms = std::fs::Permissions::from_mode(0o600);
-            std::fs::set_permissions(key_path, perms)
-                .with_context(|| format!("Failed to set permissions on: {}", key_path.display()))?;
-        }
 
         tracing::info!(
             "Certificate '{}' generated: cert={}, key={}",
