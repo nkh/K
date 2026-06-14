@@ -10,8 +10,7 @@
 //! ```text
 //!   PTY reader → emulator.feed() → buffer snapshot → VttyOutput.notify_sinks()
 //!                                                         ├─ BroadcastVttySink  → tokio broadcast channel
-//!                                                         ├─ InMemoryVttySink   → Arc<RwLock<Option<Buffer>>>
-//!                                                         └─ LogVttySink        → append to file
+//!                                                         └─ InMemoryVttySink   → Arc<RwLock<Option<Buffer>>>
 //! ```
 //!
 //! The [`VttyOutput`] struct owns a list of sinks and is responsible for
@@ -20,7 +19,6 @@
 //! wired into the PTY consumer task in the spawner.
 
 use super::buffer::Buffer;
-use std::io::Write as _;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
@@ -228,42 +226,6 @@ impl VttySink for InMemoryVttySink {
 
     fn on_close(&self) {
         *self.latest.write() = None;
-    }
-}
-
-// ---------------------------------------------------------------------------
-// LogVttySink — append rendered output to a file
-// ---------------------------------------------------------------------------
-
-/// A [`VttySink`] that appends plain-text VTTY output to a log file.
-///
-/// Each buffer change is rendered as plain text and appended to the file
-/// with a separator line.  Useful for audit trails or post-mortem analysis.
-pub struct LogVttySink {
-    file: parking_lot::Mutex<std::fs::File>,
-}
-
-impl LogVttySink {
-    /// Create a new log sink writing to `path`.
-    ///
-    /// The file is created if it doesn't exist; new content is appended.
-    pub fn new(path: &str) -> std::io::Result<Self> {
-        use std::fs::OpenOptions;
-        let file = OpenOptions::new().create(true).append(true).open(path)?;
-        Ok(Self {
-            file: parking_lot::Mutex::new(file),
-        })
-    }
-}
-
-impl VttySink for LogVttySink {
-    fn on_buffer_change(&self, buffer: &Buffer) {
-        let mut file = self.file.lock();
-        for row in &buffer.rows {
-            let line: String = row.iter().map(|c| c.ch).collect();
-            let _ = writeln!(file, "{}", line);
-        }
-        let _ = writeln!(file, "---");
     }
 }
 

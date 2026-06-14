@@ -58,6 +58,16 @@ impl Cell {
         }
     }
 
+    /// Create a wide-char continuation cell (width=0) with the same style as `style`.
+    /// The character is set to space and width to 0.
+    pub fn continuation_of(style: &Cell) -> Cell {
+        Cell {
+            ch: ' ',
+            width: 0,
+            ..*style
+        }
+    }
+
     pub fn reset_attrs(&mut self) {
         self.fg = [204, 204, 204];
         self.bg = [0, 0, 0];
@@ -184,5 +194,37 @@ mod tests {
         assert_eq!(char_width('ø'), 1);
         assert_eq!(char_width('æ'), 1);
         assert_eq!(char_width('ß'), 1);
+    }
+
+    // ─── continuation_of tests ───
+
+    #[test]
+    fn test_continuation_of() {
+        let style = Cell {
+            ch: 'X',
+            fg: [255, 0, 0],
+            bg: [0, 0, 255],
+            bold: true,
+            italic: true,
+            underline: true,
+            blink: true,
+            reverse: true,
+            invisible: true,
+            strikethrough: true,
+            width: 1,
+        };
+        let cont = Cell::continuation_of(&style);
+        assert_eq!(cont.ch, ' ');
+        assert_eq!(cont.width, 0);
+        // All style fields should be copied
+        assert_eq!(cont.fg, [255, 0, 0]);
+        assert_eq!(cont.bg, [0, 0, 255]);
+        assert!(cont.bold);
+        assert!(cont.italic);
+        assert!(cont.underline);
+        assert!(cont.blink);
+        assert!(cont.reverse);
+        assert!(cont.invisible);
+        assert!(cont.strikethrough);
     }
 }

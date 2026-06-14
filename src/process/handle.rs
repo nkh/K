@@ -90,7 +90,8 @@ impl CommandHandle {
     }
 
     pub async fn vtty_ansi(&self) -> String {
-        self.emulator.read().await.contents_ansi()
+        let buf = self.emulator.read().await.snapshot();
+        crate::vtty::renderer::VttyRenderer::to_ansi_full(&buf)
     }
 
     pub async fn vtty_partial(&self, start_row: usize, row_count: usize) -> String {
@@ -312,17 +313,7 @@ impl CommandHandle {
                                 crate::vtty::buffer::CellDiff {
                                     row: row_idx,
                                     col: col_idx,
-                                    ch: cell.ch,
-                                    fg: cell.fg,
-                                    bg: cell.bg,
-                                    bold: cell.bold,
-                                    italic: cell.italic,
-                                    underline: cell.underline,
-                                    blink: cell.blink,
-                                    reverse: cell.reverse,
-                                    invisible: cell.invisible,
-                                    strikethrough: cell.strikethrough,
-                                    width: cell.width,
+                                    cell: *cell,
                                 }
                             })
                         })

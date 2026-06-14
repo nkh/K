@@ -275,29 +275,30 @@ function buildCellGrid(cmdId, pre, rows, cols) {
 // VttyRenderer::to_html() format exactly. This ensures visual consistency
 // between full HTML replacement and incremental diff patching.
 function _cellStyle(diff) {
-    let fg = diff.fg;
-    let bg = diff.bg;
+    const c = diff.cell;
+    let fg = c.fg;
+    let bg = c.bg;
 
     // Handle reverse video: swap fg and bg
-    if (diff.reverse) {
+    if (c.reverse) {
         [fg, bg] = [bg, fg];
     }
 
     // Width in ch units: matches server-side run_len * cell_ch.
     // For single-cell updates (diff patching), run_len is always 1.
-    const cellW = diff.width || 1;
+    const cellW = c.width || 1;
     let style = 'width:' + (cellW > 0 ? cellW + 'ch' : '0') + ';color:#' + _hex(fg[0]) + _hex(fg[1]) + _hex(fg[2]) + ';background:#' + _hex(bg[0]) + _hex(bg[1]) + _hex(bg[2]);
 
-    if (diff.bold) style += ';font-weight:bold';
-    if (diff.italic) style += ';font-style:italic';
-    if (diff.underline && diff.strikethrough) {
+    if (c.bold) style += ';font-weight:bold';
+    if (c.italic) style += ';font-style:italic';
+    if (c.underline && c.strikethrough) {
         style += ';text-decoration:underline line-through';
-    } else if (diff.underline) {
+    } else if (c.underline) {
         style += ';text-decoration:underline';
-    } else if (diff.strikethrough) {
+    } else if (c.strikethrough) {
         style += ';text-decoration:line-through';
     }
-    if (diff.blink) style += ';animation:blink 1s step-end infinite';
+    if (c.blink) style += ';animation:blink 1s step-end infinite';
 
     return style;
 }
@@ -310,7 +311,7 @@ function _cellStyle(diff) {
 //
 // The diff data has the format:
 //   { generation, cursor, dimensions, changed_count, cells: [...] }
-// Each cell: { row, col, ch, fg: [r,g,b], bg: [r,g,b], bold, italic, ... }
+// Each cell: { row, col, cell: { ch, fg: [r,g,b], bg: [r,g,b], bold, italic, ... } }
 
 /// Split a merged (RLE) span at the target cell position so that cell
 /// gets its own individual <span> element.  Updates the cell grid entries
@@ -384,10 +385,10 @@ function _splitAndUpdateCell(cg, row, col, diff) {
     }
 
     // Update the target cell in place
-    const ch = diff.width === 0 ? '\u200b' : (diff.ch === '\u0000' ? ' ' : diff.ch);
+    const ch = diff.cell.width === 0 ? '\u200b' : (diff.cell.ch === '\u0000' ? ' ' : diff.cell.ch);
     span.textContent = _htmlEscapeChar(ch);
     span.setAttribute('style', _cellStyle(diff));
-    const wCls = diff.width === 0 ? 'c w0' : diff.width === 2 ? 'c w2' : 'c w1';
+    const wCls = diff.cell.width === 0 ? 'c w0' : diff.cell.width === 2 ? 'c w2' : 'c w1';
     span.className = wCls;
 
     // Update grid entry for the target cell

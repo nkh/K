@@ -369,8 +369,7 @@ fn spawn_emulator_writer(
                 }
             }
         }
-        // PTY closed — flush trailing bytes from parser
-        emulator.write().await.finish();
+        // PTY closed — no parser flush needed with vte (no partial text buffering)
         vtty_output.close();
     });
 }

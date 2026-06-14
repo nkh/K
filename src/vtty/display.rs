@@ -31,6 +31,52 @@ const DEFAULT_CELL: Cell = Cell {
     width: 1,
 };
 
+/// Tracks the current SGR state for the display renderer.
+/// Used to avoid emitting redundant escape sequences and to provide
+/// a clean way to reset state.
+struct DisplayStyle {
+    fg: Option<[u8; 3]>,
+    bg: Option<[u8; 3]>,
+    bold: bool,
+    italic: bool,
+    underline: bool,
+    blink: bool,
+    reverse: bool,
+    strikethrough: bool,
+}
+
+impl DisplayStyle {
+    fn new() -> Self {
+        Self {
+            fg: None,
+            bg: None,
+            bold: false,
+            italic: false,
+            underline: false,
+            blink: false,
+            reverse: false,
+            strikethrough: false,
+        }
+    }
+
+    /// Returns true if any non-default style is active.
+    fn is_active(&self) -> bool {
+        self.fg.is_some()
+            || self.bg.is_some()
+            || self.bold
+            || self.italic
+            || self.underline
+            || self.blink
+            || self.reverse
+            || self.strikethrough
+    }
+
+    /// Reset all tracked state to defaults.
+    fn reset(&mut self) {
+        *self = Self::new();
+    }
+}
+
 /// Renders a VTTY buffer to the local terminal using crossterm.
 pub struct TerminalDisplay;
 
@@ -76,14 +122,7 @@ impl TerminalDisplay {
 
         // Track the last rendered style to avoid redundant SGR sequences.
         // `None` means "terminal default" (ESC[39m / ESC[49m).
-        let mut last_fg: Option<[u8; 3]> = None;
-        let mut last_bg: Option<[u8; 3]> = None;
-        let mut last_bold = false;
-        let mut last_italic = false;
-        let mut last_underline = false;
-        let mut last_blink = false;
-        let mut last_reverse = false;
-        let mut last_strikethrough = false;
+        let mut style = DisplayStyle::new();
 
         for screen_row in 0..(available_rows as usize) {
             let line_idx = viewport_start + screen_row;
@@ -109,30 +148,18 @@ impl TerminalDisplay {
 
                 // Fast path: cell is fully default AND we are already in
                 // the default terminal state — no SGR needed at all.
-                if cell == &DEFAULT_CELL
-                    && last_fg.is_none()
-                    && last_bg.is_none()
-                    && !last_bold
-                    && !last_italic
-                    && !last_underline
-                    && !last_blink
-                    && !last_reverse
-                    && !last_strikethrough
-                {
+                if cell == &DEFAULT_CELL && !style.is_active() {
                     stdout.queue(Print(cell.ch))?;
                     continue;
                 }
 
                 // ── Foreground ──
-                // When the cell fg matches the VTTY default we emit
-                // ESC[39m ("default fg") so the terminal uses its own
-                // palette instead of forcing RGB [204,204,204].
                 let cell_fg = if cell.fg == DEFAULT_FG {
                     None
                 } else {
                     Some(cell.fg)
                 };
-                if cell_fg != last_fg {
+                if cell_fg != style.fg {
                     if let Some(rgb) = cell_fg {
                         stdout.queue(SetForegroundColor(Color::Rgb {
                             r: rgb[0],
@@ -142,17 +169,16 @@ impl TerminalDisplay {
                     } else {
                         stdout.queue(Print("\x1b[39m"))?;
                     }
-                    last_fg = cell_fg;
+                    style.fg = cell_fg;
                 }
 
                 // ── Background ──
-                // Same strategy as foreground: default bg → ESC[49m.
                 let cell_bg = if cell.bg == DEFAULT_BG {
                     None
                 } else {
                     Some(cell.bg)
                 };
-                if cell_bg != last_bg {
+                if cell_bg != style.bg {
                     if let Some(rgb) = cell_bg {
                         stdout.queue(SetBackgroundColor(Color::Rgb {
                             r: rgb[0],
@@ -162,57 +188,57 @@ impl TerminalDisplay {
                     } else {
                         stdout.queue(Print("\x1b[49m"))?;
                     }
-                    last_bg = cell_bg;
+                    style.bg = cell_bg;
                 }
 
                 // ── Text attributes ──
-                if cell.bold != last_bold {
+                if cell.bold != style.bold {
                     stdout.queue(style::SetAttribute(if cell.bold {
                         Attribute::Bold
                     } else {
                         Attribute::NoBold
                     }))?;
-                    last_bold = cell.bold;
+                    style.bold = cell.bold;
                 }
-                if cell.italic != last_italic {
+                if cell.italic != style.italic {
                     stdout.queue(style::SetAttribute(if cell.italic {
                         Attribute::Italic
                     } else {
                         Attribute::NoItalic
                     }))?;
-                    last_italic = cell.italic;
+                    style.italic = cell.italic;
                 }
-                if cell.underline != last_underline {
+                if cell.underline != style.underline {
                     stdout.queue(style::SetAttribute(if cell.underline {
                         Attribute::Underlined
                     } else {
                         Attribute::NoUnderline
                     }))?;
-                    last_underline = cell.underline;
+                    style.underline = cell.underline;
                 }
-                if cell.blink != last_blink {
+                if cell.blink != style.blink {
                     stdout.queue(style::SetAttribute(if cell.blink {
                         Attribute::SlowBlink
                     } else {
                         Attribute::NoBlink
                     }))?;
-                    last_blink = cell.blink;
+                    style.blink = cell.blink;
                 }
-                if cell.reverse != last_reverse {
+                if cell.reverse != style.reverse {
                     stdout.queue(style::SetAttribute(if cell.reverse {
                         Attribute::Reverse
                     } else {
                         Attribute::NoReverse
                     }))?;
-                    last_reverse = cell.reverse;
+                    style.reverse = cell.reverse;
                 }
-                if cell.strikethrough != last_strikethrough {
+                if cell.strikethrough != style.strikethrough {
                     stdout.queue(style::SetAttribute(if cell.strikethrough {
                         Attribute::CrossedOut
                     } else {
                         Attribute::NotCrossedOut
                     }))?;
-                    last_strikethrough = cell.strikethrough;
+                    style.strikethrough = cell.strikethrough;
                 }
 
                 // Print the character
@@ -226,37 +252,15 @@ impl TerminalDisplay {
                 stdout.queue(ResetColor)?;
                 stdout.queue(style::SetAttribute(Attribute::Reset))?;
                 stdout.queue(crossterm::terminal::Clear(ClearType::UntilNewLine))?;
-                last_fg = None;
-                last_bg = None;
-                last_bold = false;
-                last_italic = false;
-                last_underline = false;
-                last_blink = false;
-                last_reverse = false;
-                last_strikethrough = false;
+                style.reset();
             } else {
                 // At the end of each row, reset the style so the next
                 // row starts clean.  This avoids leaking background
                 // colors across rows.
-                if last_fg.is_some()
-                    || last_bg.is_some()
-                    || last_bold
-                    || last_italic
-                    || last_underline
-                    || last_blink
-                    || last_reverse
-                    || last_strikethrough
-                {
+                if style.is_active() {
                     stdout.queue(ResetColor)?;
                     stdout.queue(style::SetAttribute(Attribute::Reset))?;
-                    last_fg = None;
-                    last_bg = None;
-                    last_bold = false;
-                    last_italic = false;
-                    last_underline = false;
-                    last_blink = false;
-                    last_reverse = false;
-                    last_strikethrough = false;
+                    style.reset();
                 }
             }
         }

@@ -14,6 +14,33 @@ pub struct Buffer {
     generation: u64,
 }
 
+/// A single changed cell in a buffer diff.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CellDiff {
+    pub row: usize,
+    pub col: usize,
+    pub cell: Cell,
+}
+
+/// Result of diffing two buffers.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct BufferDiff {
+    pub width: usize,
+    pub height: usize,
+    pub cells: Vec<CellDiff>,
+    pub changed_count: usize,
+}
+
+fn blank_cell(template: Option<&Cell>) -> Cell {
+    match template {
+        Some(t) => Cell {
+            ch: ' ',
+            ..*t
+        },
+        None => Cell::default(),
+    }
+}
+
 impl Buffer {
     pub fn new(width: usize, height: usize, max_scrollback: usize) -> Self {
         Self {
@@ -71,23 +98,10 @@ impl Buffer {
         }
     }
 
-    /// Clear the entire buffer to default cells.
-    pub fn clear_all(&mut self) {
-        for row in &mut self.rows {
-            for cell in row {
-                cell.clear();
-            }
-        }
-        self.bump_generation();
-    }
-
-    /// Clear the entire buffer using a template cell (respects current SGR attributes).
-    /// The template's character is replaced with a space.
-    pub fn clear_all_with(&mut self, template: &Cell) {
-        let blank = Cell {
-            ch: ' ',
-            ..*template
-        };
+    /// Clear the entire buffer.
+    /// If `template` is Some, new cells inherit its style; otherwise Cell::default() is used.
+    pub fn clear_all(&mut self, template: Option<&Cell>) {
+        let blank = blank_cell(template);
         for row in &mut self.rows {
             for cell in row {
                 *cell = blank;
@@ -97,22 +111,9 @@ impl Buffer {
     }
 
     /// Clear from the given column to end of line.
-    pub fn clear_line_from(&mut self, row: usize, col: usize) {
+    pub fn clear_line_from(&mut self, row: usize, col: usize, template: Option<&Cell>) {
         if let Some(row_cells) = self.rows.get_mut(row) {
-            for cell in row_cells.iter_mut().skip(col) {
-                cell.clear();
-            }
-            self.bump_generation();
-        }
-    }
-
-    /// Clear from the given column to end of line, using a template cell.
-    pub fn clear_line_from_with(&mut self, row: usize, col: usize, template: &Cell) {
-        if let Some(row_cells) = self.rows.get_mut(row) {
-            let blank = Cell {
-                ch: ' ',
-                ..*template
-            };
+            let blank = blank_cell(template);
             for cell in row_cells.iter_mut().skip(col) {
                 *cell = blank;
             }
@@ -121,22 +122,9 @@ impl Buffer {
     }
 
     /// Clear from the start of line to the given column (inclusive).
-    pub fn clear_line_to(&mut self, row: usize, col: usize) {
+    pub fn clear_line_to(&mut self, row: usize, col: usize, template: Option<&Cell>) {
         if let Some(row_cells) = self.rows.get_mut(row) {
-            for cell in row_cells.iter_mut().take(col + 1) {
-                cell.clear();
-            }
-            self.bump_generation();
-        }
-    }
-
-    /// Clear from the start of line to the given column (inclusive), using a template cell.
-    pub fn clear_line_to_with(&mut self, row: usize, col: usize, template: &Cell) {
-        if let Some(row_cells) = self.rows.get_mut(row) {
-            let blank = Cell {
-                ch: ' ',
-                ..*template
-            };
+            let blank = blank_cell(template);
             for cell in row_cells.iter_mut().take(col + 1) {
                 *cell = blank;
             }
@@ -145,22 +133,9 @@ impl Buffer {
     }
 
     /// Clear an entire line.
-    pub fn clear_line(&mut self, row: usize) {
+    pub fn clear_line(&mut self, row: usize, template: Option<&Cell>) {
         if let Some(row_cells) = self.rows.get_mut(row) {
-            for cell in row_cells {
-                cell.clear();
-            }
-            self.bump_generation();
-        }
-    }
-
-    /// Clear an entire line, using a template cell.
-    pub fn clear_line_with(&mut self, row: usize, template: &Cell) {
-        if let Some(row_cells) = self.rows.get_mut(row) {
-            let blank = Cell {
-                ch: ' ',
-                ..*template
-            };
+            let blank = blank_cell(template);
             for cell in row_cells {
                 *cell = blank;
             }
@@ -169,58 +144,30 @@ impl Buffer {
     }
 
     /// Clear from (start_row, start_col) to end of screen.
-    pub fn clear_screen_from(&mut self, start_row: usize, start_col: usize) {
-        self.clear_line_from(start_row, start_col);
+    pub fn clear_screen_from(&mut self, start_row: usize, start_col: usize, template: Option<&Cell>) {
+        self.clear_line_from(start_row, start_col, template);
         for row in (start_row + 1)..self.height {
-            self.clear_line(row);
-        }
-    }
-
-    /// Clear from (start_row, start_col) to end of screen, using a template cell.
-    pub fn clear_screen_from_with(&mut self, start_row: usize, start_col: usize, template: &Cell) {
-        self.clear_line_from_with(start_row, start_col, template);
-        for row in (start_row + 1)..self.height {
-            self.clear_line_with(row, template);
+            self.clear_line(row, template);
         }
     }
 
     /// Clear from start of screen to (end_row, end_col).
-    pub fn clear_screen_to(&mut self, end_row: usize, end_col: usize) {
+    pub fn clear_screen_to(&mut self, end_row: usize, end_col: usize, template: Option<&Cell>) {
         for row in 0..end_row {
-            self.clear_line(row);
+            self.clear_line(row, template);
         }
-        self.clear_line_to(end_row, end_col);
-    }
-
-    /// Clear from start of screen to (end_row, end_col), using a template cell.
-    pub fn clear_screen_to_with(&mut self, end_row: usize, end_col: usize, template: &Cell) {
-        for row in 0..end_row {
-            self.clear_line_with(row, template);
-        }
-        self.clear_line_to_with(end_row, end_col, template);
+        self.clear_line_to(end_row, end_col, template);
     }
 
     /// Scroll the entire buffer up by one line.
     /// The top line goes to scrollback; a blank line appears at the bottom.
-    pub fn scroll_up(&mut self) {
-        self.scroll_region_up(0, self.height.saturating_sub(1));
-    }
-
-    /// Scroll the entire buffer up by one line, using a template cell
-    /// for the new blank line (preserves current SGR background).
-    pub fn scroll_up_with(&mut self, template: &Cell) {
-        self.scroll_region_up_with(0, self.height.saturating_sub(1), template);
-    }
-
-    /// Scroll the entire buffer down by one line.
-    /// The bottom line is lost; a blank line appears at the top.
-    pub fn scroll_down(&mut self) {
-        self.scroll_region_down(0, self.height.saturating_sub(1));
+    pub fn scroll_up(&mut self, template: Option<&Cell>) {
+        self.scroll_region_up(0, self.height.saturating_sub(1), template);
     }
 
     /// Scroll a region [top..=bottom] up by one line.
     /// The line at `top` goes to scrollback; a blank line appears at `bottom`.
-    pub fn scroll_region_up(&mut self, top: usize, bottom: usize) {
+    pub fn scroll_region_up(&mut self, top: usize, bottom: usize, template: Option<&Cell>) {
         if !self.rows.is_empty() && top <= bottom && bottom < self.height {
             let removed = self.rows.remove(top);
             if top == 0 && self.scrollback.len() < self.max_scrollback {
@@ -230,26 +177,7 @@ impl Buffer {
                 self.scrollback.push(removed);
             }
             // When top > 0, the scrolled-out line is simply discarded (not scrollback).
-            self.rows.insert(bottom, vec![Cell::default(); self.width]);
-            self.bump_generation();
-        }
-    }
-
-    /// Scroll a region [top..=bottom] up by one line, using a template cell
-    /// for the new blank line (preserves current SGR background).
-    pub fn scroll_region_up_with(&mut self, top: usize, bottom: usize, template: &Cell) {
-        if !self.rows.is_empty() && top <= bottom && bottom < self.height {
-            let removed = self.rows.remove(top);
-            if top == 0 && self.scrollback.len() < self.max_scrollback {
-                self.scrollback.push(removed);
-            } else if top == 0 && !self.scrollback.is_empty() {
-                self.scrollback.remove(0);
-                self.scrollback.push(removed);
-            }
-            let blank = Cell {
-                ch: ' ',
-                ..*template
-            };
+            let blank = blank_cell(template);
             self.rows.insert(bottom, vec![blank; self.width]);
             self.bump_generation();
         }
@@ -257,23 +185,10 @@ impl Buffer {
 
     /// Scroll a region [top..=bottom] down by one line.
     /// The line at `bottom` is lost; a blank line appears at `top`.
-    pub fn scroll_region_down(&mut self, top: usize, bottom: usize) {
+    pub fn scroll_region_down(&mut self, top: usize, bottom: usize, template: Option<&Cell>) {
         if !self.rows.is_empty() && top <= bottom && bottom < self.height {
             self.rows.remove(bottom);
-            self.rows.insert(top, vec![Cell::default(); self.width]);
-            self.bump_generation();
-        }
-    }
-
-    /// Scroll a region [top..=bottom] down by one line, using a template cell
-    /// for the new blank line (preserves current SGR background).
-    pub fn scroll_region_down_with(&mut self, top: usize, bottom: usize, template: &Cell) {
-        if !self.rows.is_empty() && top <= bottom && bottom < self.height {
-            self.rows.remove(bottom);
-            let blank = Cell {
-                ch: ' ',
-                ..*template
-            };
+            let blank = blank_cell(template);
             self.rows.insert(top, vec![blank; self.width]);
             self.bump_generation();
         }
@@ -282,23 +197,10 @@ impl Buffer {
     /// Insert a blank line at `row`, pushing lines downward.
     /// Lines that fall past `bottom` are discarded.
     /// If `bottom` is None, the last line of the buffer is discarded.
-    pub fn insert_line(&mut self, row: usize, bottom: Option<usize>) {
+    pub fn insert_line(&mut self, row: usize, bottom: Option<usize>, template: Option<&Cell>) {
         let bottom = bottom.unwrap_or(self.height.saturating_sub(1));
         if row < self.height && bottom < self.height && row <= bottom {
-            self.rows.insert(row, vec![Cell::default(); self.width]);
-            self.rows.remove(bottom + 1);
-            self.bump_generation();
-        }
-    }
-
-    /// Insert a blank line at `row`, using a template cell for the new line.
-    pub fn insert_line_with(&mut self, row: usize, bottom: Option<usize>, template: &Cell) {
-        let bottom = bottom.unwrap_or(self.height.saturating_sub(1));
-        if row < self.height && bottom < self.height && row <= bottom {
-            let blank = Cell {
-                ch: ' ',
-                ..*template
-            };
+            let blank = blank_cell(template);
             self.rows.insert(row, vec![blank; self.width]);
             self.rows.remove(bottom + 1);
             self.bump_generation();
@@ -308,54 +210,24 @@ impl Buffer {
     /// Delete the line at `row`, shifting lines below it upward.
     /// A blank line is inserted at `bottom`.
     /// If `bottom` is None, the bottom of the buffer is used.
-    pub fn delete_line(&mut self, row: usize, bottom: Option<usize>) {
+    pub fn delete_line(&mut self, row: usize, bottom: Option<usize>, template: Option<&Cell>) {
         let bottom = bottom.unwrap_or(self.height.saturating_sub(1));
         if row < self.height && bottom < self.height && row <= bottom {
             self.rows.remove(row);
-            self.rows.insert(bottom, vec![Cell::default(); self.width]);
-            self.bump_generation();
-        }
-    }
-
-    /// Delete the line at `row`, using a template cell for the new blank line.
-    pub fn delete_line_with(&mut self, row: usize, bottom: Option<usize>, template: &Cell) {
-        let bottom = bottom.unwrap_or(self.height.saturating_sub(1));
-        if row < self.height && bottom < self.height && row <= bottom {
-            self.rows.remove(row);
-            let blank = Cell {
-                ch: ' ',
-                ..*template
-            };
+            let blank = blank_cell(template);
             self.rows.insert(bottom, vec![blank; self.width]);
             self.bump_generation();
         }
     }
 
-    pub fn insert_cells(&mut self, row: usize, col: usize, count: usize) {
-        if let Some(row_cells) = self.rows.get_mut(row) {
-            let count = count.min(self.width - col);
-            for i in (col + count..self.width).rev() {
-                row_cells[i] = row_cells[i - count];
-            }
-            for cell in row_cells.iter_mut().skip(col).take(count) {
-                cell.clear();
-            }
-            self.bump_generation();
-        }
-    }
-
     /// Insert blank cells at (row, col), shifting existing cells right.
-    /// The new blank cells use the template's attributes.
-    pub fn insert_cells_with(&mut self, row: usize, col: usize, count: usize, template: &Cell) {
+    pub fn insert_cells(&mut self, row: usize, col: usize, count: usize, template: Option<&Cell>) {
         if let Some(row_cells) = self.rows.get_mut(row) {
             let count = count.min(self.width - col);
             for i in (col + count..self.width).rev() {
                 row_cells[i] = row_cells[i - count];
             }
-            let blank = Cell {
-                ch: ' ',
-                ..*template
-            };
+            let blank = blank_cell(template);
             for cell in row_cells.iter_mut().skip(col).take(count) {
                 *cell = blank;
             }
@@ -363,35 +235,14 @@ impl Buffer {
         }
     }
 
-    pub fn delete_cells(&mut self, row: usize, col: usize, count: usize) {
-        if let Some(row_cells) = self.rows.get_mut(row) {
-            let count = count.min(self.width - col);
-            for i in col..(self.width - count) {
-                row_cells[i] = row_cells[i + count];
-            }
-            for cell in row_cells
-                .iter_mut()
-                .take(self.width)
-                .skip(self.width - count)
-            {
-                cell.clear();
-            }
-            self.bump_generation();
-        }
-    }
-
     /// Delete cells at (row, col), shifting remaining cells left.
-    /// The new blank cells at the end use the template's attributes.
-    pub fn delete_cells_with(&mut self, row: usize, col: usize, count: usize, template: &Cell) {
+    pub fn delete_cells(&mut self, row: usize, col: usize, count: usize, template: Option<&Cell>) {
         if let Some(row_cells) = self.rows.get_mut(row) {
             let count = count.min(self.width - col);
             for i in col..(self.width - count) {
                 row_cells[i] = row_cells[i + count];
             }
-            let blank = Cell {
-                ch: ' ',
-                ..*template
-            };
+            let blank = blank_cell(template);
             for cell in row_cells
                 .iter_mut()
                 .take(self.width)
@@ -420,39 +271,7 @@ impl Buffer {
             .filter_map(|i| self.get_line(i))
             .collect()
     }
-}
 
-/// A single changed cell in a buffer diff.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct CellDiff {
-    pub row: usize,
-    pub col: usize,
-    pub ch: char,
-    pub fg: [u8; 3],
-    pub bg: [u8; 3],
-    pub bold: bool,
-    pub italic: bool,
-    pub underline: bool,
-    pub blink: bool,
-    pub reverse: bool,
-    pub invisible: bool,
-    pub strikethrough: bool,
-    /// Display width of the character: 0 (continuation of wide char), 1, or 2.
-    /// Required by the client to distinguish normal empty cells (width=1, ch=' ')
-    /// from wide-char continuations (width=0) when rendering incremental diffs.
-    pub width: u8,
-}
-
-/// Result of diffing two buffers.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct BufferDiff {
-    pub width: usize,
-    pub height: usize,
-    pub cells: Vec<CellDiff>,
-    pub changed_count: usize,
-}
-
-impl Buffer {
     /// Compute a cell-level diff between `self` and `other`.
     /// Returns the list of cells that differ (by position).
     /// If the dimensions differ, all cells are considered changed.
@@ -467,17 +286,7 @@ impl Buffer {
                     cells.push(CellDiff {
                         row,
                         col,
-                        ch: c.ch,
-                        fg: c.fg,
-                        bg: c.bg,
-                        bold: c.bold,
-                        italic: c.italic,
-                        underline: c.underline,
-                        blink: c.blink,
-                        reverse: c.reverse,
-                        invisible: c.invisible,
-                        strikethrough: c.strikethrough,
-                        width: c.width,
+                        cell: c,
                     });
                 }
             }
@@ -498,17 +307,7 @@ impl Buffer {
                             cells.push(CellDiff {
                                 row,
                                 col,
-                                ch: a.ch,
-                                fg: a.fg,
-                                bg: a.bg,
-                                bold: a.bold,
-                                italic: a.italic,
-                                underline: a.underline,
-                                blink: a.blink,
-                                reverse: a.reverse,
-                                invisible: a.invisible,
-                                strikethrough: a.strikethrough,
-                                width: a.width,
+                                cell: *a,
                             });
                         }
                     }
@@ -533,7 +332,7 @@ mod tests {
     fn test_buffer_scroll() {
         let mut b = Buffer::new(10, 3, 100);
         b.rows[0][0].ch = 'A';
-        b.scroll_up();
+        b.scroll_up(None);
         assert_eq!(b.scrollback.len(), 1);
         assert_eq!(b.scrollback[0][0].ch, 'A');
         assert_eq!(b.rows[0][0].ch, ' ');
@@ -553,10 +352,10 @@ mod tests {
     fn test_buffer_insert_delete_line() {
         let mut b = Buffer::new(10, 5, 100);
         b.rows[1][0].ch = 'B';
-        b.insert_line(1, None);
+        b.insert_line(1, None, None);
         assert_eq!(b.rows[1][0].ch, ' ');
         assert_eq!(b.rows[2][0].ch, 'B');
-        b.delete_line(1, None);
+        b.delete_line(1, None, None);
         assert_eq!(b.rows[1][0].ch, 'B');
     }
 
@@ -567,7 +366,7 @@ mod tests {
             b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap();
         }
         // Insert at row 2, scroll region 2-4
-        b.insert_line(2, Some(4));
+        b.insert_line(2, Some(4), None);
         assert_eq!(b.rows[0][0].ch, '0'); // unchanged
         assert_eq!(b.rows[1][0].ch, '1'); // unchanged
         assert_eq!(b.rows[2][0].ch, ' '); // new blank
@@ -587,7 +386,7 @@ mod tests {
         assert_eq!(b.generation(), 0); // wrapped
     }
 
-    // ─── CellDiff width field tests ───
+    // ─── CellDiff tests ───
 
     #[test]
     fn test_diff_includes_width_for_wide_char() {
@@ -602,13 +401,13 @@ mod tests {
         // Find the cell at (0, 1) in the diff
         let wide_cell = diff.cells.iter().find(|c| c.row == 0 && c.col == 1);
         assert!(wide_cell.is_some(), "wide char cell should be in diff");
-        let wc = wide_cell.unwrap();
+        let wc = &wide_cell.unwrap().cell;
         assert_eq!(wc.ch, '你');
         assert_eq!(wc.width, 2, "wide char CellDiff should have width=2");
         // Find the continuation cell at (0, 2)
         let cont_cell = diff.cells.iter().find(|c| c.row == 0 && c.col == 2);
         assert!(cont_cell.is_some(), "continuation cell should be in diff");
-        let cc = cont_cell.unwrap();
+        let cc = &cont_cell.unwrap().cell;
         assert_eq!(cc.width, 0, "continuation CellDiff should have width=0");
     }
 
@@ -621,7 +420,7 @@ mod tests {
         buf.rows[0][3].width = 0;
         let diff = buf.diff(&Buffer::new(5, 1, 100));
         let json = serde_json::to_string(&diff).unwrap();
-        // The JSON should contain "width":2 and "width":0
+        // The JSON should contain "width":2 and "width":0 (nested inside cell object)
         assert!(json.contains(r#""width":2"#), "JSON should contain width:2 for wide char");
         assert!(json.contains(r#""width":0"#), "JSON should contain width:0 for continuation");
     }
@@ -630,7 +429,7 @@ mod tests {
     fn test_buffer_get_line_scrollback() {
         let mut b = Buffer::new(10, 3, 100);
         b.rows[0][0].ch = 'A';
-        b.scroll_up();
+        b.scroll_up(None);
         // Now scrollback has 1 entry, rows are shifted
         assert_eq!(b.get_line(0).unwrap()[0].ch, 'A'); // scrollback[0]
         assert_eq!(b.get_line(1).unwrap()[0].ch, ' '); // rows[0]
@@ -641,7 +440,7 @@ mod tests {
         let mut b = Buffer::new(10, 5, 100);
         for i in 0..5 { b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap(); }
         let tmpl = Cell { fg: [55, 55, 55], ..Default::default() };
-        b.scroll_region_up_with(1, 3, &tmpl);
+        b.scroll_region_up(1, 3, Some(&tmpl));
         assert_eq!(b.rows[0][0].ch, '0'); // unchanged
         assert_eq!(b.rows[1][0].ch, '2');
         assert_eq!(b.rows[2][0].ch, '3');
@@ -654,7 +453,7 @@ mod tests {
     fn test_buffer_scroll_region_down() {
         let mut b = Buffer::new(10, 5, 100);
         for i in 0..5 { b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap(); }
-        b.scroll_region_down(1, 3);
+        b.scroll_region_down(1, 3, None);
         // Row 1 becomes blank
         assert_eq!(b.rows[1][0].ch, ' ');
         assert_eq!(b.rows[0][0].ch, '0'); // unchanged
@@ -691,8 +490,8 @@ mod tests {
         b_buf.rows[0][0].fg = [255, 0, 0];
         let diff = b_buf.diff(&a);
         let cell = diff.cells.iter().find(|c| c.col == 0).unwrap();
-        assert_eq!(cell.ch, 'X');
-        assert_eq!(cell.fg, [255, 0, 0]); // from self (b_buf), not other
+        assert_eq!(cell.cell.ch, 'X');
+        assert_eq!(cell.cell.fg, [255, 0, 0]); // from self (b_buf), not other
     }
 
     #[test]
@@ -700,7 +499,7 @@ mod tests {
         let mut b = Buffer::new(10, 5, 100);
         for i in 0..5 { b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap(); }
         let tmpl = Cell { bg: [11, 22, 33], ..Default::default() };
-        b.delete_line_with(1, None, &tmpl);
+        b.delete_line(1, None, Some(&tmpl));
         assert_eq!(b.rows[0][0].ch, '0');
         assert_eq!(b.rows[1][0].ch, '2'); // shifted up
         assert_eq!(b.rows[2][0].ch, '3');
@@ -714,7 +513,7 @@ mod tests {
         let mut b = Buffer::new(10, 5, 100);
         for i in 0..5 { b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap(); }
         let tmpl = Cell { fg: [123, 0, 0], ..Default::default() };
-        b.insert_line_with(2, None, &tmpl);
+        b.insert_line(2, None, Some(&tmpl));
         assert_eq!(b.rows[0][0].ch, '0');
         assert_eq!(b.rows[1][0].ch, '1');
         assert_eq!(b.rows[2][0].ch, ' ');
