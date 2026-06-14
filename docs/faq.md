@@ -24,7 +24,7 @@ vrc requires Rust 1.75+ to build from source. The binary runs on Linux, macOS, a
 
 ### Is vrc production-ready?
 
-Yes. vrc is designed for production use with daemon mode (double-fork), graceful shutdown with configurable timeouts, per-command exit handlers, and UDS IPC secured by filesystem permissions (0600).
+Yes. vrc is designed for production use with daemon mode (via the `daemonize` crate), graceful shutdown with configurable timeouts, per-command exit handlers, and UDS IPC secured by filesystem permissions (0600).
 
 ### What license does vrc use?
 
@@ -251,7 +251,7 @@ Press `F12` to open a spawn prompt.
 vrc --daemon -- my-command
 ```
 
-The process double-forks and detaches from the terminal.
+The process daemonizes into the background using the `daemonize` crate.
 
 ### How do I redirect daemon output?
 
@@ -303,7 +303,7 @@ No. Each instance loads its own config file independently. However, you can use 
 
 1. Check your config file for syntax errors: `vrc config-check`
 2. Check if another vrc instance is running: `vrc list`
-3. Check the logs if running as a daemon: `cat /tmp/vrc.err`
+3. Check the logs if running as a daemon: `cat $XDG_STATE_HOME/vrc.err`
 
 ### The display exits immediately after my command finishes. Why?
 

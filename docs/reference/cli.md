@@ -225,9 +225,9 @@ Run as a background daemon process.
 
 | Flag | Default | Config Key | Description |
 |------|---------|------------|-------------|
-| `--daemon` | `false` | `daemon.enabled` | Fork into the background after initialization. Conflicts with `--display` and `--tabs`. |
-| `--stdout-file <path>` | `/tmp/vrc.out` | `daemon.stdout_file` | File to which the daemon's stdout is redirected. |
-| `--stderr-file <path>` | `/tmp/vrc.err` | `daemon.stderr_file` | File to which the daemon's stderr is redirected. |
+| `--daemon` | `false` | `daemon.enabled` | Daemonize into the background after initialization (via the `daemonize` crate). Conflicts with `--display` and `--tabs`. |
+| `--stdout-file <path>` | `$XDG_STATE_HOME/vrc.out` | `daemon.stdout_file` | File to which the daemon's stdout is redirected. |
+| `--stderr-file <path>` | `$XDG_STATE_HOME/vrc.err` | `daemon.stderr_file` | File to which the daemon's stderr is redirected. |
 
 **Example**
 

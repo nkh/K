@@ -151,16 +151,18 @@ Controls Unix daemon (background process) behavior.
 | Key | Type | Default | CLI Flag | Description |
 |-----|------|---------|----------|-------------|
 | `enabled` | `bool` | `false` | `--daemon` | Run as a background daemon. |
-| `stdout_file` | `string` | `"/tmp/vrc.out"` | `--stdout-file <FILE>` | Redirect stdout to file. |
-| `stderr_file` | `string` | `"/tmp/vrc.err"` | `--stderr-file <FILE>` | Redirect stderr to file. |
+| `stdout_file` | `string` | `$XDG_STATE_HOME/vrc.out`¹ | `--stdout-file <FILE>` | Redirect stdout to file. |
+| `stderr_file` | `string` | `$XDG_STATE_HOME/vrc.err`¹ | `--stderr-file <FILE>` | Redirect stderr to file. |
 
 **Example:**
 ```yaml
 daemon:
   enabled: false
-  stdout_file: "/tmp/vrc.out"
-  stderr_file: "/tmp/vrc.err"
+  stdout_file: "$XDG_STATE_HOME/vrc.out"
+  stderr_file: "$XDG_STATE_HOME/vrc.err"
 ```
+
+> ¹ Defaults to `$XDG_STATE_HOME/vrc.{out,err}`. Falls back to `$XDG_RUNTIME_DIR` then `/tmp` if `XDG_STATE_HOME` is not set. On most Linux systems with systemd, this resolves to `~/.local/state/vrc.{out,err}`.
 
 ### `interactive`
 
@@ -464,7 +466,7 @@ Controls web admin UI behavior including update modes and panel colors.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `update_mode` | `string` | `"push"` | How the web UI discovers buffer changes: `"push"` or `"poll"`. |
+| `update_mode` | `enum` | `"push"` | How the web UI discovers buffer changes: `"push"` or `"poll"`. |
 | `dirty_check_ms` | `u64` | `200` | Server-side dirty-check interval in milliseconds (push mode). |
 | `default_poll_ms` | `u64` | `500` | Client-side polling interval in milliseconds (poll mode). |
 | `panel_colors` | `array` | (built-in palette) | Per-server background colors for panel headers in the web UI. Each entry defines a `background` and `text` color pair. If not specified, a built-in palette of 7 dark colors is used. |
@@ -624,8 +626,8 @@ command_log:
 
 daemon:
   enabled: false
-  stdout_file: "/tmp/vrc.out"
-  stderr_file: "/tmp/vrc.err"
+  stdout_file: "$XDG_STATE_HOME/vrc.out"
+  stderr_file: "$XDG_STATE_HOME/vrc.err"
 
 # Additional output sinks for spawned commands
 handles: []

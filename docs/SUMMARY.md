@@ -48,7 +48,6 @@
 # Testing
 
 - [Testing Procedures](./testing.md)
-- [Storyboard](storyboard.md)
 
 # Web UI Reference
 

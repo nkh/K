@@ -1458,7 +1458,7 @@ vrc --daemon \
   -- my-command
 ```
 
-In daemon mode, vrc performs a double-fork to detach from the controlling terminal. The process becomes a session leader, stdin is closed, and stdout/stderr are redirected to files (default: `/tmp/vrc.out` and `/tmp/vrc.err`). The `--display` option is automatically disabled since there is no terminal to display on.
+In daemon mode, vrc daemonizes into the background using the `daemonize` crate. The process becomes a session leader, stdin is closed, and stdout/stderr are redirected to files (default: `$XDG_STATE_HOME/vrc.out` and `$XDG_STATE_HOME/vrc.err`). The `--display` option is automatically disabled since there is no terminal to display on.
 
 To manage a daemon instance:
 
@@ -1713,8 +1713,8 @@ command_log:
 
 daemon:
   enabled: false
-  stdout_file: "/tmp/vrc.out"
-  stderr_file: "/tmp/vrc.err"
+  stdout_file: "$XDG_STATE_HOME/vrc.out"
+  stderr_file: "$XDG_STATE_HOME/vrc.err"
 
 handles: []
 ```
@@ -1751,8 +1751,8 @@ enabled = false
 
 [daemon]
 enabled = false
-stdout_file = "/tmp/vrc.out"
-stderr_file = "/tmp/vrc.err"
+stdout_file = "$XDG_STATE_HOME/vrc.out"
+stderr_file = "$XDG_STATE_HOME/vrc.err"
 ```
 
 ### JSON Example
@@ -1787,8 +1787,8 @@ stderr_file = "/tmp/vrc.err"
   },
   "daemon": {
     "enabled": false,
-    "stdout_file": "/tmp/vrc.out",
-    "stderr_file": "/tmp/vrc.err"
+    "stdout_file": "$XDG_STATE_HOME/vrc.out",
+    "stderr_file": "$XDG_STATE_HOME/vrc.err"
   }
 }
 ```

@@ -6,12 +6,11 @@ Learn how to run vrc or vrw as a background daemon, keep it running after you lo
 
 ## How Daemon Mode Works
 
-When you pass the `--daemon` flag, vrc performs a traditional Unix double-fork to detach from the controlling terminal:
+When you pass the `--daemon` flag, vrc daemonizes into the background using the `daemonize` crate:
 
-1. **First fork** — The parent process exits immediately, returning control to the shell.
-2. **Second fork** — The intermediate process forks again and exits, ensuring the daemon is reparented to init/systemd.
-3. **Sid creation** — The daemon creates a new session and process group.
-4. **Stdio redirection** — stdout and stderr are redirected to log files (default: `/tmp/vrc.out`, `/tmp/vrc.err`).
+1. **Double-fork** — The `daemonize` crate performs the traditional Unix double-fork to detach from the controlling terminal. The parent returns immediately, and the grandchild is adopted by init/systemd.
+2. **Session creation** — The daemon creates a new session and process group.
+3. **Stdio redirection** — stdout and stderr are redirected to log files (default: `$XDG_STATE_HOME/vrc.out`, `$XDG_STATE_HOME/vrc.err`).
 
 The daemon runs independently of your terminal session.
 
@@ -78,7 +77,7 @@ vrc spawn-in <PID> -- npm run build
 Read the daemon's own log:
 
 ```bash
-tail -f /tmp/vrc.err
+tail -f $XDG_STATE_HOME/vrc.err
 ```
 
 ## Systemd Integration

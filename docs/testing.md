@@ -108,7 +108,7 @@ Multi-module tests covering the `vrc_core` library. These tests are organized by
 |--------|-------------------|-------------------|
 | VTTY buffer, cell, color, emulator | Both | Buffer operations, cell properties, color palette, full terminal emulator (CSI sequences, SGR, OSC, alternate screen, scroll regions, etc.) |
 | Config schema, merge, validation | Mixed (see below) | Config deserialization, merge logic, profile overrides, validation rules |
-| Process error types | Both | Error display, `Send + Sync`, `std::error::Error` source chain |
+| Process error types | Both | Error display, `Send + Sync`, `std::error::Error` source chain (`thiserror` derive) |
 | Handle registry, null sink, file sink | Both | Handle lifecycle, sink write/flush |
 | CommandLogger | Both | Memory buffer, broadcast subscriber, ring buffer |
 | VTTY renderer (HTML) | Both | HTML output structure |
@@ -131,7 +131,7 @@ Tests that exercise multi-component interactions and the `CommandManager`.
 | Test | Feature requirement | What it verifies |
 |------|-------------------|-------------------|
 | `test_key_encoding` | Both | `encode_keys` correctly translates named keys (`<C-c>`, `<Enter>`, `<Up>`, etc.) |
-| `test_spawn_and_list` | vrw | Spawning a command and listing it via `CommandManager` |
+| `test_spawn_and_list` | vrw | Spawning a command (via `SpawnOptions` builder) and listing it via `CommandManager` |
 | `test_vtty_contents` | vrw | VTTY plain-text output after command execution |
 | `test_send_keys` | vrw | Sending keystrokes to a running command's stdin |
 

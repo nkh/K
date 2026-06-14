@@ -406,7 +406,7 @@ via `/proc/<pid>/comm` on Linux. Both binaries use the same registry.
 
 The daemon module handles three responsibilities:
 
-1. **Re-parenting** — When `--daemon` is passed, the process forks, writes a PID file, and redirects stdio.
+1. **Re-parenting** — When `--daemon` is passed, the process daemonizes using the `daemonize` crate (which handles the traditional double-fork pattern), writes a PID file, and redirects stdio.
 2. **Signal handling** — Listens for `SIGTERM`, `SIGINT`, and `SIGUSR1`.
 3. **Lifecycle loop** — When the registry is empty and the daemon is in default mode, it initiates shutdown.
 
@@ -424,8 +424,9 @@ The process manager owns the high-level lifecycle of commands. It:
 
 #### `spawner.rs`
 
-The spawner is a thin abstraction over `portable-pty`. It configures the PTY size,
-working directory, environment variables, and the executable + arguments.
+The spawner is a thin abstraction over `portable-pty`. It accepts a `SpawnOptions`
+builder struct that configures the PTY size, working directory, environment
+variables, and the executable + arguments.
 
 #### `handle.rs`
 
@@ -763,7 +764,9 @@ a new server. If the probe fails, vrw starts a new server on the default port.
 | `tracing` / `tracing-subscriber` | Structured logging | Both |
 | `parking_lot` | Fast mutex/rwlock | Both |
 | `crossterm` | Local terminal display | Both |
-| `libc` | POSIX signals, daemonization | Both |
+| `libc` | POSIX signals (process checking, signal handling) | Both |
+| `daemonize` | Unix daemonization (double-fork via `daemonize` crate) | Both |
+| `thiserror` | Error derive macros (`ProcessError` etc.) | Both |
 | `axum` | HTTP framework (routes, extractors, WebSocket) | vrw |
 | `axum-server` | HTTP/TLS server with graceful shutdown | vrw |
 | `tower` / `tower-http` | Middleware layers (CORS, tracing, fs) | vrw |
