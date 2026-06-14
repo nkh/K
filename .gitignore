@@ -1,20 +1,11 @@
-# Build artifacts
-/target/
-*.swp
-*.swo
-*~
-
-# IDE
-.idea/
+<<<<<<< HEAD
+/target
+**/*.rs.bk
+Cargo.lock
+*.log
 .vscode/
-*.iml
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Dev artifacts (not project files)
-auto
-run_vrw.sh
-served_commands*.js
-test_webui*.py
+.idea/
+=======
+skills/
+node_modules/
+>>>>>>> c2e5019 (Initial commit)
