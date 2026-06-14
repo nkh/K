@@ -21,45 +21,27 @@ pub struct CommandHandle {
     pub handle_registry: HandleRegistry,
     /// Optional certificate name bound to this command.
     pub certificate: Option<String>,
-    /// Exit configuration for this command (on_exit, on_error, timeout).
+    /// Exit configuration (on_exit, on_error, timeout).
     pub exit_config: ExitConfig,
-    /// Wall-clock time when this command was spawned.
     pub spawn_time: std::time::Instant,
-    /// PTY master handle for resizing the child PTY (e.g. on SIGWINCH).
-    /// Wrapped in a Mutex because `PtyMaster` methods may not be thread-safe.
-    /// `None` in test contexts where no real PTY is available.
+    /// PTY master for resizing (SIGWINCH). `None` in test contexts.
     pub pty_master: Option<Arc<parking_lot::Mutex<PtyMaster>>>,
     /// Output sink manager — notified after each emulator feed.
-    /// Sinks receive push notifications when the VTTY buffer changes,
-    /// replacing the need for polling-based change detection.
     pub vtty_output: Arc<VttyOutput>,
-    /// Watch-channel receiver for the child-exit signal.  Unlike
-    /// tokio::sync::Notify (which loses notifications when no waiter
-    /// is present), a watch channel always stores the latest value.
-    /// The display/headless loop awaits `changed()` in select! — it
-    /// completes the instant the child exits, even if the child died
-    /// before the loop started awaiting.
-    ///
-    /// Receiver is Clone, so it can be extracted from the DashMap
-    /// without needing mutable access.
+    /// Watch-channel receiver for the child-exit signal.
+    /// Unlike `tokio::sync::Notify`, a watch channel always stores the latest value.
     pub exit_rx: tokio::sync::watch::Receiver<bool>,
-    /// Exit code of the child process (set when the child terminates).
-    /// None while the process is still running.
+    /// Exit code of the child (None while running).
     pub exit_code: std::sync::Mutex<Option<i32>>,
-    /// Wall-clock time when the child process exited.
-    /// None while the process is still running.
+    /// Exit time (None while running).
     pub exit_time: std::sync::Mutex<Option<std::time::Instant>>,
-    /// Whether the process has been frozen (SIGSTOP).  Uses AtomicBool
-    /// so any thread can check or flip the flag without holding a lock.
+    /// Whether the process has been frozen (SIGSTOP).
     pub frozen: std::sync::atomic::AtomicBool,
-    /// Previous buffer snapshot used for computing incremental diffs (Level 3).
-    /// Stored per-handle so the HTTP diff endpoint can compute diffs without
-    /// relying on the WS diff watcher's local state.
+    /// Per-handle diff baseline for the HTTP diff endpoint.
     pub prev_diff_snapshot: Mutex<Option<crate::vtty::buffer::Buffer>>,
 }
 
-/// VTTY metadata bundle — all terminal state in one struct.
-/// Produced by `CommandHandle::vtty_metadata()` which acquires the read lock once.
+/// All VTTY metadata in one struct.
 pub struct VttyMetadata {
     pub cursor: (usize, usize),
     pub dimensions: (usize, usize),
@@ -96,13 +78,7 @@ impl CommandHandle {
         emu.snapshot()
     }
 
-    /// Blocking snapshot — used in sync contexts (e.g. inside DashMap iterations,
-    /// display rendering) that are called from within the async runtime.
-    ///
-    /// Uses `tokio::task::block_in_place` to safely call `blocking_read()` from
-    /// an async context. Without this wrapper, `blocking_read()` on a
-    /// `tokio::sync::RwLock` panics with "Cannot block the current thread from
-    /// within a runtime".
+    /// Blocking snapshot — uses `block_in_place` for sync contexts inside the async runtime.
     pub fn vtty_snapshot_blocking(&self) -> crate::vtty::buffer::Buffer {
         tokio::task::block_in_place(|| {
             let emu = self.emulator.blocking_read();
@@ -125,8 +101,7 @@ impl CommandHandle {
         emu.partial(start_row, row_count)
     }
 
-    /// Render VTTY buffer as HTML with run-length encoding.
-    /// Acquires the read lock once, snapshots, and renders.
+    /// Render VTTY buffer as HTML.
     pub async fn vtty_html(&self) -> String {
         let emu = self.emulator.read().await;
         let buf = emu.snapshot();
@@ -141,10 +116,8 @@ impl CommandHandle {
         crate::vtty::renderer::VttyRenderer::to_png(&buf, font_size, font_path)
     }
 
-    /// Get the VTTY buffer as HTML including scrollback lines.
-    ///
-    /// `scrollback_offset` shifts the viewport backward (0 = normal bottom).
-    /// `visible_rows` is how many rows of HTML to return.
+    /// VTTY buffer as HTML with scrollback.
+    /// `scrollback_offset` shifts viewport backward (0 = bottom).
     pub async fn vtty_html_scrollback(
         &self,
         scrollback_offset: usize,
@@ -178,13 +151,12 @@ impl CommandHandle {
         crate::vtty::renderer::VttyRenderer::to_html(&buf)
     }
 
-
     pub async fn cursor_position(&self) -> (usize, usize) {
         let emu = self.emulator.read().await;
         emu.cursor()
     }
 
-    /// Whether the child application has made the cursor visible (DEC mode 25).
+    /// Whether the cursor is visible (DEC mode 25).
     pub async fn is_cursor_visible(&self) -> bool {
         let emu = self.emulator.read().await;
         emu.is_cursor_visible()
@@ -196,12 +168,7 @@ impl CommandHandle {
         emu.cursor_style()
     }
 
-    /// Send pasted text to the command, wrapping in bracketed paste
-    /// escape sequences if the child has enabled bracketed paste mode (?2004).
-    /// When bracketed paste mode is active, the text is sent as:
-    ///   ESC[200~ text ESC[201~
-    /// This allows the child application to distinguish pasted text from
-    /// typed input (e.g., to avoid triggering auto-complete or line editing).
+    /// Send pasted text, wrapping in bracketed paste sequences if enabled.
     pub async fn send_paste(&self, text: &str) -> Result<()> {
         let bracketed = {
             let emu = self.emulator.read().await;
@@ -222,15 +189,13 @@ impl CommandHandle {
         emu.dimensions()
     }
 
-    /// Return the current buffer generation counter (O(1) read).
-    /// Used by the web UI to skip redundant DOM updates when nothing changed.
+    /// Return the buffer generation counter (O(1) read).
     pub async fn buffer_generation(&self) -> u64 {
         let emu = self.emulator.read().await;
         emu.buffer_generation()
     }
 
-    /// Return scrollback line count without cloning the buffer.
-    /// Uses the cheap scrollback_len() method on the emulator.
+    /// Return scrollback line count.
     pub async fn scrollback_count(&self) -> usize {
         let emu = self.emulator.read().await;
         emu.scrollback_len()
@@ -249,7 +214,6 @@ impl CommandHandle {
     }
 
     /// All VTTY metadata in a single read lock acquisition.
-    /// Replaces 8+ separate `emulator.read().await` calls with one.
     pub async fn vtty_metadata(&self) -> VttyMetadata {
         let emu = self.emulator.read().await;
         VttyMetadata {
@@ -270,10 +234,7 @@ impl CommandHandle {
         Ok(())
     }
 
-    /// Resize both the VTTY emulator AND the underlying child PTY.
-    /// This is the correct way to handle terminal resize (SIGWINCH):
-    ///   1. Resize the PTY master → kernel sends SIGWINCH to the child
-    ///   2. Resize the in-memory VTTY buffer to match
+    /// Resize both the PTY and the in-memory VTTY buffer (SIGWINCH handling).
     pub async fn resize_pty(&self, rows: u16, cols: u16) -> Result<()> {
         // Resize the PTY master first — this sends SIGWINCH to the child.
         if let Some(master) = &self.pty_master {
@@ -286,8 +247,7 @@ impl CommandHandle {
         emu.resize(rows as usize, cols as usize);
         drop(emu);
 
-        // Notify sinks so push-mode (WebSocket) clients get a vtty_dirty
-        // signal even if the child produces no new output after SIGWINCH.
+        // Notify push-mode sinks after resize even if no new output
         let emu = self.emulator.read().await;
         let buf = emu.buffer();
         self.vtty_output.notify_sinks(&buf);
@@ -304,7 +264,7 @@ impl CommandHandle {
         self.spawn_time.elapsed().as_secs_f64()
     }
 
-    /// Whether the underlying OS process is still alive (pid check).
+    /// Whether the process is still alive (pid check).
     pub fn is_alive(&self) -> bool {
         #[cfg(unix)]
         {
@@ -328,15 +288,13 @@ impl CommandHandle {
     }
 
     /// Force-exit the alternate screen if active (auto-recovery).
-    /// Called when a command exits without properly restoring the main screen.
     pub async fn recover_alternate_screen(&self) {
         let mut emu = self.emulator.write().await;
         emu.recover_from_alternate_screen();
     }
 
     /// Compute a cell-level diff of the current buffer against the last
-    /// transmitted snapshot, and return the diff along with cursor and dimensions.
-    /// Used by the HTTP diff endpoint and the Level 3 incremental update path.
+    /// transmitted snapshot. Used by the HTTP diff endpoint.
     pub async fn vtty_diff_and_state(&self) -> (
         crate::vtty::buffer::BufferDiff,
         (usize, usize),

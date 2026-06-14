@@ -1,74 +1,46 @@
 //! Typed errors for the process management module.
 //!
-//! Replaces `anyhow::Error` in library code so that callers can match on
-//! specific error conditions instead of inspecting error strings.
-//!
-//! # Design
-//!
-//! Each variant represents a semantically distinct failure mode:
-//!
-//! | Variant               | Meaning                                      |
-//! |-----------------------|----------------------------------------------|
-//! | `Io`                  | Underlying I/O error (PTY, file, etc.)       |
-//! | `CommandNotFound`     | No command with the given ID in the manager  |
-//! | `CommandAlreadyExists`| Duplicate command ID registration            |
-//! | `SpawnFailed`         | Child process could not be started           |
-//! | `UnknownSinkType`     | Unsupported sink type string                 |
-//! | `SinkAlreadyExists`   | Duplicate sink name for a command            |
-//! | `SignalFailed`        | OS signal delivery returned non-zero         |
-//! | `ChannelClosed`       | Stdin mpsc channel was dropped               |
-//! | `SnapshotNotFound`    | Named buffer snapshot does not exist         |
-//! | `PlatformNotSupported`| Unix-only operation on non-Unix              |
-//!
-//! # Compatibility
-//!
-//! `ProcessError` implements `std::error::Error`, so it converts
-//! automatically to `anyhow::Error` at the binary boundary (web
-//! handlers, CLI subcommands) without any extra glue.
+//! Replaces `anyhow::Error` in library code so callers can match on
+//! specific error conditions. Implements `std::error::Error` for
+//! automatic conversion to `anyhow::Error` at the binary boundary.
 
 use std::fmt;
 
 /// Typed error type for process management operations.
 #[derive(Debug)]
 pub enum ProcessError {
-    /// An I/O error occurred (PTY operations, file creation, etc.).
+    /// Underlying I/O error.
     Io(std::io::Error),
 
-    /// A command with the given ID was not found in the manager.
+    /// No command with the given ID in the manager.
     CommandNotFound(String),
 
-    /// A command with the given ID is already registered.
+    /// Duplicate command ID.
     CommandAlreadyExists(String),
 
     /// Failed to spawn a child process.
-    SpawnFailed {
-        /// The command binary that was being spawned.
-        cmd: String,
-    },
+    SpawnFailed { cmd: String },
 
-    /// An unknown sink type was requested.
+    /// Unknown sink type.
     UnknownSinkType(String),
 
-    /// A sink with this name already exists for the given command.
+    /// Duplicate sink name for a command.
     SinkAlreadyExists { name: String, command_id: String },
 
-    /// An OS signal operation (SIGSTOP / SIGCONT / SIGKILL) failed.
+    /// OS signal delivery failed.
     SignalFailed {
-        /// The command ID the signal was sent to.
         id: String,
-        /// Human-readable signal name (e.g. "SIGSTOP").
         signal: String,
-        /// The return code from the kill syscall.
         code: i32,
     },
 
-    /// The stdin channel to a command was closed unexpectedly.
+    /// Stdin channel was closed.
     ChannelClosed(String),
 
-    /// A named buffer snapshot was not found.
+    /// Named buffer snapshot does not exist.
     SnapshotNotFound { name: String, command_id: String },
 
-    /// Operation not supported on this platform.
+    /// Unix-only operation on non-Unix.
     PlatformNotSupported(String),
 }
 

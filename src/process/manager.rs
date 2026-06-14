@@ -40,14 +40,11 @@ pub struct CommandManager {
     commands: Arc<DashMap<CommandId, CommandHandle>>,
     config: Config,
     logger: Arc<CommandLogger>,
-    /// Broadcast channel for VTTY change notifications.
-    /// Each message is a `(command_id, message_json)` pair.
+    /// Broadcast channel for VTTY change notifications `(command_id, message_json)`.
     vtty_change_tx: broadcast::Sender<(String, String)>,
     /// Named snapshots: (command_id, snapshot_name) -> StoredSnapshot
     snapshots: Arc<DashMap<(CommandId, String), StoredSnapshot>>,
     /// Last-known buffer generation per command for O(1) change detection.
-    /// Replaces the old `last_buffer: DashMap<CommandId, Buffer>` approach
-    /// which cloned the entire buffer on every poll.
     last_generation: Arc<DashMap<CommandId, u64>>,
 }
 
@@ -147,40 +144,11 @@ impl CommandManager {
         Ok(id)
     }
 
-    /// Register an externally-created [`CommandHandle`] with the manager.
+    /// Register an externally-created [`CommandHandle`].
     ///
-    /// This is the **"attach to running process"** registration path.  The
-    /// caller is responsible for having already created the PTY, spawned the
-    /// process, wired up the VTTY emulator, and set up all I/O plumbing.
-    /// This method performs only the bookkeeping that [`CommandManager::spawn`]
-    /// normally does *after* process creation:
-    ///
-    /// 1. Validates that no command with the same ID already exists.
-    /// 2. Binds an optional certificate for per-command access control.
-    /// 3. Logs the registration event via [`CommandLogger`].
-    /// 4. Inserts the handle into the internal [`DashMap`] command registry.
-    /// 5. Starts the background diff-watcher for VTTY change notifications.
-    ///
-    /// # Arguments
-    ///
-    /// * `handle` — A fully-constructed [`CommandHandle`] (typically built by
-    ///   [`ProcessSpawner::spawn`] or a custom spawner for the attach case).
-    /// * `certificate` — Optional certificate name to bind for per-command
-    ///   access control.  When `Some`, only clients presenting that
-    ///   certificate (or its derived bearer token) may interact with the
-    ///   command.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if a command with the same ID is already registered.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use vrc_core::process::manager::CommandManager;
-    /// // Build a handle via ProcessSpawner or custom code, then:
-    /// // manager.add_handle(handle, Some("my-cert".into()))?;
-    /// ```
+    /// The caller must have already created the PTY, spawned the process,
+    /// wired up the VTTY emulator, and set up all I/O plumbing.
+    /// Returns an error if a command with the same ID already exists.
     pub fn add_handle(
         &self,
         mut handle: CommandHandle,
@@ -212,24 +180,10 @@ impl CommandManager {
         Ok(id)
     }
 
-    /// Dynamically attach an output sink to a running command.
+    /// Attach an output sink to a running command.
     ///
-    /// This completes the `POST /api/commands/:id/handles` API so that
-    /// callers can add file, VTTY, or null sinks *after* a command has
-    /// already been spawned.
-    ///
-    /// # Arguments
-    ///
-    /// * `id` — The command to attach the sink to.
-    /// * `name` — A logical name for the sink (must be unique per command).
-    /// * `sink_type` — One of `"file"`, `"vtty"`, or `"null"`.
-    /// * `path` — For `"file"` sinks, the output file path.  Supports
-    ///   `{id}` and `{name}` placeholders.  Ignored for other sink types.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the command does not exist or if a sink with
-    /// the given name is already registered.
+    /// `sink_type` must be `"file"`, `"vtty"`, or `"null"`.
+    /// File paths support `{id}` and `{name}` placeholders.
     pub fn register_sink(
         &self,
         id: &CommandId,
@@ -272,12 +226,9 @@ impl CommandManager {
         Ok(())
     }
 
-    /// Spawn a background watcher that detects buffer changes and broadcasts
-    /// incremental diff messages using the Level 3 protocol.  The watcher
-    /// maintains its own local buffer baseline, computes cell-level diffs, and
-    /// sends `vtty_diff` messages with changed cells.  If the terminal dimensions
-    /// change or too many cells changed (>90%), it falls back to `vtty_full`
-    /// with the complete HTML so the client can resync.
+    /// Spawn a background watcher that broadcasts incremental diff messages
+    /// via the Level 3 protocol. Falls back to full HTML on dimension changes
+    /// or when >90% of cells changed.
     fn spawn_diff_watcher(&self, watch_id: String) {
         let watch_commands = self.commands.clone();
         let watch_tx = self.vtty_change_tx.clone();
@@ -290,11 +241,7 @@ impl CommandManager {
             loop {
                 tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
-                // Clone the emulator Arc and drop the DashMap entry BEFORE
-                // awaiting the snapshot.  Holding the DashMap shard read lock
-                // across the .await blocks kill() (which needs a write lock
-                // to commands.remove()), making the server appear to hang
-                // when stopping a command from the web UI.
+                // Clone Arc, drop lock before .await to avoid blocking kill()
                 let emulator = match watch_commands.get(&watch_id) {
                     Some(e) => e.emulator.clone(),
                     None => {
@@ -302,8 +249,7 @@ impl CommandManager {
                         break;
                     }
                 };
-                // DashMap shard lock is now released.
-
+                // DashMap lock released
                 let (current_gen, current_buf, cursor, dims, cursor_visible, alt_screen) = {
                     let emu = emulator.read().await;
                     (
@@ -334,67 +280,47 @@ impl CommandManager {
                     None => true,
                 };
 
-                if dims_changed || prev_buffer.is_none() {
-                    // Send vtty_full for resync
-                    let html = crate::vtty::renderer::VttyRenderer::to_html(&current_buf);
-                    let msg = serde_json::json!({
-                        "type": "vtty_full",
-                        "data": {
-                            "id": &watch_id,
-                            "html": html,
-                            "cursor": {"row": cursor_row, "col": cursor_col},
-                            "dimensions": {"rows": rows, "cols": cols},
-                            "alternate_screen": alt_screen,
-                            "cursor_visible": cursor_visible,
-                            "generation": current_gen,
-                        }
-                    })
-                    .to_string();
-                    let _ = watch_tx.send((watch_id.clone(), msg));
-                    prev_buffer = Some(current_buf);
-                    prev_dims = Some((rows, cols));
-                    continue;
+                let need_full = dims_changed || prev_buffer.is_none();
+
+                if !need_full {
+                    // Compute diff between previous and current buffer
+                    let prev = prev_buffer.as_ref().unwrap();
+                    let diff = current_buf.diff(prev);
+                    // If too many cells changed (>90%), fall back to full HTML
+                    if diff.changed_count <= (rows * cols) * 9 / 10 {
+                        let msg = serde_json::json!({
+                            "type": "vtty_diff",
+                            "data": {
+                                "id": &watch_id,
+                                "generation": current_gen,
+                                "cursor": {"row": cursor_row, "col": cursor_col},
+                                "dimensions": {"rows": rows, "cols": cols},
+                                "alternate_screen": alt_screen,
+                                "cursor_visible": cursor_visible,
+                                "changed_count": diff.changed_count,
+                                "cells": diff.cells,
+                            }
+                        })
+                        .to_string();
+                        let _ = watch_tx.send((watch_id.clone(), msg));
+                        prev_buffer = Some(current_buf);
+                        prev_dims = Some((rows, cols));
+                        continue;
+                    }
                 }
 
-                // Compute diff between previous and current buffer
-                let prev = prev_buffer.as_ref().unwrap();
-                let diff = current_buf.diff(prev);
-
-                // If too many cells changed (>90% of total), fall back to full HTML
-                let total_cells = rows * cols;
-                if diff.changed_count > total_cells * 9 / 10 {
-                    let html = crate::vtty::renderer::VttyRenderer::to_html(&current_buf);
-                    let msg = serde_json::json!({
-                        "type": "vtty_full",
-                        "data": {
-                            "id": &watch_id,
-                            "html": html,
-                            "cursor": {"row": cursor_row, "col": cursor_col},
-                            "dimensions": {"rows": rows, "cols": cols},
-                            "alternate_screen": alt_screen,
-                            "cursor_visible": cursor_visible,
-                            "generation": current_gen,
-                        }
-                    })
-                    .to_string();
-                    let _ = watch_tx.send((watch_id.clone(), msg));
-                    prev_buffer = Some(current_buf);
-                    prev_dims = Some((rows, cols));
-                    continue;
-                }
-
-                // Send incremental diff
+                // Send vtty_full (resync or >90% changed)
+                let html = crate::vtty::renderer::VttyRenderer::to_html(&current_buf);
                 let msg = serde_json::json!({
-                    "type": "vtty_diff",
+                    "type": "vtty_full",
                     "data": {
                         "id": &watch_id,
-                        "generation": current_gen,
+                        "html": html,
                         "cursor": {"row": cursor_row, "col": cursor_col},
                         "dimensions": {"rows": rows, "cols": cols},
                         "alternate_screen": alt_screen,
                         "cursor_visible": cursor_visible,
-                        "changed_count": diff.changed_count,
-                        "cells": diff.cells,
+                        "generation": current_gen,
                     }
                 })
                 .to_string();
@@ -505,140 +431,54 @@ impl CommandManager {
         }
     }
 
-    /// Kill a command: remove it from the manager, send Ctrl+C, then
-    /// SIGKILL after the configured grace period.  The kill sequence
-    /// runs in a background task so this method returns immediately —
-    /// the caller (API handler) is not blocked waiting for the child
-    /// process to exit, which previously prevented the server from
-    /// shutting down gracefully.
+    /// Kill a command: send Ctrl+C, then SIGKILL after the grace period.
+    /// If `retain_on_exit` is set, the command stays in the manager.
     pub async fn kill(&self, id: &CommandId, _signal: Option<String>) -> Result<()> {
-        // Check retain_on_exit before removing the command.
-        // If the command is marked as kept, we still send the kill signal
-        // but don't remove it from the map — the process waiter will handle
-        // cleanup later (and also checks retain_on_exit).
-        let retain = self.commands.get(id).map(|h| h.exit_config.retain_on_exit).unwrap_or(false);
-
-        let (pid, name) = if let Some(handle) = self.commands.get(id) {
-            (handle.pid, handle.name.clone())
+        let (pid, name, timeout_secs) = if let Some(handle) = self.commands.get(id) {
+            (handle.pid, handle.name.clone(), handle.exit_config.timeout_secs)
         } else {
             return Err(ProcessError::CommandNotFound(id.to_string()));
         };
+        let retain = self.commands.get(id).map(|h| h.exit_config.retain_on_exit).unwrap_or(false);
         self.logger.log("kill", &format!("id={} pid={} name={} retain={}", id, pid, name, retain));
 
+        // Run on_kill hook if configured
+        if let Some(ref on_kill) = self.config.hooks.on_kill {
+            let mut vars = std::collections::HashMap::new();
+            vars.insert("name", name.clone());
+            vars.insert("id", id.to_string());
+            vars.insert("pid", pid.to_string());
+            tracing::info!(id = %id, name = %name, pid = pid, "Running on_kill hook");
+            run_hook(on_kill, &vars);
+        }
+
         if retain {
-            // Don't remove from map; just signal the process and let the
-            // process waiter handle the retained entry after exit.
             if let Some(handle) = self.commands.get(id) {
-                let pid = handle.pid;
-                let timeout_secs = handle.exit_config.timeout_secs;
-                let watch_id = id.to_string();
-                let cmd_name = handle.name.clone();
-
-                // Run on_kill hook if configured
-                if let Some(ref on_kill) = self.config.hooks.on_kill {
-                    let mut vars = std::collections::HashMap::new();
-                    vars.insert("name", cmd_name.clone());
-                    vars.insert("id", watch_id.clone());
-                    vars.insert("pid", pid.to_string());
-                    tracing::info!(
-                        id = %watch_id,
-                        name = %cmd_name,
-                        pid = pid,
-                        "Running on_kill hook"
-                    );
-                    run_hook(on_kill, &vars);
-                }
-
-                // Send Ctrl+C (SIGINT) for graceful shutdown
                 let _ = handle.send_bytes(vec![0x03]).await;
-
-                // Spawn a background task that sends SIGKILL after the grace period
-                tokio::spawn(async move {
-                    tokio::time::sleep(std::time::Duration::from_secs(timeout_secs)).await;
-                    #[cfg(unix)]
-                    {
-                        let ret = unsafe { libc::kill(pid as i32, 0) };
-                        if ret == 0 {
-                            tracing::info!(
-                                id = %watch_id,
-                                pid = pid,
-                                timeout_secs = timeout_secs,
-                                "Grace period expired, sending SIGKILL"
-                            );
-                            unsafe {
-                                libc::kill(pid as i32, libc::SIGKILL);
-                            }
-                        }
-                    }
-                    #[cfg(not(unix))]
-                    {
-                        let _ = std::process::Command::new("kill")
-                            .arg("-9")
-                            .arg(pid.to_string())
-                            .spawn();
-                    }
-                });
             }
         } else if let Some((_, handle)) = self.commands.remove(id) {
-            // Clean up associated state
             self.last_generation.remove(id);
-            // Remove all snapshots for this command
             self.snapshots.retain(|k, _| k.0 != *id);
-
-            let pid = handle.pid;
-            let timeout_secs = handle.exit_config.timeout_secs;
-            let watch_id = id.to_string();
-            let cmd_name = handle.name.clone();
-
-            // Run on_kill hook if configured
-            if let Some(ref on_kill) = self.config.hooks.on_kill {
-                let mut vars = std::collections::HashMap::new();
-                vars.insert("name", cmd_name.clone());
-                vars.insert("id", watch_id.clone());
-                vars.insert("pid", pid.to_string());
-                tracing::info!(
-                    id = %watch_id,
-                    name = %cmd_name,
-                    pid = pid,
-                    "Running on_kill hook"
-                );
-                run_hook(on_kill, &vars);
-            }
-
-            // Step 1: send Ctrl+C (SIGINT) for graceful shutdown
             let _ = handle.send_bytes(vec![0x03]).await;
-
-            // Step 2: spawn a background task that sends SIGKILL after
-            // the grace period if the process hasn't exited yet.
-            // The process waiter in spawner.rs will reap the child;
-            // we just need to make sure it actually dies.
-            tokio::spawn(async move {
-                tokio::time::sleep(std::time::Duration::from_secs(timeout_secs)).await;
-                // Check if the process is still alive before sending SIGKILL.
-                #[cfg(unix)]
-                {
-                    let ret = unsafe { libc::kill(pid as i32, 0) };
-                    if ret == 0 {
-                        tracing::info!(
-                            id = %watch_id,
-                            pid = pid,
-                            timeout_secs = timeout_secs,
-                            "Grace period expired, sending SIGKILL"
-                        );
-                        unsafe {
-                            libc::kill(pid as i32, libc::SIGKILL);
-                        }
-                    }
-                }
-                #[cfg(not(unix))]
-                {
-                    let _ = std::process::Command::new("kill")
-                        .arg("-9")
-                        .arg(pid.to_string())
-                        .spawn();
-                }
-            });
         }
+
+        // Spawn background SIGKILL after grace period
+        let kill_id = id.to_string();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(timeout_secs)).await;
+            #[cfg(unix)]
+            {
+                let ret = unsafe { libc::kill(pid as i32, 0) };
+                if ret == 0 {
+                    tracing::info!(id = %kill_id, pid = pid, timeout_secs, "Grace period expired, sending SIGKILL");
+                    unsafe { libc::kill(pid as i32, libc::SIGKILL); }
+                }
+            }
+            #[cfg(not(unix))]
+            {
+                let _ = std::process::Command::new("kill").arg("-9").arg(pid.to_string()).spawn();
+            }
+        });
         Ok(())
     }
 
@@ -684,9 +524,7 @@ impl CommandManager {
         }
     }
 
-    /// Remove a retained (exited) command from the manager.
-    /// This permanently discards the VTTY buffer and all associated state.
-    /// Use this to clean up commands that were kept alive via retain_on_exit.
+    /// Remove a retained (exited) command, discarding its VTTY buffer.
     pub fn purge(&self, id: &CommandId) -> Result<()> {
         let (pid, name) = if let Some(handle) = self.commands.get(id) {
             (handle.pid, handle.name.clone())
@@ -805,25 +643,14 @@ impl CommandManager {
         self.vtty_change_tx.subscribe()
     }
 
-    /// Check whether a command's VTTY buffer has changed since the last
-    /// snapshot.  Used by the `GET /api/commands/:id/vtty/changed` endpoint
-    /// in poll mode.
-    ///
-    /// Returns `true` if the command exists and the buffer differs from the
-    /// last-known state (or if this is the first check).  Returns `false` if
-    /// the buffer is unchanged.  Returns an error if the command does not exist.
+    /// Check whether a command's VTTY buffer has changed (O(1) generation check).
     pub fn has_changed(&self, id: &CommandId) -> Result<bool> {
-        // Clone the emulator Arc and drop the DashMap entry BEFORE
-        // the blocking read, to avoid holding the shard lock.
+        // Clone Arc, release lock before blocking read
         let emulator = match self.commands.get(id) {
             Some(e) => e.emulator.clone(),
             None => return Err(ProcessError::CommandNotFound(id.to_string())),
         };
-        // DashMap shard lock is now released.
 
-        // Use the generation counter for O(1) change detection.
-        // This replaces the old approach that cloned the entire buffer
-        // (O(rows * cols)) on every poll request.
         let current_gen = {
             let emu = tokio::task::block_in_place(|| emulator.blocking_read());
             emu.buffer_generation()
@@ -835,8 +662,6 @@ impl CommandManager {
         };
 
         if changed {
-            // Update the last-known generation so the next check won't report
-            // changed unless the buffer actually changes again.
             self.last_generation.insert(id.to_string(), current_gen);
         }
 
@@ -857,27 +682,22 @@ impl CommandManager {
         &self.config
     }
 
-    /// Get a clone of the commands `Arc<DashMap>` for use in spawned tasks
-    /// that need to remove commands after exit (e.g. the process waiter).
+    /// Get a clone of the commands `Arc<DashMap>` for spawned tasks.
     pub fn commands_arc(&self) -> Arc<DashMap<CommandId, CommandHandle>> {
         self.commands.clone()
     }
 
     pub async fn send_keys(&self, id: &CommandId, keys: &str) -> Result<()> {
-        let (pid, name) = if let Some(handle) = self.commands.get(id) {
-            (handle.pid, handle.name.clone())
-        } else {
-            return Err(ProcessError::CommandNotFound(id.to_string()));
-        };
-        self.logger
-            .log("send_keys", &format!("id={} pid={} name={} keys={}", id, pid, name, keys));
-        if let Some(handle) = self.commands.get(id) {
-            let bytes = encode_keys(keys);
-            handle.send_bytes(bytes).await?;
-            Ok(())
-        } else {
-            Err(ProcessError::CommandNotFound(id.to_string()))
-        }
+        let handle = self
+            .commands
+            .get(id)
+            .ok_or_else(|| ProcessError::CommandNotFound(id.to_string()))?;
+        self.logger.log(
+            "send_keys",
+            &format!("id={} pid={} name={} keys={}", id, handle.pid, handle.name, keys),
+        );
+        handle.send_bytes(encode_keys(keys)).await?;
+        Ok(())
     }
 }
 

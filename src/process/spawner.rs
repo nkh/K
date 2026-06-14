@@ -34,14 +34,13 @@ pub enum StdinMessage {
     Signal(String),
 }
 
-/// Internal message bridging the sync PTY reader to the async emulator writer.
-/// Each message carries a chunk of bytes read from the PTY master fd.
+/// Internal message: chunk of bytes read from the PTY master fd.
 struct PtyOutput(Vec<u8>);
 
 /// Exit status reported when a child process terminates.
 #[derive(Debug, Clone)]
 pub struct ExitStatus {
-    /// Process exit code. None if the process was killed by a signal.
+    /// Exit status when a child process terminates.
     pub code: Option<i32>,
     /// Signal number that killed the process, if applicable.
     pub signal: Option<i32>,
@@ -117,8 +116,7 @@ impl ProcessSpawner {
         //   5. Return CommandHandle with all channels and state
 
         // --- Phase 1: Open PTY + fork child process ---
-        let _cmd_display = cmd.clone(); // for error reporting
-                                        // Use per-command overrides if provided, otherwise fall back to config defaults
+        // Use per-command overrides or config defaults
         let rows = rows.unwrap_or(self.vtty_cfg.rows);
         let cols = cols.unwrap_or(self.vtty_cfg.cols);
 
@@ -160,37 +158,28 @@ impl ProcessSpawner {
         // Channel for stdin injection (async → blocking)
         let (stdin_tx, stdin_rx) = mpsc::channel::<StdinMessage>(128);
 
-        // Channel for PTY output (blocking → async)
-        // Uses a bounded channel to provide backpressure: if the async consumer
-        // (emulator writer) is slow, the blocking reader will naturally wait.
+        // Channel for PTY output (blocking → async, bounded for backpressure)
         let (pty_out_tx, pty_out_rx) = mpsc::channel::<PtyOutput>(64);
 
         // Get PTY master reader and writer
         let reader = pair.master.clone_reader()?;
         let writer = pair.master.take_writer()?;
 
-        // Store the PTY master handle for later resize (e.g. WINCH handling).
+        // PTY master for later resize (SIGWINCH)
         let pty_master: Arc<parking_lot::Mutex<crate::process::pty::PtyMaster>> =
             Arc::new(parking_lot::Mutex::new(pair.master));
 
-        // Spawn PTY reader task (blocking thread)
+        // Spawn PTY reader (blocking), emulator writer (async), stdin writer (blocking)
         spawn_pty_reader(reader, pty_out_tx, pty_raw_log);
 
-        // Create VttyOutput with a BroadcastVttySink that pushes dirty
-        // notifications via the same broadcast channel used by the existing
-        // diff watcher.  This provides an immediate, push-based notification
-        // path that complements the polling-based watcher.
+        // VttyOutput with BroadcastVttySink for push notifications
         let vtty_output: Arc<VttyOutput> = Arc::new(VttyOutput::with_sinks(vec![Arc::new(
             BroadcastVttySink::new(manager.vtty_change_sender(), command_id.to_string()),
         )]));
 
-        // Wrap PTY writer in Arc<Mutex> for shared access between the stdin
-        // writer task and the PTY output consumer (which needs to write
-        // emulator responses like DA1 replies back to the child PTY).
+        // Arc<Mutex> for shared PTY writer (stdin + emulator responses)
         let writer = Arc::new(parking_lot::Mutex::new(writer));
 
-        // Spawn async PTY output consumer — feeds data into the emulator
-        // and notifies all registered VttySinks, with rate limiting.
         spawn_emulator_writer(
             emulator.clone(),
             pty_out_rx,
@@ -199,7 +188,7 @@ impl ProcessSpawner {
             self.max_updates_per_sec,
         );
 
-        // Spawn stdin writer task (blocking thread)
+        // Spawn stdin writer (blocking)
         spawn_stdin_writer(stdin_rx, writer);
 
         // --- Phase 4: Spawn process waiter ---
@@ -258,12 +247,8 @@ impl ProcessSpawner {
 // Extracted helper functions
 // ---------------------------------------------------------------------------
 
-/// Spawn the blocking PTY reader task.
-///
-/// Reads raw bytes from the PTY master fd in a blocking thread and forwards
-/// them to the async emulator writer via a bounded channel.  When
-/// `pty_raw_log` is set, each read chunk is logged in escaped hex format
-/// with an elapsed-time stamp.
+/// Reads raw bytes from the PTY master in a blocking thread and forwards
+/// them to the async emulator writer. Logs to `pty_raw_log` if configured.
 fn spawn_pty_reader(
     reader: Box<dyn Read + Send>,
     pty_out_tx: mpsc::Sender<PtyOutput>,
@@ -317,13 +302,8 @@ fn spawn_pty_reader(
     });
 }
 
-/// Spawn the async PTY output consumer task.
-///
-/// Feeds PTY output into the VTTY emulator and notifies all registered
-/// VttySinks.  Supports two modes:
-/// - **Unlimited**: every emulator snapshot is immediately pushed to sinks.
-/// - **Rate-limited**: snapshots are batched and flushed at a configurable
-///   interval to avoid overwhelming downstream consumers.
+/// Feeds PTY output into the VTTY emulator and notifies sinks.
+/// Rate-limits notifications to `max_updates_per_sec`.
 fn spawn_emulator_writer(
     emulator: Arc<tokio::sync::RwLock<VttyEmulator>>,
     mut pty_out_rx: mpsc::Receiver<PtyOutput>,
@@ -334,9 +314,8 @@ fn spawn_emulator_writer(
     let mut rate_limiter = RateLimiter::from_config(max_updates_per_sec);
     let flush_interval = rate_limiter.interval();
     tokio::spawn(async move {
-        // State for rate-limited buffering.
+        // State for rate-limited buffering
         let mut pending_snapshot: Option<Buffer> = None;
-        // If rate limiting is disabled, use a simple loop (no timer overhead).
         if rate_limiter.is_disabled() {
             while let Some(PtyOutput(data)) = pty_out_rx.recv().await {
                 let mut emu = emulator.write().await;
@@ -344,23 +323,12 @@ fn spawn_emulator_writer(
                 let responses = emu.drain_responses();
                 let snapshot = emu.snapshot();
                 drop(emu);
-                // Send any pending emulator responses back to the child PTY
-                // (e.g., DA1 replies, focus event reports).
-                // Wrap in catch_unwind because portable-pty internally asserts
-                // that writes succeed; when the child has exited and the PTY
-                // slave is closed, a write to the master will panic.
                 if !responses.is_empty() {
-                    let mut output = writer.lock();
-                    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        let _ = output.write_all(&responses);
-                        let _ = output.flush();
-                    }));
+                    write_response_to_pty(&writer, &responses);
                 }
                 vtty_output.notify_sinks(&snapshot);
             }
         } else {
-            // Rate-limited path: use tokio::select! to combine PTY
-            // output reception with a periodic flush timer.
             let mut tick = tokio::time::interval(flush_interval);
             tick.tick().await;
 
@@ -374,15 +342,8 @@ fn spawn_emulator_writer(
                                 let responses = emu.drain_responses();
                                 let snapshot = emu.snapshot();
                                 drop(emu);
-                                // Send any pending emulator responses back
-                                // Wrap in catch_unwind for the same reason as the
-                                // non-rate-limited path above.
                                 if !responses.is_empty() {
-                                    let mut output = writer.lock();
-                                    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                                        let _ = output.write_all(&responses);
-                                        let _ = output.flush();
-                                    }));
+                                    write_response_to_pty(&writer, &responses);
                                 }
 
                                 if rate_limiter.allow() {
@@ -414,10 +375,7 @@ fn spawn_emulator_writer(
     });
 }
 
-/// Spawn the blocking stdin writer task.
-///
-/// Receives `StdinMessage` values from the async channel and writes bytes
-/// to the PTY master fd.  Signal messages are currently no-ops.
+/// Receives StdinMessage values and writes bytes to the PTY master fd.
 fn spawn_stdin_writer(
     stdin_rx: mpsc::Receiver<StdinMessage>,
     writer: Arc<parking_lot::Mutex<Box<dyn Write + Send>>>,
@@ -436,11 +394,8 @@ fn spawn_stdin_writer(
     });
 }
 
-/// Spawn the blocking process waiter task.
-///
-/// Waits for the child process to exit, then runs exit hooks (per-command
-/// and global), saves an optional snapshot, stores exit metadata, and
-/// cleans up the command from the manager unless `retain_on_exit` is set.
+/// Waits for the child to exit, runs exit hooks, saves optional snapshot,
+/// stores exit metadata, and cleans up unless `retain_on_exit` is set.
 #[allow(clippy::too_many_arguments)]
 fn spawn_process_waiter(
     mut child: crate::process::pty::ChildProcess,
@@ -540,31 +495,20 @@ fn spawn_process_waiter(
 
             let _ = child_exit_tx.send(true);
 
-            // Save snapshot to file if snapshot_on_exit is configured.
-            // This must happen before the command is removed from the manager
-            // (which drops the handle and its emulator).
+            // Save snapshot to file if configured (before command removal drops emulator)
             if let Some(ref snapshot_path) = snapshot_on_exit {
-                // Use block_in_place to safely acquire the async RwLock from
-                // a blocking context.
                 let snapshot_result = tokio::task::block_in_place(|| {
                     let emu = snapshot_emulator.blocking_read();
                     let buf = emu.snapshot();
                     let mut text = String::new();
-                    // Write scrollback lines first
+                    // Scrollback + visible screen rows
                     for line in &buf.scrollback {
-                        let line_str: String = line
-                            .iter()
-                            .map(|c| if c.width > 0 { c.ch } else { '\0' })
-                            .collect();
+                        let line_str: String = line.iter().map(|c| if c.width > 0 { c.ch } else { '\0' }).collect();
                         text.push_str(line_str.trim_end());
                         text.push('\n');
                     }
-                    // Write visible screen rows
                     for line in &buf.rows {
-                        let line_str: String = line
-                            .iter()
-                            .map(|c| if c.width > 0 { c.ch } else { '\0' })
-                            .collect();
+                        let line_str: String = line.iter().map(|c| if c.width > 0 { c.ch } else { '\0' }).collect();
                         text.push_str(line_str.trim_end());
                         text.push('\n');
                     }
@@ -572,68 +516,54 @@ fn spawn_process_waiter(
                 });
 
                 match snapshot_result {
-                    Ok(snapshot_text) => match std::fs::write(snapshot_path, &snapshot_text) {
-                        Ok(_) => {
-                            tracing::info!(
-                                id = %watch_id,
-                                path = %snapshot_path,
-                                bytes = snapshot_text.len(),
-                                "Saved snapshot on exit"
-                            );
+                    Ok(snapshot_text) => {
+                        if let Err(e) = std::fs::write(snapshot_path, &snapshot_text) {
+                            tracing::warn!(id = %watch_id, path = %snapshot_path, error = %e, "Failed to save snapshot on exit");
+                        } else {
+                            tracing::info!(id = %watch_id, path = %snapshot_path, bytes = snapshot_text.len(), "Saved snapshot on exit");
                         }
-                        Err(e) => {
-                            tracing::warn!(
-                                id = %watch_id,
-                                path = %snapshot_path,
-                                error = %e,
-                                "Failed to save snapshot on exit"
-                            );
-                        }
-                    },
+                    }
                     Err(e) => {
-                        tracing::warn!(
-                            id = %watch_id,
-                            error = %e,
-                            "Failed to acquire emulator for snapshot"
-                        );
+                        tracing::warn!(id = %watch_id, error = %e, "Failed to acquire emulator for snapshot");
                     }
                 }
             }
 
-            // Store exit metadata in the handle (if still in the manager)
+            // Store exit metadata (if still in the manager)
             if let Some(handle) = manager_cmds.get(&watch_id) {
-                let code = exit_status.code;
-                let now = std::time::Instant::now();
-                *handle.exit_code.lock().unwrap() = code;
-                *handle.exit_time.lock().unwrap() = Some(now);
-                drop(handle); // release DashMap guard
+                *handle.exit_code.lock().unwrap() = exit_status.code;
+                *handle.exit_time.lock().unwrap() = Some(std::time::Instant::now());
             }
 
             // Remove from manager unless retain_on_exit is set
-            let retain = manager_cmds
-                .get(&watch_id)
-                .map(|h| h.exit_config.retain_on_exit)
-                .unwrap_or(false);
+            let retain = manager_cmds.get(&watch_id).map(|h| h.exit_config.retain_on_exit).unwrap_or(false);
             if retain {
-                tracing::info!(id = %watch_id, "Command retained after exit (retain_on_exit)");
-                logger.log("exit", &format!("id={} pid={} name={} retained=true code={:?}", watch_id, cmd_pid, cmd_name, exit_status.code));
+                tracing::info!(id = %watch_id, "Command retained after exit");
             } else {
                 manager_cmds.remove(&watch_id);
-                tracing::info!(id = %watch_id, "Command removed from manager after exit");
-                logger.log("exit", &format!("id={} pid={} name={} retained=false code={:?}", watch_id, cmd_pid, cmd_name, exit_status.code));
+                tracing::info!(id = %watch_id, "Command removed after exit");
             }
+            logger.log("exit", &format!("id={} pid={} name={} retained={} code={:?}", watch_id, cmd_pid, cmd_name, retain, exit_status.code));
 
             let _ = exit_tx.send(exit_status);
         }
     });
 }
 
-/// Escape a byte slice into a human-readable string.
-///
-/// Printable ASCII characters (0x20–0x7E) are passed through as-is.
-/// All other bytes (control chars, ESC, high bytes) are represented as
-/// `\xHH` hex escapes.  Backslash itself is escaped as `\\` to avoid
-/// ambiguity in the log output.
+/// Write emulator responses (DA1 replies, etc.) back to the child PTY.
+/// Wrapped in catch_unwind because portable-pty panics on write to a closed PTY.
+fn write_response_to_pty(
+    writer: &Arc<parking_lot::Mutex<Box<dyn Write + Send>>>,
+    data: &[u8],
+) {
+    let mut output = writer.lock();
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ = output.write_all(data);
+        let _ = output.flush();
+    }));
+}
+
+/// Escape bytes: printable ASCII as-is, others as `\xHH`.
 fn escape_bytes(data: &[u8]) -> String {
     let mut out = String::with_capacity(data.len() * 2);
     for &b in data {
