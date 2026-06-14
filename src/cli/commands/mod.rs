@@ -31,8 +31,6 @@ pub use ipc::{
     handle_resize_command, handle_spawn_in_command, handle_thaw_command, verify_instance,
 };
 pub use list::{format_command, format_instance_header, handle_list_command};
-#[cfg(feature = "vrw")]
-pub use list::fetch_cmd_dimensions;
 pub use stop::handle_stop_command;
 
 // Re-export vrw-only handlers
@@ -42,9 +40,9 @@ pub use cat::handle_cat_command as handle_cat_command_http;
 pub use cert::handle_cert_command;
 #[cfg(feature = "vrw")]
 pub use common::{
-    collect_all_commands, format_instance_list, http_client, instance_url, post_command_action,
+    collect_all_commands, format_instance_list, http_client,
     resolve_instance, resolve_pid_to_id, resolve_target_command, resolve_targeted_instances,
-    CommandTarget,
+    CommandTarget, VrwClient,
 };
 #[cfg(feature = "vrw")]
 pub use list::{handle_list_commands_command, handle_list_vrw_command};

@@ -137,7 +137,7 @@ pub async fn handle_resize_by_pid(
 ) -> Result<()> {
     for info in instances {
         let vrw = VrwClient::new(client.clone(), info);
-        match resolve_pid_to_id(client, vrw.base_url(), pid).await {
+        match resolve_pid_to_id(&vrw, pid).await {
             Ok(cmd_id) => {
                 return resize_command_by_id(&vrw, &cmd_id, pid, rows, cols).await;
             }

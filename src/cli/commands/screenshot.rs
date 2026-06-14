@@ -7,7 +7,6 @@ use crate::cli::commands::common::{
     build_command_select_items, collect_all_commands, http_client,
     resolve_target_command, resolve_targeted_instances, SelectLabelStyle, VrwClient,
 };
-use crate::cli::commands::list::fetch_cmd_dimensions;
 use crate::instance::registry::InstanceRegistry;
 
 /// Handle the `vrw screenshot [TARGET]` subcommand.
@@ -132,7 +131,13 @@ async fn generate_output_path(
         None => {
             let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
             let dims_part =
-                match fetch_cmd_dimensions(&http_client(), client.base_url(), cmd_id).await {
+                match client.try_get_data(&format!("/api/commands/{}/vtty/html", cmd_id)).await
+                    .and_then(|d| {
+                        let dims = d.get("dimensions")?;
+                        let rows = dims.get("rows")?.as_u64()? as usize;
+                        let cols = dims.get("cols")?.as_u64()? as usize;
+                        Some((rows, cols))
+                    }) {
                     Some((rows, cols)) => format!("{}_{}", rows, cols),
                     None => String::new(),
                 };

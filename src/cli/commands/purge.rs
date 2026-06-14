@@ -7,8 +7,8 @@ use crate::cli::interactive_select::select_items;
 use crate::instance::registry::InstanceRegistry;
 
 use super::common::{
-    build_command_select_items, collect_filtered_commands, http_client, instance_url,
-    post_command_action_bool, resolve_target_command, SelectLabelStyle,
+    build_command_select_items, collect_filtered_commands, http_client,
+    resolve_target_command, VrwClient, SelectLabelStyle,
 };
 
 /// Purge a retained (exited) command by ID or name on any running instance.
@@ -46,9 +46,9 @@ pub async fn handle_purge_command(_cli: &Cli, target: Option<&str>, interactive:
             1 => {
                 let (inst_pid, ref cmd_id, _, _, ref full) = all_commands[0];
                 let info = instances.iter().find(|i| i.pid == inst_pid).unwrap();
-                let url = instance_url(info, &None);
+                let vrw = VrwClient::new(http_client(), info);
                 tracing::info!("Purging only exited command: {} (ID {})", full, cmd_id);
-                return purge_command_by_id(&client, &url, cmd_id, full).await;
+                return purge_command_by_id(&vrw, cmd_id, full).await;
             }
             _ => {
                 if interactive {
@@ -63,8 +63,8 @@ pub async fn handle_purge_command(_cli: &Cli, target: Option<&str>, interactive:
                             all_commands.iter().find(|(_, id, _, _, _)| id == &item.id)
                         {
                             let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
-                            let url = instance_url(info, &None);
-                            if purge_command_by_id(&client, &url, &item.id, full).await? {
+                            let vrw = VrwClient::new(http_client(), info);
+                            if purge_command_by_id(&vrw, &item.id, full).await? {
                                 purged_any = true;
                             }
                         }
@@ -88,8 +88,8 @@ pub async fn handle_purge_command(_cli: &Cli, target: Option<&str>, interactive:
             if id_matches.len() == 1 {
                 let (inst_pid, ref cmd_id, _, _, ref full) = id_matches[0];
                 let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
-                let url = instance_url(info, &None);
-                return purge_command_by_id(&client, &url, cmd_id, full).await;
+                let vrw = VrwClient::new(http_client(), info);
+                return purge_command_by_id(&vrw, cmd_id, full).await;
             }
             if id_matches.len() > 1 {
                 tracing::warn!("Multiple exited commands match ID prefix '{}':", t);
@@ -103,22 +103,19 @@ pub async fn handle_purge_command(_cli: &Cli, target: Option<&str>, interactive:
             let (inst_pid, ref cmd_id, _, _, ref full) =
                 resolve_target_command(Some(t), &all_commands, "No exited command")?;
             let info = instances.iter().find(|i| i.pid == inst_pid).unwrap();
-            let url = instance_url(info, &None);
-            return purge_command_by_id(&client, &url, cmd_id, full).await;
+            let vrw = VrwClient::new(http_client(), info);
+            return purge_command_by_id(&vrw, cmd_id, full).await;
         }
     }
 }
 
 /// Purge a specific command by ID via DELETE /api/commands/:id.
 pub(crate) async fn purge_command_by_id(
-    client: &reqwest::Client,
-    url: &str,
+    vrw: &VrwClient,
     cmd_id: &str,
     label: &str,
 ) -> Result<bool> {
-    post_command_action_bool(
-        client,
-        url,
+    vrw.post_action_quiet(
         &format!("/api/commands/{}", cmd_id),
         None,
         reqwest::Method::DELETE,
@@ -137,10 +134,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_purge_command_by_id_connection_refused() {
-        let client = http_client();
-        // Connecting to a non-existent server should return Ok(false)
-        let result =
-            purge_command_by_id(&client, "http://127.0.0.1:1", "fake-id", "test-label").await;
+        let info = crate::instance::info::InstanceInfo {
+            pid: 1, port: 1, bind: "127.0.0.1".to_string(),
+            name: None, start_time: chrono::Utc::now(),
+            daemon: false, display: false, command: None,
+        };
+        let vrw = VrwClient::new(http_client(), &info);
+        let result = purge_command_by_id(&vrw, "fake-id", "test-label").await;
         assert!(result.is_ok());
         assert!(!result.unwrap(), "connection refused should return false");
     }

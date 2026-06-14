@@ -128,7 +128,7 @@ pub async fn handle_list_command(cli: &Cli) -> Result<()> {
 // ── vrw (HTTP-based) implementation ──
 
 #[cfg(feature = "vrw")]
-use super::common::{http_client, instance_url, resolve_targeted_instances};
+use super::common::{http_client, resolve_targeted_instances, VrwClient};
 
 /// Handle the `vrw list` subcommand.
 /// Queries running instances via HTTP API.
@@ -172,8 +172,6 @@ pub async fn handle_list_command(cli: &Cli) -> Result<()> {
         return Ok(());
     }
 
-    let client = http_client();
-
     let mut seen_endpoints = std::collections::HashSet::new();
 
     for info in &instances {
@@ -184,59 +182,43 @@ pub async fn handle_list_command(cli: &Cli) -> Result<()> {
 
         println!("{}", format_instance_header(info));
 
-        let url = instance_url(info, &None);
+        let vrw = VrwClient::new(http_client(), info);
 
-        match client.get(format!("{}/api/commands", url)).send().await {
-            Ok(resp) => match resp.json::<serde_json::Value>().await {
-                Ok(json) => {
-                    if json["status"] == "ok" {
-                        if let Some(cmds) = json["data"].as_array() {
-                            if cmds.is_empty() {
-                                println!(
-                                    "  {}",
-                                    c("(no commands)", Color::Yellow, false)
-                                );
-                            } else {
-                                for cmd in cmds {
-                                    let cmd_id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("");
-                                    let dims = if !cmd_id.is_empty() {
-                                        fetch_cmd_dimensions(&client, &url, cmd_id).await
-                                    } else {
-                                        None
-                                    };
-                                    if let Some(line) = format_command(cmd, dims) {
-                                        println!("{}", line);
-                                    }
-                                }
-                            }
-                        } else {
-                            println!(
-                                "  {}  Invalid API response: expected array",
-                                c("[ERROR]", Color::Red, true)
-                            );
-                        }
+        match vrw.try_get_data("/api/commands").await {
+            Some(data) => {
+                if let Some(cmds) = data.as_array() {
+                    if cmds.is_empty() {
+                        println!("  {}", c("(no commands)", Color::Yellow, false));
                     } else {
-                        let err = json["error"].as_str().unwrap_or("unknown error");
-                        println!(
-                            "  {}  API returned error: {}",
-                            c("[ERROR]", Color::Red, true),
-                            err
-                        );
+                        for cmd in cmds {
+                            let cmd_id = cmd.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                            let dims = if !cmd_id.is_empty() {
+                                vrw.try_get_data(&format!("/api/commands/{}/vtty/html", cmd_id)).await
+                                    .and_then(|d| {
+                                        let dims = d.get("dimensions")?;
+                                        let rows = dims.get("rows")?.as_u64()? as usize;
+                                        let cols = dims.get("cols")?.as_u64()? as usize;
+                                        Some((rows, cols))
+                                    })
+                            } else {
+                                None
+                            };
+                            if let Some(line) = format_command(cmd, dims) {
+                                println!("{}", line);
+                            }
+                        }
                     }
-                }
-                Err(e) => {
+                } else {
                     println!(
-                        "  {}  Invalid API response: {}",
-                        c("[ERROR]", Color::Red, true),
-                        e
+                        "  {}  Invalid API response: expected array",
+                        c("[ERROR]", Color::Red, true)
                     );
                 }
-            },
-            Err(e) => {
+            }
+            None => {
                 println!(
-                    "  {}  Instance unreachable: {}",
-                    c("[ERROR]", Color::Red, true),
-                    e
+                    "  {}  Instance unreachable",
+                    c("[ERROR]", Color::Red, true)
                 );
             }
         }
@@ -249,24 +231,7 @@ pub async fn handle_list_command(cli: &Cli) -> Result<()> {
     Ok(())
 }
 
-/// Fetch terminal dimensions for a command by querying the VTTY HTML endpoint.
-#[cfg(feature = "vrw")]
-pub async fn fetch_cmd_dimensions(
-    client: &reqwest::Client,
-    base_url: &str,
-    cmd_id: &str,
-) -> Option<(usize, usize)> {
-    let url = format!("{}/api/commands/{}/vtty/html", base_url, cmd_id);
-    let resp = client.get(&url).send().await.ok()?;
-    if !resp.status().is_success() {
-        return None;
-    }
-    let json: serde_json::Value = resp.json().await.ok()?;
-    let dims = json.get("data")?.get("dimensions")?;
-    let rows = dims.get("rows")?.as_u64()? as usize;
-    let cols = dims.get("cols")?.as_u64()? as usize;
-    Some((rows, cols))
-}
+
 
 // ── Shared formatting functions ──
 
@@ -428,34 +393,25 @@ pub async fn handle_list_commands_command(cli: &Cli) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let all_instances = registry.list_instances();
     let instances = super::common::resolve_targeted_instances(cli, &all_instances)?;
-    let client = http_client();
-
     println!("VRW_PID\tCMD_PID\tNAME\tARGS\tCERT");
 
     for info in &instances {
-        let url = instance_url(info, &None);
-        match client.get(format!("{}/api/commands", url)).send().await {
-            Ok(resp) => {
-                if let Ok(json) = resp.json::<serde_json::Value>().await {
-                    if let Some(cmds) = json["data"].as_array() {
-                        for cmd in cmds {
-                            let cmd_pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0);
-                            let name = cmd.get("name").and_then(|v| v.as_str()).unwrap_or("?");
-                            let args = serde_json::to_string(
-                                cmd.get("args").unwrap_or(&serde_json::json!([])),
-                            )
-                            .unwrap_or_else(|_| "[]".to_string());
-                            let cert = cmd
-                                .get("certificate")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("-");
-                            println!("{}\t{}\t{}\t{}\t{}", info.pid, cmd_pid, name, args, cert);
-                        }
-                    }
+        let vrw = VrwClient::new(http_client(), info);
+        if let Some(data) = vrw.try_get_data("/api/commands").await {
+            if let Some(cmds) = data.as_array() {
+                for cmd in cmds {
+                    let cmd_pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0);
+                    let name = cmd.get("name").and_then(|v| v.as_str()).unwrap_or("?");
+                    let args = serde_json::to_string(
+                        cmd.get("args").unwrap_or(&serde_json::json!([])),
+                    )
+                    .unwrap_or_else(|_| "[]".to_string());
+                    let cert = cmd
+                        .get("certificate")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("-");
+                    println!("{}\t{}\t{}\t{}\t{}", info.pid, cmd_pid, name, args, cert);
                 }
-            }
-            Err(_) => {
-                // Skip unreachable instances silently in TSV mode
             }
         }
     }

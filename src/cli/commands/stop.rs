@@ -85,8 +85,8 @@ fn resolve_stop_target_impl(
 
 #[cfg(feature = "vrw")]
 use super::common::{
-    build_command_select_items, collect_all_commands, http_client, instance_url,
-    post_command_action_bool, resolve_target_command, SelectLabelStyle,
+    build_command_select_items, collect_all_commands, http_client, resolve_target_command,
+    VrwClient, SelectLabelStyle,
 };
 #[cfg(feature = "vrw")]
 use crate::cli::interactive_select::select_items;
@@ -117,8 +117,8 @@ pub async fn handle_stop_command(_cli: &crate::cli::args::Cli, target: Option<&s
         for item in &selected {
             if let Some((inst_pid, cmd_id, cmd_pid, _, _)) = all_commands.iter().find(|(_, id, _, _, _)| id == &item.id) {
                 let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
-                let url = instance_url(info, &None);
-                if stop_command_by_id(&client, &url, cmd_id, *cmd_pid, *inst_pid).await? {
+                let vrw = VrwClient::new(client.clone(), info);
+                if stop_command_by_id(&vrw, cmd_id, *cmd_pid, *inst_pid).await? {
                     any_stopped = true;
                 }
             }
@@ -130,9 +130,9 @@ pub async fn handle_stop_command(_cli: &crate::cli::args::Cli, target: Option<&s
     match resolve_target_command(target, &all_commands, "No running command") {
         Ok((inst_pid, cmd_id, cmd_pid, _, full)) => {
             let info = instances.iter().find(|i| i.pid == inst_pid).unwrap();
-            let url = instance_url(info, &None);
+            let vrw = VrwClient::new(client.clone(), info);
             tracing::info!("Stopping: {} (PID {})", full, cmd_pid);
-            stop_command_by_id(&client, &url, &cmd_id, cmd_pid, inst_pid).await
+            stop_command_by_id(&vrw, &cmd_id, cmd_pid, inst_pid).await
         }
         Err(_) => Ok(false),
     }
@@ -152,10 +152,10 @@ pub async fn handle_stop_all_commands(_cli: &crate::cli::args::Cli) -> Result<bo
     let mut any_stopped = false;
 
     for info in &instances {
-        let url = instance_url(info, &None);
-        let all_commands = collect_all_commands(&client, std::slice::from_ref(info)).await;
+        let vrw = VrwClient::new(client.clone(), info);
+        let all_commands = collect_all_commands(&http_client(), std::slice::from_ref(info)).await;
         for (_, cmd_id, cmd_pid, _, _) in &all_commands {
-            if stop_command_by_id(&client, &url, cmd_id, *cmd_pid, info.pid).await? {
+            if stop_command_by_id(&vrw, cmd_id, *cmd_pid, info.pid).await? {
                 any_stopped = true;
             }
         }
@@ -166,15 +166,12 @@ pub async fn handle_stop_all_commands(_cli: &crate::cli::args::Cli) -> Result<bo
 
 #[cfg(feature = "vrw")]
 pub async fn stop_command_by_id(
-    client: &reqwest::Client,
-    url: &str,
+    vrw: &VrwClient,
     cmd_id: &str,
     cmd_pid: u32,
     inst_pid: u32,
 ) -> Result<bool> {
-    post_command_action_bool(
-        client,
-        url,
+    vrw.post_action_quiet(
         &format!("/api/commands/{}/kill", cmd_id),
         Some(&serde_json::json!({})),
         reqwest::Method::POST,
@@ -253,9 +250,10 @@ mod tests {
     #[cfg(feature = "vrw")]
     #[tokio::test]
     async fn test_stop_command_by_id_connection_refused() {
-        use super::super::common::http_client;
+        let info = make_instance(200, 1);
         let client = http_client();
-        let result = stop_command_by_id(&client, "http://127.0.0.1:1", "fake-id", 100, 200).await;
+        let vrw = VrwClient::new(client, &info);
+        let result = stop_command_by_id(&vrw, "fake-id", 100, 200).await;
         assert!(result.is_ok());
         assert!(!result.unwrap(), "connection refused should return false");
     }

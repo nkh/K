@@ -7,8 +7,8 @@ use crate::cli::interactive_select::select_items;
 use crate::instance::registry::InstanceRegistry;
 
 use super::common::{
-    build_command_select_items, collect_filtered_commands, http_client, instance_url,
-    post_command_action_bool, resolve_target_command, SelectLabelStyle,
+    build_command_select_items, collect_filtered_commands, http_client,
+    resolve_target_command, VrwClient, SelectLabelStyle,
 };
 
 /// Tag a running command to retain its VTTY buffer after exit.
@@ -42,8 +42,8 @@ pub async fn handle_keep_command(_cli: &Cli, target: Option<&str>, interactive: 
 
     if let Some((inst_pid, cmd_id, _cmd_pid, _, full)) = resolved {
         let info = instances.iter().find(|i| i.pid == inst_pid).unwrap();
-        let url = instance_url(info, &None);
-        return keep_command_by_id(&client, &url, &cmd_id, &full).await;
+        let vrw = VrwClient::new(http_client(), info);
+        return keep_command_by_id(&vrw, &cmd_id, &full).await;
     }
 
     // No match or no target — try interactive or report failure
@@ -58,8 +58,8 @@ pub async fn handle_keep_command(_cli: &Cli, target: Option<&str>, interactive: 
         for item in &selected {
             if let Some((inst_pid, _, _, _, full)) = all_commands.iter().find(|(_, id, _, _, _)| id == &item.id) {
                 let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
-                let url = instance_url(info, &None);
-                if keep_command_by_id(&client, &url, &item.id, full).await? {
+                let vrw = VrwClient::new(http_client(), info);
+                if keep_command_by_id(&vrw, &item.id, full).await? {
                     kept_any = true;
                 }
             }
@@ -98,8 +98,8 @@ pub async fn handle_unkeep_command(_cli: &Cli, target: Option<&str>, interactive
 
     if let Some((inst_pid, cmd_id, _cmd_pid, _, full)) = resolved {
         let info = instances.iter().find(|i| i.pid == inst_pid).unwrap();
-        let url = instance_url(info, &None);
-        return unkeep_command_by_id(&client, &url, &cmd_id, &full).await;
+        let vrw = VrwClient::new(http_client(), info);
+        return unkeep_command_by_id(&vrw, &cmd_id, &full).await;
     }
 
     // No match or no target — try interactive or report failure
@@ -114,8 +114,8 @@ pub async fn handle_unkeep_command(_cli: &Cli, target: Option<&str>, interactive
         for item in &selected {
             if let Some((inst_pid, _, _, _, full)) = all_commands.iter().find(|(_, id, _, _, _)| id == &item.id) {
                 let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
-                let url = instance_url(info, &None);
-                if unkeep_command_by_id(&client, &url, &item.id, full).await? {
+                let vrw = VrwClient::new(http_client(), info);
+                if unkeep_command_by_id(&vrw, &item.id, full).await? {
                     unkept_any = true;
                 }
             }
@@ -126,15 +126,8 @@ pub async fn handle_unkeep_command(_cli: &Cli, target: Option<&str>, interactive
     Ok(false)
 }
 
-async fn keep_command_by_id(
-    client: &reqwest::Client,
-    url: &str,
-    cmd_id: &str,
-    label: &str,
-) -> Result<bool> {
-    post_command_action_bool(
-        client,
-        url,
+async fn keep_command_by_id(vrw: &VrwClient, cmd_id: &str, label: &str) -> Result<bool> {
+    vrw.post_action_quiet(
         &format!("/api/commands/{}/keep", cmd_id),
         None,
         reqwest::Method::POST,
@@ -145,15 +138,8 @@ async fn keep_command_by_id(
     .await
 }
 
-async fn unkeep_command_by_id(
-    client: &reqwest::Client,
-    url: &str,
-    cmd_id: &str,
-    label: &str,
-) -> Result<bool> {
-    post_command_action_bool(
-        client,
-        url,
+async fn unkeep_command_by_id(vrw: &VrwClient, cmd_id: &str, label: &str) -> Result<bool> {
+    vrw.post_action_quiet(
         &format!("/api/commands/{}/unkeep", cmd_id),
         None,
         reqwest::Method::POST,
@@ -172,16 +158,26 @@ mod tests {
 
     #[tokio::test]
     async fn test_keep_command_by_id_connection_refused() {
-        let client = http_client();
-        let result = keep_command_by_id(&client, "http://127.0.0.1:1", "fake-id", "test").await;
+        let info = crate::instance::info::InstanceInfo {
+            pid: 1, port: 1, bind: "127.0.0.1".to_string(),
+            name: None, start_time: chrono::Utc::now(),
+            daemon: false, display: false, command: None,
+        };
+        let vrw = VrwClient::new(http_client(), &info);
+        let result = keep_command_by_id(&vrw, "fake-id", "test").await;
         assert!(result.is_ok());
         assert!(!result.unwrap());
     }
 
     #[tokio::test]
     async fn test_unkeep_command_by_id_connection_refused() {
-        let client = http_client();
-        let result = unkeep_command_by_id(&client, "http://127.0.0.1:1", "fake-id", "test").await;
+        let info = crate::instance::info::InstanceInfo {
+            pid: 1, port: 1, bind: "127.0.0.1".to_string(),
+            name: None, start_time: chrono::Utc::now(),
+            daemon: false, display: false, command: None,
+        };
+        let vrw = VrwClient::new(http_client(), &info);
+        let result = unkeep_command_by_id(&vrw, "fake-id", "test").await;
         assert!(result.is_ok());
         assert!(!result.unwrap());
     }

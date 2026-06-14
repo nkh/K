@@ -135,15 +135,10 @@ pub(crate) fn build_full_display_string(cmd: &serde_json::Value) -> (String, Str
 
 /// Resolve a PID to a command UUID by querying the instance's command list.
 #[cfg(feature = "vrw")]
-pub async fn resolve_pid_to_id(client: &reqwest::Client, url: &str, pid: u32) -> Result<String> {
-    let resp = client.get(format!("{}/api/commands", url)).send().await?;
+pub async fn resolve_pid_to_id(vrw: &VrwClient, pid: u32) -> Result<String> {
+    let data = vrw.get_data("/api/commands").await?;
 
-    let json: serde_json::Value = resp.json().await?;
-    if json["status"] != "ok" {
-        anyhow::bail!("Failed to query commands from instance");
-    }
-
-    if let Some(cmds) = json["data"].as_array() {
+    if let Some(cmds) = data.as_array() {
         for cmd in cmds {
             if cmd.get("pid").and_then(|v| v.as_u64()) == Some(pid as u64) {
                 if let Some(id) = cmd.get("id").and_then(|v| v.as_str()) {
@@ -164,18 +159,14 @@ pub async fn collect_all_commands(
 ) -> Vec<(u32, String, u32, String, String)> {
     let mut all_commands: Vec<(u32, String, u32, String, String)> = Vec::new();
     for info in instances {
-        let url = instance_url(info, &None);
-        let resp = client.get(format!("{}/api/commands", url)).send().await;
-
-        if let Ok(resp) = resp {
-            if let Ok(json) = resp.json::<serde_json::Value>().await {
-                if let Some(cmds) = json["data"].as_array() {
-                    for cmd in cmds {
-                        let cmd_pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-                        if let Some(id) = cmd.get("id").and_then(|v| v.as_str()) {
-                            let (name, full) = build_full_display_string(cmd);
-                            all_commands.push((info.pid, id.to_string(), cmd_pid, name, full));
-                        }
+        let vrw = VrwClient::new(client.clone(), info);
+        if let Some(data) = vrw.try_get_data("/api/commands").await {
+            if let Some(cmds) = data.as_array() {
+                for cmd in cmds {
+                    let cmd_pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                    if let Some(id) = cmd.get("id").and_then(|v| v.as_str()) {
+                        let (name, full) = build_full_display_string(cmd);
+                        all_commands.push((info.pid, id.to_string(), cmd_pid, name, full));
                     }
                 }
             }
@@ -544,87 +535,6 @@ pub fn resolve_target_command(
     }
 }
 
-/// Send a POST to a command action endpoint and parse the standard
-/// `{ "status": "ok", ... }` / `{ "status": "error", "error": "..." }` response.
-///
-/// Used by freeze, thaw, stop, resize, and purge to avoid repeating the
-/// same response-check boilerplate in every handler.
-#[cfg(feature = "vrw")]
-pub async fn post_command_action(
-    client: &reqwest::Client,
-    url: &str,
-    path: &str,
-    body: Option<&serde_json::Value>,
-) -> Result<bool> {
-    let req = match body {
-        Some(b) => client.post(format!("{}{}", url, path)).json(b),
-        None => client.post(format!("{}{}", url, path)),
-    };
-    let resp = req.send().await?;
-
-    let status = resp.status();
-    let json: serde_json::Value = resp
-        .json()
-        .await
-        .unwrap_or(serde_json::json!({"status": "unknown"}));
-
-    if status.is_success() && json.get("status").and_then(|s| s.as_str()) == Some("ok") {
-        Ok(true)
-    } else {
-        let err_msg = json
-            .get("error")
-            .and_then(|e| e.as_str())
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| format!("HTTP {}", status));
-        Err(anyhow::anyhow!("{}", err_msg))
-    }
-}
-
-/// Like [`post_command_action`] but returns `Ok(false)` on failure instead of
-/// `Err`, logging the error via `tracing::error!`.  Prints `success_msg` on
-/// success.  Used by stop, keep, unkeep, and purge handlers.
-#[cfg(feature = "vrw")]
-pub async fn post_command_action_bool(
-    client: &reqwest::Client,
-    url: &str,
-    path: &str,
-    body: Option<&serde_json::Value>,
-    method: reqwest::Method,
-    label: &str,
-    verb: &str,
-    success_msg: &str,
-) -> Result<bool> {
-    let req = match body {
-        Some(b) => client.request(method.clone(), format!("{}{}", url, path)).json(b),
-        None => client.request(method, format!("{}{}", url, path)),
-    };
-    match req.send().await {
-        Ok(resp) => {
-            let status = resp.status();
-            let json: serde_json::Value = resp
-                .json()
-                .await
-                .unwrap_or(serde_json::json!({"status": "unknown"}));
-            if status.is_success() && json.get("status").and_then(|s| s.as_str()) == Some("ok") {
-                println!("{}", success_msg);
-                Ok(true)
-            } else {
-                let err_msg = json
-                    .get("error")
-                    .and_then(|e| e.as_str())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| format!("HTTP {}", status));
-                tracing::error!("Failed to {} '{}': {}", verb, label, err_msg);
-                Ok(false)
-            }
-        }
-        Err(e) => {
-            tracing::error!("Failed to {} '{}': {}", verb, label, e);
-            Ok(false)
-        }
-    }
-}
-
 /// Typed HTTP client for vrw CLI commands.
 ///
 /// Encapsulates the reqwest client and base URL, providing typed methods
@@ -658,6 +568,22 @@ impl VrwClient {
     /// Return a reference to the underlying reqwest client.
     pub fn client(&self) -> &reqwest::Client {
         &self.client
+    }
+
+    /// GET a JSON endpoint, returning None on any error (connection refused, etc.).
+    /// Used for collection/discovery where individual failures should be silently skipped.
+    pub async fn try_get_data(&self, path: &str) -> Option<serde_json::Value> {
+        let url = format!("{}{}", self.base_url, path);
+        let resp = self.client.get(&url).send().await.ok()?;
+        if !resp.status().is_success() {
+            return None;
+        }
+        let json: serde_json::Value = resp.json().await.ok()?;
+        if json.get("status").and_then(|s| s.as_str()) == Some("ok") {
+            json.get("data").cloned()
+        } else {
+            None
+        }
     }
 
     /// GET a JSON endpoint, returning the `data` field on success.
@@ -815,19 +741,17 @@ where
 {
     let mut result = Vec::new();
     for info in instances {
-        let url = instance_url(info, &None);
-        if let Ok(resp) = client.get(format!("{}/api/commands", url)).send().await {
-            if let Ok(json) = resp.json::<serde_json::Value>().await {
-                if let Some(cmds) = json["data"].as_array() {
-                    for cmd in cmds {
-                        if !filter(cmd) {
-                            continue;
-                        }
-                        let cmd_pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-                        if let Some(id) = cmd.get("id").and_then(|v| v.as_str()) {
-                            let (name, full) = build_full_display_string(cmd);
-                            result.push((info.pid, id.to_string(), cmd_pid, name, full));
-                        }
+        let vrw = VrwClient::new(client.clone(), info);
+        if let Some(data) = vrw.try_get_data("/api/commands").await {
+            if let Some(cmds) = data.as_array() {
+                for cmd in cmds {
+                    if !filter(cmd) {
+                        continue;
+                    }
+                    let cmd_pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                    if let Some(id) = cmd.get("id").and_then(|v| v.as_str()) {
+                        let (name, full) = build_full_display_string(cmd);
+                        result.push((info.pid, id.to_string(), cmd_pid, name, full));
                     }
                 }
             }

@@ -195,7 +195,7 @@ async fn handle_signal_command(
     };
 
     // Look up the command ID by PID via the instance's API
-    let cmd_id = resolve_pid_to_id(vrw.client(), vrw.base_url(), pid).await?;
+    let cmd_id = resolve_pid_to_id(&vrw, pid).await?;
 
     vrw.post_action(&format!("/api/commands/{}/{}", cmd_id, signal), None)
         .await
