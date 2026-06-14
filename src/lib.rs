@@ -12,3 +12,10 @@ pub mod vtty;
 
 #[cfg(feature = "vrw")]
 pub mod web;
+
+// Re-export commonly used types for ergonomic imports.
+pub use config::schema::Config;
+pub use process::manager::CommandManager;
+pub use vtty::emulator::VttyEmulator;
+pub use vtty::buffer::Buffer;
+pub use ipc::protocol::{ControlCommand, ControlResponse};
