@@ -55,7 +55,7 @@ interval balances two competing concerns:
   into a single diff but make interactive input feel sluggish.
 
 200ms was chosen as the sweet spot for most terminal workloads. It is configurable
-via the `VRW_DIFF_INTERVAL` environment variable.
+via the `web.dirty_check_ms` configuration option.
 
 ### Cell-Level Comparison
 
