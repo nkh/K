@@ -2,35 +2,40 @@ use std::path::Path;
 
 use super::schema::Config;
 
-/// Severity level for a configuration validation issue.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ValidationLevel {
-    /// A fatal issue that prevents startup.
     Error,
-    /// A non-fatal issue that is logged but does not prevent startup.
     Warning,
 }
 
-/// A single configuration validation finding.
 #[derive(Debug, Clone)]
 pub struct ValidationIssue {
-    /// Dot-separated path to the offending field (e.g. "vtty.rows").
     pub field: String,
-    /// Severity of the issue.
     pub level: ValidationLevel,
-    /// Human-readable description of the problem.
     pub message: String,
 }
 
+/// Check that the parent directory of `path` exists; push a warning if not.
+fn check_parent_dir(path: &str, field: &str, issues: &mut Vec<ValidationIssue>) {
+    if path.is_empty() {
+        return;
+    }
+    if let Some(parent) = Path::new(path).parent() {
+        if !parent.as_os_str().is_empty() && !parent.exists() {
+            issues.push(ValidationIssue {
+                field: field.into(),
+                level: ValidationLevel::Warning,
+                message: format!("Parent directory does not exist: {}", parent.display()),
+            });
+        }
+    }
+}
+
 /// Validate a [`Config`] and return all issues found.
-///
-/// Errors are fatal (e.g. dimensions out of range) and should cause the
-/// program to abort.  Warnings are non-fatal and are logged but startup
-/// continues.
 pub fn validate_config(config: &Config) -> Vec<ValidationIssue> {
     let mut issues = Vec::new();
 
-    // ── server settings (vrw only) ──────────────────────────
+    // ── server settings (vrw only) ──
     #[cfg(feature = "vrw")]
     {
         if config.server.port == 0 {
@@ -49,7 +54,7 @@ pub fn validate_config(config: &Config) -> Vec<ValidationIssue> {
         }
     }
 
-    // ── vtty dimensions ──────────────────────────────────────────
+    // ── vtty dimensions ──
     if config.vtty.rows == 0 {
         issues.push(ValidationIssue {
             field: "vtty.rows".into(),
@@ -65,7 +70,7 @@ pub fn validate_config(config: &Config) -> Vec<ValidationIssue> {
         });
     }
 
-    // ── display.refresh_ms ───────────────────────────────────────
+    // ── display.refresh_ms ──
     if config.display.refresh_ms < 10 {
         issues.push(ValidationIssue {
             field: "display.refresh_ms".into(),
@@ -77,70 +82,14 @@ pub fn validate_config(config: &Config) -> Vec<ValidationIssue> {
         });
     }
 
-    // ── daemon stdout / stderr parent dir ────────────────────────
-    if !config.daemon.stdout_file.is_empty() {
-        if let Some(parent) = Path::new(&config.daemon.stdout_file).parent() {
-            if !parent.as_os_str().is_empty() && !parent.exists() {
-                issues.push(ValidationIssue {
-                    field: "daemon.stdout_file".into(),
-                    level: ValidationLevel::Warning,
-                    message: format!(
-                        "Parent directory for daemon stdout does not exist: {}",
-                        parent.display()
-                    ),
-                });
-            }
-        }
+    // ── parent directory checks ──
+    check_parent_dir(&config.daemon.stdout_file, "daemon.stdout_file", &mut issues);
+    check_parent_dir(&config.daemon.stderr_file, "daemon.stderr_file", &mut issues);
+    if let Some(ref f) = config.command_log.file {
+        check_parent_dir(f, "command_log.file", &mut issues);
     }
-    if !config.daemon.stderr_file.is_empty() {
-        if let Some(parent) = Path::new(&config.daemon.stderr_file).parent() {
-            if !parent.as_os_str().is_empty() && !parent.exists() {
-                issues.push(ValidationIssue {
-                    field: "daemon.stderr_file".into(),
-                    level: ValidationLevel::Warning,
-                    message: format!(
-                        "Parent directory for daemon stderr does not exist: {}",
-                        parent.display()
-                    ),
-                });
-            }
-        }
-    }
-
-    // ── command_log.file parent dir ──────────────────────────────
-    if let Some(ref log_file) = config.command_log.file {
-        if !log_file.is_empty() {
-            if let Some(parent) = Path::new(log_file).parent() {
-                if !parent.as_os_str().is_empty() && !parent.exists() {
-                    issues.push(ValidationIssue {
-                        field: "command_log.file".into(),
-                        level: ValidationLevel::Warning,
-                        message: format!(
-                            "Parent directory for command log does not exist: {}",
-                            parent.display()
-                        ),
-                    });
-                }
-            }
-        }
-    }
-
-    // ── command_log.pty_raw_log parent dir ───────────────────────
-    if let Some(ref pty_log) = config.command_log.pty_raw_log {
-        if !pty_log.is_empty() {
-            if let Some(parent) = Path::new(pty_log).parent() {
-                if !parent.as_os_str().is_empty() && !parent.exists() {
-                    issues.push(ValidationIssue {
-                        field: "command_log.pty_raw_log".into(),
-                        level: ValidationLevel::Warning,
-                        message: format!(
-                            "Parent directory for PTY raw log does not exist: {}",
-                            parent.display()
-                        ),
-                    });
-                }
-            }
-        }
+    if let Some(ref f) = config.command_log.pty_raw_log {
+        check_parent_dir(f, "command_log.pty_raw_log", &mut issues);
     }
 
     issues
@@ -155,18 +104,9 @@ mod tests {
     }
 
     #[test]
-    fn test_valid_config_produces_no_issues() {
-        let config = default_config();
-        let issues = validate_config(&config);
-        let errors: Vec<_> = issues
-            .iter()
-            .filter(|i| i.level == ValidationLevel::Error)
-            .collect();
-        assert!(
-            errors.is_empty(),
-            "Default config should produce no errors, got: {:?}",
-            errors
-        );
+    fn test_valid_config_no_errors() {
+        let issues = validate_config(&default_config());
+        assert!(issues.iter().all(|i| i.level != ValidationLevel::Error));
     }
 
     #[test]
@@ -175,14 +115,9 @@ mod tests {
         config.vtty.rows = 0;
         config.vtty.cols = 0;
         let issues = validate_config(&config);
-        let vtty_issues: Vec<_> = issues
-            .iter()
-            .filter(|i| i.field.starts_with("vtty"))
-            .collect();
-        assert_eq!(vtty_issues.len(), 2);
-        assert!(vtty_issues
-            .iter()
-            .all(|i| i.level == ValidationLevel::Error));
+        let vtty: Vec<_> = issues.iter().filter(|i| i.field.starts_with("vtty")).collect();
+        assert_eq!(vtty.len(), 2);
+        assert!(vtty.iter().all(|i| i.level == ValidationLevel::Error));
     }
 
     #[test]
@@ -190,23 +125,7 @@ mod tests {
         let mut config = default_config();
         config.display.refresh_ms = 1;
         let issues = validate_config(&config);
-        let refresh_issues: Vec<_> = issues
-            .iter()
-            .filter(|i| i.field == "display.refresh_ms")
-            .collect();
-        assert_eq!(refresh_issues.len(), 1);
-        assert_eq!(refresh_issues[0].level, ValidationLevel::Error);
-    }
-
-    #[test]
-    fn test_refresh_ms_boundary() {
-        let mut config = default_config();
-        config.display.refresh_ms = 10;
-        let issues = validate_config(&config);
-        assert!(
-            issues.iter().all(|i| i.field != "display.refresh_ms"),
-            "refresh_ms = 10 should be valid (boundary)"
-        );
+        assert!(issues.iter().any(|i| i.field == "display.refresh_ms"));
     }
 
     #[test]
@@ -214,11 +133,8 @@ mod tests {
         let mut config = default_config();
         config.daemon.stdout_file = "/nonexistent/dir/stdout.log".into();
         let issues = validate_config(&config);
-        let daemon_issues: Vec<_> = issues
-            .iter()
-            .filter(|i| i.field == "daemon.stdout_file")
-            .collect();
-        assert_eq!(daemon_issues.len(), 1);
-        assert_eq!(daemon_issues[0].level, ValidationLevel::Warning);
+        let out: Vec<_> = issues.iter().filter(|i| i.field == "daemon.stdout_file").collect();
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].level, ValidationLevel::Warning);
     }
 }

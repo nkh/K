@@ -74,8 +74,7 @@ impl CommandHandle {
     }
 
     pub async fn vtty_snapshot(&self) -> crate::vtty::buffer::Buffer {
-        let emu = self.emulator.read().await;
-        emu.snapshot()
+        self.emulator.read().await.snapshot()
     }
 
     /// Blocking snapshot — uses `block_in_place` for sync contexts inside the async runtime.
@@ -87,18 +86,15 @@ impl CommandHandle {
     }
 
     pub async fn vtty_plain(&self) -> String {
-        let emu = self.emulator.read().await;
-        emu.contents_plain()
+        self.emulator.read().await.contents_plain()
     }
 
     pub async fn vtty_ansi(&self) -> String {
-        let emu = self.emulator.read().await;
-        emu.contents_ansi()
+        self.emulator.read().await.contents_ansi()
     }
 
     pub async fn vtty_partial(&self, start_row: usize, row_count: usize) -> String {
-        let emu = self.emulator.read().await;
-        emu.partial(start_row, row_count)
+        self.emulator.read().await.partial(start_row, row_count)
     }
 
     /// Render VTTY buffer as HTML.
@@ -133,8 +129,7 @@ impl CommandHandle {
 
     /// Whether the process is currently using the alternate screen buffer.
     pub async fn is_alternate_screen(&self) -> bool {
-        let emu = self.emulator.read().await;
-        emu.is_alternate_screen()
+        self.emulator.read().await.is_alternate_screen()
     }
 
     /// Get the main buffer as HTML (even if alt screen is active).
@@ -152,20 +147,17 @@ impl CommandHandle {
     }
 
     pub async fn cursor_position(&self) -> (usize, usize) {
-        let emu = self.emulator.read().await;
-        emu.cursor()
+        self.emulator.read().await.cursor()
     }
 
     /// Whether the cursor is visible (DEC mode 25).
     pub async fn is_cursor_visible(&self) -> bool {
-        let emu = self.emulator.read().await;
-        emu.is_cursor_visible()
+        self.emulator.read().await.is_cursor_visible()
     }
 
     /// Get the current cursor style.
     pub async fn cursor_style(&self) -> crate::vtty::emulator::CursorStyle {
-        let emu = self.emulator.read().await;
-        emu.cursor_style()
+        self.emulator.read().await.cursor_style()
     }
 
     /// Send pasted text, wrapping in bracketed paste sequences if enabled.
@@ -185,32 +177,27 @@ impl CommandHandle {
     }
 
     pub async fn dimensions(&self) -> (usize, usize) {
-        let emu = self.emulator.read().await;
-        emu.dimensions()
+        self.emulator.read().await.dimensions()
     }
 
     /// Return the buffer generation counter (O(1) read).
     pub async fn buffer_generation(&self) -> u64 {
-        let emu = self.emulator.read().await;
-        emu.buffer_generation()
+        self.emulator.read().await.buffer_generation()
     }
 
     /// Return scrollback line count.
     pub async fn scrollback_count(&self) -> usize {
-        let emu = self.emulator.read().await;
-        emu.scrollback_len()
+        self.emulator.read().await.scrollback_len()
     }
 
     /// Whether any mouse tracking mode is enabled (1002/1003).
     pub async fn mouse_tracking_enabled(&self) -> bool {
-        let emu = self.emulator.read().await;
-        emu.mouse_tracking_enabled()
+        self.emulator.read().await.mouse_tracking_enabled()
     }
 
     /// Whether SGR extended mouse coordinates (?1006) is enabled.
     pub async fn mouse_sgr_enabled(&self) -> bool {
-        let emu = self.emulator.read().await;
-        emu.mouse_sgr_enabled()
+        self.emulator.read().await.mouse_sgr_enabled()
     }
 
     /// All VTTY metadata in a single read lock acquisition.
@@ -283,8 +270,7 @@ impl CommandHandle {
 
     /// Whether the child has enabled focus reporting (?1004h).
     pub async fn focus_reporting_enabled(&self) -> bool {
-        let emu = self.emulator.read().await;
-        emu.focus_reporting_enabled()
+        self.emulator.read().await.focus_reporting_enabled()
     }
 
     /// Force-exit the alternate screen if active (auto-recovery).
