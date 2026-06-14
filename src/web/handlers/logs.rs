@@ -7,6 +7,7 @@ use axum::{
 use serde_json::Value;
 use std::collections::HashMap;
 
+use crate::web::response::api_ok;
 use crate::web::state::AppState;
 
 /// Read command log contents with optional search/filter.
@@ -32,18 +33,14 @@ pub async fn get_log(
 
     // If logging is not enabled at all, return early with a clear message
     if !cfg.enabled {
-        return Json(serde_json::json!({
-            "status": "ok",
-            "data": {
-                "lines": [],
-                "total_lines": 0,
-                "filtered_lines": 0,
-                "offset": 0,
-                "limit": limit,
-                "search": search,
-                "message": "Command logging is not enabled. Start vrw with --log or --log-file <path> to enable.",
-            },
-            "error": null
+        return api_ok(serde_json::json!({
+            "lines": [],
+            "total_lines": 0,
+            "filtered_lines": 0,
+            "offset": 0,
+            "limit": limit,
+            "search": search,
+            "message": "Command logging is not enabled. Start vrw with --log or --log-file <path> to enable.",
         }));
     }
 
@@ -74,17 +71,13 @@ pub async fn get_log(
             let filtered_total = filtered.len();
             let page: Vec<String> = filtered.into_iter().skip(offset).take(limit).collect();
 
-            Json(serde_json::json!({
-                "status": "ok",
-                "data": {
-                    "lines": page,
-                    "total_lines": total,
-                    "filtered_lines": filtered_total,
-                    "offset": offset,
-                    "limit": limit,
-                    "search": search,
-                },
-                "error": null
+            api_ok(serde_json::json!({
+                "lines": page,
+                "total_lines": total,
+                "filtered_lines": filtered_total,
+                "offset": offset,
+                "limit": limit,
+                "search": search,
             }))
         }
         None => {
@@ -92,18 +85,14 @@ pub async fn get_log(
             let mem_lines = state.manager.logger().read_memory_buffer();
 
             if mem_lines.is_empty() {
-                return Json(serde_json::json!({
-                    "status": "ok",
-                    "data": {
-                        "lines": [],
-                        "total_lines": 0,
-                        "filtered_lines": 0,
-                        "offset": 0,
-                        "limit": limit,
-                        "search": search,
-                        "message": "No log entries yet. Logs will appear here once commands are spawned (spawn, kill, resize, etc.).",
-                    },
-                    "error": null
+                return api_ok(serde_json::json!({
+                    "lines": [],
+                    "total_lines": 0,
+                    "filtered_lines": 0,
+                    "offset": 0,
+                    "limit": limit,
+                    "search": search,
+                    "message": "No log entries yet. Logs will appear here once commands are spawned (spawn, kill, resize, etc.).",
                 }));
             }
 
@@ -122,21 +111,15 @@ pub async fn get_log(
             let filtered_total = filtered.len();
             let page: Vec<String> = filtered.into_iter().skip(offset).take(limit).collect();
 
-            Json(serde_json::json!({
-                "status": "ok",
-                "data": {
-                    "lines": page,
-                    "total_lines": total,
-                    "filtered_lines": filtered_total,
-                    "offset": offset,
-                    "limit": limit,
-                    "search": search,
-                    "source": "memory",
-                },
-                "error": null
+            api_ok(serde_json::json!({
+                "lines": page,
+                "total_lines": total,
+                "filtered_lines": filtered_total,
+                "offset": offset,
+                "limit": limit,
+                "search": search,
+                "source": "memory",
             }))
         }
     }
 }
-
-

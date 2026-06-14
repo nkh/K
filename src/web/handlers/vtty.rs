@@ -9,23 +9,16 @@ use axum::{
 use serde_json::Value;
 use std::collections::HashMap;
 
+use crate::web::response::{api_err, api_ok};
 use crate::web::state::AppState;
 
 pub async fn get_vtty_full(State(state): State<AppState>, Path(id): Path<String>) -> Json<Value> {
     match state.manager.get(&id) {
         Some(handle) => {
             let ansi = handle.vtty_ansi().await;
-            Json(serde_json::json!({
-                "status": "ok",
-                "data": { "id": id, "content": ansi },
-                "error": null
-            }))
+            api_ok(serde_json::json!({ "id": id, "content": ansi }))
         }
-        None => Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": format!("Command {} not found", id)
-        })),
+        None => api_err(format!("Command {} not found", id)),
     }
 }
 
@@ -65,29 +58,21 @@ pub async fn get_vtty_html(
             let mouse_sgr = handle.mouse_sgr_enabled().await;
             let cursor_visible = handle.is_cursor_visible().await;
             let generation = handle.buffer_generation().await;
-            Json(serde_json::json!({
-                "status": "ok",
-                "data": {
-                    "id": id,
-                    "html": html,
-                    "cursor": { "row": cursor.0, "col": cursor.1 },
-                    "dimensions": { "rows": rows, "cols": cols },
-                    "scrollback_lines": scrollback,
-                    "scrollback_offset": scrollback_offset,
-                    "alternate_screen": alt_screen,
-                    "cursor_visible": cursor_visible,
-                    "mouse_tracking": mouse_tracking,
-                    "mouse_sgr": mouse_sgr,
-                    "generation": generation,
-                },
-                "error": null
+            api_ok(serde_json::json!({
+                "id": id,
+                "html": html,
+                "cursor": { "row": cursor.0, "col": cursor.1 },
+                "dimensions": { "rows": rows, "cols": cols },
+                "scrollback_lines": scrollback,
+                "scrollback_offset": scrollback_offset,
+                "alternate_screen": alt_screen,
+                "cursor_visible": cursor_visible,
+                "mouse_tracking": mouse_tracking,
+                "mouse_sgr": mouse_sgr,
+                "generation": generation,
             }))
         }
-        None => Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": format!("Command {} not found", id)
-        })),
+        None => api_err(format!("Command {} not found", id)),
     }
 }
 
@@ -117,24 +102,16 @@ pub async fn get_vtty_buffer(
             let alt_screen = handle.is_alternate_screen().await;
             let (rows, cols) = handle.dimensions().await;
             let cursor_visible = handle.is_cursor_visible().await;
-            Json(serde_json::json!({
-                "status": "ok",
-                "data": {
-                    "id": id,
-                    "screen": label,
-                    "html": html,
-                    "alternate_screen": alt_screen,
-                    "cursor_visible": cursor_visible,
-                    "dimensions": { "rows": rows, "cols": cols },
-                },
-                "error": null
+            api_ok(serde_json::json!({
+                "id": id,
+                "screen": label,
+                "html": html,
+                "alternate_screen": alt_screen,
+                "cursor_visible": cursor_visible,
+                "dimensions": { "rows": rows, "cols": cols },
             }))
         }
-        None => Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": format!("Command {} not found", id)
-        })),
+        None => api_err(format!("Command {} not found", id)),
     }
 }
 
@@ -155,22 +132,14 @@ pub async fn get_vtty_partial(
     match state.manager.get(&id) {
         Some(handle) => {
             let content = handle.vtty_partial(offset, limit).await;
-            Json(serde_json::json!({
-                "status": "ok",
-                "data": {
-                    "id": id,
-                    "offset": offset,
-                    "limit": limit,
-                    "content": content
-                },
-                "error": null
+            api_ok(serde_json::json!({
+                "id": id,
+                "offset": offset,
+                "limit": limit,
+                "content": content
             }))
         }
-        None => Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": format!("Command {} not found", id)
-        })),
+        None => api_err(format!("Command {} not found", id)),
     }
 }
 
@@ -183,11 +152,7 @@ pub async fn resize_vtty(
     let cols = body.get("cols").and_then(|v| v.as_u64()).unwrap_or(80) as u16;
 
     if rows < 1 || cols < 1 || rows > 10000 || cols > 1000 {
-        return Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": "Invalid dimensions: rows must be 1-10000, cols must be 1-1000"
-        }));
+        return api_err("Invalid dimensions: rows must be 1-10000, cols must be 1-1000");
     }
 
     match state.manager.get(&id) {
@@ -196,11 +161,7 @@ pub async fn resize_vtty(
             // frozen and cannot be meaningfully resized (no live PTY to send
             // SIGWINCH to).  The VTTY buffer is retained as-is for inspection.
             if !handle.is_alive() {
-                return Json(serde_json::json!({
-                    "status": "error",
-                    "data": null,
-                    "error": "Cannot resize an exited command's terminal"
-                }));
+                return api_err("Cannot resize an exited command's terminal");
             }
             // Use resize_pty: resizes PTY master (sends SIGWINCH to child)
             // AND resizes the in-memory VTTY buffer.
@@ -210,24 +171,12 @@ pub async fn resize_vtty(
                         .manager
                         .logger()
                         .log("resize", &format!("id={} pid={} name={} rows={} cols={}", id, handle.pid, handle.name, rows, cols));
-                    Json(serde_json::json!({
-                        "status": "ok",
-                        "data": { "id": id, "rows": rows, "cols": cols },
-                        "error": null
-                    }))
+                    api_ok(serde_json::json!({ "id": id, "rows": rows, "cols": cols }))
                 }
-                Err(e) => Json(serde_json::json!({
-                    "status": "error",
-                    "data": null,
-                    "error": e.to_string()
-                })),
+                Err(e) => api_err(e.to_string()),
             }
         }
-        None => Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": format!("Command {} not found", id)
-        })),
+        None => api_err(format!("Command {} not found", id)),
     }
 }
 
@@ -240,16 +189,8 @@ pub async fn resize_vtty(
 /// returns `true` to get the updated buffer content.
 pub async fn vtty_changed(State(state): State<AppState>, Path(id): Path<String>) -> Json<Value> {
     match state.manager.has_changed(&id) {
-        Ok(changed) => Json(serde_json::json!({
-            "status": "ok",
-            "data": { "id": id, "changed": changed },
-            "error": null
-        })),
-        Err(e) => Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": e.to_string()
-        })),
+        Ok(changed) => api_ok(serde_json::json!({ "id": id, "changed": changed })),
+        Err(e) => api_err(e.to_string()),
     }
 }
 
@@ -260,17 +201,9 @@ pub async fn get_vtty_text(State(state): State<AppState>, Path(id): Path<String>
     match state.manager.get(&id) {
         Some(handle) => {
             let text = handle.vtty_plain().await;
-            Json(serde_json::json!({
-                "status": "ok",
-                "data": { "id": id, "text": text },
-                "error": null
-            }))
+            api_ok(serde_json::json!({ "id": id, "text": text }))
         }
-        None => Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": format!("Command {} not found", id)
-        })),
+        None => api_err(format!("Command {} not found", id)),
     }
 }
 
@@ -312,21 +245,13 @@ pub async fn get_vtty_png(
             }
             Err(e) => (
                 StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({
-                    "status": "error",
-                    "data": null,
-                    "error": e.to_string()
-                })),
+                api_err(e.to_string()),
             )
                 .into_response(),
         },
         None => (
             StatusCode::NOT_FOUND,
-            Json(serde_json::json!({
-                "status": "error",
-                "data": null,
-                "error": format!("Command {} not found", id)
-            })),
+            api_err(format!("Command {} not found", id)),
         )
             .into_response(),
     }
@@ -349,25 +274,17 @@ pub async fn get_vtty_diff(
         Some(handle) => {
             let (diff, cursor, dims, gen) = handle.vtty_diff_and_state().await;
             let (rows, cols) = dims;
-            Json(serde_json::json!({
-                "status": "ok",
-                "data": {
-                    "id": id,
-                    "generation": gen,
-                    "cursor": { "row": cursor.0, "col": cursor.1 },
-                    "dimensions": { "rows": rows, "cols": cols },
-                    "changed_count": diff.changed_count,
-                    "full_sync_required": diff.changed_count > rows * cols * 9 / 10,
-                    "cells": diff.cells,
-                },
-                "error": null
+            api_ok(serde_json::json!({
+                "id": id,
+                "generation": gen,
+                "cursor": { "row": cursor.0, "col": cursor.1 },
+                "dimensions": { "rows": rows, "cols": cols },
+                "changed_count": diff.changed_count,
+                "full_sync_required": diff.changed_count > rows * cols * 9 / 10,
+                "cells": diff.cells,
             }))
         }
-        None => Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": format!("Command {} not found", id)
-        })),
+        None => api_err(format!("Command {} not found", id)),
     }
 }
 

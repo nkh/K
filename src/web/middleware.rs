@@ -8,11 +8,11 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use serde_json::json;
 use std::time::Instant;
 use tracing;
 
 use crate::config::schema::CorsConfig;
+use crate::web::response::api_err;
 
 /// CORS layer configuration.
 ///
@@ -87,12 +87,9 @@ pub async fn auth_middleware(req: Request, next: Next) -> Response {
                 Some(t) if t == expected => next.run(req).await,
                 _ => (
                     StatusCode::UNAUTHORIZED,
-                    axum::Json(json!({
-                        "status": "error",
-                        "data": null,
-                        "error": "Unauthorized — provide a valid Bearer token in the Authorization header"
-                    }))
-                ).into_response(),
+                    api_err("Unauthorized — provide a valid Bearer token in the Authorization header"),
+                )
+                    .into_response(),
             }
         }
     }
@@ -136,11 +133,7 @@ pub async fn error_handler(req: Request, next: Next) -> Response {
             Err(_) => {
                 return (
                     status,
-                    axum::Json(json!({
-                        "status": "error",
-                        "data": null,
-                        "error": format!("HTTP {}", status.as_u16())
-                    })),
+                    api_err(format!("HTTP {}", status.as_u16())),
                 )
                     .into_response();
             }
@@ -155,16 +148,10 @@ pub async fn error_handler(req: Request, next: Next) -> Response {
 
         return (
             status,
-            axum::Json(json!({
-                "status": "error",
-                "data": null,
-                "error": error_msg
-            })),
+            api_err(error_msg),
         )
             .into_response();
     }
 
     response
 }
-
-

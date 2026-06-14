@@ -6,6 +6,7 @@ use axum::{
 };
 use serde_json::Value;
 
+use crate::web::response::{api_err, api_ok};
 use crate::web::state::AppState;
 
 pub async fn send_keys(
@@ -16,24 +17,12 @@ pub async fn send_keys(
     let keys = body.get("keys").and_then(|v| v.as_str()).unwrap_or("");
 
     if keys.is_empty() {
-        return Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": "Missing 'keys' field"
-        }));
+        return api_err("Missing 'keys' field");
     }
 
     match state.manager.send_keys(&id, keys).await {
-        Ok(_) => Json(serde_json::json!({
-            "status": "ok",
-            "data": { "id": id, "keys_sent": keys },
-            "error": null
-        })),
-        Err(e) => Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": e.to_string()
-        })),
+        Ok(_) => api_ok(serde_json::json!({ "id": id, "keys_sent": keys })),
+        Err(e) => api_err(e.to_string()),
     }
 }
 
@@ -50,45 +39,25 @@ pub async fn send_mouse(
     let y = body.get("y").and_then(|v| v.as_u64()).unwrap_or(1) as u16;
 
     if event.is_empty() {
-        return Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": "Missing 'event' field"
-        }));
+        return api_err("Missing 'event' field");
     }
 
     match state.manager.get(&id) {
         Some(handle) => {
             // Only forward if the child has enabled mouse tracking
             if !handle.mouse_tracking_enabled().await {
-                return Json(serde_json::json!({
-                    "status": "ok",
-                    "data": { "id": id, "forwarded": false },
-                    "error": null
-                }));
+                return api_ok(serde_json::json!({ "id": id, "forwarded": false }));
             }
 
             let sgr = handle.mouse_sgr_enabled().await;
             let seq = encode_mouse_event(event, button, x, y, sgr);
 
             match handle.send_bytes(seq.into_bytes()).await {
-                Ok(_) => Json(serde_json::json!({
-                    "status": "ok",
-                    "data": { "id": id, "forwarded": true },
-                    "error": null
-                })),
-                Err(e) => Json(serde_json::json!({
-                    "status": "error",
-                    "data": null,
-                    "error": e.to_string()
-                })),
+                Ok(_) => api_ok(serde_json::json!({ "id": id, "forwarded": true })),
+                Err(e) => api_err(e.to_string()),
             }
         }
-        None => Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": format!("Command {} not found", id)
-        })),
+        None => api_err(format!("Command {} not found", id)),
     }
 }
 

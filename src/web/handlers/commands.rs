@@ -9,6 +9,7 @@ use std::collections::HashMap;
 
 use crate::config::merge::merge_command_env;
 use crate::web::handlers::resources::read_proc_stats;
+use crate::web::response::{api_err, api_ok};
 use crate::web::state::AppState;
 
 pub async fn list_commands(State(state): State<AppState>) -> Json<Value> {
@@ -63,7 +64,7 @@ pub async fn list_commands(State(state): State<AppState>) -> Json<Value> {
             })
         })
         .collect();
-    Json(serde_json::json!({ "status": "ok", "data": data, "error": null }))
+    api_ok(data)
 }
 
 pub async fn start_command(State(state): State<AppState>, Json(body): Json<Value>) -> Json<Value> {
@@ -113,11 +114,7 @@ pub async fn start_command(State(state): State<AppState>, Json(body): Json<Value
         .unwrap_or_default();
 
     if cmd.is_empty() {
-        return Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": "Missing 'cmd' field"
-        }));
+        return api_err("Missing 'cmd' field");
     }
 
     // Check for no_env flag — when true, skip config-level environment variables
@@ -129,11 +126,7 @@ pub async fn start_command(State(state): State<AppState>, Json(body): Json<Value
     // Validate certificate name if provided
     if let Some(ref cert_name) = certificate {
         if !state.cert_store.exists(cert_name) {
-            return Json(serde_json::json!({
-                "status": "error",
-                "data": null,
-                "error": format!("Certificate '{}' not found in store", cert_name)
-            }));
+            return api_err(format!("Certificate '{}' not found in store", cert_name));
         }
     }
 
@@ -147,11 +140,7 @@ pub async fn start_command(State(state): State<AppState>, Json(body): Json<Value
     // Validate dimensions if provided
     if let (Some(r), Some(c)) = (rows, cols) {
         if r < 1 || c < 1 || r > 10000 || c > 1000 {
-            return Json(serde_json::json!({
-                "status": "error",
-                "data": null,
-                "error": "Invalid dimensions: rows must be 1-10000, cols must be 1-1000"
-            }));
+            return api_err("Invalid dimensions: rows must be 1-10000, cols must be 1-1000");
         }
     }
 
@@ -159,11 +148,7 @@ pub async fn start_command(State(state): State<AppState>, Json(body): Json<Value
     if let Some(ref d) = dir {
         let path = std::path::Path::new(d);
         if !path.is_dir() {
-            return Json(serde_json::json!({
-                "status": "error",
-                "data": null,
-                "error": format!("Working directory '{}' does not exist or is not a directory", d)
-            }));
+            return api_err(format!("Working directory '{}' does not exist or is not a directory", d));
         }
     }
 
@@ -207,17 +192,9 @@ pub async fn start_command(State(state): State<AppState>, Json(body): Json<Value
         Ok(id) => {
             // Look up the child's OS PID for the response.
             let pid = state.manager.get(&id).map(|h| h.pid).unwrap_or(0);
-            Json(serde_json::json!({
-                "status": "ok",
-                "data": { "id": id, "pid": pid },
-                "error": null
-            }))
+            api_ok(serde_json::json!({ "id": id, "pid": pid }))
         }
-        Err(e) => Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": e.to_string()
-        })),
+        Err(e) => api_err(e.to_string()),
     }
 }
 
@@ -231,16 +208,8 @@ pub async fn kill_command(
         .and_then(|v| v.as_str())
         .map(String::from);
     match state.manager.kill(&id, signal).await {
-        Ok(_) => Json(serde_json::json!({
-            "status": "ok",
-            "data": { "id": id },
-            "error": null
-        })),
-        Err(e) => Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": e.to_string()
-        })),
+        Ok(_) => api_ok(serde_json::json!({ "id": id })),
+        Err(e) => api_err(e.to_string()),
     }
 }
 
@@ -251,16 +220,8 @@ pub async fn kill_command_by_pid(
     Path(pid): Path<u32>,
 ) -> Json<Value> {
     match state.manager.kill_by_pid(pid).await {
-        Ok(_) => Json(serde_json::json!({
-            "status": "ok",
-            "data": { "pid": pid },
-            "error": null
-        })),
-        Err(e) => Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": e.to_string()
-        })),
+        Ok(_) => api_ok(serde_json::json!({ "pid": pid })),
+        Err(e) => api_err(e.to_string()),
     }
 }
 
@@ -293,32 +254,16 @@ pub async fn kill_all_commands(State(state): State<AppState>) -> Json<Value> {
 /// Freeze (suspend) a running command via SIGSTOP.
 pub async fn freeze_command(State(state): State<AppState>, Path(id): Path<String>) -> Json<Value> {
     match state.manager.freeze(&id) {
-        Ok(_) => Json(serde_json::json!({
-            "status": "ok",
-            "data": { "id": id, "frozen": true },
-            "error": null
-        })),
-        Err(e) => Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": e.to_string()
-        })),
+        Ok(_) => api_ok(serde_json::json!({ "id": id, "frozen": true })),
+        Err(e) => api_err(e.to_string()),
     }
 }
 
 /// Thaw (resume) a frozen command via SIGCONT.
 pub async fn thaw_command(State(state): State<AppState>, Path(id): Path<String>) -> Json<Value> {
     match state.manager.thaw(&id) {
-        Ok(_) => Json(serde_json::json!({
-            "status": "ok",
-            "data": { "id": id, "frozen": false },
-            "error": null
-        })),
-        Err(e) => Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": e.to_string()
-        })),
+        Ok(_) => api_ok(serde_json::json!({ "id": id, "frozen": false })),
+        Err(e) => api_err(e.to_string()),
     }
 }
 
@@ -336,11 +281,7 @@ pub async fn restart_command(
     let (cmd_name, cmd_args) = match state.manager.get(&id) {
         Some(h) => (h.name.clone(), h.args.clone()),
         None => {
-            return Json(serde_json::json!({
-                "status": "error",
-                "data": null,
-                "error": format!("Command '{}' not found", id)
-            }));
+            return api_err(format!("Command '{}' not found", id));
         }
     };
 
@@ -385,27 +326,15 @@ pub async fn restart_command(
                 new_id = %new_id,
                 "Restarted command"
             );
-            Json(serde_json::json!({
-                "status": "ok",
-                "data": { "id": new_id, "pid": new_pid },
-                "error": null
-            }))
+            api_ok(serde_json::json!({ "id": new_id, "pid": new_pid }))
         }
-        Err(e) => Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": format!("Failed to spawn replacement command: {}", e)
-        })),
+        Err(e) => api_err(format!("Failed to spawn replacement command: {}", e)),
     }
 }
 
 pub async fn shutdown(State(state): State<AppState>) -> Json<Value> {
     let _ = state.shutdown_tx.send(());
-    Json(serde_json::json!({
-        "status": "ok",
-        "data": { "message": "shutdown initiated" },
-        "error": null
-    }))
+    api_ok(serde_json::json!({ "message": "shutdown initiated" }))
 }
 
 pub async fn get_info(State(state): State<AppState>) -> Json<Value> {
@@ -428,26 +357,22 @@ pub async fn get_info(State(state): State<AppState>) -> Json<Value> {
         })
         .collect();
 
-    Json(serde_json::json!({
-        "status": "ok",
-        "data": {
-            "command_count": commands.len(),
-            "certificate_count": certs.len(),
-            "certificates": cert_names,
-            "auth_enabled": state.auth_token.is_some(),
-            "server_name": server_config.name,
-            "web": {
-                "update_mode": web_config.update_mode,
-                "dirty_check_ms": web_config.dirty_check_ms,
-                "default_poll_ms": web_config.default_poll_ms,
-                "panel_colors": panel_colors,
-            },
-            "vtty": {
-                "screenshot_font_size": vtty_config.screenshot_font_size,
-                "screenshot_font_name": vtty_config.screenshot_font_name,
-            },
+    api_ok(serde_json::json!({
+        "command_count": commands.len(),
+        "certificate_count": certs.len(),
+        "certificates": cert_names,
+        "auth_enabled": state.auth_token.is_some(),
+        "server_name": server_config.name,
+        "web": {
+            "update_mode": web_config.update_mode,
+            "dirty_check_ms": web_config.dirty_check_ms,
+            "default_poll_ms": web_config.default_poll_ms,
+            "panel_colors": panel_colors,
         },
-        "error": null
+        "vtty": {
+            "screenshot_font_size": vtty_config.screenshot_font_size,
+            "screenshot_font_name": vtty_config.screenshot_font_name,
+        },
     }))
 }
 
@@ -466,24 +391,16 @@ pub async fn snapshot_command(
         .to_string();
 
     match state.manager.store_snapshot(&id, &name) {
-        Ok(meta) => Json(serde_json::json!({
-            "status": "ok",
-            "data": {
-                "id": id,
-                "name": meta.name,
-                "command_name": meta.command_name,
-                "command_args": meta.command_args,
-                "pid": meta.pid,
-                "timestamp": meta.timestamp.to_rfc3339(),
-                "runtime_secs": meta.runtime_secs,
-            },
-            "error": null
+        Ok(meta) => api_ok(serde_json::json!({
+            "id": id,
+            "name": meta.name,
+            "command_name": meta.command_name,
+            "command_args": meta.command_args,
+            "pid": meta.pid,
+            "timestamp": meta.timestamp.to_rfc3339(),
+            "runtime_secs": meta.runtime_secs,
         })),
-        Err(e) => Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": e.to_string()
-        })),
+        Err(e) => api_err(e.to_string()),
     }
 }
 
@@ -491,11 +408,7 @@ pub async fn snapshot_command(
 /// List all snapshots for a command.
 pub async fn list_snapshots(State(state): State<AppState>, Path(id): Path<String>) -> Json<Value> {
     let snapshots = state.manager.list_snapshots(&id);
-    Json(serde_json::json!({
-        "status": "ok",
-        "data": snapshots,
-        "error": null
-    }))
+    api_ok(snapshots)
 }
 
 /// POST /api/commands/:id/diff
@@ -513,23 +426,15 @@ pub async fn diff_command(
         .to_string();
 
     match state.manager.diff_snapshot(&id, &name) {
-        Ok(diff) => Json(serde_json::json!({
-            "status": "ok",
-            "data": {
-                "id": id,
-                "name": name,
-                "width": diff.width,
-                "height": diff.height,
-                "changed_count": diff.changed_count,
-                "cells": diff.cells,
-            },
-            "error": null
+        Ok(diff) => api_ok(serde_json::json!({
+            "id": id,
+            "name": name,
+            "width": diff.width,
+            "height": diff.height,
+            "changed_count": diff.changed_count,
+            "cells": diff.cells,
         })),
-        Err(e) => Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": e.to_string()
-        })),
+        Err(e) => api_err(e.to_string()),
     }
 }
 
@@ -540,16 +445,8 @@ pub async fn delete_snapshot(
     Path((id, name)): Path<(String, String)>,
 ) -> Json<Value> {
     match state.manager.delete_snapshot(&id, &name) {
-        Ok(_) => Json(serde_json::json!({
-            "status": "ok",
-            "data": { "id": id, "name": name },
-            "error": null
-        })),
-        Err(e) => Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": e.to_string()
-        })),
+        Ok(_) => api_ok(serde_json::json!({ "id": id, "name": name })),
+        Err(e) => api_err(e.to_string()),
     }
 }
 
@@ -591,11 +488,7 @@ pub async fn lookup_command(
         })
         .collect();
 
-    Json(serde_json::json!({
-        "status": "ok",
-        "data": matches,
-        "error": null
-    }))
+    api_ok(matches)
 }
 
 /// POST /api/commands/:id/keep
@@ -603,16 +496,8 @@ pub async fn lookup_command(
 /// Sets `retain_on_exit = true` on the command's exit configuration.
 pub async fn keep_command(State(state): State<AppState>, Path(id): Path<String>) -> Json<Value> {
     match state.manager.keep(&id) {
-        Ok(_) => Json(serde_json::json!({
-            "status": "ok",
-            "data": { "id": id, "retain_on_exit": true },
-            "error": null
-        })),
-        Err(e) => Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": e.to_string()
-        })),
+        Ok(_) => api_ok(serde_json::json!({ "id": id, "retain_on_exit": true })),
+        Err(e) => api_err(e.to_string()),
     }
 }
 
@@ -621,16 +506,8 @@ pub async fn keep_command(State(state): State<AppState>, Path(id): Path<String>)
 /// the manager when it exits.
 pub async fn unkeep_command(State(state): State<AppState>, Path(id): Path<String>) -> Json<Value> {
     match state.manager.unkeep(&id) {
-        Ok(_) => Json(serde_json::json!({
-            "status": "ok",
-            "data": { "id": id, "retain_on_exit": false },
-            "error": null
-        })),
-        Err(e) => Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": e.to_string()
-        })),
+        Ok(_) => api_ok(serde_json::json!({ "id": id, "retain_on_exit": false })),
+        Err(e) => api_err(e.to_string()),
     }
 }
 
@@ -639,16 +516,8 @@ pub async fn unkeep_command(State(state): State<AppState>, Path(id): Path<String
 /// This permanently discards the VTTY buffer and all associated state.
 pub async fn purge_command(State(state): State<AppState>, Path(id): Path<String>) -> Json<Value> {
     match state.manager.purge(&id) {
-        Ok(_) => Json(serde_json::json!({
-            "status": "ok",
-            "data": { "id": id, "purged": true },
-            "error": null
-        })),
-        Err(e) => Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": e.to_string()
-        })),
+        Ok(_) => api_ok(serde_json::json!({ "id": id, "purged": true })),
+        Err(e) => api_err(e.to_string()),
     }
 }
 
@@ -755,14 +624,10 @@ pub async fn get_snapshot(State(state): State<AppState>) -> Json<Value> {
         }
     }
 
-    Json(serde_json::json!({
-        "status": "ok",
-        "data": {
-            "commands": data,
-            "vtty": vtty,
-            "resources": resources,
-        },
-        "error": null
+    api_ok(serde_json::json!({
+        "commands": data,
+        "vtty": vtty,
+        "resources": resources,
     }))
 }
 
@@ -836,11 +701,7 @@ pub async fn tab_complete(
 
     matches.sort();
 
-    Json(serde_json::json!({
-        "status": "ok",
-        "data": matches,
-        "error": null
-    }))
+    api_ok(matches)
 }
 
 

@@ -3,6 +3,7 @@
 use axum::{extract::State, Json};
 use serde_json::Value;
 
+use crate::web::response::api_ok;
 use crate::web::state::AppState;
 
 /// List all certificates in the store.
@@ -25,7 +26,5 @@ pub async fn list_certificates(State(state): State<AppState>) -> Json<Value> {
             })
         })
         .collect();
-    Json(serde_json::json!({ "status": "ok", "data": data, "error": null }))
+    api_ok(Value::Array(data))
 }
-
-

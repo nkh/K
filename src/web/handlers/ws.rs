@@ -11,6 +11,7 @@ use futures::{SinkExt, StreamExt};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
+use crate::web::response::api_err;
 use crate::web::state::AppState;
 
 // ---------------------------------------------------------------------------
@@ -34,11 +35,7 @@ pub async fn ws_vtty_stream(
             _ => {
                 return (
                     axum::http::StatusCode::UNAUTHORIZED,
-                    axum::Json(json!({
-                        "status": "error",
-                        "data": null,
-                        "error": "Unauthorized — provide a valid token via ?token=... query parameter"
-                    }))
+                    api_err("Unauthorized — provide a valid token via ?token=... query parameter"),
                 )
                     .into_response();
             }
@@ -49,11 +46,7 @@ pub async fn ws_vtty_stream(
     if state.manager.get(&id).is_none() {
         return (
             axum::http::StatusCode::NOT_FOUND,
-            axum::Json(json!({
-                "status": "error",
-                "data": null,
-                "error": format!("Command {} not found", id)
-            })),
+            api_err(format!("Command {} not found", id)),
         )
             .into_response();
     }
@@ -437,5 +430,3 @@ async fn handle_log_socket(socket: WebSocket, state: AppState) {
         }
     }
 }
-
-

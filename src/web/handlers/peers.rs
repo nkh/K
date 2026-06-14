@@ -4,7 +4,9 @@
 
 use axum::{extract::{Path, State}, Json};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
+use crate::web::response::{api_err, api_ok};
 use crate::web::state::AppState;
 
 /// Information about a registered peer vrw instance.
@@ -33,12 +35,9 @@ pub struct RegisterPeerRequest {
 }
 
 /// List all registered peer instances.
-pub async fn list_peers(State(state): State<AppState>) -> Json<serde_json::Value> {
+pub async fn list_peers(State(state): State<AppState>) -> Json<Value> {
     let peers: Vec<PeerInfo> = state.peers.iter().map(|r| r.value().clone()).collect();
-    Json(serde_json::json!({
-        "status": "ok",
-        "data": peers,
-    }))
+    api_ok(serde_json::json!(peers))
 }
 
 /// Register a new peer instance.
@@ -49,13 +48,10 @@ pub async fn list_peers(State(state): State<AppState>) -> Json<serde_json::Value
 pub async fn register_peer(
     State(state): State<AppState>,
     Json(body): Json<RegisterPeerRequest>,
-) -> Json<serde_json::Value> {
+) -> Json<Value> {
     // Validate URL is well-formed
     if body.url.is_empty() {
-        return Json(serde_json::json!({
-            "status": "error",
-            "error": "url is required"
-        }));
+        return api_err("url is required");
     }
 
     let label = body
@@ -94,10 +90,7 @@ pub async fn register_peer(
         let _ = state.peer_events.send(msg);
     }
 
-    Json(serde_json::json!({
-        "status": "ok",
-        "data": peer,
-    }))
+    api_ok(serde_json::json!(peer))
 }
 
 /// Unregister a peer instance.
@@ -106,7 +99,7 @@ pub async fn register_peer(
 pub async fn unregister_peer(
     State(state): State<AppState>,
     Path(url): Path<String>,
-) -> Json<serde_json::Value> {
+) -> Json<Value> {
     if state.peers.remove(&url).is_some() {
         tracing::info!(url = %url, "Peer unregistered");
 
@@ -118,7 +111,5 @@ pub async fn unregister_peer(
         let _ = state.peer_events.send(msg);
     }
 
-    Json(serde_json::json!({"status": "ok"}))
+    api_ok(Value::Null)
 }
-
-

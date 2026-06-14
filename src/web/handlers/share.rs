@@ -6,6 +6,7 @@ use axum::{
 };
 use serde_json::Value;
 
+use crate::web::response::{api_err, api_ok};
 use crate::web::state::AppState;
 use std::time::Duration;
 
@@ -37,11 +38,7 @@ pub async fn create_share_token(
     // Verify the command exists
     let exists = state.manager.get(&id).is_some();
     if !exists {
-        return Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": format!("Command '{}' not found", id)
-        }));
+        return api_err(format!("Command '{}' not found", id));
     }
 
     let token = uuid::Uuid::new_v4().to_string();
@@ -59,15 +56,11 @@ pub async fn create_share_token(
         })
         .unwrap_or_else(|| "never".to_string());
 
-    Json(serde_json::json!({
-        "status": "ok",
-        "data": {
-            "token": token,
-            "url": format!("/share/{}", token),
-            "expires_at": expires_at_str,
-            "keyboard": keyboard,
-        },
-        "error": null
+    api_ok(serde_json::json!({
+        "token": token,
+        "url": format!("/share/{}", token),
+        "expires_at": expires_at_str,
+        "keyboard": keyboard,
     }))
 }
 
@@ -75,11 +68,7 @@ pub async fn create_share_token(
 /// Validate a share token and return the command's VTTY HTML.
 pub async fn get_share(State(state): State<AppState>, Path(token): Path<String>) -> Json<Value> {
     let Some(entry) = state.share_tokens.get(&token) else {
-        return Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": "Invalid or expired share token"
-        }));
+        return api_err("Invalid or expired share token");
     };
 
     let share = entry.value().clone();
@@ -89,11 +78,7 @@ pub async fn get_share(State(state): State<AppState>, Path(token): Path<String>)
         if std::time::Instant::now() >= expires {
             drop(entry);
             state.share_tokens.remove(&token);
-            return Json(serde_json::json!({
-                "status": "error",
-                "data": null,
-                "error": "Share token has expired"
-            }));
+            return api_err("Share token has expired");
         }
     }
 
@@ -109,15 +94,9 @@ pub async fn get_share(State(state): State<AppState>, Path(token): Path<String>)
 
     let html_str = html.unwrap_or_default();
 
-    Json(serde_json::json!({
-        "status": "ok",
-        "data": {
-            "cmd_id": cmd_id,
-            "html": html_str,
-            "keyboard": share.keyboard,
-        },
-        "error": null
+    api_ok(serde_json::json!({
+        "cmd_id": cmd_id,
+        "html": html_str,
+        "keyboard": share.keyboard,
     }))
 }
-
-

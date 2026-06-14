@@ -4,6 +4,7 @@ use axum::extract::State;
 use axum::Json;
 use serde_json::Value;
 
+use crate::web::response::api_ok;
 use crate::web::state::AppState;
 
 /// GET /api/templates
@@ -30,11 +31,5 @@ pub async fn list_templates(State(state): State<AppState>) -> Json<Value> {
         })
         .collect();
 
-    Json(serde_json::json!({
-        "status": "ok",
-        "data": data,
-        "error": null
-    }))
+    api_ok(Value::Array(data))
 }
-
-

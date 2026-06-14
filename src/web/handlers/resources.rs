@@ -6,6 +6,7 @@ use axum::{
 };
 use serde_json::Value;
 
+use crate::web::response::{api_err, api_ok};
 use crate::web::state::AppState;
 
 /// GET /api/commands/:id/resources
@@ -15,11 +16,7 @@ pub async fn get_resources(State(state): State<AppState>, Path(id): Path<String>
     let handle = match state.manager.get(&id) {
         Some(h) => h,
         None => {
-            return Json(serde_json::json!({
-                "status": "error",
-                "data": null,
-                "error": "Command not found"
-            }));
+            return api_err("Command not found");
         }
     };
 
@@ -27,32 +24,24 @@ pub async fn get_resources(State(state): State<AppState>, Path(id): Path<String>
     let is_alive = handle.is_alive();
 
     if !is_alive {
-        return Json(serde_json::json!({
-            "status": "ok",
-            "data": {
-                "pid": pid,
-                "cpu_percent": null,
-                "memory_mb": null,
-                "threads": null,
-                "alive": false,
-            },
-            "error": null
+        return api_ok(serde_json::json!({
+            "pid": pid,
+            "cpu_percent": null,
+            "memory_mb": null,
+            "threads": null,
+            "alive": false,
         }));
     }
 
     // Read /proc/[pid]/stat and /proc/[pid]/statm on Linux
     let result = read_proc_stats(pid);
 
-    Json(serde_json::json!({
-        "status": "ok",
-        "data": {
-            "pid": pid,
-            "cpu_percent": result.cpu_percent,
-            "memory_mb": result.memory_mb,
-            "threads": result.threads,
-            "alive": true,
-        },
-        "error": null
+    api_ok(serde_json::json!({
+        "pid": pid,
+        "cpu_percent": result.cpu_percent,
+        "memory_mb": result.memory_mb,
+        "threads": result.threads,
+        "alive": true,
     }))
 }
 

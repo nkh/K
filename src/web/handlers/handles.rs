@@ -7,6 +7,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::web::response::{api_err, api_ok};
 use crate::web::state::AppState;
 
 /// Request body for attaching a new output handle to a command.
@@ -29,17 +30,9 @@ pub async fn list_handles(State(state): State<AppState>, Path(id): Path<String>)
     match state.manager.get(&id) {
         Some(handle) => {
             let handles = handle.list_handles();
-            Json(serde_json::json!({
-                "status": "ok",
-                "data": { "id": id, "handles": handles },
-                "error": null
-            }))
+            api_ok(serde_json::json!({ "id": id, "handles": handles }))
         }
-        None => Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": format!("Command {} not found", id)
-        })),
+        None => api_err(format!("Command {} not found", id)),
     }
 }
 
@@ -64,11 +57,7 @@ pub async fn add_handle(
     let req = match serde_json::from_value::<AddHandleRequest>(body) {
         Ok(r) => r,
         Err(e) => {
-            return Json(serde_json::json!({
-                "status": "error",
-                "data": null,
-                "error": format!("Invalid request: {}", e)
-            }));
+            return api_err(format!("Invalid request: {}", e));
         }
     };
 
@@ -84,21 +73,13 @@ pub async fn add_handle(
         .manager
         .register_sink(&id, req.name.clone(), &req.sink, req.path.as_deref())
     {
-        Ok(()) => Json(serde_json::json!({
-            "status": "ok",
-            "data": {
-                "id": id,
-                "name": req.name,
-                "sink": req.sink,
-                "message": "Handle attached successfully"
-            },
-            "error": null
+        Ok(()) => api_ok(serde_json::json!({
+            "id": id,
+            "name": req.name,
+            "sink": req.sink,
+            "message": "Handle attached successfully"
         })),
-        Err(e) => Json(serde_json::json!({
-            "status": "error",
-            "data": null,
-            "error": e.to_string()
-        })),
+        Err(e) => api_err(e.to_string()),
     }
 }
 
