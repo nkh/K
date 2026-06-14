@@ -574,12 +574,41 @@ impl Default for ServerConfig {
     }
 }
 
-/// Web admin panel and VTTY streaming. `update_mode`: "push" or "poll".
+/// How the web UI discovers buffer changes.
+#[cfg(feature = "vrw")]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum UpdateMode {
+    /// Server pushes diffs via WebSocket when dirty.
+    Push,
+    /// Client polls at an interval.
+    Poll,
+}
+
+#[cfg(feature = "vrw")]
+impl Default for UpdateMode {
+    fn default() -> Self {
+        Self::Push
+    }
+}
+
+#[cfg(feature = "vrw")]
+impl std::fmt::Display for UpdateMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Push => write!(f, "push"),
+            Self::Poll => write!(f, "poll"),
+        }
+    }
+}
+
+/// Web admin panel and VTTY streaming.
 #[cfg(feature = "vrw")]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct WebConfig {
-    /// How the web UI discovers buffer changes: "push" or "poll". Default: "push".
-    pub update_mode: String,
+    /// How the web UI discovers buffer changes. Default: push.
+    #[serde(default)]
+    pub update_mode: UpdateMode,
     /// Server-side dirty-check interval in ms (push mode). Default: 200.
     pub dirty_check_ms: u64,
     /// Client-side polling interval in ms (poll mode). Default: 500.
@@ -606,7 +635,7 @@ pub struct PanelColorEntry {
 impl Default for WebConfig {
     fn default() -> Self {
         Self {
-            update_mode: "push".to_string(),
+            update_mode: UpdateMode::default(),
             dirty_check_ms: 200,
             default_poll_ms: 500,
             panel_colors: Vec::new(),
