@@ -156,23 +156,8 @@ pub async fn resolve_pid_to_id(vrw: &VrwClient, pid: u32) -> Result<String> {
 pub async fn collect_all_commands(
     client: &reqwest::Client,
     instances: &[InstanceInfo],
-) -> Vec<(u32, String, u32, String, String)> {
-    let mut all_commands: Vec<(u32, String, u32, String, String)> = Vec::new();
-    for info in instances {
-        let vrw = VrwClient::new(client.clone(), info);
-        if let Some(data) = vrw.try_get_data("/api/commands").await {
-            if let Some(cmds) = data.as_array() {
-                for cmd in cmds {
-                    let cmd_pid = cmd.get("pid").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-                    if let Some(id) = cmd.get("id").and_then(|v| v.as_str()) {
-                        let (name, full) = build_full_display_string(cmd);
-                        all_commands.push((info.pid, id.to_string(), cmd_pid, name, full));
-                    }
-                }
-            }
-        }
-    }
-    all_commands
+) -> Vec<CommandTarget> {
+    collect_filtered_commands(client, instances, |_| true).await
 }
 
 /// Filter instances by --pid, returning all if no pid specified.
@@ -570,6 +555,18 @@ impl VrwClient {
         &self.client
     }
 
+    /// Parse a standard API response envelope.
+    fn parse_response(status: reqwest::StatusCode, json: serde_json::Value) -> Result<serde_json::Value> {
+        if status.is_success() && json.get("status").and_then(|s| s.as_str()) == Some("ok") {
+            Ok(json.get("data").cloned().unwrap_or(serde_json::Value::Null))
+        } else {
+            let err = json.get("error").and_then(|e| e.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| format!("HTTP {}", status));
+            anyhow::bail!("{}", err)
+        }
+    }
+
     /// GET a JSON endpoint, returning None on any error (connection refused, etc.).
     /// Used for collection/discovery where individual failures should be silently skipped.
     pub async fn try_get_data(&self, path: &str) -> Option<serde_json::Value> {
@@ -593,14 +590,7 @@ impl VrwClient {
         let status = resp.status();
         let json: serde_json::Value = resp.json().await
             .unwrap_or(serde_json::json!({"status": "unknown"}));
-        if status.is_success() && json.get("status").and_then(|s| s.as_str()) == Some("ok") {
-            Ok(json.get("data").cloned().unwrap_or(serde_json::Value::Null))
-        } else {
-            let err = json.get("error").and_then(|e| e.as_str())
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| format!("HTTP {}", status));
-            anyhow::bail!("{}", err)
-        }
+        Self::parse_response(status, json)
     }
 
     /// GET raw bytes from an endpoint (for screenshots etc).
@@ -626,14 +616,7 @@ impl VrwClient {
         let status = resp.status();
         let json: serde_json::Value = resp.json().await
             .unwrap_or(serde_json::json!({"status": "unknown"}));
-        if status.is_success() && json.get("status").and_then(|s| s.as_str()) == Some("ok") {
-            Ok(())
-        } else {
-            let err = json.get("error").and_then(|e| e.as_str())
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| format!("HTTP {}", status));
-            anyhow::bail!("{}", err)
-        }
+        Self::parse_response(status, json).map(|_| ())
     }
 
     /// POST and return the `data` field from the response.
@@ -643,14 +626,7 @@ impl VrwClient {
         let status = resp.status();
         let json: serde_json::Value = resp.json().await
             .unwrap_or(serde_json::json!({"status": "unknown"}));
-        if status.is_success() && json.get("status").and_then(|s| s.as_str()) == Some("ok") {
-            Ok(json.get("data").cloned().unwrap_or(serde_json::Value::Null))
-        } else {
-            let err = json.get("error").and_then(|e| e.as_str())
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| format!("HTTP {}", status));
-            anyhow::bail!("{}", err)
-        }
+        Self::parse_response(status, json)
     }
 
     /// POST to a command action endpoint, printing success_msg on ok,

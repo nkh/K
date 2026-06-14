@@ -11,13 +11,22 @@ use super::common::{
     resolve_target_command, VrwClient, SelectLabelStyle,
 };
 
-/// Tag a running command to retain its VTTY buffer after exit.
+/// Tag or untag a running command's retain-on-exit flag.
 ///
-/// Only running commands (alive == true) are considered for `keep`.
-/// For `unkeep`, all commands with `retain_on_exit == true` are shown.
-///
-/// Returns true if exactly one command was found and tagged.
-pub async fn handle_keep_command(_cli: &Cli, target: Option<&str>, interactive: bool) -> Result<bool> {
+/// Generic handler for both `keep` and `unkeep` commands.
+/// Parameterized by filter predicate, API endpoint, prompts, and messages.
+async fn handle_toggle_command(
+    _cli: &Cli,
+    target: Option<&str>,
+    interactive: bool,
+    filter: fn(&serde_json::Value) -> bool,
+    endpoint: &'static str,
+    select_prompt: &str,
+    empty_warn: &str,
+    not_found_msg: &str,
+    verb: &str,
+    success_fmt: fn(&str) -> String,
+) -> Result<bool> {
     let registry = InstanceRegistry::new()?;
     let instances = registry.list_instances();
 
@@ -26,14 +35,10 @@ pub async fn handle_keep_command(_cli: &Cli, target: Option<&str>, interactive: 
     }
 
     let client = http_client();
-    let all_commands = collect_filtered_commands(&client, &instances, |cmd| {
-        cmd.get("alive").and_then(|v| v.as_bool()).unwrap_or(false)
-    })
-    .await;
+    let all_commands = collect_filtered_commands(&client, &instances, filter).await;
 
-    // When target is specified, try resolve_target_command (handles PID, name, prefix).
     let resolved = if target.is_some() {
-        resolve_target_command(target, &all_commands, "No running command").ok()
+        resolve_target_command(target, &all_commands, not_found_msg).ok()
     } else if all_commands.len() == 1 {
         Some(all_commands[0].clone())
     } else {
@@ -43,111 +48,77 @@ pub async fn handle_keep_command(_cli: &Cli, target: Option<&str>, interactive: 
     if let Some((inst_pid, cmd_id, _cmd_pid, _, full)) = resolved {
         let info = instances.iter().find(|i| i.pid == inst_pid).unwrap();
         let vrw = VrwClient::new(http_client(), info);
-        return keep_command_by_id(&vrw, &cmd_id, &full).await;
+        let msg = success_fmt(&full);
+        return vrw.post_action_quiet(
+            &format!("/api/commands/{}/{}", cmd_id, endpoint),
+            None,
+            reqwest::Method::POST,
+            &full,
+            verb,
+            &msg,
+        ).await;
     }
 
-    // No match or no target — try interactive or report failure
     if interactive {
         let items = build_command_select_items(&all_commands, SelectLabelStyle::IdPrefixWithFull);
         if items.is_empty() {
-            tracing::warn!("No running commands to keep.");
+            tracing::warn!("{}", empty_warn);
             return Ok(false);
         }
-        let selected = select_items(&items, "Select commands to keep [space-separated numbers]")?;
-        let mut kept_any = false;
+        let selected = select_items(&items, select_prompt)?;
+        let mut acted_any = false;
         for item in &selected {
             if let Some((inst_pid, _, _, _, full)) = all_commands.iter().find(|(_, id, _, _, _)| id == &item.id) {
                 let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
                 let vrw = VrwClient::new(http_client(), info);
-                if keep_command_by_id(&vrw, &item.id, full).await? {
-                    kept_any = true;
+                let msg = success_fmt(full);
+                if vrw.post_action_quiet(
+                    &format!("/api/commands/{}/{}", item.id, endpoint),
+                    None,
+                    reqwest::Method::POST,
+                    full,
+                    verb,
+                    &msg,
+                ).await? {
+                    acted_any = true;
                 }
             }
         }
-        return Ok(kept_any);
+        return Ok(acted_any);
     }
 
     Ok(false)
+}
+
+/// Tag a running command to retain its VTTY buffer after exit.
+pub async fn handle_keep_command(cli: &Cli, target: Option<&str>, interactive: bool) -> Result<bool> {
+    handle_toggle_command(
+        cli, target, interactive,
+        |cmd| cmd.get("alive").and_then(|v| v.as_bool()).unwrap_or(false),
+        "keep",
+        "Select commands to keep [space-separated numbers]",
+        "No running commands to keep.",
+        "No running command",
+        "keep",
+        |full| format!("Kept: {} (terminal rendering retained after exit)", full),
+    ).await
 }
 
 /// Unkeep: remove retain_on_exit tag from commands.
-pub async fn handle_unkeep_command(_cli: &Cli, target: Option<&str>, interactive: bool) -> Result<bool> {
-    let registry = InstanceRegistry::new()?;
-    let instances = registry.list_instances();
-
-    if instances.is_empty() {
-        return Ok(false);
-    }
-
-    let client = http_client();
-    let all_commands = collect_filtered_commands(&client, &instances, |cmd| {
-        cmd.get("exit")
+pub async fn handle_unkeep_command(cli: &Cli, target: Option<&str>, interactive: bool) -> Result<bool> {
+    handle_toggle_command(
+        cli, target, interactive,
+        |cmd| cmd.get("exit")
             .and_then(|e| e.get("retain_on_exit"))
             .and_then(|v| v.as_bool())
-            .unwrap_or(false)
-    })
-    .await;
-
-    let resolved = if target.is_some() {
-        resolve_target_command(target, &all_commands, "No kept command").ok()
-    } else if all_commands.len() == 1 {
-        Some(all_commands[0].clone())
-    } else {
-        None
-    };
-
-    if let Some((inst_pid, cmd_id, _cmd_pid, _, full)) = resolved {
-        let info = instances.iter().find(|i| i.pid == inst_pid).unwrap();
-        let vrw = VrwClient::new(http_client(), info);
-        return unkeep_command_by_id(&vrw, &cmd_id, &full).await;
-    }
-
-    // No match or no target — try interactive or report failure
-    if interactive {
-        let items = build_command_select_items(&all_commands, SelectLabelStyle::IdPrefixWithFull);
-        if items.is_empty() {
-            tracing::warn!("No kept commands to unkeep.");
-            return Ok(false);
-        }
-        let selected = select_items(&items, "Select commands to unkeep [space-separated numbers]")?;
-        let mut unkept_any = false;
-        for item in &selected {
-            if let Some((inst_pid, _, _, _, full)) = all_commands.iter().find(|(_, id, _, _, _)| id == &item.id) {
-                let info = instances.iter().find(|i| i.pid == *inst_pid).unwrap();
-                let vrw = VrwClient::new(http_client(), info);
-                if unkeep_command_by_id(&vrw, &item.id, full).await? {
-                    unkept_any = true;
-                }
-            }
-        }
-        return Ok(unkept_any);
-    }
-
-    Ok(false)
-}
-
-async fn keep_command_by_id(vrw: &VrwClient, cmd_id: &str, label: &str) -> Result<bool> {
-    vrw.post_action_quiet(
-        &format!("/api/commands/{}/keep", cmd_id),
-        None,
-        reqwest::Method::POST,
-        label,
-        "keep",
-        &format!("Kept: {} (terminal rendering retained after exit)", label),
-    )
-    .await
-}
-
-async fn unkeep_command_by_id(vrw: &VrwClient, cmd_id: &str, label: &str) -> Result<bool> {
-    vrw.post_action_quiet(
-        &format!("/api/commands/{}/unkeep", cmd_id),
-        None,
-        reqwest::Method::POST,
-        label,
+            .unwrap_or(false),
         "unkeep",
-        &format!("Unkept: {} (will be removed on exit)", label),
-    )
-    .await
+        "Select commands to unkeep [space-separated numbers]",
+        "No kept commands to unkeep.",
+        "No kept command",
+        "unkeep",
+        |full| format!("Unkept: {} (will be removed on exit)", full),
+    ).await
 }
 
 #[cfg(test)]
@@ -156,28 +127,36 @@ mod tests {
     use super::*;
     use crate::cli::commands::common::http_client;
 
-    #[tokio::test]
-    async fn test_keep_command_by_id_connection_refused() {
-        let info = crate::instance::info::InstanceInfo {
+    fn make_test_instance() -> crate::instance::info::InstanceInfo {
+        crate::instance::info::InstanceInfo {
             pid: 1, port: 1, bind: "127.0.0.1".to_string(),
             name: None, start_time: chrono::Utc::now(),
             daemon: false, display: false, command: None,
-        };
+        }
+    }
+
+    #[tokio::test]
+    async fn test_keep_command_by_id_connection_refused() {
+        let info = make_test_instance();
         let vrw = VrwClient::new(http_client(), &info);
-        let result = keep_command_by_id(&vrw, "fake-id", "test").await;
+        let result = vrw.post_action_quiet(
+            "/api/commands/fake-id/keep", None,
+            reqwest::Method::POST, "test", "keep",
+            "Kept: test (terminal rendering retained after exit)",
+        ).await;
         assert!(result.is_ok());
         assert!(!result.unwrap());
     }
 
     #[tokio::test]
     async fn test_unkeep_command_by_id_connection_refused() {
-        let info = crate::instance::info::InstanceInfo {
-            pid: 1, port: 1, bind: "127.0.0.1".to_string(),
-            name: None, start_time: chrono::Utc::now(),
-            daemon: false, display: false, command: None,
-        };
+        let info = make_test_instance();
         let vrw = VrwClient::new(http_client(), &info);
-        let result = unkeep_command_by_id(&vrw, "fake-id", "test").await;
+        let result = vrw.post_action_quiet(
+            "/api/commands/fake-id/unkeep", None,
+            reqwest::Method::POST, "test", "unkeep",
+            "Unkept: test (will be removed on exit)",
+        ).await;
         assert!(result.is_ok());
         assert!(!result.unwrap());
     }

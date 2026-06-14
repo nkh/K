@@ -197,22 +197,7 @@ impl InstanceRegistry {
             println!("No running vrw instances.");
             return;
         }
-        println!(
-            "{:<10} {:<8} {:<20} {:<10} {:<10} {:<15} COMMAND",
-            "PID", "PORT", "BIND", "DAEMON", "DISPLAY", "NAME"
-        );
-        for info in instances {
-            println!(
-                "{:<10} {:<8} {:<20} {:<10} {:<10} {:<15} {}",
-                info.pid,
-                info.port,
-                info.bind,
-                if info.daemon { "yes" } else { "no" },
-                if info.display { "yes" } else { "no" },
-                info.name.as_deref().unwrap_or("-"),
-                info.command.as_deref().unwrap_or("(idle)")
-            );
-        }
+        print!("{}", crate::cli::commands::common::format_instance_list(&instances));
     }
 
     /// Stop an instance via HTTP (vrw only).
