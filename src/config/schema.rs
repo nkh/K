@@ -633,10 +633,13 @@ pub struct DaemonConfig {
 
 impl Default for DaemonConfig {
     fn default() -> Self {
+        let state_dir = dirs::state_dir()
+            .or_else(dirs::runtime_dir)
+            .unwrap_or_else(|| "/tmp".into());
         Self {
             enabled: false,
-            stdout_file: "/tmp/vrc.out".to_string(),
-            stderr_file: "/tmp/vrc.err".to_string(),
+            stdout_file: state_dir.join("vrc.out").to_string_lossy().into(),
+            stderr_file: state_dir.join("vrc.err").to_string_lossy().into(),
         }
     }
 }
