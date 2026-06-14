@@ -27,7 +27,7 @@ A feature comparison between vrw and similar tools for running and managing term
 | **Split-Pane** | Ctrl+S toggle | Yes | Yes | No | No | No |
 | **Tab Bar** | Optional tab bar | Windows | No | No | No | No |
 | **Snapshots/Diffs** | Yes | No | No | No | No | No |
-| **Sixel Images** | Yes | No | No | No | No | No |
+| **Sixel Images** | No | No | No | No | No | No |
 | **Alt Screen** | Auto-recovery | Yes | Yes | No | No | Yes |
 | **Scroll Regions** | Full support | Yes | No | No | No | Yes |
 | **Bracketed Paste** | Yes | Yes | Yes | No | No | Yes |
@@ -53,7 +53,7 @@ A feature comparison between vrw and similar tools for running and managing term
 - You want **real-time browser-based monitoring** without installing anything on client machines — just open a URL
 - You are building a **CI/CD system** where a script starts a command in one environment and another monitors it from another
 - You want **TLS + auth built in** without reverse proxy configuration
-- You need **terminal-aware process management** (full PTY with ANSI, mouse, sixel images)
+- You need **terminal-aware process management** (full PTY with ANSI, mouse)
 
 ## When to Choose Alternatives
 

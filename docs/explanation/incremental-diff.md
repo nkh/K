@@ -244,7 +244,7 @@ snapshot is sent to the client (triggering Phase 3).
 
 ## Client Implementation Strategy
 
-vrw ships with a default admin interface that uses `xterm.js` for rendering.
+vrw ships with a default admin interface that uses server-side HTML rendering.
 However, the protocol is designed to support two rendering strategies:
 
 ### Strategy A: Direct DOM Updates (Recommended)
@@ -253,8 +253,7 @@ The client maintains a parallel grid of DOM elements (or a virtual DOM). On
 receiving a `vtty_full`, it rebuilds the entire grid. On receiving a `vtty_diff`,
 it updates only the DOM elements at the specified `(r, c)` coordinates.
 
-This approach is used by the shipped admin interface and by `xterm.js`-based
-clients. Advantages:
+This approach is used by the shipped admin interface. Advantages:
 
 - Minimal DOM manipulation per frame.
 - No string parsing or HTML injection required.
