@@ -5,7 +5,7 @@
 //! numbered list of applicable items and can select one or more by typing
 //! space-separated numbers.
 
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 
 /// An item that can be presented in the interactive selection list.
 #[derive(Debug, Clone)]
@@ -32,7 +32,7 @@ pub fn select_items(items: &[SelectItem], prompt: &str) -> anyhow::Result<Vec<Se
         anyhow::bail!("No items to select from.");
     }
 
-    if !atty::is(atty::Stream::Stdin) {
+    if !std::io::stdin().is_terminal() {
         anyhow::bail!(
             "Interactive mode requires a terminal (stdin is not a TTY). \
              Provide explicit arguments instead."
