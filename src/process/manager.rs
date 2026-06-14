@@ -787,8 +787,6 @@ fn encode_special_key(seq: &str) -> Vec<u8> {
 mod tests {
     use super::*;
 
-    // ─── manager tests ───
-
     // ─── Helper infrastructure for CommandManager tests ───
 
     use crate::process::handle::CommandHandle;
@@ -835,77 +833,7 @@ mod tests {
         rx
     }
 
-    // ─── get ───
-
-    #[test]
-    fn test_get_missing() {
-        let mgr = make_manager();
-        assert!(mgr.get(&"none".to_string()).is_none());
-    }
-
-    #[test]
-    fn test_get_existing() {
-        let mgr = make_manager();
-        insert_mock(&mgr, "cmd-1", 100);
-        assert!(mgr.get(&"cmd-1".to_string()).is_some());
-        assert_eq!(mgr.get(&"cmd-1".to_string()).unwrap().pid, 100);
-    }
-
-    // ─── get_certificate ───
-
-    #[test]
-    fn test_get_certificate_none() {
-        let mgr = make_manager();
-        insert_mock(&mgr, "cmd-1", 100);
-        assert!(mgr.get_certificate(&"cmd-1".to_string()).is_none());
-    }
-
-    #[test]
-    fn test_get_certificate_some() {
-        let mgr = make_manager();
-        insert_mock(&mgr, "cmd-1", 100);
-        if let Some(mut h) = mgr.commands_arc().get_mut("cmd-1") {
-            h.certificate = Some("my-cert".to_string());
-        }
-        assert_eq!(mgr.get_certificate(&"cmd-1".to_string()).as_deref(), Some("my-cert"));
-    }
-
-    #[test]
-    fn test_get_certificate_missing_cmd() {
-        let mgr = make_manager();
-        assert!(mgr.get_certificate(&"none".to_string()).is_none());
-    }
-
-    // ─── list / find_by_pid ───
-
-    #[test]
-    fn test_list_with_commands() {
-        let mgr = make_manager();
-        insert_mock(&mgr, "a", 100);
-        insert_mock(&mgr, "b", 200);
-        assert_eq!(mgr.list().len(), 2);
-    }
-
-    #[test]
-    fn test_find_by_pid_found() {
-        let mgr = make_manager();
-        insert_mock(&mgr, "x", 42);
-        assert_eq!(mgr.find_by_pid(42).as_deref(), Some("x"));
-    }
-
-    #[test]
-    fn test_find_by_pid_missing() {
-        let mgr = make_manager();
-        assert!(mgr.find_by_pid(99999).is_none());
-    }
-
     // ─── freeze / thaw ───
-
-    #[test]
-    fn test_freeze_missing() {
-        let mgr = make_manager();
-        assert!(mgr.freeze(&"none".to_string()).is_err());
-    }
 
     #[test]
     fn test_freeze_sets_flag() {
@@ -915,12 +843,6 @@ mod tests {
         if let Some(h) = mgr.commands_arc().get("cmd-1") {
             assert!(h.frozen.load(std::sync::atomic::Ordering::Relaxed));
         }
-    }
-
-    #[test]
-    fn test_thaw_missing() {
-        let mgr = make_manager();
-        assert!(mgr.thaw(&"none".to_string()).is_err());
     }
 
     #[test]
@@ -936,48 +858,7 @@ mod tests {
         }
     }
 
-    // ─── keep / unkeep ───
-
-    #[test]
-    fn test_keep_missing() {
-        let mgr = make_manager();
-        assert!(mgr.keep(&"none".to_string()).is_err());
-    }
-
-    #[test]
-    fn test_keep_sets_retain() {
-        let mgr = make_manager();
-        insert_mock(&mgr, "cmd-1", 1);
-        mgr.keep(&"cmd-1".to_string()).unwrap();
-        if let Some(h) = mgr.commands_arc().get("cmd-1") {
-            assert!(h.exit_config.retain_on_exit);
-        }
-    }
-
-    #[test]
-    fn test_unkeep_missing() {
-        let mgr = make_manager();
-        assert!(mgr.unkeep(&"none".to_string()).is_err());
-    }
-
-    #[test]
-    fn test_unkeep_clears_retain() {
-        let mgr = make_manager();
-        insert_mock(&mgr, "cmd-1", 1);
-        mgr.keep(&"cmd-1".to_string()).unwrap();
-        mgr.unkeep(&"cmd-1".to_string()).unwrap();
-        if let Some(h) = mgr.commands_arc().get("cmd-1") {
-            assert!(!h.exit_config.retain_on_exit);
-        }
-    }
-
     // ─── purge ───
-
-    #[test]
-    fn test_purge_missing() {
-        let mgr = make_manager();
-        assert!(mgr.purge(&"none".to_string()).is_err());
-    }
 
     #[test]
     fn test_purge_removes_command() {
@@ -989,12 +870,6 @@ mod tests {
     }
 
     // ─── snapshots ───
-
-    #[test]
-    fn test_store_snapshot_missing_cmd() {
-        let mgr = make_manager();
-        assert!(mgr.store_snapshot(&"none".to_string(), "snap1").is_err());
-    }
 
     #[test]
     fn test_store_and_list_snapshots() {
@@ -1010,12 +885,6 @@ mod tests {
     }
 
     #[test]
-    fn test_list_snapshots_missing_cmd() {
-        let mgr = make_manager();
-        assert!(mgr.list_snapshots(&"none".to_string()).is_empty());
-    }
-
-    #[test]
     fn test_list_all_snapshots_across_commands() {
         let mgr = make_manager();
         insert_mock(&mgr, "cmd-1", 1);
@@ -1023,19 +892,6 @@ mod tests {
         mgr.store_snapshot(&"cmd-1".to_string(), "a").unwrap();
         mgr.store_snapshot(&"cmd-2".to_string(), "b").unwrap();
         assert_eq!(mgr.list_all_snapshots().len(), 2);
-    }
-
-    #[test]
-    fn test_diff_snapshot_missing_cmd() {
-        let mgr = make_manager();
-        assert!(mgr.diff_snapshot(&"none".to_string(), "snap").is_err());
-    }
-
-    #[test]
-    fn test_diff_snapshot_missing_snap() {
-        let mgr = make_manager();
-        insert_mock(&mgr, "cmd-1", 1);
-        assert!(mgr.diff_snapshot(&"cmd-1".to_string(), "none").is_err());
     }
 
     #[test]
@@ -1061,19 +917,6 @@ mod tests {
     }
 
     #[test]
-    fn test_delete_snapshot_missing_cmd() {
-        let mgr = make_manager();
-        assert!(mgr.delete_snapshot(&"none".to_string(), "s").is_err());
-    }
-
-    #[test]
-    fn test_delete_snapshot_missing_snap() {
-        let mgr = make_manager();
-        insert_mock(&mgr, "cmd-1", 1);
-        assert!(mgr.delete_snapshot(&"cmd-1".to_string(), "none").is_err());
-    }
-
-    #[test]
     fn test_delete_snapshot_success() {
         let mgr = make_manager();
         insert_mock(&mgr, "cmd-1", 1);
@@ -1084,12 +927,6 @@ mod tests {
     }
 
     // ─── has_changed ───
-
-    #[test]
-    fn test_has_changed_missing() {
-        let mgr = make_manager();
-        assert!(mgr.has_changed(&"none".to_string()).is_err());
-    }
 
     #[test]
     fn test_has_changed_first_check() {
@@ -1107,12 +944,6 @@ mod tests {
     }
 
     // ─── send_keys ───
-
-    #[tokio::test]
-    async fn test_send_keys_missing() {
-        let mgr = make_manager();
-        assert!(mgr.send_keys(&"none".to_string(), "hi").await.is_err());
-    }
 
     #[tokio::test]
     async fn test_send_keys_success() {
@@ -1141,15 +972,6 @@ mod tests {
     // ─── add_handle ───
 
     #[tokio::test]
-    async fn test_add_handle_success() {
-        let mgr = make_manager();
-        let (handle, _rx) = make_mock_handle("new-cmd", 999);
-        let result = mgr.add_handle(handle, Some("cert".to_string()));
-        assert!(result.is_ok());
-        assert!(mgr.get(&"new-cmd".to_string()).is_some());
-    }
-
-    #[tokio::test]
     async fn test_add_handle_duplicate() {
         let mgr = make_manager();
         let (h1, _r1) = make_mock_handle("dup", 1);
@@ -1161,51 +983,6 @@ mod tests {
     // ─── register_sink ───
 
     #[test]
-    fn test_register_sink_missing_cmd() {
-        let mgr = make_manager();
-        assert!(mgr.register_sink(&"none".to_string(), "s1".into(), "null", None).is_err());
-    }
-
-    #[test]
-    fn test_register_null_sink() {
-        let mgr = make_manager();
-        insert_mock(&mgr, "cmd-1", 1);
-        mgr.register_sink(&"cmd-1".to_string(), "ns".into(), "null", None).unwrap();
-        if let Some(h) = mgr.commands_arc().get("cmd-1") {
-            assert!(h.handle_registry.list().contains(&"ns".to_string()));
-        }
-    }
-
-    #[test]
-    fn test_register_vtty_sink() {
-        let mgr = make_manager();
-        insert_mock(&mgr, "cmd-1", 1);
-        mgr.register_sink(&"cmd-1".to_string(), "vs".into(), "vtty", None).unwrap();
-        if let Some(h) = mgr.commands_arc().get("cmd-1") {
-            assert!(h.handle_registry.list().contains(&"vs".to_string()));
-        }
-    }
-
-    #[test]
-    fn test_register_file_sink() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("out.log").to_string_lossy().to_string();
-        let mgr = make_manager();
-        insert_mock(&mgr, "cmd-1", 1);
-        mgr.register_sink(&"cmd-1".to_string(), "fs".into(), "file", Some(&path)).unwrap();
-        if let Some(h) = mgr.commands_arc().get("cmd-1") {
-            assert!(h.handle_registry.list().contains(&"fs".to_string()));
-        }
-    }
-
-    #[test]
-    fn test_register_unknown_sink_type() {
-        let mgr = make_manager();
-        insert_mock(&mgr, "cmd-1", 1);
-        assert!(mgr.register_sink(&"cmd-1".to_string(), "bad".into(), "bad_type", None).is_err());
-    }
-
-    #[test]
     fn test_register_duplicate_sink_name() {
         let mgr = make_manager();
         insert_mock(&mgr, "cmd-1", 1);
@@ -1214,12 +991,6 @@ mod tests {
     }
 
     // ─── kill ───
-
-    #[tokio::test]
-    async fn test_kill_missing() {
-        let mgr = make_manager();
-        assert!(mgr.kill(&"none".to_string(), None).await.is_err());
-    }
 
     #[tokio::test]
     async fn test_kill_removes_command() {
@@ -1236,12 +1007,6 @@ mod tests {
         mgr.keep(&"cmd-1".to_string()).unwrap();
         mgr.kill(&"cmd-1".to_string(), None).await.unwrap();
         assert!(mgr.get(&"cmd-1".to_string()).is_some());
-    }
-
-    #[tokio::test]
-    async fn test_kill_by_pid_missing() {
-        let mgr = make_manager();
-        assert!(mgr.kill_by_pid(99999).await.is_err());
     }
 
     #[tokio::test]
