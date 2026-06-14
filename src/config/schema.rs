@@ -752,6 +752,7 @@ pub struct ProfilesConfig {
 
 /// Top-level configuration. All fields have sensible defaults.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     /// Binary name ("vrw" or "vrc") — set at runtime from CLI, not from config file.
     #[serde(default, skip)]
