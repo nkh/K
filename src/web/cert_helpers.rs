@@ -13,10 +13,6 @@ pub struct CertGenerationConfig {
     pub extended_key_usages: Vec<rcgen::ExtendedKeyUsagePurpose>,
     /// Whether this certificate is a CA.
     pub is_ca: rcgen::IsCa,
-    /// Certificate validity start (UTC).
-    pub not_before: rcgen::Time,
-    /// Certificate validity end (UTC).
-    pub not_after: rcgen::Time,
     /// Subject Alternative Names (DNS names, IP addresses, etc.).
     pub subject_alt_names: Vec<rcgen::SanType>,
 }
@@ -40,8 +36,6 @@ impl CertGenerationConfig {
             ],
             extended_key_usages: vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth],
             is_ca: rcgen::IsCa::NoCa,
-            not_before: rcgen::date_time_ymd(2025, 1, 1),
-            not_after: rcgen::date_time_ymd(2030, 1, 1),
             subject_alt_names: sans,
         }
     }
@@ -70,8 +64,8 @@ pub fn generate_self_signed_cert(config: CertGenerationConfig) -> Result<(String
     params.is_ca = config.is_ca;
 
     // Validity period
-    params.not_before = config.not_before;
-    params.not_after = config.not_after;
+    params.not_before = rcgen::date_time_ymd(2025, 1, 1);
+    params.not_after = rcgen::date_time_ymd(2030, 1, 1);
 
     // Subject Alternative Names
     params.subject_alt_names = config.subject_alt_names;
