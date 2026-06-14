@@ -65,6 +65,7 @@ dirs = "5"
 dashmap = "5"
 parking_lot = "0.12"
 unicode-width = "0.2.2"
+vte = "0.14"
 regex = "1"
 atty = "0.2"
 
