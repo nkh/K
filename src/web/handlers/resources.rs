@@ -177,19 +177,91 @@ pub(crate) fn read_proc_stats(_pid: u32) -> ProcStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::schema::Config;
+    use crate::process::manager::CommandManager;
+    use crate::process::handle::CommandHandle;
+    use crate::handles::registry::HandleRegistry;
+    use crate::vtty::emulator::VttyEmulator;
+    use crate::vtty::sink::VttyOutput;
+    use crate::web::certs::CertificateStore;
+    use crate::web::state::AppState;
+    use std::sync::Arc;
 
-    #[test]
-    fn test_read_proc_stats_self() {
-        let stats = read_proc_stats(std::process::id());
-        // On Linux, reading self should succeed
+    fn make_app_state() -> AppState {
+        let mut config = Config::default();
+        config.binary_name = "test".to_string();
+        let manager = Arc::new(CommandManager::new(config));
+        let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
+        let cert_store = Arc::new(CertificateStore::new());
+        let (vtty_tx, _) = tokio::sync::broadcast::channel::<(String, String)>(16);
+        let (log_tx, _) = tokio::sync::broadcast::channel::<String>(16);
+        AppState::new(manager, shutdown_tx, None, cert_store, vtty_tx, log_tx)
+    }
+
+    fn insert_mock_cmd(mgr: &CommandManager, id: &str, pid: u32) {
+        let (stdin_tx, _stdin_rx) = tokio::sync::mpsc::channel::<crate::process::spawner::StdinMessage>(16);
+        let (_exit_tx, exit_rx) = tokio::sync::oneshot::channel::<crate::process::spawner::ExitStatus>();
+        let (watch_tx, watch_rx) = tokio::sync::watch::channel(false);
+        std::mem::forget(watch_tx);
+        let emu = VttyEmulator::new(24, 80, 1000);
+        let handle = CommandHandle {
+            id: id.to_string(), pid,
+            name: format!("cmd-{}", id),
+            args: vec![],
+            emulator: std::sync::Arc::new(tokio::sync::RwLock::new(emu)),
+            stdin_tx, _exit_rx: exit_rx,
+            handle_registry: HandleRegistry::new(),
+            certificate: None,
+            exit_config: crate::config::schema::ExitConfig::default(),
+            spawn_time: std::time::Instant::now(),
+            pty_master: None,
+            vtty_output: std::sync::Arc::new(VttyOutput::new()),
+            exit_rx: watch_rx,
+            exit_code: std::sync::Mutex::new(None),
+            exit_time: std::sync::Mutex::new(None),
+            frozen: std::sync::atomic::AtomicBool::new(false),
+            prev_diff_snapshot: tokio::sync::Mutex::new(None),
+        };
+        mgr.commands_arc().insert(id.to_string(), handle);
+    }
+
+    #[tokio::test]
+    async fn test_get_resources_not_found() {
+        let state = make_app_state();
+        let result = get_resources(State(state), Path("nonexistent".into())).await;
+        assert_eq!(result.0["status"], "error");
+        assert!(result.0["error"].as_str().unwrap().contains("not found"));
+    }
+
+    #[tokio::test]
+    async fn test_get_resources_dead_pid() {
+        let state = make_app_state();
+        // Use a PID that doesn't exist so is_alive() returns false
+        insert_mock_cmd(&state.manager, "cmd-1", 999999999);
+        let result = get_resources(State(state), Path("cmd-1".into())).await;
+        assert_eq!(result.0["status"], "ok");
+        assert_eq!(result.0["data"]["pid"], 999999999);
+        assert_eq!(result.0["data"]["alive"], false);
+        assert!(result.0["data"]["cpu_percent"].is_null());
+        assert!(result.0["data"]["memory_mb"].is_null());
+        assert!(result.0["data"]["threads"].is_null());
+    }
+
+    #[tokio::test]
+    async fn test_get_resources_self() {
+        let state = make_app_state();
+        // Insert a mock with our own PID so is_alive() returns true
+        let own_pid = std::process::id();
+        insert_mock_cmd(&state.manager, "cmd-self", own_pid);
+        let result = get_resources(State(state), Path("cmd-self".into())).await;
+        assert_eq!(result.0["status"], "ok");
+        assert_eq!(result.0["data"]["pid"], own_pid);
+        assert_eq!(result.0["data"]["alive"], true);
+        // On Linux, we should get real stats; on other platforms, nulls
         #[cfg(target_os = "linux")]
         {
-            assert!(stats.threads.is_some());
-            assert!(stats.threads.unwrap() > 0);
-        }
-        #[cfg(not(target_os = "linux"))]
-        {
-            assert!(stats.cpu_percent.is_none());
+            assert!(result.0["data"]["threads"].is_number());
+            assert!(result.0["data"]["threads"].as_u64().unwrap() > 0);
         }
     }
 

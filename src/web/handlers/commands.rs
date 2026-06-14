@@ -1056,4 +1056,44 @@ mod tests {
                 || result.0["error"].as_str().unwrap_or("").contains("No such file"),
                 "Unexpected response: {}", result.0);
     }
+
+    #[tokio::test]
+    async fn test_restart_command_not_found() {
+        let state = make_app_state();
+        let body = json!({});
+        let result = restart_command(State(state), Path("nonexistent".into()), Json(body)).await;
+        assert_eq!(result.0["status"], "error");
+        assert!(result.0["error"].as_str().unwrap().contains("not found"));
+    }
+
+    #[tokio::test]
+    async fn test_restart_command_spawn_fails() {
+        let state = make_app_state();
+        insert_mock_cmd(&state.manager, "cmd-1", 100);
+        // The mock command's name ("cmd-cmd-1") is not a real executable,
+        // so spawning the replacement will fail.
+        let body = json!({});
+        let result = restart_command(State(state), Path("cmd-1".into()), Json(body)).await;
+        assert_eq!(result.0["status"], "error");
+        assert!(result.0["error"].as_str().unwrap().contains("Failed to spawn replacement"));
+    }
+
+    #[tokio::test]
+    async fn test_kill_command_by_pid_existing() {
+        let state = make_app_state();
+        insert_mock_cmd(&state.manager, "cmd-1", 100);
+        let result = kill_command_by_pid(State(state.clone()), Path(100)).await;
+        assert_eq!(result.0["status"], "ok");
+        assert_eq!(result.0["data"]["pid"], 100);
+        // Command should be removed after kill (not retained)
+        assert!(state.manager.get(&"cmd-1".to_string()).is_none());
+    }
+
+    #[tokio::test]
+    async fn test_kill_command_by_pid_not_found() {
+        let state = make_app_state();
+        let result = kill_command_by_pid(State(state), Path(999999)).await;
+        assert_eq!(result.0["status"], "error");
+        assert!(result.0["error"].as_str().unwrap().contains("PID 999999"));
+    }
 }

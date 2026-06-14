@@ -123,3 +123,62 @@ pub async fn get_log(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::schema::Config;
+    use crate::process::manager::CommandManager;
+    use crate::web::certs::CertificateStore;
+    use crate::web::state::AppState;
+    use std::sync::Arc;
+
+    fn make_app_state() -> AppState {
+        let mut config = Config::default();
+        config.binary_name = "test".to_string();
+        let manager = Arc::new(CommandManager::new(config));
+        let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
+        let cert_store = Arc::new(CertificateStore::new());
+        let (vtty_tx, _) = tokio::sync::broadcast::channel::<(String, String)>(16);
+        let (log_tx, _) = tokio::sync::broadcast::channel::<String>(16);
+        AppState::new(manager, shutdown_tx, None, cert_store, vtty_tx, log_tx)
+    }
+
+    #[tokio::test]
+    async fn test_get_log_disabled() {
+        let state = make_app_state();
+        let params: HashMap<String, String> = HashMap::new();
+        let result = get_log(State(state), Query(params)).await;
+        assert_eq!(result.0["status"], "ok");
+        assert_eq!(result.0["data"]["total_lines"], 0);
+        assert_eq!(result.0["data"]["lines"].as_array().unwrap().len(), 0);
+        // Should have a message about logging not being enabled
+        assert!(result.0["data"]["message"].as_str().unwrap().contains("not enabled"));
+    }
+
+    #[tokio::test]
+    async fn test_get_log_with_search_param() {
+        let state = make_app_state();
+        let mut params: HashMap<String, String> = HashMap::new();
+        params.insert("search".to_string(), "spawn".to_string());
+        let result = get_log(State(state), Query(params)).await;
+        assert_eq!(result.0["status"], "ok");
+        assert_eq!(result.0["data"]["search"], "spawn");
+        // Logging is disabled, so still empty
+        assert_eq!(result.0["data"]["lines"].as_array().unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_log_with_limit_and_offset() {
+        let state = make_app_state();
+        let mut params: HashMap<String, String> = HashMap::new();
+        params.insert("limit".to_string(), "10".to_string());
+        params.insert("offset".to_string(), "5".to_string());
+        let result = get_log(State(state), Query(params)).await;
+        assert_eq!(result.0["status"], "ok");
+        // When logging is disabled, the early-return path uses limit from the request
+        assert_eq!(result.0["data"]["limit"], 10);
+        // But offset is hardcoded to 0 in the disabled path
+        assert_eq!(result.0["data"]["offset"], 0);
+    }
+}
