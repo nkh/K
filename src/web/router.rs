@@ -8,7 +8,7 @@ use axum::{
 };
 
 use super::handlers;
-use super::middleware::{auth_middleware, cors_layer, error_handler, request_logger};
+use super::middleware::{auth_middleware, cors_layer, request_logger};
 use super::state::AppState;
 use crate::config::schema::CorsConfig;
 
@@ -180,8 +180,172 @@ pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
         .merge(public_routes)
         .layer(cors_layer(cors_config))
         .layer(middleware::from_fn(request_logger))
-        .layer(middleware::from_fn(error_handler))
         .with_state(state)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::schema::Config;
+    use crate::process::manager::CommandManager;
+    use crate::web::certs::CertificateStore;
+    use crate::web::handlers::commands::start_command;
+    use crate::web::handlers::commands::list_commands;
+    use crate::web::handlers::commands::get_snapshot;
+    use crate::web::handlers::commands::get_info;
+    use crate::web::state::AppState;
+    use axum::extract::State as AxumState;
+    use axum::Json;
+    use serde_json::json;
+    use std::sync::Arc;
 
+    fn make_app_state() -> AppState {
+        let mut config = Config::default();
+        config.binary_name = "test".to_string();
+        let manager = Arc::new(CommandManager::new(config));
+        let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
+        let cert_store = Arc::new(CertificateStore::new());
+        let (vtty_tx, _) = tokio::sync::broadcast::channel::<(String, String)>(16);
+        let (log_tx, _) = tokio::sync::broadcast::channel::<String>(16);
+        AppState::new(manager, shutdown_tx, None, cert_store, vtty_tx, log_tx)
+    }
+
+    #[tokio::test]
+    async fn test_spawn_echo_through_handler() {
+        let state = make_app_state();
+        let body = json!({"cmd": "echo", "args": ["hello"]});
+        let result = start_command(AxumState(state), Json(body)).await;
+        assert_eq!(result.0["status"], "ok", "Spawn failed: {}", result.0);
+        assert!(result.0["data"]["id"].is_string(), "Missing id: {}", result.0);
+        let pid = result.0["data"]["pid"].as_u64().unwrap_or(0);
+        assert!(pid > 0, "PID should be > 0: {}", result.0);
+    }
+
+    #[tokio::test]
+    async fn test_spawn_then_list_shows_command() {
+        let state = make_app_state();
+        // Spawn
+        let body = json!({"cmd": "echo", "args": ["integration_test"]});
+        let result = start_command(AxumState(state.clone()), Json(body)).await;
+        let id = result.0["data"]["id"].as_str().unwrap().to_string();
+
+        // List
+        let result = list_commands(AxumState(state)).await;
+        assert_eq!(result.0["status"], "ok");
+        let cmds = result.0["data"].as_array().unwrap();
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0]["id"], id);
+        assert_eq!(cmds[0]["name"], "echo");
+    }
+
+    #[tokio::test]
+    async fn test_spawn_then_snapshot_includes_command() {
+        let state = make_app_state();
+        // Spawn
+        let body = json!({"cmd": "echo", "args": ["snapshot_test"]});
+        let result = start_command(AxumState(state.clone()), Json(body)).await;
+        let spawned_id = result.0["data"]["id"].as_str().unwrap().to_string();
+        // Snapshot should include the command
+        let result = get_snapshot(AxumState(state)).await;
+        assert_eq!(result.0["status"], "ok");
+        let cmds = result.0["data"]["commands"].as_array().unwrap();
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0]["id"], spawned_id);
+    }
+
+    #[tokio::test]
+    async fn test_get_info_works() {
+        let state = make_app_state();
+        let result = get_info(AxumState(state)).await;
+        assert_eq!(result.0["status"], "ok");
+        assert_eq!(result.0["data"]["command_count"], 0);
+        assert_eq!(result.0["data"]["auth_enabled"], false);
+    }
+
+    #[tokio::test]
+    async fn test_spawn_missing_cmd_returns_error() {
+        let state = make_app_state();
+        let body = json!({"cmd": ""});
+        let result = start_command(AxumState(state), Json(body)).await;
+        assert_eq!(result.0["status"], "error");
+        assert!(result.0["error"].as_str().unwrap().contains("Missing"));
+    }
+
+    #[tokio::test]
+    async fn test_spawn_nonexistent_returns_error() {
+        let state = make_app_state();
+        let body = json!({"cmd": "nonexistent_binary_xyz_12345"});
+        let result = start_command(AxumState(state), Json(body)).await;
+        assert_eq!(result.0["status"], "error");
+    }
+
+    #[tokio::test]
+    async fn test_spawn_with_env_and_dir() {
+        let state = make_app_state();
+        let body = json!({
+            "cmd": "sh",
+            "args": ["-c", "echo $TEST_VAR"],
+            "env": {"TEST_VAR": "it_works"},
+            "dir": "/tmp"
+        });
+        let result = start_command(AxumState(state), Json(body)).await;
+        assert_eq!(result.0["status"], "ok", "Spawn failed: {}", result.0);
+    }
+
+    #[tokio::test]
+    async fn test_spawn_with_dimensions() {
+        let state = make_app_state();
+        let body = json!({
+            "cmd": "echo",
+            "args": ["dim_test"],
+            "rows": 40,
+            "cols": 120
+        });
+        let result = start_command(AxumState(state), Json(body)).await;
+        assert_eq!(result.0["status"], "ok", "Spawn failed: {}", result.0);
+        assert!(result.0["data"]["pid"].as_u64().unwrap_or(0) > 0);
+    }
+
+    #[tokio::test]
+    async fn test_spawn_invalid_dimensions_returns_error() {
+        let state = make_app_state();
+        let body = json!({
+            "cmd": "echo",
+            "args": [],
+            "rows": 0,
+            "cols": 80
+        });
+        let result = start_command(AxumState(state), Json(body)).await;
+        assert_eq!(result.0["status"], "error");
+        assert!(result.0["error"].as_str().unwrap().contains("Invalid dimensions"));
+    }
+
+    #[tokio::test]
+    async fn test_spawn_invalid_dir_returns_error() {
+        let state = make_app_state();
+        let body = json!({
+            "cmd": "echo",
+            "args": [],
+            "dir": "/nonexistent_dir_xyz_12345"
+        });
+        let result = start_command(AxumState(state), Json(body)).await;
+        assert_eq!(result.0["status"], "error");
+        assert!(result.0["error"].as_str().unwrap().contains("does not exist"));
+    }
+
+    #[tokio::test]
+    async fn test_spawn_retain_on_exit() {
+        let state = make_app_state();
+        let body = json!({
+            "cmd": "echo",
+            "args": ["retain_test"],
+            "retain_on_exit": true
+        });
+        let result = start_command(AxumState(state.clone()), Json(body)).await;
+        assert_eq!(result.0["status"], "ok", "Spawn failed: {}", result.0);
+        // Verify retain_on_exit is set
+        let result = list_commands(AxumState(state)).await;
+        let cmds = result.0["data"].as_array().unwrap();
+        assert_eq!(cmds[0]["exit"]["retain_on_exit"], true);
+    }
+}

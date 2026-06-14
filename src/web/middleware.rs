@@ -117,7 +117,14 @@ pub async fn request_logger(req: Request, next: Next) -> Response {
     response
 }
 
-/// Error handling middleware: converts errors into standard JSON envelope
+/// Error handling middleware: converts errors into standard JSON envelope.
+///
+/// NOTE: This middleware is currently NOT used in the router. It was removed because
+/// it was intercepting all 4xx/5xx responses and re-encoding them, which caused
+/// subtle issues with the web UI (double-encoding JSON, consuming response bodies).
+/// The handlers already return proper JSON error responses via `api_ok`/`api_err`,
+/// so this middleware is not needed.
+#[allow(dead_code)]
 pub async fn error_handler(req: Request, next: Next) -> Response {
     let response = next.run(req).await;
 
