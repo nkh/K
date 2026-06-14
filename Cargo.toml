@@ -97,5 +97,4 @@ tempfile = "3"
 strip = "symbols"
 opt-level = "z"
 lto = true
-panic = "abort"
 codegen-units = 1
