@@ -10,67 +10,6 @@ use crossterm::terminal;
 
 use super::keybinding::{format_key, Action, Binding};
 
-/// The result of executing an action in the display loop.
-#[derive(Debug, Clone, PartialEq)]
-pub enum ActionEffect {
-    /// No special effect (action handled internally).
-    None,
-    /// Switch to the next command.
-    NextCommand,
-    /// Switch to the previous command.
-    PrevCommand,
-    /// Toggle the log overlay on/off.  `true` = show, `false` = hide.
-    ToggleLog(bool),
-    /// Show the help overlay.
-    ShowHelp,
-    /// Kill the active command.
-    KillCommand,
-    /// Toggle pause (freeze/thaw) on the active command.
-    TogglePause,
-    /// Quit the display loop.
-    Quit,
-}
-
-/// Dispatch a matched action to its handler, returning the effect to apply.
-///
-/// This function does NOT perform side effects like rendering directly (except
-/// for `ShowHelp` which needs to render immediately).  Most effects are
-/// returned as enum variants so the display loop can manage state transitions.
-pub fn execute_action(
-    action: &Action,
-    showing_log: bool,
-    command_count: usize,
-    _bindings: &[Binding],
-) -> ActionEffect {
-    match action {
-        Action::NextCommand => {
-            if command_count > 1 {
-                ActionEffect::NextCommand
-            } else {
-                ActionEffect::None
-            }
-        }
-        Action::PrevCommand => {
-            if command_count > 1 {
-                ActionEffect::PrevCommand
-            } else {
-                ActionEffect::None
-            }
-        }
-        Action::ToggleLog => {
-            let show = !showing_log;
-            ActionEffect::ToggleLog(show)
-        }
-        Action::SpawnCommand => {
-            ActionEffect::None // Handled separately by the display loop
-        }
-        Action::ShowHelp => ActionEffect::ShowHelp,
-        Action::KillCommand => ActionEffect::KillCommand,
-        Action::TogglePause => ActionEffect::TogglePause,
-        Action::Quit => ActionEffect::Quit,
-    }
-}
-
 /// Render a full-screen help overlay showing all configured keybindings.
 ///
 /// The overlay replaces the VTTY display.  Callers should set a flag
@@ -181,23 +120,12 @@ pub fn render_help_overlay(bindings: &[Binding], stdout: &mut std::io::Stdout) {
     let _ = stdout.flush();
 }
 
-/// Render a spawn prompt overlay (placeholder for future use).
-#[allow(dead_code)]
-pub fn render_spawn_prompt(stdout: &mut std::io::Stdout) {
-    let _ = terminal::Clear(terminal::ClearType::All);
-    let _ = write!(stdout, "\x1b[1;34m  vrc — Spawn Command\x1b[0m\r\n\r\n");
-    let _ = write!(stdout, "  \x1b[1mCommand:\x1b[0m ");
-    let _ = stdout.flush();
-}
-
 /// Read a command string from the user in cooked (non-raw) mode.
 ///
 /// Temporarily disables raw mode, moves the cursor to the bottom of the
 /// terminal, reads a line from stdin, then re-enables raw mode.
 /// Returns `Some(input)` on Enter, `None` on Ctrl+C / empty.
 pub fn read_spawn_command() -> Option<String> {
-    use std::io::Write;
-
     // Leave raw mode so the user gets normal line editing
     let _ = terminal::disable_raw_mode();
 
@@ -232,80 +160,4 @@ pub fn restore_raw_mode() -> bool {
         return false;
     }
     true
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::interactive::keybinding::{Action, Binding};
-
-    fn sample_bindings() -> Vec<Binding> {
-        vec![]
-    }
-
-    #[test]
-    fn test_execute_next_command_single() {
-        let effect = execute_action(&Action::NextCommand, false, 1, &sample_bindings());
-        assert_eq!(effect, ActionEffect::None);
-    }
-
-    #[test]
-    fn test_execute_next_command_multiple() {
-        let effect = execute_action(&Action::NextCommand, false, 3, &sample_bindings());
-        assert_eq!(effect, ActionEffect::NextCommand);
-    }
-
-    #[test]
-    fn test_execute_prev_command_single() {
-        let effect = execute_action(&Action::PrevCommand, false, 1, &sample_bindings());
-        assert_eq!(effect, ActionEffect::None);
-    }
-
-    #[test]
-    fn test_execute_prev_command_multiple() {
-        let effect = execute_action(&Action::PrevCommand, false, 5, &sample_bindings());
-        assert_eq!(effect, ActionEffect::PrevCommand);
-    }
-
-    #[test]
-    fn test_execute_toggle_log_off() {
-        let effect = execute_action(&Action::ToggleLog, false, 1, &sample_bindings());
-        assert_eq!(effect, ActionEffect::ToggleLog(true));
-    }
-
-    #[test]
-    fn test_execute_toggle_log_on() {
-        let effect = execute_action(&Action::ToggleLog, true, 1, &sample_bindings());
-        assert_eq!(effect, ActionEffect::ToggleLog(false));
-    }
-
-    #[test]
-    fn test_execute_spawn_command() {
-        let effect = execute_action(&Action::SpawnCommand, false, 1, &sample_bindings());
-        assert_eq!(effect, ActionEffect::None);
-    }
-
-    #[test]
-    fn test_execute_show_help() {
-        let effect = execute_action(&Action::ShowHelp, false, 1, &sample_bindings());
-        assert_eq!(effect, ActionEffect::ShowHelp);
-    }
-
-    #[test]
-    fn test_execute_kill_command() {
-        let effect = execute_action(&Action::KillCommand, false, 1, &sample_bindings());
-        assert_eq!(effect, ActionEffect::KillCommand);
-    }
-
-    #[test]
-    fn test_execute_toggle_pause() {
-        let effect = execute_action(&Action::TogglePause, false, 1, &sample_bindings());
-        assert_eq!(effect, ActionEffect::TogglePause);
-    }
-
-    #[test]
-    fn test_execute_quit() {
-        let effect = execute_action(&Action::Quit, false, 1, &sample_bindings());
-        assert_eq!(effect, ActionEffect::Quit);
-    }
 }

@@ -41,8 +41,5 @@ mod actions;
 pub mod display;
 mod keybinding;
 
-pub use actions::{
-    execute_action, read_spawn_command, render_help_overlay, render_spawn_prompt, restore_raw_mode,
-    ActionEffect,
-};
+pub use actions::{read_spawn_command, render_help_overlay, restore_raw_mode};
 pub use keybinding::{check_bindings, parse_key_name, resolve_keybindings, Action, Binding};

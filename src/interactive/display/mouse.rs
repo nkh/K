@@ -21,7 +21,6 @@ pub(crate) enum MouseButton {
 pub(crate) enum MouseEventType {
     Press,
     Release,
-    #[allow(dead_code)]
     Motion,
 }
 #[derive(Debug, Clone)]

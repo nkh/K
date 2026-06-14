@@ -35,7 +35,7 @@ pub(crate) use render::{
     render_tab_bar, render_vtty,
 };
 pub(crate) use keybinding_dispatch::{
-    dispatch_action_effect, execute_context_menu_action, handle_spawn_command, send_focus_event,
+    dispatch_action, execute_context_menu_action, handle_spawn_command, send_focus_event,
     CommandLoopResult, SpawnCommandResult,
 };
 
@@ -955,9 +955,6 @@ pub async fn run_display_loop(
                                             // Matched! Execute action and clear buffer.
                                             esc_buf.clear();
                                             esc_deadline = None;
-                                            let effect = crate::interactive::execute_action(
-                                                &act, showing_log, manager.list().len(), &bindings,
-                                            );
                                             // spawn_command needs special handling: leave raw mode, read input
                                             if act == Action::SpawnCommand {
                                                 match handle_spawn_command(manager).await {
@@ -970,8 +967,8 @@ pub async fn run_display_loop(
                                                 }
                                                 continue;
                                             }
-                                            match dispatch_action_effect(
-                                                manager, effect, &mut active_id, &mut log_scroll_offset,
+                                            match dispatch_action(
+                                                manager, &act, &mut active_id, &mut log_scroll_offset,
                                                 &mut showing_log, &mut showing_help, &mut scrollback_offset,
                                             ).await {
                                                 CommandLoopResult::Break => break 'outer,
@@ -1045,11 +1042,8 @@ pub async fn run_display_loop(
                                             }
                                             continue;
                                         }
-                                        let effect = crate::interactive::execute_action(
-                                            act, showing_log, manager.list().len(), &bindings,
-                                        );
-                                        match dispatch_action_effect(
-                                            manager, effect, &mut active_id, &mut log_scroll_offset,
+                                        match dispatch_action(
+                                            manager, act, &mut active_id, &mut log_scroll_offset,
                                             &mut showing_log, &mut showing_help, &mut scrollback_offset,
                                         ).await {
                                             CommandLoopResult::Break => break 'outer,

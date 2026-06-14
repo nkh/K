@@ -7,13 +7,14 @@
 
 use std::sync::Arc;
 
-use crate::interactive::{read_spawn_command, restore_raw_mode, ActionEffect};
+use crate::interactive::{read_spawn_command, restore_raw_mode};
+use crate::interactive::keybinding::Action;
 use crate::process::manager::CommandManager;
 use std::io::Write;
 
 use super::mouse::base64_encode;
 
-/// Result of [`dispatch_action_effect`], indicating what the caller should do
+/// Result of [`dispatch_action`], indicating what the caller should do
 /// after processing a keybinding action.
 #[derive(Debug)]
 pub(crate) enum CommandLoopResult {
@@ -39,18 +40,17 @@ pub(crate) enum SpawnCommandResult {
 // Centralizes keybinding action dispatch (switch tab, toggle log, kill,
 // freeze/thaw, show help, quit) to avoid duplication between the single-byte
 // and multi-byte keybinding match paths in the select! loop.
-pub(crate) async fn dispatch_action_effect(
+pub(crate) async fn dispatch_action(
     manager: &Arc<CommandManager>,
-    effect: ActionEffect,
+    action: &Action,
     active_id: &mut Option<String>,
     log_scroll_offset: &mut usize,
     showing_log: &mut bool,
     showing_help: &mut bool,
     scrollback_offset: &mut usize,
 ) -> CommandLoopResult {
-    match effect {
-        ActionEffect::None => CommandLoopResult::Continue,
-        ActionEffect::NextCommand | ActionEffect::PrevCommand => {
+    match action {
+        Action::NextCommand | Action::PrevCommand => {
             let commands = manager.list();
             if commands.len() <= 1 {
                 return CommandLoopResult::Continue;
@@ -63,7 +63,7 @@ pub(crate) async fn dispatch_action_effect(
                     .iter()
                     .position(|(id, _, _, _, _)| id == cur)
                     .unwrap_or(0);
-                let new_idx = if effect == ActionEffect::NextCommand {
+                let new_idx = if *action == Action::NextCommand {
                     (idx + 1) % commands.len()
                 } else {
                     idx.checked_sub(1).unwrap_or(commands.len() - 1)
@@ -80,16 +80,16 @@ pub(crate) async fn dispatch_action_effect(
                 CommandLoopResult::Continue
             }
         }
-        ActionEffect::ToggleLog(show) => {
-            *showing_log = show;
+        Action::ToggleLog => {
+            *showing_log = !*showing_log;
             *log_scroll_offset = 0;
             CommandLoopResult::Continue
         }
-        ActionEffect::ShowHelp => {
+        Action::ShowHelp => {
             *showing_help = true;
             CommandLoopResult::RenderAndContinue
         }
-        ActionEffect::KillCommand => {
+        Action::KillCommand => {
             if let Some(id) = active_id.take() {
                 manager
                     .logger()
@@ -98,7 +98,7 @@ pub(crate) async fn dispatch_action_effect(
             }
             CommandLoopResult::Continue
         }
-        ActionEffect::TogglePause => {
+        Action::TogglePause => {
             if let Some(ref id) = active_id {
                 if let Some(handle) = manager.get(id) {
                     if handle.is_alive() {
@@ -116,7 +116,12 @@ pub(crate) async fn dispatch_action_effect(
             }
             CommandLoopResult::Continue
         }
-        ActionEffect::Quit => CommandLoopResult::Break,
+        Action::Quit => CommandLoopResult::Break,
+        Action::SpawnCommand => {
+            // SpawnCommand is handled directly by the display loop before
+            // calling dispatch, so we should never reach here.
+            CommandLoopResult::Continue
+        }
     }
 }
 
