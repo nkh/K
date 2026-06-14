@@ -119,51 +119,34 @@ impl TlsManager {
         Ok((cert_pem_str.into_bytes(), key_pem_str.into_bytes()))
     }
 
-    /// Generate a self-signed X.509 certificate using rcgen.
+    /// Generate a self-signed X.509 certificate using the shared helper.
     /// Returns (cert_pem_string, key_pem_string).
     fn generate_certificate() -> Result<(String, String)> {
-        let mut params = rcgen::CertificateParams::default();
-
-        // Set distinguished name
-        params.distinguished_name = rcgen::DistinguishedName::new();
-        params
-            .distinguished_name
-            .push(rcgen::DnType::CommonName, "vrw");
-        params
-            .distinguished_name
-            .push(rcgen::DnType::OrganizationName, "vrw");
-
-        // Set key usage
-        params.key_usages = vec![
-            rcgen::KeyUsagePurpose::DigitalSignature,
-            rcgen::KeyUsagePurpose::KeyEncipherment,
-        ];
-        params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
-
-        params.is_ca = rcgen::IsCa::NoCa;
-
-        // Valid for 5 years from 2025
-        params.not_before = rcgen::date_time_ymd(2025, 1, 1);
-        params.not_after = rcgen::date_time_ymd(2030, 1, 1);
-
-        // Add Subject Alternative Names for localhost
-        let san_entries = vec![
-            rcgen::SanType::DnsName(rcgen::Ia5String::try_from("localhost").unwrap()),
-            rcgen::SanType::IpAddress(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)),
-            rcgen::SanType::IpAddress(std::net::IpAddr::V6(std::net::Ipv6Addr::LOCALHOST)),
-        ];
-        params.subject_alt_names = san_entries;
-
-        let key_pair = rcgen::KeyPair::generate().context("Failed to generate TLS key pair")?;
-
-        let cert = params
-            .self_signed(&key_pair)
-            .context("Failed to create self-signed certificate")?;
-
-        let cert_pem = cert.pem();
-        let key_pem = key_pair.serialize_pem();
-
-        Ok((cert_pem, key_pem))
+        super::cert_helpers::generate_self_signed_cert(
+            super::cert_helpers::CertGenerationConfig {
+                common_name: "vrw".to_string(),
+                organization: "vrw".to_string(),
+                key_usages: vec![
+                    rcgen::KeyUsagePurpose::DigitalSignature,
+                    rcgen::KeyUsagePurpose::KeyEncipherment,
+                ],
+                extended_key_usages: vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth],
+                is_ca: rcgen::IsCa::NoCa,
+                not_before: rcgen::date_time_ymd(2025, 1, 1),
+                not_after: rcgen::date_time_ymd(2030, 1, 1),
+                subject_alt_names: vec![
+                    rcgen::SanType::DnsName(
+                        rcgen::Ia5String::try_from("localhost").unwrap(),
+                    ),
+                    rcgen::SanType::IpAddress(std::net::IpAddr::V4(
+                        std::net::Ipv4Addr::LOCALHOST,
+                    )),
+                    rcgen::SanType::IpAddress(std::net::IpAddr::V6(
+                        std::net::Ipv6Addr::LOCALHOST,
+                    )),
+                ],
+            },
+        )
     }
 }
 

@@ -141,47 +141,38 @@ impl CertificateStore {
                 .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
         }
 
-        let mut params = rcgen::CertificateParams::default();
-        params.distinguished_name = rcgen::DistinguishedName::new();
-        params
-            .distinguished_name
-            .push(rcgen::DnType::CommonName, name);
-        params
-            .distinguished_name
-            .push(rcgen::DnType::OrganizationName, "vrw");
-
-        params.key_usages = vec![
-            rcgen::KeyUsagePurpose::DigitalSignature,
-            rcgen::KeyUsagePurpose::KeyEncipherment,
-        ];
-        params.extended_key_usages = vec![
-            rcgen::ExtendedKeyUsagePurpose::ServerAuth,
-            rcgen::ExtendedKeyUsagePurpose::ClientAuth,
-        ];
-        params.is_ca = rcgen::IsCa::NoCa;
-
-        params.not_before = rcgen::date_time_ymd(2025, 1, 1);
-        params.not_after = rcgen::date_time_ymd(2030, 1, 1);
-
-        // SANs: localhost + the certificate name as DNS
-        let san_entries = vec![
-            rcgen::SanType::DnsName(rcgen::Ia5String::try_from("localhost").unwrap()),
-            rcgen::SanType::DnsName(
-                rcgen::Ia5String::try_from(name)
-                    .unwrap_or(rcgen::Ia5String::try_from("localhost").unwrap()),
-            ),
-            rcgen::SanType::IpAddress(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)),
-            rcgen::SanType::IpAddress(std::net::IpAddr::V6(std::net::Ipv6Addr::LOCALHOST)),
-        ];
-        params.subject_alt_names = san_entries;
-
-        let key_pair = rcgen::KeyPair::generate().context("Failed to generate key pair")?;
-        let cert = params
-            .self_signed(&key_pair)
-            .context("Failed to create certificate")?;
-
-        let cert_pem = cert.pem();
-        let key_pem = key_pair.serialize_pem();
+        let (cert_pem, key_pem) = super::cert_helpers::generate_self_signed_cert(
+            super::cert_helpers::CertGenerationConfig {
+                common_name: name.to_string(),
+                organization: "vrw".to_string(),
+                key_usages: vec![
+                    rcgen::KeyUsagePurpose::DigitalSignature,
+                    rcgen::KeyUsagePurpose::KeyEncipherment,
+                ],
+                extended_key_usages: vec![
+                    rcgen::ExtendedKeyUsagePurpose::ServerAuth,
+                    rcgen::ExtendedKeyUsagePurpose::ClientAuth,
+                ],
+                is_ca: rcgen::IsCa::NoCa,
+                not_before: rcgen::date_time_ymd(2025, 1, 1),
+                not_after: rcgen::date_time_ymd(2030, 1, 1),
+                subject_alt_names: vec![
+                    rcgen::SanType::DnsName(
+                        rcgen::Ia5String::try_from("localhost").unwrap(),
+                    ),
+                    rcgen::SanType::DnsName(
+                        rcgen::Ia5String::try_from(name)
+                            .unwrap_or(rcgen::Ia5String::try_from("localhost").unwrap()),
+                    ),
+                    rcgen::SanType::IpAddress(std::net::IpAddr::V4(
+                        std::net::Ipv4Addr::LOCALHOST,
+                    )),
+                    rcgen::SanType::IpAddress(std::net::IpAddr::V6(
+                        std::net::Ipv6Addr::LOCALHOST,
+                    )),
+                ],
+            },
+        )?;
 
         std::fs::write(cert_path, &cert_pem)
             .with_context(|| format!("Failed to write certificate: {}", cert_path.display()))?;
