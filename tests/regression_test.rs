@@ -843,14 +843,9 @@ async fn regression_spawn_with_env_vars() {
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
         .spawn(
-            "sh".into(),
-            vec!["-c".into(), "echo $TEST_VAR".into()],
-            None,
-            None,
-            env,
-            None,
-            None,
-            None,
+            vrc_core::process::manager::SpawnOptions::new("sh".to_string())
+                .args(vec!["-c".into(), "echo $TEST_VAR".into()])
+                .env_vars(env),
         )
         .await
         .unwrap();
@@ -889,14 +884,9 @@ async fn regression_spawn_command_env_overrides_config_env() {
 
     let id = manager
         .spawn(
-            "sh".into(),
-            vec!["-c".into(), "echo $OVERRIDE_VAR $NEW_VAR $BASE_VAR".into()],
-            None,
-            None,
-            env,
-            None,
-            None,
-            None,
+            vrc_core::process::manager::SpawnOptions::new("sh".to_string())
+                .args(vec!["-c".into(), "echo $OVERRIDE_VAR $NEW_VAR $BASE_VAR".into()])
+                .env_vars(env),
         )
         .await
         .unwrap();
@@ -937,14 +927,9 @@ async fn regression_spawn_env_value_with_equals_sign() {
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
         .spawn(
-            "sh".into(),
-            vec!["-c".into(), "echo $CONN_STR $MATH".into()],
-            None,
-            None,
-            env,
-            None,
-            None,
-            None,
+            vrc_core::process::manager::SpawnOptions::new("sh".to_string())
+                .args(vec!["-c".into(), "echo $CONN_STR $MATH".into()])
+                .env_vars(env),
         )
         .await
         .unwrap();
@@ -972,14 +957,10 @@ async fn regression_spawn_with_custom_vtty_size() {
     let manager = Arc::new(CommandManager::new(cfg));
     let id = manager
         .spawn(
-            "stty".into(),
-            vec!["size".into()],
-            None,
-            None,
-            HashMap::new(),
-            Some(5),
-            Some(20),
-            None,
+            vrc_core::process::manager::SpawnOptions::new("stty".to_string())
+                .args(vec!["size".into()])
+                .rows(Some(5))
+                .cols(Some(20)),
         )
         .await
         .unwrap();
@@ -1298,17 +1279,11 @@ async fn regression_vtty_changes_detected_and_rendered() {
     // Spawn a command that produces output in stages
     let id = manager
         .spawn(
-            "sh".into(),
-            vec![
-                "-c".into(),
-                "echo first; sleep 0.1; echo second; sleep 0.1; echo third".into(),
-            ],
-            None,
-            None,
-            HashMap::new(),
-            None,
-            None,
-            None,
+            vrc_core::process::manager::SpawnOptions::new("sh".to_string())
+                .args(vec![
+                    "-c".into(),
+                    "echo first; sleep 0.1; echo second; sleep 0.1; echo third".into(),
+                ]),
         )
         .await
         .unwrap();

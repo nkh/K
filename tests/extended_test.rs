@@ -397,7 +397,7 @@ fn buffer_scroll_up_adds_to_scrollback() {
     let mut b = vrc_core::vtty::buffer::Buffer::new(10, 2, 100);
     b.rows[0][0].ch = 'T';
     b.rows[1][0].ch = 'B';
-    b.scroll_up();
+    b.scroll_up(None);
     assert_eq!(b.scrollback.len(), 1);
     assert_eq!(b.scrollback[0][0].ch, 'T');
 }

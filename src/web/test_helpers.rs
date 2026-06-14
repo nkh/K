@@ -10,21 +10,25 @@
 
 #[cfg(all(feature = "vrw", test))]
 pub fn test_app(config: crate::config::schema::Config) -> axum::Router {
+    use axum::routing::get;
     use axum::Router;
     use crate::web::handlers;
-    use crate::web::middleware::{auth_middleware, cors_layer, error_handler, request_logger};
     use crate::web::state::AppState;
     use std::sync::Arc;
 
     let manager = Arc::new(crate::process::manager::CommandManager::new(config.clone()));
-    let state = AppState {
+    let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
+    let (vtty_events, _) = tokio::sync::broadcast::channel(16);
+    let (log_events, _) = tokio::sync::broadcast::channel(16);
+    let cert_store = std::sync::Arc::new(crate::web::certs::CertificateStore::new());
+    let state = AppState::new(
         manager,
-        auth_token: None,
-        server_name: "test".into(),
-        web_config: config.web.clone(),
-        cors_config: config.security.cors.clone(),
-        cert_pool: Default::default(),
-    };
+        shutdown_tx,
+        None,
+        cert_store,
+        vtty_events,
+        log_events,
+    );
 
     let api_routes = Router::new()
         .route("/api/commands", get(handlers::commands::list_commands))
@@ -32,7 +36,5 @@ pub fn test_app(config: crate::config::schema::Config) -> axum::Router {
 
     Router::new()
         .merge(api_routes)
-        .layer(cors_layer(&config.security.cors))
-        .layer(tower::ServiceBuilder::new().layer(error_handler))
         .with_state(state)
 }

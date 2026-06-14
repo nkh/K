@@ -69,7 +69,7 @@ fn buffer_resize_grow() {
 fn buffer_scroll_down() {
     let mut b = vrc_core::vtty::buffer::Buffer::new(10, 3, 100);
     b.rows[2][0].ch = 'Z';
-    b.scroll_down();
+    b.scroll_region_down(0, 2, None);
     // scroll_down removes bottom row, inserts blank at top
     assert_eq!(b.rows[0][0].ch, ' '); // new blank at top
     assert_eq!(b.rows[2][0].ch, ' '); // bottom row removed (was 'Z')
@@ -81,7 +81,7 @@ fn buffer_scroll_region_down() {
     for i in 0..5 {
         b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap();
     }
-    b.scroll_region_down(1, 3);
+    b.scroll_region_down(1, 3, None);
     assert_eq!(b.rows[0][0].ch, '0'); // unchanged
     assert_eq!(b.rows[1][0].ch, ' '); // new blank
     assert_eq!(b.rows[2][0].ch, '1'); // shifted from 1
@@ -95,7 +95,7 @@ fn buffer_scroll_region_up_preserves_scrollback() {
     for i in 0..5 {
         b.rows[i][0].ch = char::from_digit(i as u32, 10).unwrap();
     }
-    b.scroll_region_up(2, 4); // top > 0, line NOT added to scrollback
+    b.scroll_region_up(2, 4, None); // top > 0, line NOT added to scrollback
     assert_eq!(b.scrollback.len(), 0);
     assert_eq!(b.rows[2][0].ch, '3');
     assert_eq!(b.rows[3][0].ch, '4');
@@ -109,7 +109,7 @@ fn buffer_insert_cells_shifts_right() {
     b.set(0, 0, Cell::new('A'));
     b.set(0, 1, Cell::new('B'));
     b.set(0, 2, Cell::new('C'));
-    b.insert_cells(0, 1, 2); // insert 2 blanks at col 1
+    b.insert_cells(0, 1, 2, None); // insert 2 blanks at col 1
     assert_eq!(b.rows[0][0].ch, 'A'); // unchanged
     assert_eq!(b.rows[0][1].ch, ' '); // inserted
     assert_eq!(b.rows[0][2].ch, ' '); // inserted
@@ -125,7 +125,7 @@ fn buffer_delete_cells_shifts_left() {
     b.set(0, 1, Cell::new('B'));
     b.set(0, 2, Cell::new('C'));
     b.set(0, 3, Cell::new('D'));
-    b.delete_cells(0, 1, 2); // delete 2 at col 1
+    b.delete_cells(0, 1, 2, None); // delete 2 at col 1
     assert_eq!(b.rows[0][0].ch, 'A'); // unchanged
     assert_eq!(b.rows[0][1].ch, 'D'); // shifted left
     assert_eq!(b.rows[0][2].ch, ' '); // cleared
@@ -158,7 +158,7 @@ fn buffer_diff_single_cell_change() {
     assert_eq!(diff.changed_count, 1);
     assert_eq!(diff.cells[0].row, 2);
     assert_eq!(diff.cells[0].col, 3);
-    assert_eq!(diff.cells[0].ch, 'X');
+    assert_eq!(diff.cells[0].cell.ch, 'X');
 }
 
 #[test]
@@ -167,8 +167,8 @@ fn buffer_scrollback_max_limit() {
     b.rows[0][0].ch = '1';
     b.rows[1][0].ch = '2';
     b.rows[2][0].ch = '3';
-    b.scroll_up(); // '1' → scrollback
-    b.scroll_up(); // '2' → scrollback (replaces '1')
+    b.scroll_up(None); // '1' → scrollback
+    b.scroll_up(None); // '2' → scrollback (replaces '1')
     assert_eq!(b.scrollback.len(), 2);
     assert_eq!(b.scrollback[0][0].ch, '1'); // evicted oldest
     assert_eq!(b.scrollback[1][0].ch, '2');
@@ -179,7 +179,7 @@ fn buffer_get_line_across_scrollback() {
     let mut b = vrc_core::vtty::buffer::Buffer::new(10, 2, 100);
     b.rows[0][0].ch = 'S';
     b.rows[1][0].ch = 'V';
-    b.scroll_up();
+    b.scroll_up(None);
     // scroll_up removes top row to scrollback, shifts remaining up
     assert_eq!(b.scrollback.len(), 1);
     assert_eq!(b.scrollback[0][0].ch, 'S');
@@ -842,9 +842,9 @@ async fn file_sink_write_and_read() {
     let _ = std::fs::remove_file(&path); // cleanup from prior run
 
     let mut sink = vrc_core::handles::file_sink::FileSink::new(path.to_str().unwrap()).unwrap();
-    sink.write(b"hello ").await;
-    sink.write(b"world\n").await;
-    sink.flush().await;
+    sink.write(b"hello ").unwrap();
+    sink.write(b"world\n").unwrap();
+    sink.flush().unwrap();
     drop(sink);
 
     let content = std::fs::read_to_string(&path).unwrap();
@@ -862,12 +862,12 @@ async fn file_sink_append() {
     use vrc_core::handles::sink::Sink;
     {
         let mut s1 = vrc_core::handles::file_sink::FileSink::new(path.to_str().unwrap()).unwrap();
-        s1.write(b"first\n").await;
+        s1.write(b"first\n").unwrap();
     }
     {
         let mut s2 = vrc_core::handles::file_sink::FileSink::new(path.to_str().unwrap()).unwrap();
-        s2.write(b"second\n").await;
-        s2.flush().await;
+        s2.write(b"second\n").unwrap();
+        s2.flush().unwrap();
     }
 
     let content = std::fs::read_to_string(&path).unwrap();
@@ -1052,7 +1052,7 @@ fn buffer_clear_screen_to() {
     b.rows[1][5].ch = 'B';
     b.rows[2][9].ch = 'C';
     b.rows[3][0].ch = 'D';
-    b.clear_screen_to(2, 5);
+    b.clear_screen_to(2, 5, None);
     assert_eq!(b.rows[0][0].ch, ' '); // cleared
     assert_eq!(b.rows[1][5].ch, ' '); // cleared
     assert_eq!(b.rows[2][5].ch, ' '); // cleared (inclusive)
