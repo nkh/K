@@ -1,5 +1,4 @@
 use super::sink::Sink;
-use async_trait::async_trait;
 use std::fs::OpenOptions;
 use std::io::Write;
 
@@ -19,14 +18,13 @@ impl FileSink {
     }
 }
 
-#[async_trait]
 impl Sink for FileSink {
-    async fn write(&mut self, data: &[u8]) {
-        let _ = self.file.write_all(data);
+    fn write(&mut self, data: &[u8]) -> std::io::Result<()> {
+        self.file.write_all(data)
     }
 
-    async fn flush(&mut self) {
-        let _ = self.file.flush();
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.file.flush()
     }
 }
 
@@ -34,26 +32,26 @@ impl Sink for FileSink {
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn test_file_sink_write_and_flush() {
+    #[test]
+    fn test_file_sink_write_and_flush() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("test.log");
         let mut sink = FileSink::new(path.to_str().unwrap()).unwrap();
-        sink.write(b"hello\n").await;
-        sink.flush().await;
+        sink.write(b"hello\n").unwrap();
+        sink.flush().unwrap();
         let contents = std::fs::read_to_string(path).unwrap();
         assert_eq!(contents, "hello\n");
     }
 
-    #[tokio::test]
-    async fn test_file_sink_multiple_writes() {
+    #[test]
+    fn test_file_sink_multiple_writes() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("multi.log");
         let mut sink = FileSink::new(path.to_str().unwrap()).unwrap();
-        sink.write(b"line1\n").await;
-        sink.write(b"line2\n").await;
-        sink.write(b"line3\n").await;
-        sink.flush().await;
+        sink.write(b"line1\n").unwrap();
+        sink.write(b"line2\n").unwrap();
+        sink.write(b"line3\n").unwrap();
+        sink.flush().unwrap();
         let contents = std::fs::read_to_string(path).unwrap();
         assert_eq!(contents, "line1\nline2\nline3\n");
     }

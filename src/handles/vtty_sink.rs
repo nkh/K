@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use super::sink::Sink;
 
 /// A sink that discards output (VTTY display is handled via broadcast channels).
@@ -12,12 +11,12 @@ impl VttySink {
     }
 }
 
-#[async_trait]
 impl Sink for VttySink {
-    async fn write(&mut self, _data: &[u8]) {
-        // VTTY output is pushed via BroadcastVttySink directly;
-        // this handle sink is a no-op.
+    fn write(&mut self, _data: &[u8]) -> std::io::Result<()> {
+        Ok(())
     }
 
-    async fn flush(&mut self) {}
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
 }

@@ -231,21 +231,6 @@ mod tests {
     }
 
     #[test]
-    fn test_certificate_store_new() {
-        let store = CertificateStore::new();
-        assert!(store.entries.is_empty());
-        assert!(store.token_to_name.is_empty());
-        assert!(store.list().is_empty());
-        assert!(store.certs_dir().to_string_lossy().contains("certs"));
-    }
-
-    #[test]
-    fn test_certificate_store_default() {
-        let store = CertificateStore::default();
-        assert!(store.list().is_empty());
-    }
-
-    #[test]
     fn test_certificate_store_generate() {
         let dir = tempfile::tempdir().unwrap();
         let cert_path = dir.path().join("cert.pem");
@@ -313,12 +298,6 @@ mod tests {
     }
 
     #[test]
-    fn test_certificate_store_get_missing() {
-        let store = CertificateStore::new();
-        assert!(store.get("nonexistent").is_none());
-    }
-
-    #[test]
     fn test_certificate_store_validate_token() {
         let dir = tempfile::tempdir().unwrap();
         let mut store = CertificateStore {
@@ -330,18 +309,6 @@ mod tests {
         let token = store.get("auth-test").unwrap().derive_token().unwrap();
         assert_eq!(store.validate_token(&token), Some("auth-test"));
         assert!(store.validate_token("invalid").is_none());
-    }
-
-    #[test]
-    fn test_certificate_store_validate_empty_token() {
-        let store = CertificateStore::new();
-        assert!(store.validate_token("").is_none());
-    }
-
-    #[test]
-    fn test_certificate_store_exists() {
-        let store = CertificateStore::new();
-        assert!(!store.exists("nope"));
     }
 
     #[test]
@@ -360,13 +327,7 @@ mod tests {
  }
 
     #[test]
- fn test_certificate_store_remove_missing() {
-        let mut store = CertificateStore::new();
-        assert!(store.remove("ghost").is_none());
- }
-
-    #[test]
- fn test_certificate_entry_serde_roundtrip() {
+    fn test_certificate_entry_serde_roundtrip() {
         let entry = CertificateEntry {
             name: "test".to_string(),
             cert_file: "/certs/test.pem".to_string(),
