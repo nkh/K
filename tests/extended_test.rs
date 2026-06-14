@@ -87,9 +87,8 @@ fn ipc_control_response_ok_serde() {
         data: serde_json::json!({"count": 5}),
     };
     let json = serde_json::to_string(&resp).unwrap();
-    assert!(json.contains("Ok") || json.contains("data"));
     let parsed: ControlResponse = serde_json::from_str(&json).unwrap();
-    assert!(matches!(parsed, ControlResponse::Ok { .. }));
+    assert!(matches!(parsed, ControlResponse::Ok { data } if data["count"] == 5));
 }
 
 #[test]
@@ -99,9 +98,8 @@ fn ipc_control_response_error_serde() {
         error: "not found".into(),
     };
     let json = serde_json::to_string(&resp).unwrap();
-    assert!(json.contains("not found"));
     let parsed: ControlResponse = serde_json::from_str(&json).unwrap();
-    assert!(matches!(parsed, ControlResponse::Error { .. }));
+    assert!(matches!(parsed, ControlResponse::Error { error } if error == "not found"));
 }
 
 #[test]

@@ -124,7 +124,10 @@ async fn test_vtty_contents() {
 
     if let Some(handle) = manager.get(&id) {
         let plain = handle.vtty_plain().await;
-        assert!(plain.contains("test_output") || plain.is_empty());
+        // The process may not have written yet — only assert if we got output
+        if !plain.is_empty() {
+            assert!(plain.contains("test_output"), "expected 'test_output' in: {plain:?}");
+        }
     }
 
     let _ = manager.kill(&id, None).await;
@@ -159,7 +162,9 @@ async fn test_send_keys() {
 
     if let Some(handle) = manager.get(&id) {
         let plain = handle.vtty_plain().await;
-        assert!(plain.contains("hello") || plain.is_empty());
+        if !plain.is_empty() {
+            assert!(plain.contains("hello"), "expected 'hello' in: {plain:?}");
+        }
     }
 
     // Send Ctrl+C to terminate cat
