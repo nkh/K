@@ -33,7 +33,7 @@ pub use crate::cli::commands::keep::{handle_keep_command, handle_unkeep_command}
 #[cfg(feature = "vrw")]
 pub use crate::cli::commands::purge::handle_purge_command;
 #[cfg(feature = "vrw")]
-pub use crate::cli::commands::resize::{handle_resize_command, resize_command_by_id};
+pub use crate::cli::commands::resize::handle_resize_command;
 #[cfg(feature = "vrw")]
 pub use crate::cli::commands::screenshot::handle_screenshot_command;
 #[cfg(feature = "vrw")]

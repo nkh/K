@@ -53,7 +53,7 @@ pub use keep::{handle_keep_command, handle_unkeep_command};
 #[cfg(feature = "vrw")]
 pub use purge::handle_purge_command;
 #[cfg(feature = "vrw")]
-pub use resize::{handle_resize_by_pid, resize_command_by_id};
+pub use resize::handle_resize_by_pid;
 #[cfg(feature = "vrw")]
 pub use screenshot::handle_screenshot_command;
 #[cfg(feature = "vrw")]

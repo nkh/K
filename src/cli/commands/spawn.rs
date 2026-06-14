@@ -3,9 +3,8 @@
 use anyhow::Result;
 
 use crate::cli::args::Cli;
+use crate::cli::commands::common::{http_client, resolve_instance, resolve_pid_to_id, VrwClient};
 use crate::instance::registry::InstanceRegistry;
-
-use super::common::{http_client, instance_url, resolve_instance, resolve_pid_to_id};
 
 /// Handle the `vrw spawn` subcommand.
 /// Discovers a running vrw instance and sends a spawn request via HTTP API.
@@ -29,12 +28,13 @@ pub async fn handle_spawn_command(
         if instances.len() == 1 {
             instances.into_iter().next().unwrap()
         } else {
-            let items: Vec<_> = instances.iter().map(|i| {
-                crate::cli::interactive_select::SelectItem {
+            let items: Vec<_> = instances
+                .iter()
+                .map(|i| crate::cli::interactive_select::SelectItem {
                     label: format!("PID {} — port {}", i.pid, i.port),
                     id: i.pid.to_string(),
-                }
-            }).collect();
+                })
+                .collect();
             let selected = crate::cli::interactive_select::select_items(
                 &items,
                 "Select instance to spawn on [space-separated numbers]",
@@ -43,15 +43,17 @@ pub async fn handle_spawn_command(
                 anyhow::bail!("No instance selected.");
             }
             let target_pid: u32 = selected[0].id.parse().unwrap();
-            instances.into_iter().find(|i| i.pid == target_pid)
+            instances
+                .into_iter()
+                .find(|i| i.pid == target_pid)
                 .expect("selected PID must exist")
         }
     } else {
         resolve_instance(cli, &registry)?
     };
 
-    let url = instance_url(&info, &None);
     let client = http_client();
+    let vrw = VrwClient::new(client, &info);
 
     let mut body = serde_json::json!({
         "cmd": cmd,
@@ -93,39 +95,37 @@ pub async fn handle_spawn_command(
         body["cols"] = serde_json::json!(c_);
     }
 
-    tracing::info!(target_pid = info.pid, cmd = cmd, url = %url, "Spawning command on remote instance");
+    tracing::info!(
+        target_pid = info.pid,
+        cmd = cmd,
+        url = %vrw.base_url(),
+        "Spawning command on remote instance"
+    );
 
-    let resp = client
-        .post(format!("{}/api/commands", url))
-        .json(&body)
-        .send()
+    let data = vrw
+        .post_data("/api/commands", &body)
         .await
         .map_err(|e| {
-            tracing::error!(url = %url, error = %e, "Failed to connect to vrw instance");
+            tracing::error!(url = %vrw.base_url(), error = %e, "Failed to connect to vrw instance");
             anyhow::anyhow!(
                 "Cannot connect to vrw instance at {} — is it running? Error: {}",
-                url,
+                vrw.base_url(),
                 e
             )
         })?;
 
-    let status = resp.status();
-    let result: serde_json::Value = resp.json().await?;
-
-    if status.is_success() {
-        let cmd_pid = result["data"]["pid"].as_u64().unwrap_or(0);
-        let cmd_id = result["data"]["id"].as_str().unwrap_or("?");
-        println!(
-            "Command spawned successfully on instance {} (PID {})",
-            info.pid, info.pid
-        );
-        println!("  PID:       {}", cmd_pid);
-        println!("  VTTY:      {}/api/commands/{}/vtty/html", url, cmd_id);
-    } else {
-        let error = result["error"].as_str().unwrap_or("Unknown error");
-        tracing::error!("Failed to spawn command: {}", error);
-        std::process::exit(1);
-    }
+    let cmd_pid = data["pid"].as_u64().unwrap_or(0);
+    let cmd_id = data["id"].as_str().unwrap_or("?");
+    println!(
+        "Command spawned successfully on instance {} (PID {})",
+        info.pid, info.pid
+    );
+    println!("  PID:       {}", cmd_pid);
+    println!(
+        "  VTTY:      {}/api/commands/{}/vtty/html",
+        vrw.base_url(),
+        cmd_id
+    );
 
     Ok(())
 }
@@ -134,37 +134,41 @@ pub async fn handle_spawn_command(
 ///
 /// `signal` is the API path segment (`"freeze"` or `"thaw"`).
 /// `signal_desc` is the human-readable description (`"SIGSTOP"` or `"SIGCONT"`).
-async fn handle_signal_command(cli: &Cli, pid: Option<u32>, interactive: bool, signal: &str, signal_desc: &str) -> Result<()> {
+async fn handle_signal_command(
+    cli: &Cli,
+    pid: Option<u32>,
+    interactive: bool,
+    signal: &str,
+    signal_desc: &str,
+) -> Result<()> {
     let registry = InstanceRegistry::new()?;
     let info = resolve_instance(cli, &registry)?;
-    let url = instance_url(&info, &None);
     let client = http_client();
+    let vrw = VrwClient::new(client, &info);
 
     if interactive {
-        let all_commands = super::common::collect_all_commands(
-            &client,
-            std::slice::from_ref(&info),
-        )
-        .await;
-        let items = super::common::build_command_select_items(
+        let all_commands =
+            crate::cli::commands::common::collect_all_commands(
+                vrw.client(),
+                std::slice::from_ref(&info),
+            )
+            .await;
+        let items = crate::cli::commands::common::build_command_select_items(
             &all_commands,
-            super::common::SelectLabelStyle::FullWithPid,
+            crate::cli::commands::common::SelectLabelStyle::FullWithPid,
         );
         let selected = crate::cli::interactive_select::select_items(
-            &items, &format!("Select commands to {} [space-separated numbers]", signal),
+            &items,
+            &format!("Select commands to {} [space-separated numbers]", signal),
         )?;
         for item in &selected {
-            let resp = client
-                .post(format!("{}/api/commands/{}/{}", url, item.id, signal))
-                .send()
-                .await?;
-            let status = resp.status();
-            let result: serde_json::Value = resp.json().await?;
-            if status.is_success() {
-                println!("Command {} {} ({})", item.id, signal, signal_desc);
+            if let Err(e) = vrw
+                .post_action(&format!("/api/commands/{}/{}", item.id, signal), None)
+                .await
+            {
+                tracing::error!("Failed to {} {}: {}", signal, item.id, e);
             } else {
-                let error = result["error"].as_str().unwrap_or("Unknown error");
-                tracing::error!("Failed to {} {}: {}", signal, item.id, error);
+                println!("Command {} {} ({})", item.id, signal, signal_desc);
             }
         }
         return Ok(());
@@ -173,7 +177,12 @@ async fn handle_signal_command(cli: &Cli, pid: Option<u32>, interactive: bool, s
     let pid = match pid {
         Some(p) => p,
         None => {
-            let all_commands = super::common::collect_all_commands(&client, std::slice::from_ref(&info)).await;
+            let all_commands =
+                crate::cli::commands::common::collect_all_commands(
+                    vrw.client(),
+                    std::slice::from_ref(&info),
+                )
+                .await;
             if all_commands.len() == 1 {
                 all_commands[0].2
             } else {
@@ -186,26 +195,22 @@ async fn handle_signal_command(cli: &Cli, pid: Option<u32>, interactive: bool, s
     };
 
     // Look up the command ID by PID via the instance's API
-    let cmd_id = resolve_pid_to_id(&client, &url, pid).await?;
+    let cmd_id = resolve_pid_to_id(vrw.client(), vrw.base_url(), pid).await?;
 
-    let resp = client
-        .post(format!("{}/api/commands/{}/{}", url, cmd_id, signal))
-        .send()
-        .await?;
+    vrw.post_action(&format!("/api/commands/{}/{}", cmd_id, signal), None)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to {} command: {}", signal, e);
+            anyhow::anyhow!("Failed to {} command: {}", signal, e)
+        })?;
 
-    let status = resp.status();
-    let result: serde_json::Value = resp.json().await?;
-
-    if status.is_success() {
-        println!(
-            "Command with PID {} {} ({}) on instance {}",
-            pid, signal, signal_desc, info.pid
-        );
-    } else {
-        let error = result["error"].as_str().unwrap_or("Unknown error");
-        tracing::error!("Failed to {} command: {}", signal, error);
-        std::process::exit(1);
-    }
+    println!(
+        "Command with PID {} {} ({}) on instance {}",
+        pid,
+        signal,
+        signal_desc,
+        info.pid
+    );
 
     Ok(())
 }

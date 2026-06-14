@@ -625,6 +625,148 @@ pub async fn post_command_action_bool(
     }
 }
 
+/// Typed HTTP client for vrw CLI commands.
+///
+/// Encapsulates the reqwest client and base URL, providing typed methods
+/// that handle response parsing centrally.  Eliminates the inline
+/// HTTP boilerplate that was previously copy-pasted across every command.
+#[cfg(feature = "vrw")]
+pub struct VrwClient {
+    client: reqwest::Client,
+    base_url: String,
+    instance_pid: u32,
+}
+
+#[cfg(feature = "vrw")]
+impl VrwClient {
+    pub fn new(client: reqwest::Client, info: &InstanceInfo) -> Self {
+        Self {
+            base_url: instance_url(info, &None),
+            instance_pid: info.pid,
+            client,
+        }
+    }
+
+    pub fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
+    pub fn instance_pid(&self) -> u32 {
+        self.instance_pid
+    }
+
+    /// Return a reference to the underlying reqwest client.
+    pub fn client(&self) -> &reqwest::Client {
+        &self.client
+    }
+
+    /// GET a JSON endpoint, returning the `data` field on success.
+    pub async fn get_data(&self, path: &str) -> Result<serde_json::Value> {
+        let url = format!("{}{}", self.base_url, path);
+        let resp = self.client.get(&url).send().await?;
+        let status = resp.status();
+        let json: serde_json::Value = resp.json().await
+            .unwrap_or(serde_json::json!({"status": "unknown"}));
+        if status.is_success() && json.get("status").and_then(|s| s.as_str()) == Some("ok") {
+            Ok(json.get("data").cloned().unwrap_or(serde_json::Value::Null))
+        } else {
+            let err = json.get("error").and_then(|e| e.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| format!("HTTP {}", status));
+            anyhow::bail!("{}", err)
+        }
+    }
+
+    /// GET raw bytes from an endpoint (for screenshots etc).
+    pub async fn get_bytes(&self, path: &str) -> Result<bytes::Bytes> {
+        let url = format!("{}{}", self.base_url, path);
+        let resp = self.client.get(&url).send().await?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("HTTP {}: {}", status, body);
+        }
+        Ok(resp.bytes().await?)
+    }
+
+    /// POST to a command action endpoint, check for ok status.
+    pub async fn post_action(&self, path: &str, body: Option<&serde_json::Value>) -> Result<()> {
+        let url = format!("{}{}", self.base_url, path);
+        let req = match body {
+            Some(b) => self.client.post(&url).json(b),
+            None => self.client.post(&url),
+        };
+        let resp = req.send().await?;
+        let status = resp.status();
+        let json: serde_json::Value = resp.json().await
+            .unwrap_or(serde_json::json!({"status": "unknown"}));
+        if status.is_success() && json.get("status").and_then(|s| s.as_str()) == Some("ok") {
+            Ok(())
+        } else {
+            let err = json.get("error").and_then(|e| e.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| format!("HTTP {}", status));
+            anyhow::bail!("{}", err)
+        }
+    }
+
+    /// POST and return the `data` field from the response.
+    pub async fn post_data(&self, path: &str, body: &serde_json::Value) -> Result<serde_json::Value> {
+        let url = format!("{}{}", self.base_url, path);
+        let resp = self.client.post(&url).json(body).send().await?;
+        let status = resp.status();
+        let json: serde_json::Value = resp.json().await
+            .unwrap_or(serde_json::json!({"status": "unknown"}));
+        if status.is_success() && json.get("status").and_then(|s| s.as_str()) == Some("ok") {
+            Ok(json.get("data").cloned().unwrap_or(serde_json::Value::Null))
+        } else {
+            let err = json.get("error").and_then(|e| e.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| format!("HTTP {}", status));
+            anyhow::bail!("{}", err)
+        }
+    }
+
+    /// POST to a command action endpoint, printing success_msg on ok,
+    /// logging error on failure. Returns Ok(false) on failure.
+    pub async fn post_action_quiet(
+        &self,
+        path: &str,
+        body: Option<&serde_json::Value>,
+        method: reqwest::Method,
+        label: &str,
+        verb: &str,
+        success_msg: &str,
+    ) -> Result<bool> {
+        let url = format!("{}{}", self.base_url, path);
+        let req = match body {
+            Some(b) => self.client.request(method.clone(), &url).json(b),
+            None => self.client.request(method, &url),
+        };
+        match req.send().await {
+            Ok(resp) => {
+                let status = resp.status();
+                let json: serde_json::Value = resp.json().await
+                    .unwrap_or(serde_json::json!({"status": "unknown"}));
+                if status.is_success() && json.get("status").and_then(|s| s.as_str()) == Some("ok") {
+                    println!("{}", success_msg);
+                    Ok(true)
+                } else {
+                    let err = json.get("error").and_then(|e| e.as_str())
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| format!("HTTP {}", status));
+                    tracing::error!("Failed to {} '{}': {}", verb, label, err);
+                    Ok(false)
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to {} '{}': {}", verb, label, e);
+                Ok(false)
+            }
+        }
+    }
+}
+
 /// Label style for [`build_command_select_items`].
 #[cfg(feature = "vrw")]
 #[derive(Clone, Copy)]
