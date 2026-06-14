@@ -92,7 +92,7 @@ up reverse tunnels, or configuring firewalls. vrw's self-signed TLS and
 localhost binding mean you can start a secure terminal in one command:
 
 ```bash
-vrw run --tls --auth-token my-secret -- web-server --port 3000
+vrw --tls -- web-server --port 3000
 ```
 
 ### You Need a REST API Alongside the Terminal

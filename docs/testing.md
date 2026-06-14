@@ -215,7 +215,7 @@ vrc screenshot
 # Expected: prints absolute path like /home/user/vrc_YYYYMMDD_HHMMSS_80x24_htop.png
 
 # vrw binary (HTTP server)
-vrw run htop
+vrw -- htop
 vrw screenshot
 # Expected: prints absolute path like /home/user/vrw_YYYYMMDD_HHMMSS_80x24_htop.png
 

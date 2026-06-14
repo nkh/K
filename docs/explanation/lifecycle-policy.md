@@ -19,7 +19,7 @@ as soon as they are no longer needed.
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                                                              │
-│   vrw run -- web-server                                  │
+│   vrw -- web-server                                  │
 │   ┌────────────┐                                             │
 │   │  Daemon    │  lives as long as "web-server" is running   │
 │   │  ┌───────┐ │                                             │
@@ -149,7 +149,7 @@ cleanup. This handles common scenarios:
 The monitor timeout is configurable:
 
 ```bash
-vrw run --monitor-timeout 120s -- long-running-job
+vrw --monitor-timeout 120s -- long-running-job
 ```
 
 A timeout of `0` disables monitoring entirely—command cleanup happens
@@ -225,7 +225,7 @@ they are attached to. If you start five commands, each can have its own
 `--retain-on-exit` and `--monitor-timeout` settings:
 
 ```bash
-vrw run \
+vrw \
   --retain-on-exit -- my-database      # retained after exit  \
   --snapshot-on-exit -- my-build        # snapshot saved on exit \
   -- my-web-server                     # normal lifecycle
