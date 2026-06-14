@@ -4,7 +4,7 @@ use std::io::Write;
 use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
 
-use crate::config::hooks::TerminalLogConfig;
+use crate::config::schema::TerminalLogConfig;
 
 const MEMORY_BUFFER_CAPACITY: usize = 2048;
 const RESET: &str = "\x1b[0m";

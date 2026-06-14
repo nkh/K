@@ -9,8 +9,7 @@ use tokio::sync::{mpsc, oneshot};
 use std::collections::HashMap;
 
 use super::handle::CommandHandle;
-use crate::config::hooks::HooksConfig;
-use crate::config::schema::{ExitConfig, HandleConfig, VttyConfig};
+use crate::config::schema::{ExitConfig, HandleConfig, HooksConfig, VttyConfig};
 use crate::handles::{
     file_sink::FileSink, null_sink::NullSink, registry::HandleRegistry, sink::Sink,
     vtty_sink::VttySink,

@@ -1000,7 +1000,7 @@ fn instance_info_serialization_roundtrip() {
 fn hooks_config_deserialize() {
     let json =
         r#"{ "on_spawn": "echo starting", "on_exit": "echo done", "on_error": "echo failed" }"#;
-    let hooks: vrc_core::config::hooks::HooksConfig = serde_json::from_str(json).unwrap();
+    let hooks: vrc_core::config::schema::HooksConfig = serde_json::from_str(json).unwrap();
     assert_eq!(hooks.on_spawn.as_deref(), Some("echo starting"));
     assert_eq!(hooks.on_exit.as_deref(), Some("echo done"));
     assert_eq!(hooks.on_error.as_deref(), Some("echo failed"));

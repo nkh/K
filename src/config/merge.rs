@@ -248,7 +248,7 @@ mod tests {
     fn test_apply_profile_overrides_display() {
         let base = Config::default();
         let mut profile = PartialConfig::default();
-        let custom_display = crate::config::display::DisplayConfig {
+        let custom_display = crate::config::schema::DisplayConfig {
             enabled: true,
             refresh_ms: 500,
             display_all: true,

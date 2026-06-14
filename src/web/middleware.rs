@@ -12,7 +12,7 @@ use serde_json::json;
 use std::time::Instant;
 use tracing;
 
-use crate::config::security::CorsConfig;
+use crate::config::schema::CorsConfig;
 
 /// CORS layer configuration.
 ///

@@ -10,7 +10,7 @@ use axum::{
 use super::handlers;
 use super::middleware::{auth_middleware, cors_layer, error_handler, request_logger};
 use super::state::AppState;
-use crate::config::security::CorsConfig;
+use crate::config::schema::CorsConfig;
 
 pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
     // API routes — protected by auth middleware when auth is enabled
