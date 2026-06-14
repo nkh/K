@@ -4,30 +4,37 @@
 //! specific error conditions. Implements `std::error::Error` for
 //! automatic conversion to `anyhow::Error` at the binary boundary.
 
-use std::fmt;
+use thiserror::Error;
 
 /// Typed error type for process management operations.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ProcessError {
     /// Underlying I/O error.
-    Io(std::io::Error),
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
 
     /// No command with the given ID in the manager.
+    #[error("Command {0} not found")]
     CommandNotFound(String),
 
     /// Duplicate command ID.
+    #[error("Command {0} is already registered")]
     CommandAlreadyExists(String),
 
     /// Failed to spawn a child process.
+    #[error("Failed to spawn process '{cmd}'")]
     SpawnFailed { cmd: String },
 
     /// Unknown sink type.
+    #[error("Unknown sink type '{0}'. Supported: file, vtty, null")]
     UnknownSinkType(String),
 
     /// Duplicate sink name for a command.
+    #[error("Sink '{name}' is already registered for command {command_id}")]
     SinkAlreadyExists { name: String, command_id: String },
 
     /// OS signal delivery failed.
+    #[error("Failed to send {signal} to command {id}: {signal} returned {code}")]
     SignalFailed {
         id: String,
         signal: String,
@@ -35,75 +42,17 @@ pub enum ProcessError {
     },
 
     /// Stdin channel was closed.
+    #[error("stdin channel closed for command {0}")]
     ChannelClosed(String),
 
     /// Named buffer snapshot does not exist.
+    #[error("Snapshot '{name}' not found for command {command_id}")]
     SnapshotNotFound { name: String, command_id: String },
 
     /// Unix-only operation on non-Unix.
+    #[error("{0} is only supported on Unix-like systems")]
     PlatformNotSupported(String),
-}
-
-impl fmt::Display for ProcessError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Io(e) => write!(f, "I/O error: {}", e),
-            Self::CommandNotFound(id) => write!(f, "Command {} not found", id),
-            Self::CommandAlreadyExists(id) => {
-                write!(f, "Command {} is already registered", id)
-            }
-            Self::SpawnFailed { cmd } => {
-                write!(f, "Failed to spawn process '{}'", cmd)
-            }
-            Self::UnknownSinkType(t) => {
-                write!(f, "Unknown sink type '{}'. Supported: file, vtty, null", t)
-            }
-            Self::SinkAlreadyExists { name, command_id } => {
-                write!(
-                    f,
-                    "Sink '{}' is already registered for command {}",
-                    name, command_id
-                )
-            }
-            Self::SignalFailed { id, signal, code } => {
-                write!(
-                    f,
-                    "Failed to send {} to command {}: {} returned {}",
-                    signal, id, signal, code
-                )
-            }
-            Self::ChannelClosed(id) => {
-                write!(f, "stdin channel closed for command {}", id)
-            }
-            Self::SnapshotNotFound { name, command_id } => {
-                write!(
-                    f,
-                    "Snapshot '{}' not found for command {}",
-                    name, command_id
-                )
-            }
-            Self::PlatformNotSupported(op) => {
-                write!(f, "{} is only supported on Unix-like systems", op)
-            }
-        }
-    }
-}
-
-impl std::error::Error for ProcessError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Io(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-
-impl From<std::io::Error> for ProcessError {
-    fn from(e: std::io::Error) -> Self {
-        Self::Io(e)
-    }
 }
 
 /// Module-local `Result` alias using [`ProcessError`].
 pub type Result<T> = std::result::Result<T, ProcessError>;
-

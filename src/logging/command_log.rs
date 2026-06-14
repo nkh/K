@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use chrono::Local;
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -11,7 +13,7 @@ const RESET: &str = "\x1b[0m";
 
 /// Shared in-memory log buffer type used by both the web UI handler
 /// and the terminal display loop.
-pub type SharedLogBuffer = Arc<Mutex<Vec<String>>>;
+pub type SharedLogBuffer = Arc<Mutex<VecDeque<String>>>;
 
 pub struct CommandLogger {
     enabled: bool,
@@ -46,7 +48,7 @@ impl CommandLogger {
         Ok(Self {
             enabled,
             file,
-            memory_buffer: Arc::new(Mutex::new(Vec::with_capacity(MEMORY_BUFFER_CAPACITY))),
+            memory_buffer: Arc::new(Mutex::new(VecDeque::with_capacity(MEMORY_BUFFER_CAPACITY))),
             log_tx,
             color_terminal_log,
             terminal_cfg,
@@ -312,9 +314,9 @@ impl CommandLogger {
         // regardless of whether file logging is enabled.
         if let Ok(mut buf) = self.memory_buffer.lock() {
             if buf.len() >= MEMORY_BUFFER_CAPACITY {
-                buf.remove(0);
+                buf.pop_front();
             }
-            buf.push(term_trimmed.clone());
+            buf.push_back(term_trimmed.clone());
         }
         let _ = self.log_tx.send(term_trimmed.clone());
 

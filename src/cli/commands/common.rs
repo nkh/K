@@ -604,7 +604,7 @@ impl VrwClient {
     }
 
     /// GET raw bytes from an endpoint (for screenshots etc).
-    pub async fn get_bytes(&self, path: &str) -> Result<bytes::Bytes> {
+    pub async fn get_bytes(&self, path: &str) -> Result<Vec<u8>> {
         let url = format!("{}{}", self.base_url, path);
         let resp = self.client.get(&url).send().await?;
         if !resp.status().is_success() {
@@ -612,7 +612,7 @@ impl VrwClient {
             let body = resp.text().await.unwrap_or_default();
             anyhow::bail!("HTTP {}: {}", status, body);
         }
-        Ok(resp.bytes().await?)
+        Ok(resp.bytes().await?.to_vec())
     }
 
     /// POST to a command action endpoint, check for ok status.

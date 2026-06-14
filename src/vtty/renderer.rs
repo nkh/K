@@ -3,18 +3,8 @@ use super::cell::Cell;
 
 /// Format an RGB triplet as a hex color string: "#RRGGBB".
 #[inline]
-fn hex_color(c: [u8; 3]) -> [u8; 7] {
-    let mut out = [b'#', 0, 0, 0, 0, 0, 0];
-    let hex = |b: u8| -> (u8, u8) {
-        let h = b >> 4;
-        let l = b & 0x0f;
-        (if h < 10 { b'0' + h } else { b'a' + h - 10 }, if l < 10 { b'0' + l } else { b'a' + l - 10 })
-    };
-    let (h0, l0) = hex(c[0]);
-    let (h1, l1) = hex(c[1]);
-    let (h2, l2) = hex(c[2]);
-    out[1] = h0; out[2] = l0; out[3] = h1; out[4] = l1; out[5] = h2; out[6] = l2;
-    out
+fn hex_color(c: [u8; 3]) -> String {
+    format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])
 }
 
 /// Renders a VTTY buffer to various output formats.
@@ -367,23 +357,15 @@ fn to_html_impl<'a>(rows: impl Iterator<Item = &'a [Cell]>, width: usize) -> Str
             // Write width in ch units: run_len * cell_ch
             let total_ch = run_len * cell_ch;
             if total_ch > 0 {
-                let mut buf = [0u8; 8];
-                let mut pos = buf.len();
-                let mut n = total_ch;
-                while n > 0 {
-                    pos -= 1;
-                    buf[pos] = b'0' + (n % 10) as u8;
-                    n /= 10;
-                }
-                html.push_str(std::str::from_utf8(&buf[pos..]).unwrap());
-                html.push_str("ch");
+                use std::fmt::Write;
+                let _ = write!(html, "{}ch", total_ch);
             } else {
                 html.push('0');
             }
             html.push_str(";color:");
-            html.push_str(std::str::from_utf8(&fg_hex).unwrap());
+            html.push_str(&fg_hex);
             html.push_str(";background:");
-            html.push_str(std::str::from_utf8(&bg_hex).unwrap());
+            html.push_str(&bg_hex);
             if bold {
                 html.push_str(";font-weight:bold");
             }
