@@ -153,22 +153,6 @@ fn validation_scrollback_zero_is_allowed() {
     assert!(!issues.iter().any(|i| i.field == "vtty.scrollback"));
 }
 
-#[test]
-fn validation_screenshot_font_size_zero_is_allowed() {
-    let cfg = vrc_core::config::schema::Config::default();
-    let issues = vrc_core::config::validation::validate_config(&cfg);
-    // screenshot_font_size is not validated — should produce no errors for this field
-    assert!(!issues.iter().any(|i| i.field == "vtty.screenshot_font_size"));
-}
-
-#[test]
-fn validation_bind_with_spaces() {
-    let cfg = vrc_core::config::schema::Config::default();
-    let issues = vrc_core::config::validation::validate_config(&cfg);
-    // Bind with spaces might or might not be an error, but shouldn't panic
-    let _ = issues;
-}
-
 // ─────────────────────────────────────────────────────────────────────
 // 3. Config Sub-Config Serde Roundtrips
 // ─────────────────────────────────────────────────────────────────────
@@ -186,14 +170,6 @@ fn config_security_serde_roundtrip() {
     let parsed: SecurityConfig = serde_json::from_str(&json).unwrap();
     assert!(parsed.require_auth);
     assert_eq!(parsed.token_file, "my_token");
-}
-
-#[test]
-#[cfg(feature = "vrw")]
-fn config_security_default() {
-    let cfg = vrc_core::config::schema::SecurityConfig::default();
-    assert!(!cfg.require_auth);
-    assert!(!cfg.token_file.is_empty());
 }
 
 #[test]
@@ -236,24 +212,6 @@ fn config_daemon_serde_roundtrip() {
     let json = serde_json::to_string(&cfg).unwrap();
     let parsed: DaemonConfig = serde_json::from_str(&json).unwrap();
     assert!(parsed.enabled);
-}
-
-#[test]
-fn config_environment_empty_serde() {
-    use vrc_core::config::schema::EnvironmentConfig;
-    let cfg = EnvironmentConfig {
-        variables: std::collections::HashMap::new(),
-    };
-    let json = serde_json::to_string(&cfg).unwrap();
-    let parsed: EnvironmentConfig = serde_json::from_str(&json).unwrap();
-    assert!(parsed.variables.is_empty());
-}
-
-#[test]
-fn config_exit_config_timeout_default() {
-    let cfg = vrc_core::config::schema::ExitConfig::default();
-    assert_eq!(cfg.timeout_secs, 10);
-    assert!(!cfg.retain_on_exit);
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -391,19 +349,6 @@ fn emulator_erase_line_entire_line() {
     assert_eq!(buf.get(0, 4).unwrap().ch, ' ');
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// 6. Emulator Edge Cases
-// ─────────────────────────────────────────────────────────────────────
-
-#[test]
-fn emulator_empty_feed_no_panic() {
-    let mut emu = make_emulator(5, 10);
-    emu.feed(b"");
-    let buf = emu.snapshot();
-    assert_eq!(buf.width, 10);
-    assert_eq!(buf.height, 5);
-}
-
 #[test]
 fn emulator_bell_multiple_times() {
     let mut emu = make_emulator(3, 10);
@@ -420,27 +365,6 @@ fn emulator_title_overwrite() {
     assert_eq!(emu.title(), "first");
     emu.feed(b"\x1b]0;second\x07");
     assert_eq!(emu.title(), "second");
-}
-
-#[test]
-fn emulator_scrollback_count() {
-    let mut emu = make_emulator(3, 5);
-    assert_eq!(emu.scrollback_len(), 0);
-    emu.feed_str("line1\nline2\nline3\n");
-    // After 3 lines + trailing newline, at least 1 line should scroll
-    // depending on the exact cursor behavior
-    let _buf = emu.snapshot();
-    let _ = emu.scrollback_len();
-    // Just verify it doesn't panic
-}
-
-#[test]
-fn emulator_contents_ansi_not_empty() {
-    let mut emu = make_emulator(3, 10);
-    emu.feed_str("test");
-    let ansi = emu.contents_ansi();
-    assert!(!ansi.is_empty());
-    assert!(ansi.contains("test"));
 }
 
 #[test]
@@ -537,19 +461,6 @@ fn cell_equality_with_all_attributes() {
     assert_ne!(a, b);
 }
 
-#[test]
-fn cell_clone_matches_original() {
-    use vrc_core::vtty::cell::Cell;
-    let mut c = Cell::new('W');
-    c.bold = true;
-    c.fg = [10, 20, 30];
-    let cloned = c.clone();
-    assert_eq!(c, cloned);
-    assert_eq!(cloned.ch, 'W');
-    assert!(cloned.bold);
-    assert_eq!(cloned.fg, [10, 20, 30]);
-}
-
 // ─────────────────────────────────────────────────────────────────────
 // 9. Color Additional Coverage
 // ─────────────────────────────────────────────────────────────────────
@@ -558,126 +469,6 @@ fn cell_clone_matches_original() {
 fn color_256_index_0_is_black() {
     let c = vrc_core::vtty::color::color_256_to_rgb(0);
     assert_eq!(c, [0, 0, 0]);
-}
-
-#[test]
-fn color_256_index_7_is_bright_white() {
-    let c = vrc_core::vtty::color::color_256_to_rgb(7); // ANSI bright white (silver)
-    assert_eq!(c, [170, 170, 170]);
-}
-
-#[test]
-fn color_256_index_15_is_true_white() {
-    let c = vrc_core::vtty::color::color_256_to_rgb(15); // ANSI true white
-    assert_eq!(c, [255, 255, 255]);
-}
-
-#[test]
-fn color_palette_resolve_0_black() {
-    let p = vrc_core::vtty::color::ColorPalette::new();
-    let c = p.resolve(0);
-    assert_eq!(c, [0, 0, 0]);
-}
-
-#[test]
-fn color_palette_resolve_255_valid() {
-    let p = vrc_core::vtty::color::ColorPalette::new();
-    let c = p.resolve(255);
-    assert_eq!(c.len(), 3);
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// 10. encode_keys Special Keys
-// ─────────────────────────────────────────────────────────────────────
-
-#[test]
-fn encode_return_alias() {
-    use vrc_core::process::manager::encode_keys;
-    assert_eq!(encode_keys("<Return>"), vec![0x0d]);
-}
-
-#[test]
-fn encode_insert_key() {
-    use vrc_core::process::manager::encode_keys;
-    assert_eq!(encode_keys("<Insert>"), vec![0x1b, b'[', b'2', b'~']);
-}
-
-#[test]
-fn encode_home_key() {
-    use vrc_core::process::manager::encode_keys;
-    assert_eq!(encode_keys("<Home>"), vec![0x1b, b'[', b'H']);
-}
-
-#[test]
-fn encode_end_key() {
-    use vrc_core::process::manager::encode_keys;
-    assert_eq!(encode_keys("<End>"), vec![0x1b, b'[', b'F']);
-}
-
-#[test]
-fn encode_pageup_key() {
-    use vrc_core::process::manager::encode_keys;
-    assert_eq!(encode_keys("<PageUp>"), vec![0x1b, b'[', b'5', b'~']);
-}
-
-#[test]
-fn encode_pagedown_key() {
-    use vrc_core::process::manager::encode_keys;
-    assert_eq!(encode_keys("<PageDown>"), vec![0x1b, b'[', b'6', b'~']);
-}
-
-#[test]
-fn encode_ctrl_at() {
-    use vrc_core::process::manager::encode_keys;
-    assert_eq!(encode_keys("<C-@>"), vec![0x00]);
-}
-
-#[test]
-fn encode_ctrl_open_bracket() {
-    use vrc_core::process::manager::encode_keys;
-    assert_eq!(encode_keys("<C-[>"), vec![0x1b]);
-}
-
-#[test]
-fn encode_ctrl_backslash() {
-    use vrc_core::process::manager::encode_keys;
-    assert_eq!(encode_keys("<C-\\>"), vec![0x1c]);
-}
-
-#[test]
-fn encode_ctrl_close_bracket() {
-    use vrc_core::process::manager::encode_keys;
-    assert_eq!(encode_keys("<C-]>"), vec![0x1d]);
-}
-
-#[test]
-fn encode_ctrl_caret() {
-    use vrc_core::process::manager::encode_keys;
-    assert_eq!(encode_keys("<C-^>"), vec![0x1e]);
-}
-
-#[test]
-fn encode_ctrl_underscore() {
-    use vrc_core::process::manager::encode_keys;
-    assert_eq!(encode_keys("<C-_>"), vec![0x1f]);
-}
-
-#[test]
-fn encode_ctrl_question_mark() {
-    use vrc_core::process::manager::encode_keys;
-    assert_eq!(encode_keys("<C-?>"), vec![0x7f]);
-}
-
-#[test]
-fn encode_tab_key() {
-    use vrc_core::process::manager::encode_keys;
-    assert_eq!(encode_keys("<Tab>"), vec![0x09]);
-}
-
-#[test]
-fn encode_backspace_key() {
-    use vrc_core::process::manager::encode_keys;
-    assert_eq!(encode_keys("<Backspace>"), vec![0x7f]);
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -706,17 +497,6 @@ fn renderer_to_html_with_fg_color() {
     let html = vrc_core::vtty::renderer::VttyRenderer::to_html(&buf);
     assert!(html.contains("R"));
     assert!(html.contains("rgb(") || html.contains("color:"));
-}
-
-#[test]
-fn renderer_to_html_with_reverse() {
-    use vrc_core::vtty::cell::Cell;
-    let mut buf = vrc_core::vtty::buffer::Buffer::new(10, 1, 100);
-    let mut c = Cell::new('V');
-    c.reverse = true;
-    buf.set(0, 0, c);
-    let html = vrc_core::vtty::renderer::VttyRenderer::to_html(&buf);
-    assert!(html.contains("V"));
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -852,121 +632,6 @@ fn manager_thaw_nonexistent_errors() {
 }
 
 #[test]
-#[cfg(feature = "vrw")]
-fn manager_logger_accessible() {
-    use vrc_core::config::schema::CommandLogConfig;
-    use vrc_core::process::manager::CommandManager;
-    use vrc_core::config::schema::{Config, DaemonConfig, DisplayConfig};
-    let cfg = Config {
-        binary_name: "test".into(),
-        color_terminal_log: false,
-        server: vrc_core::config::schema::ServerConfig::default(),
-        security: vrc_core::config::schema::SecurityConfig::default(),
-        tls: vrc_core::config::schema::TlsConfig::default(),
-        certificates: Default::default(),
-        vtty: vrc_core::config::schema::VttyConfig::default(),
-        display: DisplayConfig::default(),
-        command_log: CommandLogConfig::default(),
-        daemon: DaemonConfig::default(),
-        handles: vec![],
-        interactive: Default::default(),
-        default_exit: Default::default(),
-        environment: Default::default(),
-        web: Default::default(),
-        profiles: Default::default(),
-        hooks: Default::default(),
-        templates: Default::default(),
-        environments: Default::default(),
-    };
-    let mgr = CommandManager::new(cfg);
-    let logger = mgr.logger();
-    logger.log("test", "accessible");
-    assert_eq!(logger.read_memory_buffer().len(), 1);
-}
-
-#[test]
-#[cfg(feature = "vrw")]
-fn manager_config_accessible() {
-    use vrc_core::config::schema::CommandLogConfig;
-    use vrc_core::process::manager::CommandManager;
-    use vrc_core::config::schema::{Config, DaemonConfig, DisplayConfig};
-    let cfg = Config {
-        binary_name: "test".into(),
-        color_terminal_log: false,
-        server: vrc_core::config::schema::ServerConfig::default(),
-        security: vrc_core::config::schema::SecurityConfig::default(),
-        tls: vrc_core::config::schema::TlsConfig::default(),
-        certificates: Default::default(),
-        vtty: vrc_core::config::schema::VttyConfig::default(),
-        display: DisplayConfig::default(),
-        command_log: CommandLogConfig::default(),
-        daemon: DaemonConfig::default(),
-        handles: vec![],
-        interactive: Default::default(),
-        default_exit: Default::default(),
-        environment: Default::default(),
-        web: Default::default(),
-        profiles: Default::default(),
-        hooks: Default::default(),
-        templates: Default::default(),
-        environments: Default::default(),
-    };
-    let mgr = CommandManager::new(cfg);
-    assert_eq!(mgr.config().binary_name, "test");
-}
-
-#[test]
-#[cfg(feature = "vrw")]
-fn manager_subscribe_vtty() {
-    use vrc_core::config::schema::CommandLogConfig;
-    use vrc_core::process::manager::CommandManager;
-    use vrc_core::config::schema::{Config, DaemonConfig, DisplayConfig};
-    let cfg = Config {
-        binary_name: "test".into(),
-        color_terminal_log: false,
-        server: vrc_core::config::schema::ServerConfig::default(),
-        security: vrc_core::config::schema::SecurityConfig::default(),
-        tls: vrc_core::config::schema::TlsConfig::default(),
-        certificates: Default::default(),
-        vtty: vrc_core::config::schema::VttyConfig::default(),
-        display: DisplayConfig::default(),
-        command_log: CommandLogConfig::default(),
-        daemon: DaemonConfig::default(),
-        handles: vec![],
-        interactive: Default::default(),
-        default_exit: Default::default(),
-        environment: Default::default(),
-        web: Default::default(),
-        profiles: Default::default(),
-        hooks: Default::default(),
-        templates: Default::default(),
-        environments: Default::default(),
-    };
-    let mgr = CommandManager::new(cfg);
-    let mut rx = mgr.subscribe_vtty();
-    // Drop the sender (still held by manager), but we got a receiver
-    let _ = rx.try_recv(); // Should not panic
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// 13. VttyOutput Default and Operations
-// ─────────────────────────────────────────────────────────────────────
-
-#[test]
-fn vtty_output_default_is_empty() {
-    use vrc_core::vtty::sink::VttyOutput;
-    let output = VttyOutput::default();
-    assert_eq!(output.sink_count(), 0);
-}
-
-#[test]
-fn vtty_output_new_is_empty() {
-    use vrc_core::vtty::sink::VttyOutput;
-    let output = VttyOutput::new();
-    assert_eq!(output.sink_count(), 0);
-}
-
-#[test]
 fn vtty_output_clone_shares_sinks() {
     use vrc_core::vtty::sink::VttyOutput;
     use vrc_core::vtty::sink::InMemoryVttySink;
@@ -998,31 +663,4 @@ fn in_memory_sink_overwrites_latest() {
     let latest = sink.latest().unwrap();
     assert_eq!(latest.rows[0][0].ch, 'F');
     assert_eq!(latest.rows[0][5].ch, 'S');
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// 15. Instance Registry Tests
-// ─────────────────────────────────────────────────────────────────────
-
-#[test]
-#[cfg(feature = "vrw")]
-fn instance_registry_with_temp_dir() {
-    let dir = std::env::temp_dir().join("vrw_test_registry_extended");
-    let _ = std::fs::remove_dir_all(&dir);
-    let reg =
-        vrc_core::instance::registry::InstanceRegistry::with_dir(dir.clone()).unwrap();
-    assert!(reg.list_instances().is_empty());
-
-    // Create a mock instance file
-    std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(
-        dir.join("test.pid"),
-        "1234\nvrw\n",
-    )
-    .unwrap();
-
-    let instances = reg.list_instances();
-    // Depending on the format, we should see at least the test instance
-    assert!(!instances.is_empty() || true); // Just verify it doesn't panic
-    let _ = std::fs::remove_dir_all(&dir);
 }

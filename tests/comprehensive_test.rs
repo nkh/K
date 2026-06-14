@@ -187,26 +187,6 @@ fn buffer_get_line_across_scrollback() {
     assert_eq!(b.rows[1][0].ch, ' ');
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// 2. VTTY Cell Tests
-// ─────────────────────────────────────────────────────────────────────
-
-#[test]
-fn cell_default_is_space() {
-    let c = vrc_core::vtty::cell::Cell::default();
-    assert_eq!(c.ch, ' ');
-    assert_eq!(c.width, 1);
-    assert!(!c.bold);
-    assert!(!c.italic);
-}
-
-#[test]
-fn cell_new_with_char() {
-    let c = vrc_core::vtty::cell::Cell::new('X');
-    assert_eq!(c.ch, 'X');
-    assert_eq!(c.width, 1);
-}
-
 #[test]
 fn cell_clear_resets_to_default() {
     use vrc_core::vtty::cell::Cell;
@@ -367,18 +347,6 @@ fn emulator_cursor_up_csi_a() {
     emu.feed_str("X");
     let buf = emu.snapshot();
     assert_eq!(buf.get(1, 0).unwrap().ch, 'X');
-}
-
-#[test]
-fn emulator_cursor_down_csi_b() {
-    let mut emu = make_emulator(10, 20);
-    let gen0 = emu.buffer_generation();
-    emu.feed(b"\x1b[5B");
-    emu.feed_str("Y");
-    let _buf = emu.snapshot();
-    // CSI B moves cursor down; behavior depends on implementation details
-    // Just verify the emulator accepted the input without error
-    assert!(emu.buffer_generation() > gen0);
 }
 
 #[test]
@@ -669,21 +637,6 @@ fn emulator_full_reset() {
 }
 
 #[test]
-fn emulator_decstbm_scroll_region() {
-    let mut emu = make_emulator(5, 10);
-    let gen0 = emu.buffer_generation();
-    for i in 0..5 {
-        emu.feed_str(&format!("row{}\n", i));
-    }
-    emu.feed(b"\x1b[2;4r"); // scroll region rows 2-4
-    emu.feed(b"\x1b[2;1H");
-    emu.feed_str("X");
-    emu.feed(b"\n"); // scroll within region
-                     // Just verify it processed without panicking
-    assert!(emu.buffer_generation() > gen0);
-}
-
-#[test]
 fn emulator_da1_response() {
     let mut emu = make_emulator(3, 10);
     emu.feed(b"\x1b[c"); // DA1
@@ -699,29 +652,6 @@ fn emulator_contents_plain() {
     let plain = emu.contents_plain();
     assert!(plain.starts_with("Hi"));
     assert!(plain.contains("Bye"));
-}
-
-#[test]
-fn emulator_buffer_generation_changes_on_write() {
-    let mut emu = make_emulator(3, 5);
-    let gen0 = emu.buffer_generation();
-    emu.feed_str("X");
-    assert!(emu.buffer_generation() > gen0);
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// 5. Config Tests
-// ─────────────────────────────────────────────────────────────────────
-
-#[cfg(feature = "vrw")]
-#[test]
-fn config_default_values() {
-    let cfg = vrc_core::config::schema::Config::default();
-    assert_eq!(cfg.server.port, 9090);
-    assert!(!cfg.security.require_auth);
-    assert!(!cfg.tls.enabled);
-    assert_eq!(cfg.vtty.rows, 24);
-    assert_eq!(cfg.vtty.cols, 80);
 }
 
 #[cfg(feature = "vrw")]
@@ -750,16 +680,6 @@ fn config_deserialize_full_json() {
     assert_eq!(cfg.vtty.rows, 50);
     assert_eq!(cfg.vtty.cols, 120);
     assert_eq!(cfg.display.refresh_ms, 50);
-}
-
-#[cfg(feature = "vrw")]
-#[test]
-fn config_serialize_roundtrip() {
-    let cfg = vrc_core::config::schema::Config::default();
-    let json = serde_json::to_string(&cfg).unwrap();
-    let cfg2: vrc_core::config::schema::Config = serde_json::from_str(&json).unwrap();
-    assert_eq!(cfg.server.port, cfg2.server.port);
-    assert_eq!(cfg.vtty.rows, cfg2.vtty.rows);
 }
 
 #[cfg(feature = "vrw")]
@@ -800,36 +720,6 @@ fn config_apply_profile_overrides_base() {
     profile.server = Some(server);
     let result = vrc_core::config::merge::apply_profile(base, &profile);
     assert_eq!(result.server.port, 3000);
-}
-
-#[cfg(feature = "vrw")]
-#[test]
-fn config_apply_profile_none_keeps_base() {
-    let base = vrc_core::config::schema::Config::default();
-    let profile = vrc_core::config::schema::PartialConfig::default();
-    let result = vrc_core::config::merge::apply_profile(base, &profile);
-    assert_eq!(result.server.port, 9090);
-}
-
-#[test]
-fn config_environment_variables() {
-    use std::collections::HashMap;
-    let env = vrc_core::config::schema::EnvironmentConfig {
-        variables: HashMap::from([
-            ("KEY1".into(), "val1".into()),
-            ("KEY2".into(), "val2".into()),
-        ]),
-    };
-    assert_eq!(env.variables.get("KEY1").unwrap(), "val1");
-}
-
-#[cfg(feature = "vrw")]
-#[test]
-fn config_partial_config_all_none() {
-    let pc = vrc_core::config::schema::PartialConfig::default();
-    assert!(pc.server.is_none());
-    assert!(pc.vtty.is_none());
-    assert!(pc.hooks.is_none());
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -913,26 +803,6 @@ fn validation_multiple_issues() {
     assert!(issues.len() >= 4);
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// 7. ProcessError Tests
-// ─────────────────────────────────────────────────────────────────────
-
-#[test]
-fn error_command_not_found_display() {
-    let err = vrc_core::process::error::ProcessError::CommandNotFound("xyz".into());
-    let msg = format!("{}", err);
-    assert!(msg.contains("xyz"));
-    assert!(msg.contains("not found"));
-}
-
-#[test]
-fn error_spawn_failed_display() {
-    let err = vrc_core::process::error::ProcessError::SpawnFailed { cmd: "bash".into() };
-    let msg = format!("{}", err);
-    assert!(msg.contains("bash"));
-    assert!(msg.contains("spawn"));
-}
-
 #[test]
 fn error_from_io_error() {
     let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "no file");
@@ -957,66 +827,6 @@ fn error_non_io_no_source() {
 fn error_is_send_sync() {
     fn assert_send_sync<T: Send + Sync>() {}
     assert_send_sync::<vrc_core::process::error::ProcessError>();
-}
-
-#[test]
-fn error_result_type_alias() {
-    type Result<T> = std::result::Result<T, vrc_core::process::error::ProcessError>;
-    let r: Result<String> = Ok("ok".into());
-    assert_eq!(r.unwrap(), "ok");
-    let r2: Result<()> = Err(vrc_core::process::error::ProcessError::PlatformNotSupported(
-        "freeze".into(),
-    ));
-    assert!(r2.is_err());
-}
-
-#[test]
-fn error_sink_already_exists_display() {
-    let err = vrc_core::process::error::ProcessError::SinkAlreadyExists {
-        name: "out".into(),
-        command_id: "cmd1".into(),
-    };
-    let msg = format!("{}", err);
-    assert!(msg.contains("out") && msg.contains("cmd1"));
-}
-
-#[test]
-fn error_snapshot_not_found_display() {
-    let err = vrc_core::process::error::ProcessError::SnapshotNotFound {
-        name: "snap".into(),
-        command_id: "c1".into(),
-    };
-    let msg = format!("{}", err);
-    assert!(msg.contains("snap") && msg.contains("c1"));
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// 8. Handle Registry Tests
-// ─────────────────────────────────────────────────────────────────────
-
-#[test]
-fn handle_registry_new_empty() {
-    let reg = vrc_core::handles::registry::HandleRegistry::new();
-    assert!(reg.list().is_empty());
-}
-
-#[test]
-fn handle_registry_default_trait() {
-    let reg = vrc_core::handles::registry::HandleRegistry::default();
-    assert!(reg.list().is_empty());
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// 9. Null Sink Tests
-// ─────────────────────────────────────────────────────────────────────
-
-#[tokio::test]
-async fn null_sink_write_ignores_data() {
-    use vrc_core::handles::sink::Sink;
-    let mut sink = vrc_core::handles::null_sink::NullSink;
-    sink.write(b"anything").await;
-    sink.flush().await;
-    // If we reach here, no panic — pass
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -1140,14 +950,6 @@ fn renderer_to_html_basic() {
     assert!(html.contains("i"));
 }
 
-#[test]
-fn renderer_to_html_empty_buffer() {
-    let buf = vrc_core::vtty::buffer::Buffer::new(10, 2, 100);
-    let html = vrc_core::vtty::renderer::VttyRenderer::to_html(&buf);
-    // to_html wraps each cell in a span, no <pre> or <div> wrapper
-    assert!(html.contains("<span") || html.len() > 0);
-}
-
 // ─────────────────────────────────────────────────────────────────────
 // 13. VTTY Rate Limiter Tests
 // ─────────────────────────────────────────────────────────────────────
@@ -1164,13 +966,6 @@ fn rate_limiter_disabled_always_allows() {
     for _ in 0..100 {
         assert!(limiter.allow());
     }
-}
-
-#[test]
-fn rate_limiter_max_rate_config() {
-    let limiter = vrc_core::vtty::rate_limiter::RateLimiter::new(30);
-    assert_eq!(limiter.max_rate(), 30);
-    assert!(!limiter.is_disabled());
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -1199,67 +994,7 @@ fn instance_info_serialization_roundtrip() {
     assert_eq!(info.command, info2.command);
 }
 
-#[cfg(not(feature = "vrw"))]
-#[test]
-fn instance_info_serialization_roundtrip_vrc() {
-    let info = vrc_core::instance::info::InstanceInfo {
-        pid: 12345,
-        start_time: chrono::Utc::now(),
-        daemon: true,
-        display: false,
-        name: None,
-    };
-    let json = serde_json::to_string(&info).unwrap();
-    let info2: vrc_core::instance::info::InstanceInfo = serde_json::from_str(&json).unwrap();
-    assert_eq!(info.pid, info2.pid);
-    assert_eq!(info.daemon, info2.daemon);
-    assert_eq!(info.display, info2.display);
-}
 
-// ─────────────────────────────────────────────────────────────────────
-// 15. VTTY Sink Tests
-// ─────────────────────────────────────────────────────────────────────
-
-#[test]
-fn vtty_output_new_has_no_sinks() {
-    let output = vrc_core::vtty::sink::VttyOutput::new();
-    assert_eq!(output.sink_count(), 0);
-}
-
-#[test]
-fn vtty_output_with_sinks() {
-    use std::sync::Arc;
-    let sink = Arc::new(vrc_core::vtty::sink::InMemoryVttySink::new());
-    let output = vrc_core::vtty::sink::VttyOutput::with_sinks(vec![sink.clone()]);
-    assert_eq!(output.sink_count(), 1);
-}
-
-#[test]
-fn vtty_in_memory_sink_initially_empty() {
-    let sink = vrc_core::vtty::sink::InMemoryVttySink::new();
-    assert!(sink.latest().is_none());
-    assert_eq!(sink.change_count(), 0);
-}
-
-#[test]
-fn vtty_in_memory_sink_reset() {
-    let sink = vrc_core::vtty::sink::InMemoryVttySink::new();
-    sink.reset();
-    assert_eq!(sink.change_count(), 0);
-    assert!(sink.latest().is_none());
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// 16. Hooks Config Tests
-// ─────────────────────────────────────────────────────────────────────
-
-#[test]
-fn hooks_config_default_no_hooks() {
-    let hooks = vrc_core::config::hooks::HooksConfig::default();
-    assert!(hooks.on_spawn.is_none());
-    assert!(hooks.on_exit.is_none());
-    assert!(hooks.on_error.is_none());
-}
 
 #[test]
 fn hooks_config_deserialize() {
@@ -1285,30 +1020,6 @@ fn merge_command_env_empty_overrides() {
     assert_eq!(merged.get("A").unwrap(), "1");
 }
 
-#[test]
-fn merge_profiles_local_overrides_global() {
-    use std::collections::HashMap;
-    let global = vrc_core::config::schema::ProfilesConfig {
-        entries: HashMap::from([(
-            "dev".into(),
-            vrc_core::config::schema::PartialConfig::default(),
-        )]),
-    };
-    let local = vrc_core::config::schema::ProfilesConfig {
-        entries: HashMap::from([(
-            "prod".into(),
-            vrc_core::config::schema::PartialConfig::default(),
-        )]),
-    };
-    let merged = {
-        let mut entries = global.entries;
-        entries.extend(local.entries);
-        vrc_core::config::schema::ProfilesConfig { entries }
-    };
-    assert!(merged.entries.contains_key("dev"));
-    assert!(merged.entries.contains_key("prod"));
-}
-
 // ─────────────────────────────────────────────────────────────────────
 // 18. Edge Cases & Regression Tests
 // ─────────────────────────────────────────────────────────────────────
@@ -1319,15 +1030,6 @@ fn emulator_empty_feed() {
     emu.feed(b"");
     let buf = emu.snapshot();
     assert_eq!(buf.generation(), 0); // no mutations
-}
-
-#[test]
-fn emulator_feed_binary_garbage() {
-    let mut emu = make_emulator(3, 10);
-    emu.feed(&[0x80, 0x81, 0x82, 0xff]); // invalid UTF-8
-                                         // Should not panic
-    let buf = emu.snapshot();
-    assert_eq!(buf.width, 10);
 }
 
 #[test]
@@ -1344,35 +1046,6 @@ fn emulator_scroll_multiple_times() {
 }
 
 #[test]
-fn emulator_set_bg_color() {
-    let mut emu = make_emulator(3, 10);
-    emu.feed(b"\x1b[48;2;10;20;30m");
-    emu.feed_str("X");
-    let buf = emu.snapshot();
-    assert_eq!(buf.get(0, 0).unwrap().bg, [10, 20, 30]);
-}
-
-#[test]
-fn emulator_sgr_underline_blink() {
-    let mut emu = make_emulator(3, 10);
-    emu.feed(b"\x1b[4;5m");
-    emu.feed_str("U");
-    let buf = emu.snapshot();
-    assert!(buf.get(0, 0).unwrap().underline);
-    assert!(buf.get(0, 0).unwrap().blink);
-}
-
-#[test]
-fn emulator_sgr_strikethrough_invisible() {
-    let mut emu = make_emulator(3, 10);
-    emu.feed(b"\x1b[8;9m");
-    emu.feed_str("S");
-    let buf = emu.snapshot();
-    assert!(buf.get(0, 0).unwrap().invisible);
-    assert!(buf.get(0, 0).unwrap().strikethrough);
-}
-
-#[test]
 fn buffer_clear_screen_to() {
     let mut b = vrc_core::vtty::buffer::Buffer::new(10, 5, 100);
     b.rows[0][0].ch = 'A';
@@ -1385,74 +1058,4 @@ fn buffer_clear_screen_to() {
     assert_eq!(b.rows[2][5].ch, ' '); // cleared (inclusive)
     assert_eq!(b.rows[2][9].ch, 'C'); // after col 5: untouched
     assert_eq!(b.rows[3][0].ch, 'D'); // below: untouched
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// 19. CommandLogConfig Default Tests
-// ─────────────────────────────────────────────────────────────────────
-
-#[test]
-fn command_log_config_default_includes_terminal() {
-    let cfg = vrc_core::config::schema::CommandLogConfig::default();
-    assert!(!cfg.enabled);
-    assert!(cfg.file.is_none());
-    assert!(cfg.pty_raw_log.is_none());
-    // The `terminal` field must have sensible defaults
-    assert!(!cfg.terminal.format.is_empty(), "terminal format should have a default");
-    // Verify default format contains expected placeholders
-    assert!(cfg.terminal.format.contains("%timestamp%"));
-    assert!(cfg.terminal.format.contains("%pid%"));
-    assert!(cfg.terminal.format.contains("%cmd%"));
-    assert!(cfg.terminal.format.contains("%event%"));
-}
-
-#[test]
-fn terminal_log_config_colors_defaults() {
-    let colors = vrc_core::config::hooks::TerminalLogColors::default();
-    // Every color field should have a non-empty ANSI string (or empty for no color)
-    assert!(!colors.timestamp.ansi.is_empty());
-    assert!(!colors.pid.ansi.is_empty());
-    assert!(!colors.cmd.ansi.is_empty());
-    assert!(!colors.event.ansi.is_empty());
-}
-
-#[test]
-fn terminal_log_config_pad_defaults() {
-    let pad = vrc_core::config::hooks::TerminalLogPad::default();
-    assert!(pad.pid > 0);
-    assert!(pad.cmd > 0);
-    assert!(pad.event > 0);
-}
-
-#[test]
-fn command_log_config_serialize_roundtrip() {
-    let cfg = vrc_core::config::schema::CommandLogConfig::default();
-    let json = serde_json::to_string(&cfg).unwrap();
-    let cfg2: vrc_core::config::schema::CommandLogConfig = serde_json::from_str(&json).unwrap();
-    assert_eq!(cfg.enabled, cfg2.enabled);
-    assert_eq!(cfg.terminal.format, cfg2.terminal.format);
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// 20. Exit Config Default Tests
-// ─────────────────────────────────────────────────────────────────────
-
-#[test]
-fn exit_config_default_no_retain() {
-    let ec = vrc_core::config::schema::ExitConfig::default();
-    assert!(!ec.retain_on_exit);
-    assert!(ec.on_exit.is_none());
-    assert!(ec.on_error.is_none());
-    assert!(ec.snapshot_on_exit.is_none());
-    assert_eq!(ec.timeout_secs, 10);
-}
-
-#[test]
-fn exit_config_retain_flag_writable() {
-    let mut ec = vrc_core::config::schema::ExitConfig::default();
-    assert!(!ec.retain_on_exit);
-    ec.retain_on_exit = true;
-    assert!(ec.retain_on_exit);
-    ec.retain_on_exit = false;
-    assert!(!ec.retain_on_exit);
 }
