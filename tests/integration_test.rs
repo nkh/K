@@ -79,15 +79,10 @@ async fn test_spawn_and_list() {
 
     let id = manager
         .spawn(
-            "echo".to_string(),
-            vec!["hello".to_string()],
-            None,
-            None,
-            std::collections::HashMap::new(),
-            None,
-            None,
-            None,
-        )
+            vrc_core::process::manager::SpawnOptions::new("echo".to_string())
+                .args(vec!["hello".to_string()])
+                .env_vars(std::collections::HashMap::new()),
+            )
         .await
         .unwrap();
 
@@ -107,15 +102,10 @@ async fn test_vtty_contents() {
 
     let id = manager
         .spawn(
-            "echo".to_string(),
-            vec!["test_output".to_string()],
-            None,
-            None,
-            std::collections::HashMap::new(),
-            None,
-            None,
-            None,
-        )
+            vrc_core::process::manager::SpawnOptions::new("echo".to_string())
+                .args(vec!["test_output".to_string()])
+                .env_vars(std::collections::HashMap::new()),
+            )
         .await
         .unwrap();
 
@@ -142,15 +132,10 @@ async fn test_send_keys() {
     // Spawn a shell that reads input (cat is good for testing)
     let id = manager
         .spawn(
-            "cat".to_string(),
-            vec![],
-            None,
-            None,
-            std::collections::HashMap::new(),
-            None,
-            None,
-            None,
-        )
+            vrc_core::process::manager::SpawnOptions::new("cat".to_string())
+                .args(vec![])
+                .env_vars(std::collections::HashMap::new()),
+            )
         .await
         .unwrap();
 
@@ -201,15 +186,10 @@ async fn test_restart_keeps_manager_nonempty() {
     // Spawn initial command (simulates the CLI-spawned "direct child")
     let old_id = manager
         .spawn(
-            "sleep".to_string(),
-            vec!["60".to_string()],
-            None,
-            None,
-            std::collections::HashMap::new(),
-            None,
-            None,
-            None,
-        )
+            vrc_core::process::manager::SpawnOptions::new("sleep".to_string())
+                .args(vec!["60".to_string()])
+                .env_vars(std::collections::HashMap::new()),
+            )
         .await
         .unwrap();
 
@@ -220,15 +200,10 @@ async fn test_restart_keeps_manager_nonempty() {
     // This matches web::handlers::commands::restart_command exactly.
     let new_id = manager
         .spawn(
-            "sleep".to_string(),
-            vec!["60".to_string()],
-            None,
-            None,
-            std::collections::HashMap::new(),
-            None,
-            None,
-            None,
-        )
+            vrc_core::process::manager::SpawnOptions::new("sleep".to_string())
+                .args(vec!["60".to_string()])
+                .env_vars(std::collections::HashMap::new()),
+            )
         .await
         .unwrap();
 
@@ -262,30 +237,20 @@ async fn test_restart_single_command() {
 
     let old_id = manager
         .spawn(
-            "echo".to_string(),
-            vec!["hello".to_string()],
-            None,
-            None,
-            std::collections::HashMap::new(),
-            None,
-            None,
-            None,
-        )
+            vrc_core::process::manager::SpawnOptions::new("echo".to_string())
+                .args(vec!["hello".to_string()])
+                .env_vars(std::collections::HashMap::new()),
+            )
         .await
         .unwrap();
 
     // Spawn replacement before killing (same order as restart handler)
     let new_id = manager
         .spawn(
-            "sleep".to_string(),
-            vec!["60".to_string()],
-            None,
-            None,
-            std::collections::HashMap::new(),
-            None,
-            None,
-            None,
-        )
+            vrc_core::process::manager::SpawnOptions::new("sleep".to_string())
+                .args(vec!["60".to_string()])
+                .env_vars(std::collections::HashMap::new()),
+            )
         .await
         .unwrap();
 

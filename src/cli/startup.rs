@@ -51,14 +51,11 @@ pub async fn spawn_initial_command(
 
     let id = manager
         .spawn(
-            cmd,
-            args,
-            None,
-            per_command_exit,
-            cfg.environment.variables.clone(),
-            None,
-            None,
-            cli.working_directory.clone(),
+            crate::process::manager::SpawnOptions::new(cmd)
+                .args(args)
+                .exit_config(per_command_exit)
+                .env_vars(cfg.environment.variables.clone())
+                .dir(cli.working_directory.clone()),
         )
         .await?;
 

@@ -162,7 +162,14 @@ async fn dispatch_command(manager: &Arc<CommandManager>, cmd: ControlCommand) ->
         } => {
             let env_vars = env.unwrap_or_default();
             match manager
-                .spawn(command, args, None, None, env_vars, rows, cols, dir)
+                .spawn(
+                    crate::process::manager::SpawnOptions::new(command)
+                        .args(args)
+                        .env_vars(env_vars)
+                        .rows(rows)
+                        .cols(cols)
+                        .dir(dir),
+                )
                 .await
             {
                 Ok(id) => ControlResponse::Ok {
@@ -227,7 +234,9 @@ async fn dispatch_command(manager: &Arc<CommandManager>, cmd: ControlCommand) ->
             match info {
                 Some((name, args)) => {
                     match manager
-                        .spawn(name.clone(), args, None, None, std::collections::HashMap::new(), None, None, None)
+                        .spawn(
+                            crate::process::manager::SpawnOptions::new(name.clone()).args(args),
+                        )
                         .await
                     {
                         Ok(new_id) => {

@@ -171,14 +171,7 @@ pub(crate) async fn execute_context_menu_action(
                 drop(h);
                 match manager
                     .spawn(
-                        cmd,
-                        args,
-                        None,
-                        None,
-                        std::collections::HashMap::new(),
-                        None,
-                        None,
-                        None,
+                        crate::process::manager::SpawnOptions::new(cmd).args(args),
                     )
                     .await
                 {
@@ -216,14 +209,7 @@ pub(crate) async fn handle_spawn_command(manager: &Arc<CommandManager>) -> Spawn
             let args = parts[1..].iter().map(|s| s.to_string()).collect();
             match manager
                 .spawn(
-                    cmd,
-                    args,
-                    None,
-                    None,
-                    std::collections::HashMap::new(),
-                    None,
-                    None,
-                    None,
+                    crate::process::manager::SpawnOptions::new(cmd).args(args),
                 )
                 .await
             {

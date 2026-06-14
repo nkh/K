@@ -1,4 +1,5 @@
 use dashmap::DashMap;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use uuid::Uuid;
@@ -7,7 +8,7 @@ use super::error::{ProcessError, Result};
 
 use super::handle::CommandHandle;
 use super::spawner::ProcessSpawner;
-use crate::config::schema::Config;
+use crate::config::schema::{Config, ExitConfig};
 use crate::handles::{file_sink::FileSink, null_sink::NullSink, sink::Sink, vtty_sink::VttySink};
 use crate::hooks::runner::run_hook;
 use crate::logging::command_log::CommandLogger;
@@ -48,6 +49,42 @@ pub struct CommandManager {
     last_generation: Arc<DashMap<CommandId, u64>>,
 }
 
+/// Options for spawning a new command. Use `SpawnOptions::new()` and chain
+/// builder methods to set only the fields you need.
+pub struct SpawnOptions {
+    pub cmd: String,
+    pub args: Vec<String>,
+    pub certificate: Option<String>,
+    pub exit_config: Option<ExitConfig>,
+    pub env_vars: HashMap<String, String>,
+    pub rows: Option<u16>,
+    pub cols: Option<u16>,
+    pub dir: Option<String>,
+}
+
+impl SpawnOptions {
+    pub fn new(cmd: impl Into<String>) -> Self {
+        Self {
+            cmd: cmd.into(),
+            args: Vec::new(),
+            certificate: None,
+            exit_config: None,
+            env_vars: HashMap::new(),
+            rows: None,
+            cols: None,
+            dir: None,
+        }
+    }
+
+    pub fn args(mut self, args: Vec<String>) -> Self { self.args = args; self }
+    pub fn certificate(mut self, cert: Option<String>) -> Self { self.certificate = cert; self }
+    pub fn exit_config(mut self, cfg: Option<ExitConfig>) -> Self { self.exit_config = cfg; self }
+    pub fn env_vars(mut self, env: HashMap<String, String>) -> Self { self.env_vars = env; self }
+    pub fn rows(mut self, rows: Option<u16>) -> Self { self.rows = rows; self }
+    pub fn cols(mut self, cols: Option<u16>) -> Self { self.cols = cols; self }
+    pub fn dir(mut self, dir: Option<String>) -> Self { self.dir = dir; self }
+}
+
 impl CommandManager {
     pub fn new(config: Config) -> Self {
         let logger = Arc::new(
@@ -77,18 +114,8 @@ impl CommandManager {
     /// from `config.default_exit.exit` is used.  When `Some(...)`, the
     /// provided `ExitConfig` takes full precedence (on_exit, on_error,
     /// timeout_secs).
-    #[allow(clippy::too_many_arguments)]
-    pub async fn spawn(
-        &self,
-        cmd: String,
-        args: Vec<String>,
-        certificate: Option<String>,
-        exit_config: Option<crate::config::schema::ExitConfig>,
-        env_vars: std::collections::HashMap<String, String>,
-        rows: Option<u16>,
-        cols: Option<u16>,
-        dir: Option<String>,
-    ) -> Result<CommandId> {
+    pub async fn spawn(&self, opts: SpawnOptions) -> Result<CommandId> {
+        let SpawnOptions { cmd, args, certificate, exit_config, env_vars, rows, cols, dir } = opts;
         let id = Uuid::new_v4().to_string();
 
         // Use per-command exit config if provided, otherwise fall back to defaults

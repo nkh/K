@@ -178,14 +178,14 @@ pub async fn start_command(State(state): State<AppState>, Json(body): Json<Value
     match state
         .manager
         .spawn(
-            cmd,
-            args,
-            certificate,
-            Some(exit_config),
-            merged_env,
-            rows,
-            cols,
-            dir,
+            crate::process::manager::SpawnOptions::new(cmd)
+                .args(args)
+                .certificate(certificate)
+                .exit_config(Some(exit_config))
+                .env_vars(merged_env)
+                .rows(rows)
+                .cols(cols)
+                .dir(dir),
         )
         .await
     {
@@ -306,14 +306,7 @@ pub async fn restart_command(
     match state
         .manager
         .spawn(
-            final_cmd,
-            final_args,
-            None,
-            None,
-            std::collections::HashMap::new(),
-            None,
-            None,
-            None,
+            crate::process::manager::SpawnOptions::new(final_cmd).args(final_args),
         )
         .await
     {
