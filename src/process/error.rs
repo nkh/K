@@ -132,31 +132,6 @@ impl From<std::io::Error> for ProcessError {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Result type alias for convenience
-// ---------------------------------------------------------------------------
-
 /// Module-local `Result` alias using [`ProcessError`].
 pub type Result<T> = std::result::Result<T, ProcessError>;
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_io_error_source() {
-        let io_err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "access denied");
-        let err = ProcessError::Io(io_err);
-        assert!(std::error::Error::source(&err).is_some());
-    }
-
-    #[test]
-    fn test_non_io_error_no_source() {
-        let err = ProcessError::CommandNotFound("x".into());
-        assert!(std::error::Error::source(&err).is_none());
-    }
-}

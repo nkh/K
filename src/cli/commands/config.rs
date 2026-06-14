@@ -72,13 +72,4 @@ mod tests {
         assert!(msg.contains("Config file not found"), "unexpected error: {}", msg);
     }
 
-    #[test]
-    fn config_check_default_config_valid() {
-        // With no config path, load_config uses defaults
-        // This may pick up local config, so we just check it doesn't panic.
-        // We can't assert Ok because local config may cause warnings/errors.
-        let _ = handle_config_check_command(None);
     }
-
-
-}

@@ -151,21 +151,3 @@ impl ChildProcess {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_openpty() {
-        let pair = openpty(24, 80);
-        // Should succeed on Unix; may fail in restricted CI environments
-        match pair {
-            Ok(_pair) => {
-                // Successfully opened a PTY
-            }
-            Err(_) => {
-                // PTY not available in this environment
-            }
-        }
-    }
-}

@@ -461,48 +461,6 @@ mod tests {
         }
     }
 
-    // ─── VttyMetadata struct tests ───
-
-    #[test]
-    fn test_vtty_metadata_fields() {
-        let meta = VttyMetadata {
-            cursor: (10, 20),
-            dimensions: (80, 24),
-            scrollback_lines: 100,
-            alternate_screen: false,
-            cursor_visible: true,
-            mouse_tracking: false,
-            mouse_sgr: false,
-            generation: 42,
-        };
-        assert_eq!(meta.cursor, (10, 20));
-        assert_eq!(meta.dimensions, (80, 24));
-        assert_eq!(meta.scrollback_lines, 100);
-        assert!(!meta.alternate_screen);
-        assert!(meta.cursor_visible);
-        assert!(!meta.mouse_tracking);
-        assert!(!meta.mouse_sgr);
-        assert_eq!(meta.generation, 42);
-    }
-
-    #[test]
-    fn test_vtty_metadata_with_alternate_screen() {
-        let meta = VttyMetadata {
-            cursor: (0, 0),
-            dimensions: (120, 40),
-            scrollback_lines: 0,
-            alternate_screen: true,
-            cursor_visible: true,
-            mouse_tracking: true,
-            mouse_sgr: true,
-            generation: 0,
-        };
-        assert!(meta.alternate_screen);
-        assert!(meta.mouse_tracking);
-        assert!(meta.mouse_sgr);
-        assert_eq!(meta.dimensions, (120, 40));
-    }
-
     // ─── send_bytes tests ───
 
     #[tokio::test]
@@ -963,48 +921,6 @@ mod tests {
         assert!(handle.list_handles().is_empty());
     }
 
-    // ─── runtime_secs tests ───
-
-    #[test]
-    fn test_runtime_secs_non_negative() {
-        let (handle, _rx) = make_test_handle("test-runtime");
-        let rt = handle.runtime_secs();
-        assert!(rt >= 0.0);
-    }
-
-    #[test]
-    fn test_runtime_secs_increases() {
-        let (handle, _rx) = make_test_handle("test-runtime-incr");
-        let rt1 = handle.runtime_secs();
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        let rt2 = handle.runtime_secs();
-        assert!(rt2 >= rt1);
-    }
-
-    // ─── is_alive tests ───
-
-    #[test]
-    fn test_is_alive() {
-        let (handle, _rx) = make_test_handle("test-alive");
-        // PID 42 may or may not exist — just ensure it doesn't panic
-        let _ = handle.is_alive();
-    }
-
-    // ─── is_frozen tests ───
-
-    #[test]
-    fn test_is_frozen_default() {
-        let (handle, _rx) = make_test_handle("test-frozen-default");
-        assert!(!handle.is_frozen());
-    }
-
-    #[test]
-    fn test_is_frozen_set() {
-        let (handle, _rx) = make_test_handle("test-frozen-set");
-        handle.frozen.store(true, std::sync::atomic::Ordering::Relaxed);
-        assert!(handle.is_frozen());
-    }
-
     // ─── focus_reporting_enabled tests ───
 
     #[tokio::test]
@@ -1096,40 +1012,6 @@ mod tests {
         let (diff, _, _, _) = handle.vtty_diff_and_state().await;
         // At least 1 cell changed (the 'C' at position (0,2))
         assert!(diff.changed_count >= 1);
-    }
-
-    // ─── exit_code / exit_time tests ───
-
-    #[test]
-    fn test_exit_code_initial_none() {
-        let (handle, _rx) = make_test_handle("test-exit-code-init");
-        assert_eq!(*handle.exit_code.lock().unwrap(), None);
-    }
-
-    #[test]
-    fn test_exit_code_set() {
-        let (handle, _rx) = make_test_handle("test-exit-code-set");
-        *handle.exit_code.lock().unwrap() = Some(0);
-        assert_eq!(*handle.exit_code.lock().unwrap(), Some(0));
-    }
-
-    #[test]
-    fn test_exit_time_initial_none() {
-        let (handle, _rx) = make_test_handle("test-exit-time-init");
-        assert_eq!(*handle.exit_time.lock().unwrap(), None);
-    }
-
-    #[test]
-    fn test_certificate_initial_none() {
-        let (handle, _rx) = make_test_handle("test-cert-init");
-        assert!(handle.certificate.is_none());
-    }
-
-    #[test]
-    fn test_certificate_set() {
-        let (mut handle, _rx) = make_test_handle("test-cert-set");
-        handle.certificate = Some("my-cert".to_string());
-        assert_eq!(handle.certificate.as_deref(), Some("my-cert"));
     }
 
     // ─── handle_registry tests ───

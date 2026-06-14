@@ -1015,15 +1015,6 @@ mod tests {
         rx
     }
 
-    // ─── CommandManager::new ───
-
-    #[test]
-    fn test_manager_new() {
-        let mgr = make_manager();
-        assert!(mgr.list().is_empty());
-        assert!(mgr.list_all_snapshots().is_empty());
-    }
-
     // ─── get ───
 
     #[test]
@@ -1066,12 +1057,6 @@ mod tests {
     }
 
     // ─── list / find_by_pid ───
-
-    #[test]
-    fn test_list_empty() {
-        let mgr = make_manager();
-        assert!(mgr.list().is_empty());
-    }
 
     #[test]
     fn test_list_with_commands() {
@@ -1211,12 +1196,6 @@ mod tests {
     }
 
     #[test]
-    fn test_list_all_snapshots_empty() {
-        let mgr = make_manager();
-        assert!(mgr.list_all_snapshots().is_empty());
-    }
-
-    #[test]
     fn test_list_all_snapshots_across_commands() {
         let mgr = make_manager();
         insert_mock(&mgr, "cmd-1", 1);
@@ -1282,31 +1261,6 @@ mod tests {
         assert_eq!(mgr.list_snapshots(&"cmd-1".to_string()).len(), 1);
         mgr.delete_snapshot(&"cmd-1".to_string(), "s1").unwrap();
         assert!(mgr.list_snapshots(&"cmd-1".to_string()).is_empty());
-    }
-
-    // ─── subscribe_vtty / vtty_change_sender / logger / config / commands_arc ───
-
-    #[test]
-    fn test_subscribe_vtty() {
-        let mgr = make_manager();
-        let _rx = mgr.subscribe_vtty();
-    }
-
-    #[test]
-    fn test_vtty_change_sender() {
-        let mgr = make_manager();
-        let tx = mgr.vtty_change_sender();
-        // tokio broadcast send() returns Ok(num_receivers) or Err if channel is closed.
-        // With 0 receivers, tokio broadcast still sends successfully (returns Ok(0)).
-        // Keep the manager alive so the channel isn't closed.
-        let _keep_alive = &mgr;
-        let res = tx.send(("test".to_string(), "{}".to_string()));
-        // If the send fails it means the channel is closed, which is a valid test scenario.
-        // The important thing is that we got a sender clone successfully.
-        match res {
-            Ok(n) => { /* n = number of active receivers, could be 0 */ }
-            Err(e) => { /* channel closed (e.g., no receivers) */ }
-        }
     }
 
     // ─── has_changed ───

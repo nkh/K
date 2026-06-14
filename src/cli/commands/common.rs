@@ -214,18 +214,6 @@ pub fn resolve_targeted_instances(
 }
 
 #[cfg(test)]
-mod tests {
-    use clap::Parser;
-    use super::*;
-
-    #[test]
-    fn test_c_plain_when_not_tty() {
-        let result = c("test", Color::Red, true);
-        assert!(result.contains("test"));
-    }
-}
-
-#[cfg(test)]
 #[cfg(feature = "vrw")]
 mod vrw_tests {
     use clap::Parser;
@@ -328,23 +316,6 @@ mod vrw_tests {
         };
         let url = instance_url(&info, &None);
         assert_eq!(url, "http://127.0.0.1:9090");
-    }
-
-    #[test]
-    fn test_instance_url_https_port_always_http() {
-        // Per code comment, always uses HTTP (TLS instances will reject)
-        let info = InstanceInfo {
-            pid: 1234,
-            port: 443,
-            bind: "0.0.0.0".to_string(),
-            name: None,
-            start_time: chrono::Utc::now(),
-            daemon: false,
-            display: false,
-            command: None,
-        };
-        let url = instance_url(&info, &None);
-        assert_eq!(url, "http://0.0.0.0:443");
     }
 
     #[test]

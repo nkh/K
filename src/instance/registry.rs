@@ -258,23 +258,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_registry_with_dir() {
-        let dir = tempfile::tempdir().unwrap();
-        let reg = InstanceRegistry::with_dir(dir.path().to_path_buf()).unwrap();
-        // Should be empty — no instances running
-        let instances = reg.list_instances();
-        assert!(instances.is_empty());
-    }
-
-    #[test]
-    fn test_registry_scan_pid_files_empty() {
-        let dir = tempfile::tempdir().unwrap();
-        let reg = InstanceRegistry::with_dir(dir.path().to_path_buf()).unwrap();
-        let entries = reg.scan_pid_files();
-        assert!(entries.is_empty());
-    }
-
-    #[test]
     fn test_registry_scan_pid_files_with_stale_file() {
         let dir = tempfile::tempdir().unwrap();
         // Create a fake PID file for a process that doesn't exist

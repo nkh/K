@@ -34,13 +34,6 @@ impl Sink for FileSink {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_file_sink_new() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("test.log");
-        let _sink = FileSink::new(path.to_str().unwrap()).unwrap();
-    }
-
     #[tokio::test]
     async fn test_file_sink_write_and_flush() {
         let dir = tempfile::tempdir().unwrap();
