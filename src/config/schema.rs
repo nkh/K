@@ -1,16 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-// Re-export all domain modules so that `config::schema::*` still works
-// for every existing import site.
-pub use super::daemon::DaemonConfig;
+// Re-export remaining domain modules so that `config::schema::*` still works.
 pub use super::display::{DisplayConfig, InteractiveConfig, KeybindingsConfig};
-pub use super::environment::EnvironmentConfig;
-pub use super::handles::HandleConfig;
 pub use super::hooks::{CommandLogConfig, DefaultExitConfig, ExitConfig, HooksConfig};
-pub use super::profiles::ProfilesConfig;
 pub use super::templates::{TemplateConfig, TemplatesConfig};
 pub use super::environments::{EnvironmentCommand, EnvironmentPanel, WorkspaceEnvironment, EnvironmentsConfig};
-pub use super::vtty::VttyConfig;
 
 #[cfg(feature = "vrw")]
 pub use super::security::{
@@ -19,7 +13,144 @@ pub use super::security::{
 #[cfg(feature = "vrw")]
 pub use super::server::ServerConfig;
 #[cfg(feature = "vrw")]
-pub use super::web::{PanelColorEntry, RateLimitConfig, WebConfig};
+pub use super::web::{PanelColorEntry, WebConfig};
+
+// ── daemon ──
+
+/// Daemon (background process) settings.
+/// When enabled, vrc forks into the background after binding.
+/// Only available on Unix systems.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct DaemonConfig {
+    /// Run as a background daemon (Unix only).
+    pub enabled: bool,
+    /// File to redirect stdout to when daemonized.
+    pub stdout_file: String,
+    /// File to redirect stderr to when daemonized.
+    pub stderr_file: String,
+}
+
+impl Default for DaemonConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            stdout_file: "/tmp/vrc.out".to_string(),
+            stderr_file: "/tmp/vrc.err".to_string(),
+        }
+    }
+}
+
+// ── vtty ──
+
+/// Virtual terminal configuration.
+/// Controls the dimensions, TERM value, and capabilities of the pseudo-terminal
+/// allocated for each spawned command.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct VttyConfig {
+    /// Number of rows in the virtual terminal.
+    pub rows: u16,
+    /// Number of columns in the virtual terminal.
+    pub cols: u16,
+    /// The TERM value reported to child processes.
+    pub term: String,
+    /// Maximum number of scrollback lines retained.
+    pub scrollback: usize,
+    /// Enable 24-bit truecolor support.
+    pub truecolor: bool,
+    /// Enable mouse event forwarding.
+    pub mouse: bool,
+    /// Default font size for PNG screenshots (vrw only).
+    #[cfg(feature = "vrw")]
+    pub screenshot_font_size: f32,
+    /// Default font file path for PNG screenshots (vrw only).
+    #[cfg(feature = "vrw")]
+    pub screenshot_font_name: Option<String>,
+}
+
+impl Default for VttyConfig {
+    fn default() -> Self {
+        Self {
+            rows: 24,
+            cols: 80,
+            term: "xterm-256color".to_string(),
+            scrollback: 5000,
+            truecolor: true,
+            mouse: false,
+            #[cfg(feature = "vrw")]
+            screenshot_font_size: 14.0,
+            #[cfg(feature = "vrw")]
+            screenshot_font_name: None,
+        }
+    }
+}
+
+// ── handles ──
+
+/// A pre-configured output handle.
+/// Handles can be attached to spawned commands to direct their output
+/// to a file, VTTY, or null sink by name.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct HandleConfig {
+    /// Name of the handle (used as the identifier in the API).
+    pub name: String,
+    /// Sink type: "file", "vtty", or "null".
+    pub sink: String,
+    /// Path for file sinks. Supports {id} and {name} placeholders.
+    pub path: Option<String>,
+}
+
+// ── environment ──
+
+/// Environment variable configuration for spawned commands.
+///
+/// Variables defined here are applied to every spawned command unless:
+/// - The command is spawned with --no-env (CLI), which skips config env vars
+/// - The variable is overridden by a per-command env var (API or CLI)
+///
+/// Per-command environment variables (from API or CLI --env flags) are always
+/// merged on top of config environment variables, allowing overrides.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct EnvironmentConfig {
+    /// Key-value pairs of environment variables to set in child processes.
+    /// Example: { "RUST_LOG": "debug", "DATABASE_URL": "postgres://..." }
+    #[serde(default)]
+    pub variables: std::collections::HashMap<String, String>,
+}
+
+// ── profiles ──
+
+/// Named configuration profiles.
+///
+/// Each profile is a partial configuration that can be selected by name.
+/// When selected, only the fields present in the profile override the base config.
+/// This allows defining reusable configurations for different environments
+/// (e.g., "production", "development", "testing").
+///
+/// Example:
+/// ```yaml
+/// profiles:
+///   production:
+///     server:
+///       bind: "0.0.0.0"
+///     security:
+///       require_auth: true
+///     environment:
+///       variables:
+///         RUST_LOG: "warn"
+///   development:
+///     vtty:
+///       rows: 40
+///       cols: 120
+///     environment:
+///       variables:
+///         RUST_LOG: "debug"
+/// ```
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct ProfilesConfig {
+    /// Named configuration presets. The key is the profile name.
+    #[serde(default)]
+    pub entries: std::collections::HashMap<String, PartialConfig>,
+}
 
 /// Top-level configuration.
 ///

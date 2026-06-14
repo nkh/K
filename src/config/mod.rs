@@ -1,16 +1,11 @@
-pub mod daemon;
 pub mod display;
-pub mod environment;
 pub mod environments;
-pub mod handles;
 pub mod hooks;
 pub mod loader;
 pub mod merge;
-pub mod profiles;
 pub mod schema;
 pub mod templates;
 pub mod validation;
-pub mod vtty;
 
 #[cfg(feature = "vrw")]
 pub mod security;

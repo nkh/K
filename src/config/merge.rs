@@ -225,7 +225,7 @@ mod tests {
     fn test_apply_profile_overrides_vtty() {
         let base = Config::default();
         let mut profile = PartialConfig::default();
-        profile.vtty = Some(crate::config::vtty::VttyConfig {
+        profile.vtty = Some(crate::config::schema::VttyConfig {
             rows: 50,
             cols: 200,
             ..Default::default()

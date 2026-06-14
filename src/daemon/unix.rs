@@ -119,7 +119,7 @@ mod tests {
         let stdout_path = dir.path().join("test_out.log");
         let stderr_path = dir.path().join("test_err.log");
         let cfg = Config {
-            daemon: crate::config::daemon::DaemonConfig {
+            daemon: crate::config::schema::DaemonConfig {
                 enabled: true,
                 stdout_file: stdout_path.to_string_lossy().to_string(),
                 stderr_file: stderr_path.to_string_lossy().to_string(),
