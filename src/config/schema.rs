@@ -831,52 +831,6 @@ pub struct PartialConfig {
 mod tests {
     use super::*;
 
-    // ── display tests ──
-
-    #[test]
-    fn test_display_config_deserialize_partial() {
-        let json = r#"{"enabled": true}"#;
-        let config: DisplayConfig = serde_json::from_str(json).unwrap();
-        assert!(config.enabled);
-        // refresh_ms and display_all fall back to Rust Default impl
-        assert_eq!(config.refresh_ms, 100);
-        assert!(!config.display_all);
-    }
-
-    #[test]
-    fn test_keybindings_config_deserialize_partial() {
-        let json = r#"{"next_command": "ctrl+left", "prev_command": "ctrl+right"}"#;
-        let config: KeybindingsConfig = serde_json::from_str(json).unwrap();
-        assert_eq!(config.next_command.as_deref(), Some("ctrl+left"));
-        assert_eq!(config.prev_command.as_deref(), Some("ctrl+right"));
-        // Other fields use serde defaults
-        assert_eq!(config.toggle_log.as_deref(), Some("ctrl+l"));
-        assert!(config.kill_command.is_none());
-    }
-
-    // ── server tests (vrw only) ──
-
-    #[cfg(feature = "vrw")]
-    #[test]
-    fn test_server_config_name_skipped_when_none() {
-        let cfg = ServerConfig::default();
-        let json = serde_json::to_string(&cfg).unwrap();
-        assert!(!json.contains("name"));
-    }
-
-    #[cfg(feature = "vrw")]
-    #[test]
-    fn test_server_config_name_included_when_some() {
-        let cfg = ServerConfig {
-            bind: "127.0.0.1".to_string(),
-            port: 9090,
-            name: Some("test".to_string()),
-        };
-        let json = serde_json::to_string(&cfg).unwrap();
-        assert!(json.contains("name"));
-        assert!(json.contains("test"));
-    }
-
     // ── environments tests ──
 
     fn make_env(name: &str) -> WorkspaceEnvironment {

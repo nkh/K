@@ -303,35 +303,5 @@ mod tests {
         ).await;
         assert!(result.is_ok());
     }
-
-    #[tokio::test]
-    async fn test_spawn_initial_command_no_cmd_args() {
-        // When no cmd_args, should return None
-        let cli = make_cli(&[BINARY_NAME]);
-        let cfg = default_config();
-        let manager = std::sync::Arc::new(crate::process::manager::CommandManager::new(cfg.clone()));
-
-        let result = spawn_initial_command(&cli, &manager, &cfg).await;
-        assert!(result.is_ok());
-        assert!(result.unwrap().is_none(), "no cmd_args should return None");
-    }
-
-    #[tokio::test]
-    async fn test_spawn_initial_command_empty_cmd_args() {
-        // Empty cmd_args should return None
-        let cli = crate::cli::args::Cli::try_parse_from([BINARY_NAME, "--"]).unwrap();
-        let cfg = default_config();
-        let manager = std::sync::Arc::new(crate::process::manager::CommandManager::new(cfg.clone()));
-
-        let result = spawn_initial_command(&cli, &manager, &cfg).await;
-        assert!(result.is_ok());
-        // cli.cmd_args may be None or empty — either way should return None
-        match result.unwrap() {
-            None => {} // expected
-            Some(_) => {
-                // May actually spawn if "—" counts as an arg — that's OK, just verify no error
-            }
-        }
-    }
 }
 

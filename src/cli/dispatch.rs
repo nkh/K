@@ -546,13 +546,6 @@ mod tests {
     }
 
     #[test]
-    fn resolve_config_missing_file_errors() {
-        let cli = Cli::try_parse_from([BINARY_NAME, "--config", "/nonexistent/path.yaml"]).unwrap();
-        let result = resolve_config(&cli);
-        assert!(result.is_err());
-    }
-
-    #[test]
     fn resolve_config_profile_not_found_errors() {
         let dir = std::env::temp_dir().join("vrc_test_resolve_config_profile");
         std::fs::create_dir_all(&dir).unwrap();

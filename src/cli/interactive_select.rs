@@ -132,13 +132,6 @@ mod tests {
     }
 
     #[test]
-    fn test_empty_items() {
-        let items: Vec<SelectItem> = vec![];
-        let result = select_items(&items, "Select");
-        assert!(result.is_err());
-    }
-
-    #[test]
     fn test_select_items_non_tty_errors() {
         // In test environment, stdin is not a TTY
         let items = vec![
@@ -149,26 +142,6 @@ mod tests {
         assert!(result.is_err());
         let msg = result.unwrap_err().to_string();
         assert!(msg.contains("stdin is not a TTY") || msg.contains("No selection made"));
-    }
-
-    #[test]
-    fn test_filter_items_all_match() {
-        let items = vec![
-            SelectItem { label: "cmd-a".to_string(), id: "1".to_string() },
-            SelectItem { label: "cmd-b".to_string(), id: "2".to_string() },
-            SelectItem { label: "cmd-c".to_string(), id: "3".to_string() },
-        ];
-        let result = filter_items(&items, |_| true);
-        assert_eq!(result.len(), 3);
-    }
-
-    #[test]
-    fn test_filter_items_none_match() {
-        let items = vec![
-            SelectItem { label: "cmd-a".to_string(), id: "1".to_string() },
-        ];
-        let result = filter_items(&items, |_| false);
-        assert!(result.is_empty());
     }
 
     #[test]

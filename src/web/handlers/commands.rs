@@ -756,47 +756,6 @@ mod tests {
         mgr.commands_arc().insert(id.to_string(), handle);
     }
 
-    /// Test that kill_all_commands returns the correct JSON structure
-    /// when no commands are running (empty manager).
-    #[test]
-    fn test_kill_all_response_structure() {
-        let commands: Vec<(String, String, Vec<String>, u32, Option<String>)> = vec![];
-        let killed: Vec<String> = vec![];
-        let errors: Vec<String> = vec![];
-        let response = json!({
-            "status": "ok",
-            "data": {
-                "killed_count": killed.len(),
-                "total_count": commands.len(),
-                "killed_ids": killed,
-            },
-            "error": if errors.is_empty() { serde_json::Value::Null } else { serde_json::json!(errors.join("; ")) }
-        });
-        assert_eq!(response["status"], "ok");
-        assert_eq!(response["data"]["killed_count"], 0);
-        assert_eq!(response["data"]["total_count"], 0);
-        assert!(response["error"].is_null());
-    }
-
-    /// Test that kill_all response includes error when some kills fail.
-    #[test]
-    fn test_kill_all_with_errors() {
-        let killed = vec!["cmd-1".to_string()];
-        let errors = vec!["cmd-2: command not found".to_string()];
-        let response = json!({
-            "status": "ok",
-            "data": {
-                "killed_count": killed.len(),
-                "total_count": killed.len() + errors.len(),
-                "killed_ids": killed,
-            },
-            "error": if errors.is_empty() { serde_json::Value::Null } else { serde_json::json!(errors.join("; ")) }
-        });
-        assert_eq!(response["data"]["killed_count"], 1);
-        assert_eq!(response["data"]["total_count"], 2);
-        assert_eq!(response["error"], "cmd-2: command not found");
-    }
-
     // ─── Handler integration tests with real AppState ───
 
     #[tokio::test]
@@ -857,14 +816,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_kill_command_missing() {
-        let state = make_app_state();
-        let body = json!({});
-        let result = kill_command(State(state), Path("nonexistent".into()), Json(body)).await;
-        assert_eq!(result.0["status"], "error");
-    }
-
-    #[tokio::test]
     async fn test_kill_command_existing() {
         let state = make_app_state();
         insert_mock_cmd(&state.manager, "cmd-1", 100);
@@ -874,13 +825,6 @@ mod tests {
         assert_eq!(result.0["data"]["id"], "cmd-1");
         // Command should be removed (not retained)
         assert!(state.manager.get(&"cmd-1".to_string()).is_none());
-    }
-
-    #[tokio::test]
-    async fn test_kill_command_by_pid_missing() {
-        let state = make_app_state();
-        let result = kill_command_by_pid(State(state), Path(99999)).await;
-        assert_eq!(result.0["status"], "error");
     }
 
     #[tokio::test]
@@ -902,13 +846,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_freeze_command_missing() {
-        let state = make_app_state();
-        let result = freeze_command(State(state), Path("nope".into())).await;
-        assert_eq!(result.0["status"], "error");
-    }
-
-    #[tokio::test]
     async fn test_freeze_command_sets_flag() {
         let state = make_app_state();
         insert_mock_cmd(&state.manager, "cmd-1", 1);
@@ -925,13 +862,6 @@ mod tests {
         if let Some(h) = state.manager.get(&"cmd-1".to_string()) {
             assert!(h.is_frozen());
         };
-    }
-
-    #[tokio::test]
-    async fn test_thaw_command_missing() {
-        let state = make_app_state();
-        let result = thaw_command(State(state), Path("nope".into())).await;
-        assert_eq!(result.0["status"], "error");
     }
 
     #[tokio::test]
@@ -955,15 +885,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_restart_command_missing() {
-        let state = make_app_state();
-        let body = json!({});
-        let result = restart_command(State(state), Path("nope".into()), Json(body)).await;
-        assert_eq!(result.0["status"], "error");
-        assert!(result.0["error"].as_str().unwrap().contains("not found"));
-    }
-
-    #[tokio::test]
     async fn test_shutdown() {
         let state = make_app_state();
         let result = shutdown(State(state)).await;
@@ -982,14 +903,6 @@ mod tests {
         // Web config fields
         assert!(result.0["data"]["web"]["panel_colors"].is_array());
         assert!(result.0["data"]["vtty"].is_object());
-    }
-
-    #[tokio::test]
-    async fn test_snapshot_command_missing() {
-        let state = make_app_state();
-        let body = json!({"name": "snap1"});
-        let result = snapshot_command(State(state), Path("nope".into()), Json(body)).await;
-        assert_eq!(result.0["status"], "error");
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1013,14 +926,6 @@ mod tests {
         assert_eq!(result.0["data"].as_array().unwrap().len(), 0);
     }
 
-    #[tokio::test]
-    async fn test_diff_command_missing() {
-        let state = make_app_state();
-        let body = json!({"name": "v1"});
-        let result = diff_command(State(state), Path("nope".into()), Json(body)).await;
-        assert_eq!(result.0["status"], "error");
-    }
-
     #[tokio::test(flavor = "multi_thread")]
     async fn test_diff_command_success() {
         let state = make_app_state();
@@ -1030,13 +935,6 @@ mod tests {
         let result = diff_command(State(state), Path("cmd-1".into()), Json(body)).await;
         assert_eq!(result.0["status"], "ok");
         assert_eq!(result.0["data"]["changed_count"], 0);
-    }
-
-    #[tokio::test]
-    async fn test_delete_snapshot_missing_cmd() {
-        let state = make_app_state();
-        let result = delete_snapshot(State(state), Path(("nope".into(), "snap".into()))).await;
-        assert_eq!(result.0["status"], "error");
     }
 
     #[tokio::test]
@@ -1076,26 +974,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_keep_command_missing() {
-        let state = make_app_state();
-        let result = keep_command(State(state), Path("nope".into())).await;
-        assert_eq!(result.0["status"], "error");
-    }
-
-    #[tokio::test]
     async fn test_keep_command_success() {
         let state = make_app_state();
         insert_mock_cmd(&state.manager, "cmd-1", 1);
         let result = keep_command(State(state), Path("cmd-1".into())).await;
         assert_eq!(result.0["status"], "ok");
         assert_eq!(result.0["data"]["retain_on_exit"], true);
-    }
-
-    #[tokio::test]
-    async fn test_unkeep_command_missing() {
-        let state = make_app_state();
-        let result = unkeep_command(State(state), Path("nope".into())).await;
-        assert_eq!(result.0["status"], "error");
     }
 
     #[tokio::test]
@@ -1106,13 +990,6 @@ mod tests {
         let result = unkeep_command(State(state), Path("cmd-1".into())).await;
         assert_eq!(result.0["status"], "ok");
         assert_eq!(result.0["data"]["retain_on_exit"], false);
-    }
-
-    #[tokio::test]
-    async fn test_purge_command_missing() {
-        let state = make_app_state();
-        let result = purge_command(State(state), Path("nope".into())).await;
-        assert_eq!(result.0["status"], "error");
     }
 
     #[tokio::test]

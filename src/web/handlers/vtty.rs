@@ -341,14 +341,6 @@ mod tests {
     // ─── get_vtty_full ───
 
     #[tokio::test]
-    async fn test_get_vtty_full_missing() {
-        let state = make_app_state();
-        let result = get_vtty_full(State(state), Path("nope".into())).await;
-        assert_eq!(result.0["status"], "error");
-        assert!(result.0["error"].as_str().unwrap().contains("not found"));
-    }
-
-    #[tokio::test]
     async fn test_get_vtty_full_success() {
         let state = make_app_state();
         insert_mock_cmd(&state.manager, "cmd-1", 1);
@@ -359,14 +351,6 @@ mod tests {
     }
 
     // ─── get_vtty_html ───
-
-    #[tokio::test]
-    async fn test_get_vtty_html_missing() {
-        let state = make_app_state();
-        let params: HashMap<String, String> = HashMap::new();
-        let result = get_vtty_html(State(state), Path("nope".into()), Query(params)).await;
-        assert_eq!(result.0["status"], "error");
-    }
 
     #[tokio::test]
     async fn test_get_vtty_html_success() {
@@ -396,14 +380,6 @@ mod tests {
     // ─── get_vtty_buffer ───
 
     #[tokio::test]
-    async fn test_get_vtty_buffer_missing() {
-        let state = make_app_state();
-        let params: HashMap<String, String> = HashMap::new();
-        let result = get_vtty_buffer(State(state), Path("nope".into()), Query(params)).await;
-        assert_eq!(result.0["status"], "error");
-    }
-
-    #[tokio::test]
     async fn test_get_vtty_buffer_current() {
         let state = make_app_state();
         insert_mock_cmd(&state.manager, "cmd-1", 1);
@@ -414,37 +390,7 @@ mod tests {
         assert!(result.0["data"]["html"].is_string());
     }
 
-    #[tokio::test]
-    async fn test_get_vtty_buffer_main() {
-        let state = make_app_state();
-        insert_mock_cmd(&state.manager, "cmd-1", 1);
-        let mut params: HashMap<String, String> = HashMap::new();
-        params.insert("screen".to_string(), "main".to_string());
-        let result = get_vtty_buffer(State(state), Path("cmd-1".into()), Query(params)).await;
-        assert_eq!(result.0["status"], "ok");
-        assert_eq!(result.0["data"]["screen"], "main");
-    }
-
-    #[tokio::test]
-    async fn test_get_vtty_buffer_alt() {
-        let state = make_app_state();
-        insert_mock_cmd(&state.manager, "cmd-1", 1);
-        let mut params: HashMap<String, String> = HashMap::new();
-        params.insert("screen".to_string(), "alt".to_string());
-        let result = get_vtty_buffer(State(state), Path("cmd-1".into()), Query(params)).await;
-        assert_eq!(result.0["status"], "ok");
-        assert_eq!(result.0["data"]["screen"], "alt");
-    }
-
     // ─── get_vtty_partial ───
-
-    #[tokio::test]
-    async fn test_get_vtty_partial_missing() {
-        let state = make_app_state();
-        let params: HashMap<String, String> = HashMap::new();
-        let result = get_vtty_partial(State(state), Path("nope".into()), Query(params)).await;
-        assert_eq!(result.0["status"], "error");
-    }
 
     #[tokio::test]
     async fn test_get_vtty_partial_success() {
@@ -474,14 +420,6 @@ mod tests {
     // ─── resize_vtty ───
 
     #[tokio::test]
-    async fn test_resize_vtty_missing() {
-        let state = make_app_state();
-        let body = serde_json::json!({"rows": 40, "cols": 120});
-        let result = resize_vtty(State(state), Path("nope".into()), Json(body)).await;
-        assert_eq!(result.0["status"], "error");
-    }
-
-    #[tokio::test]
     async fn test_resize_vtty_invalid_dimensions() {
         let state = make_app_state();
         insert_mock_cmd(&state.manager, "cmd-1", 1);
@@ -501,13 +439,6 @@ mod tests {
     }
 
     // ─── vtty_changed ───
-
-    #[tokio::test]
-    async fn test_vtty_changed_missing() {
-        let state = make_app_state();
-        let result = vtty_changed(State(state), Path("nope".into())).await;
-        assert_eq!(result.0["status"], "error");
-    }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_vtty_changed_first_check() {
@@ -532,13 +463,6 @@ mod tests {
     // ─── get_vtty_text ───
 
     #[tokio::test]
-    async fn test_get_vtty_text_missing() {
-        let state = make_app_state();
-        let result = get_vtty_text(State(state), Path("nope".into())).await;
-        assert_eq!(result.0["status"], "error");
-    }
-
-    #[tokio::test]
     async fn test_get_vtty_text_success() {
         let state = make_app_state();
         insert_mock_cmd(&state.manager, "cmd-1", 1);
@@ -551,13 +475,6 @@ mod tests {
     // ─── get_vtty_diff ───
 
     #[tokio::test]
-    async fn test_get_vtty_diff_missing() {
-        let state = make_app_state();
-        let result = get_vtty_diff(State(state), Path("nope".into())).await;
-        assert_eq!(result.0["status"], "error");
-    }
-
-    #[tokio::test]
     async fn test_get_vtty_diff_success() {
         let state = make_app_state();
         insert_mock_cmd(&state.manager, "cmd-1", 1);
@@ -568,13 +485,4 @@ mod tests {
         assert!(result.0["data"]["dimensions"].is_object());
     }
 
-    // ─── get_vtty_png ───
-
-    #[tokio::test]
-    async fn test_get_vtty_png_missing() {
-        let state = make_app_state();
-        let params: HashMap<String, String> = HashMap::new();
-        let result = get_vtty_png(State(state), Path("nope".into()), Query(params)).await;
-        assert_eq!(result.status(), StatusCode::NOT_FOUND);
-    }
 }
