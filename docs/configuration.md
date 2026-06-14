@@ -88,7 +88,7 @@ Controls local terminal display of the VTTY output.
 | Key | Type | Default | CLI Flag | Description |
 |-----|------|---------|----------|-------------|
 | `enabled` | `bool` | `false` | `--display` / `--no-display` | Mirror VTTY output to the local terminal. |
-| `display_all` | `bool` | `false` | `--display-all` *(deprecated)* | Stay active after the initial CLI command exits, switching to the next available command. Now implicitly set when `display.enabled = true` via `--display`. The `--display-all` flag is no longer needed. |
+| `display_all` | `bool` | `false` | *(set implicitly by `--display`)* | Stay active after the initial CLI command exits, switching to the next available command. Automatically set to `true` when `--display` is used. |
 | `refresh_ms` | `u64` | `100` | `--refresh-ms <MS>` | Display refresh interval in milliseconds. |
 
 **Example:**
@@ -515,8 +515,7 @@ vrc [OPTIONS] [-- <COMMAND> [ARGS...]]
 
 | Flag | Argument | Config Key | Description |
 |------|----------|------------|-------------|
-| `--display` | — | `display.enabled` → `true` | Show VTTY output on the local terminal. |
-| `--display-all` | — | *(deprecated)* | Equivalent to `--display`. Kept for backward compatibility; `--display` now includes this behavior. |
+| `--display` | — | `display.enabled` → `true` | Show VTTY output on the local terminal. Also implicitly sets `display_all = true`. |
 | `--no-display` | — | `display.enabled` → `false` | Disable local terminal display. |
 | `--refresh-ms` | `<MS>` | `display.refresh_ms` | Display refresh interval in milliseconds. |
 

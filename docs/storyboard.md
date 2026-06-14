@@ -97,7 +97,7 @@ $ vrw --remote --tls --port 443 --daemon
 **Visual**: Full-screen terminal showing:
 
 ```bash
-$ vrw --display-all --tabs -- cargo test
+$ vrw --display --tabs -- cargo test
 ```
 
 **Visual**: Terminal renders the test output with full ANSI colors. Tab bar at the top shows all commands. `Ctrl+Right` switches to the next command. `Ctrl+F` opens a search bar. Mouse selection copies text to clipboard.

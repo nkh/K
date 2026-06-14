@@ -219,10 +219,10 @@ Add `--display` to mirror VTTY output to your terminal:
 vrc --display -- htop
 ```
 
-Add `--display-all` to stay in display mode after the command exits:
+Add `--display` to stay in display mode after the command exits:
 
 ```bash
-vrc --display-all --tabs -- htop
+vrc --display --tabs -- htop
 ```
 
 ### How do I switch between commands in the display?
