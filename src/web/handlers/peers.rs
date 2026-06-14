@@ -1,5 +1,5 @@
 #![cfg(feature = "vrw")]
-#![allow(dead_code, unused_imports)]
+
 //! Peer instance registration and discovery.
 
 use axum::{extract::{Path, State}, Json};

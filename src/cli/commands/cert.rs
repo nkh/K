@@ -1,5 +1,5 @@
 #![cfg(feature = "vrw")]
-#![allow(dead_code, unused_imports)]
+
 use anyhow::Result;
 
 use crate::cli::args::CertAction;

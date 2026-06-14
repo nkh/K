@@ -1,5 +1,5 @@
 #![cfg(feature = "vrw")]
-#![allow(dead_code, unused_imports)]
+
 pub mod admin;
 pub mod certificates;
 pub mod commands;

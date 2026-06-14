@@ -1,5 +1,5 @@
 #![cfg(feature = "vrw")]
-#![allow(dead_code, unused_imports)]
+
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::broadcast;
