@@ -62,7 +62,7 @@ pub async fn start_server(
         vtty_events,
         log_events,
         config.web.max_updates_per_sec,
-        1000,
+        config.web.ws_burst_window_ms,
     );
     let router = create_router(state, &config.security.cors);
     let app = router.into_make_service();

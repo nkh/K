@@ -614,9 +614,15 @@ pub struct WebConfig {
     /// Per-server panel header colors. Empty = built-in dark palette.
     #[serde(default)]
     pub panel_colors: Vec<PanelColorEntry>,
-    /// Max VTTY updates/sec/command. 0 = disabled.
+    /// Max VTTY dirty signals per WS client per burst window. 0 = unlimited.
     #[serde(default = "default_max_updates_per_sec")]
     pub max_updates_per_sec: u32,
+    /// Burst window duration in ms for WS dirty signal throttling.
+    /// Together with max_updates_per_sec, controls the rate at which
+    /// vtty_dirty signals are forwarded to each WebSocket client.
+    /// Default: 1000 (1 second).
+    #[serde(default = "default_ws_burst_window_ms")]
+    pub ws_burst_window_ms: u32,
 }
 
 /// A (background, text) color pair for panel headers.
@@ -637,12 +643,16 @@ impl Default for WebConfig {
             default_poll_ms: 500,
             panel_colors: Vec::new(),
             max_updates_per_sec: default_max_updates_per_sec(),
+            ws_burst_window_ms: default_ws_burst_window_ms(),
         }
     }
 }
 
 #[cfg(feature = "vrw")]
 fn default_max_updates_per_sec() -> u32 { 10 }
+
+#[cfg(feature = "vrw")]
+fn default_ws_burst_window_ms() -> u32 { 1000 }
 
 // ── daemon ──
 
