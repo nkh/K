@@ -644,7 +644,6 @@ impl CommandManager {
         self.evict_expired_baselines();
 
         let now = std::time::Instant::now();
-        let ttl = std::time::Duration::from_secs(60 * 60);
 
         match baseline_uuid {
             Some(uuid) if self.diff_baselines.contains_key(&(cmd_id.to_string(), uuid.to_string())) => {
