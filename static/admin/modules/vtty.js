@@ -153,11 +153,13 @@ function applyVttyDiffForPanel(panelObj, panelEl, data) {
             const entry = cg.grid[c.row][c.col];
             if (entry) {
                 if (entry.len === 1) {
-                    // Fast path: single-char span — update directly
-                    const ch = c.width === 0 ? '\u200b' : (c.ch === '\u0000' ? ' ' : c.ch);
+                    // Fast path: single-char span — update directly.
+                    // Server sends { row, col, cell: { ch, fg, bg, ..., width } }.
+                    const cell = c.cell;
+                    const ch = cell.width === 0 ? '\u200b' : (cell.ch === '\u0000' ? ' ' : cell.ch);
                     entry.span.textContent = _htmlEscapeChar(ch);
                     entry.span.setAttribute('style', _cellStyle(c));
-                    const wCls = c.width === 0 ? 'c w0' : c.width === 2 ? 'c w2' : 'c w1';
+                    const wCls = cell.width === 0 ? 'c w0' : cell.width === 2 ? 'c w2' : 'c w1';
                     entry.span.className = wCls;
                 } else {
                     // Slow path: split the merged span at the target position

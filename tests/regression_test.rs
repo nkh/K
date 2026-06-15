@@ -1015,12 +1015,17 @@ async fn regression_vtty_change_subscription() {
         .await
         .unwrap();
 
-    // Should receive at least one change notification
+    // Should receive a vtty_full or vtty_diff notification (the diff watcher
+    // sends vtty_full on the first poll since no previous buffer exists).
     tokio::select! {
         msg = rx.recv() => {
             let (cmd_id, json) = msg.unwrap();
             assert_eq!(cmd_id, id);
-            assert!(json.contains("vtty_dirty"));
+            assert!(
+                json.contains("vtty_full") || json.contains("vtty_diff"),
+                "expected vtty_full or vtty_diff, got: {}",
+                json
+            );
         }
         _ = tokio::time::sleep(Duration::from_secs(2)) => {
             // Timeout is acceptable — the notification is best-effort
@@ -1411,6 +1416,156 @@ async fn regression_vtty_generation_advances_on_write() {
         after_second_write,
         "has_changed() must return true after second write"
     );
+
+    let _ = manager.kill(&id, None).await;
+}
+
+/// Verify the diff watcher broadcasts well-formed vtty_diff messages
+/// that the web UI can parse and apply.
+///
+/// This test exercises the full push pipeline:
+///   1. Spawn a long-running command (cat) so the PTY stays open.
+///   2. Subscribe to the broadcast channel (same way ws.rs does).
+///   3. Write data to the PTY to trigger a buffer change.
+///   4. Wait for the diff watcher to detect the change and broadcast.
+///   5. Parse the received JSON and verify:
+///      - The message type is "vtty_full" (first poll) or "vtty_diff" (subsequent).
+///      - The "data" object contains the expected fields (generation, cursor,
+///        dimensions, cells for diffs / html for full).
+///      - The cell diff entries have the correct nested structure
+///        `{ row, col, cell: { ch, fg, bg, ..., width } }` that the
+///        client-side `applyVttyDiffForPanel()` expects.
+///   6. Write again and verify a second vtty_diff arrives with incremented
+///      generation and non-empty cells array.
+#[tokio::test(flavor = "multi_thread")]
+#[cfg(feature = "vrw")]
+async fn regression_diff_watcher_broadcasts_correct_format() {
+    let cfg = test_config();
+    let manager = Arc::new(CommandManager::new(cfg));
+
+    // Use cat so the PTY stays open and we can write to it.
+    let id = manager
+        .spawn(
+            vrc_core::process::manager::SpawnOptions::new("cat".to_string()),
+        )
+        .await
+        .unwrap();
+
+    // Subscribe BEFORE the first diff-watcher poll fires (200ms interval).
+    let mut rx = manager.subscribe_vtty();
+
+    // Wait for the initial vtty_full (first poll, no previous buffer).
+    let (cmd_id, json_str) = tokio::time::timeout(
+        Duration::from_secs(2),
+        rx.recv(),
+    )
+    .await
+    .expect("should receive initial vtty_full within 2s")
+    .unwrap();
+
+    assert_eq!(cmd_id, id);
+
+    // Parse and validate the initial message.
+    let msg: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+    let msg_type = msg.get("type").and_then(|v| v.as_str()).unwrap_or("");
+    assert_eq!(
+        msg_type, "vtty_full",
+        "first broadcast must be vtty_full, got: {}",
+        msg_type
+    );
+    let data = msg.get("data").expect("message must have 'data' field");
+    assert!(
+        data.get("html").is_some(),
+        "vtty_full data must contain 'html'"
+    );
+    assert!(
+        data.get("generation").is_some(),
+        "vtty_full data must contain 'generation'"
+    );
+    assert!(
+        data.get("cursor").is_some(),
+        "vtty_full data must contain 'cursor'"
+    );
+    assert!(
+        data.get("dimensions").is_some(),
+        "vtty_full data must contain 'dimensions'"
+    );
+    let first_gen = data.get("generation").and_then(|v| v.as_u64()).unwrap_or(0);
+
+    // Now write to the PTY to trigger a change that produces a vtty_diff.
+    if let Some(handle) = manager.get(&id) {
+        handle.send_bytes(b"hello diff test\n".to_vec()).await.unwrap();
+    }
+    // The diff watcher polls every 200ms; give it time to detect and broadcast.
+    let (cmd_id2, json_str2) = tokio::time::timeout(
+        Duration::from_secs(2),
+        rx.recv(),
+    )
+    .await
+    .expect("should receive vtty_diff within 2s after write")
+    .unwrap();
+
+    assert_eq!(cmd_id2, id);
+    let msg2: serde_json::Value = serde_json::from_str(&json_str2).unwrap();
+    let msg_type2 = msg2.get("type").and_then(|v| v.as_str()).unwrap_or("");
+    assert_eq!(
+        msg_type2, "vtty_diff",
+        "second broadcast must be vtty_diff, got: {}",
+        msg_type2
+    );
+    let data2 = msg2.get("data").expect("vtty_diff must have 'data'");
+    assert!(
+        data2.get("cells").is_some(),
+        "vtty_diff data must contain 'cells'"
+    );
+    assert!(
+        data2.get("generation").is_some(),
+        "vtty_diff data must contain 'generation'"
+    );
+    let second_gen = data2.get("generation").and_then(|v| v.as_u64()).unwrap_or(0);
+    assert!(
+        second_gen > first_gen,
+        "generation must advance: first={}, second={}",
+        first_gen, second_gen
+    );
+
+    // Verify the cell diff entries have the correct nested structure
+    // that the client's applyVttyDiffForPanel() expects:
+    //   { row, col, cell: { ch, fg, bg, bold, italic, ..., width } }
+    let cells = data2.get("cells").unwrap().as_array().unwrap();
+    assert!(
+        !cells.is_empty(),
+        "vtty_diff cells array must not be empty after a write"
+    );
+    for cell_entry in cells {
+        assert!(
+            cell_entry.get("row").is_some(),
+            "each cell entry must have 'row'"
+        );
+        assert!(
+            cell_entry.get("col").is_some(),
+            "each cell entry must have 'col'"
+        );
+        let nested_cell = cell_entry
+            .get("cell")
+            .expect("each cell entry must have nested 'cell' object");
+        assert!(
+            nested_cell.get("ch").is_some(),
+            "nested cell must have 'ch'"
+        );
+        assert!(
+            nested_cell.get("fg").is_some(),
+            "nested cell must have 'fg'"
+        );
+        assert!(
+            nested_cell.get("bg").is_some(),
+            "nested cell must have 'bg'"
+        );
+        assert!(
+            nested_cell.get("width").is_some(),
+            "nested cell must have 'width'"
+        );
+    }
 
     let _ = manager.kill(&id, None).await;
 }
