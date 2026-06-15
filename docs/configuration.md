@@ -462,20 +462,18 @@ certificates:
 
 ### `web` *(vrw only)*
 
-Controls web admin UI behavior including update modes and panel colors.
+Controls web server behavior including update throttling and panel colors.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `update_mode` | `enum` | `"push"` | How the web UI discovers buffer changes: `"push"` or `"poll"`. |
-| `dirty_check_ms` | `u64` | `200` | Server-side dirty-check interval in milliseconds (push mode). |
+| `max_updates_per_sec` | `u32` | `10` | Max `vtty_dirty` signals forwarded per WS session per second. Within a 1-second window, at most this many dirty events are sent to each client, evenly spaced. Set to `0` to disable throttling. Each WS connection to the same command is throttled independently. |
 | `default_poll_ms` | `u64` | `500` | Client-side polling interval in milliseconds (poll mode). |
 | `panel_colors` | `array` | (built-in palette) | Per-server background colors for panel headers in the web UI. Each entry defines a `background` and `text` color pair. If not specified, a built-in palette of 7 dark colors is used. |
 
 **Example:**
 ```yaml
 web:
-  update_mode: "push"
-  dirty_check_ms: 200
+  max_updates_per_sec: 10
   default_poll_ms: 500
   panel_colors:
     - background: "#1a1a2e"
@@ -529,6 +527,13 @@ vrc [OPTIONS] [-- <COMMAND> [ARGS...]]
 | `--no-log` | — | `command_log.enabled` → `false` | Suppress activity logging. Overrides `--log`. |
 | `--log-file` | `<FILE>` | `command_log.file` + `command_log.enabled` → `true` | Log commands to a file. |
 | `--log-pty-raw` | `<FILE>` | `command_log.pty_raw_log` | Log raw PTY output. |
+
+### Event Tracing Options
+
+| Flag | Short | Argument | Description |
+|------|-------|----------|-------------|
+| `--show-events` | `-v` | — | Enable event tracing to fd 3 (stackable: `-v`, `-vv`, `-vvv`). |
+| `--event-regexp` | — | `<REGEX>` | Filter traced events by regex. |
 
 ### Daemon Options
 

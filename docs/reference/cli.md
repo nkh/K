@@ -74,6 +74,7 @@ These options control the HTTP server that vrw starts.
 | `--register-with <port>` | — | — | Register this instance with another vrw server at the specified port. |
 | `--token-file <path>` | `~/.config/vrw/token` | `security.token_file` | Path to the bearer token file. If the file does not exist when auth is required, a cryptographically random 256-bit token is generated and saved. |
 | `--certificate <name:cert:key>` | — | `certificates` | Define a named certificate for the certificate pool. Repeatable. Format: `NAME:CERT:KEY`. |
+| `--max-updates-per-sec <n>` | `10` | `web.max_updates_per_sec` | Max `vtty_dirty` signals per WS session per second. Within a 1-second window, at most *n* dirty events are forwarded to each client, evenly spaced. `0` disables throttling. |
 
 ---
 
@@ -207,6 +208,38 @@ Use `--no-terminal-log` (or `-q`) to suppress this output:
 ```bash
 vrw --no-terminal-log -- python server.py        # silent — no event log
 vrw -q --daemon -- worker.sh                     # silent daemon
+```
+
+---
+
+## Event Tracing Options (Shared)
+
+Trace all server WebSocket and HTTP events to file descriptor 3 for debugging.
+
+| Flag | Default | Config Key | Description |
+|------|---------|------------|-------------|
+| `--show-events` | `-v` | `0` | — | Enable event tracing to fd 3. Stackable: `-v` basic (one line per event), `-vv` full payloads, `-vvv` internal detail. Redirect fd 3 to capture: `vrw -v htop 3>/tmp/events.log` |
+| `--event-regexp <regex>` | — | — | Filter `--show-events` output. Only lines matching the regex (applied to the full formatted line) are emitted. Example: `--event-regexp 'vtty_dirty'` |
+
+The trace output uses distinct arrows per direction and source:
+
+| Direction | Source | Arrow (plain) | Arrow (with `-F`) |
+|-----------|--------|---------------|-------------------|
+| Server → client (send) | WebSocket | `⇨` | bright green |
+| Client → server (recv) | WebSocket | `⇦` | bright cyan |
+| Server → client (send) | HTTP | `🠲` | bright magenta |
+| Client → server (recv) | HTTP | `🠰` | bright yellow |
+
+When `-F` / `--color-terminal-log` is set, the arrows and source labels are colored. The timestamp is dimmed.
+
+**Example — capture all events to a file:**
+```bash
+vrw -v -F -- htop 3>/tmp/events.log
+```
+
+**Example — only see dirty signals:**
+```bash
+vrw -v --event-regexp 'vtty_dirty' -- htop 3>/tmp/events.log
 ```
 
 ---

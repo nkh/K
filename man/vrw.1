@@ -145,6 +145,10 @@ Path to a custom PEM-encoded TLS private key file.
 .BR \-C ", " "\-\-certificate " \fINAME:CERT:KEY\fR
 Define a named certificate for the certificate pool. Can be repeated. Example: \fB\-\-certificate "myapp:/path/to/cert.pem:/path/to/key.pem"\fR.
 
+.TP
+.BR "\-\-max\-updates\-per\-sec " \fIN\fR
+Max vtty_dirty signals per WS session per second (default: \fB10\fR). Within a 1-second window, at most N dirty events are forwarded to each client, evenly spaced. Set to \fB0\fR to disable throttling.
+
 .SS VTTY Options
 
 .TP
@@ -200,8 +204,24 @@ VTTY display refresh interval in milliseconds (default: \fB100\fR).
 Suppress activity logging (spawning, stopping, resizing). Overrides \-\-log.
 
 .TP
+.BR \-\-no\-terminal\-log
+Suppress terminal event output when not in \-\-display mode. Events are still logged to the log file if \-\-log is active.
+
+.TP
 .BR \-q ", " \-\-quiet
-Alias for \-\-no\-log. Suppress all non-error logging output. Overrides \-\-log.
+Hidden alias for \-\-no\-terminal\-log.
+
+.TP
+.BR \-F ", " \-\-color\-terminal\-log
+Use ANSI color codes in terminal log output.
+
+.TP
+.BR \-v ", " \-\-show\-events
+Enable event tracing to file descriptor 3. Stackable: \-v basic, \-vv full payloads, \-vvv internal detail. Redirect fd 3 to capture output: \fBvrw \-v htop 3>/tmp/events.log\fR.
+
+.TP
+.BR "\-\-event\-regexp " \fIREGEX\fR
+Filter \-\-show\-events output. Only lines matching the regex are emitted. Example: \fB\-\-event\-regexp 'vtty_dirty'\fR.
 
 .TP
 .BR \-\-handle\-sigwinch

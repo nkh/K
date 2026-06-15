@@ -102,7 +102,7 @@ Lightweight dirty-change notification. Sent when the VTTY buffer has been modifi
 |-------|------|-------------|
 | `data.id` | string | Command UUID whose buffer changed |
 
-The server broadcasts `vtty_dirty` at a configurable interval (default: 200ms, controlled by `web.dirty_check_ms`). Rate limiting is applied per command (default: 30 updates/sec, controlled by `web.max_updates_per_sec`).
+The server broadcasts `vtty_dirty` immediately when the VTTY buffer changes (push-based, no polling). Per-session throttling limits how many dirty signals each WS connection receives: within a 1-second window, at most `web.max_updates_per_sec` (default: 10) dirty events are forwarded, evenly spaced. `vtty_close` always passes through unthrottled. Different WS connections to the same command are throttled independently.
 
 #### `command_ended`
 

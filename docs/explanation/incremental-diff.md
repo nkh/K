@@ -43,19 +43,19 @@ The diff engine lives in `vtty/renderer.rs`. It operates on a simple principle:
 maintain a snapshot of the last transmitted buffer and compare it cell-by-cell
 with the current buffer on each tick.
 
-### Polling Interval
+### Push-Based Notifications
 
-The diff engine polls the VTTY emulator every **200 milliseconds** (5 Hz). This
-interval balances two competing concerns:
+The VTTY emulator fires a `vtty_dirty` broadcast signal **immediately** when any
+PTY output modifies the buffer — there is no polling interval. The broadcast
+carries only the command ID, no cell data. Clients pull the actual diff
+content on demand via HTTP (`GET /api/commands/:id/vtty/diff?baseline=<uuid>`).
 
-- **Responsiveness** — A lower interval (e.g., 50ms) would reduce perceived
-  latency for fast-scrolling output but increase CPU usage and the number of
-  WebSocket messages.
-- **Efficiency** — A higher interval (e.g., 500ms) would batch more changes
-  into a single diff but make interactive input feel sluggish.
-
-200ms was chosen as the sweet spot for most terminal workloads. It is configurable
-via the `web.dirty_check_ms` configuration option.
+Per-session throttling on the server limits how many `vtty_dirty` signals each
+WebSocket connection receives: within a 1-second window, at most
+`web.max_updates_per_sec` (default: 10) dirty events are forwarded, evenly
+spaced. `vtty_close` always passes through unthrottled. Each WS connection is
+throttled independently, so two clients watching the same command do not
+interfere with each other.
 
 ### Cell-Level Comparison
 

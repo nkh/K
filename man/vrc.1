@@ -171,7 +171,19 @@ Suppress activity logging (spawning, stopping, resizing). Overrides \-\-log.
 
 .TP
 .BR \-q ", " \-\-quiet
-Alias for \-\-no\-log. Suppress all non-error logging output. Overrides \-\-log.
+Hidden alias for \-\-no\-terminal\-log.
+
+.TP
+.BR \-F ", " \-\-color\-terminal\-log
+Use ANSI color codes in terminal log output.
+
+.TP
+.BR \-v ", " \-\-show\-events
+Enable event tracing to file descriptor 3. Stackable: \-v basic, \-vv full payloads, \-vvv internal detail. Redirect fd 3 to capture output.
+
+.TP
+.BR "\-\-event\-regexp " \fIREGEX\fR
+Filter \-\-show\-events output. Only lines matching the regex are emitted.
 
 .TP
 .BR \-\-handle\-sigwinch
