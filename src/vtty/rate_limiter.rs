@@ -26,7 +26,7 @@ use std::time::{Duration, Instant};
 
 /// Maximum burst size: allow a small burst of notifications when the
 /// system has been idle, but cap it to prevent a sudden flood.
-const MAX_BURST_TOKENS: f64 = 3.0;
+const MAX_BURST_TOKENS: f64 = 1.0;
 
 /// A token-bucket rate limiter.
 ///
@@ -223,7 +223,7 @@ mod tests {
         limiter.last_refill = Instant::now() - Duration::from_secs(10);
         limiter.refill();
         // After 10 seconds at 10 tokens/sec, raw refill would be 100 tokens,
-        // but it should be capped at MAX_BURST_TOKENS (3.0).
+        // but it should be capped at MAX_BURST_TOKENS (1.0).
         assert!(limiter.tokens <= MAX_BURST_TOKENS + 0.01);
     }
 }

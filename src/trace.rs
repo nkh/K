@@ -26,10 +26,11 @@ use std::sync::Mutex;
 mod color {
     pub const RESET: &str = "\x1b[0m";
     pub const DIM: &str = "\x1b[2m";
-    pub const GREEN: &str = "\x1b[32m";
-    pub const CYAN: &str = "\x1b[36m";
-    pub const YELLOW: &str = "\x1b[33m";
-    pub const _GRAY: &str = "\x1b[90m";
+    pub const BRIGHT_GREEN: &str = "\x1b[92m";
+    pub const BRIGHT_CYAN: &str = "\x1b[96m";
+    pub const BRIGHT_YELLOW: &str = "\x1b[93m";
+    pub const BRIGHT_MAGENTA: &str = "\x1b[95m";
+    pub const _BRIGHT_RED: &str = "\x1b[91m";
 }
 
 static TRACER: Mutex<Option<TracerInner>> = Mutex::new(None);
@@ -129,9 +130,11 @@ pub fn event(
     let now = chrono::Local::now();
     let ts = now.format("%H:%M:%S%.3f");
 
-    let arrow = match dir {
-        Direction::Send => "\u{2192}",
-        Direction::Recv => "\u{2190}",
+    let arrow = match (dir, source) {
+        (Direction::Send, Source::WebSocket) => "\u{25b6}\u{25b6}",
+        (Direction::Recv, Source::WebSocket) => "\u{25c0}\u{25c0}",
+        (Direction::Send, Source::Http) => "\u{2192}\u{2192}",
+        (Direction::Recv, Source::Http) => "\u{2190}\u{2190}",
     };
 
     let src_label = match source {
@@ -164,13 +167,11 @@ pub fn event(
 
         // Apply colors if enabled
         if tracer.color {
-            let arrow_color = match dir {
-                Direction::Send => color::GREEN,
-                Direction::Recv => color::CYAN,
-            };
-            let src_color = match source {
-                Source::WebSocket => "",
-                Source::Http => color::YELLOW,
+            let (arrow_color, src_color) = match (dir, source) {
+                (Direction::Send, Source::WebSocket) => (color::BRIGHT_GREEN, ""),
+                (Direction::Recv, Source::WebSocket) => (color::BRIGHT_CYAN, ""),
+                (Direction::Send, Source::Http) => (color::BRIGHT_MAGENTA, ""),
+                (Direction::Recv, Source::Http) => (color::BRIGHT_YELLOW, ""),
             };
             format!(
                 "{dim}{ts}{reset} {arrow_clr}{arrow}{reset} {src_clr}{src_label}{reset}:{session_id} {msg_type} {truncated}{reset}",
