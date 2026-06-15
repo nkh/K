@@ -212,6 +212,7 @@ pub fn http_response(method: &str, path: &str, status: u16, body_hint: &str) {
 }
 
 /// Extract the message `type` field from a JSON string, for use as `msg_type`.
+/// Returns the unquoted value (e.g. `vtty_dirty`, not `"vtty_dirty"`).
 pub fn json_msg_type(json: &str) -> &str {
     // Fast path: find "type":"..." or "type": "..."
     if let Some(pos) = json.find("\"type\"") {
@@ -222,7 +223,7 @@ pub fn json_msg_type(json: &str) -> &str {
             let rest = rest[1..].trim_start();
             if rest.starts_with('"') {
                 if let Some(end) = rest[1..].find('"') {
-                    return &rest[1..end + 1];
+                    return &rest[1..1 + end];
                 }
             }
         }
