@@ -67,7 +67,6 @@ function _setupWs(obj, prefix, instUrl, cmdId, opts) {
             switch (msg.type) {
                 case 'vtty_full':
                 case 'vtty_diff':
-                case 'vtty_dirty':
                     if (opts.onVtty) opts.onVtty(msg);
                     break;
                 case 'command_ended':
@@ -156,8 +155,6 @@ function connectPanelWs(panelId) {
                     if (badge) badge.classList.toggle('visible', !!msg.data.alternate_screen);
                 } else if (msg.type === 'vtty_diff' && msg.data) {
                     if (!_throttleRefresh()) applyVttyDiffForPanel(panelObj, panelEl, msg.data);
-                } else if (msg.type === 'vtty_dirty' && msg.data) {
-                    scheduleVttyHttpForPanel(panelObj.id, instUrl, cmdId, 50);
                 }
             },
             onEnded() {
@@ -282,8 +279,6 @@ function _connectSecondaryWs(panelObj) {
                     if (!_throttleRefresh()) updateSecondaryVttyDisplay(panelObj, vttyEl, msg.data);
                 } else if (msg.type === 'vtty_diff' && msg.data) {
                     if (!_throttleRefresh()) applySecondaryVttyDiff(panelObj, vttyEl, msg.data);
-                } else if (msg.type === 'vtty_dirty' && msg.data) {
-                    scheduleSecondaryVttyHttp(panelObj, 50);
                 }
             },
             onEnded() { notifyCommandEnded(s.secondaryCmdId); },

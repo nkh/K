@@ -999,38 +999,40 @@ async fn regression_manager_logger_works() {
     let _ = manager.kill(&id, None).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 #[cfg(feature = "vrw")]
 async fn regression_vtty_change_subscription() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
-    let mut rx = manager.subscribe_vtty();
 
+    // Use a long-running command so the diff watcher (200 ms poll) has time
+    // to fire at least one broadcast before the process exits.
     let id = manager
         .spawn(
-            vrc_core::process::manager::SpawnOptions::new("echo".to_string())
-                .args(vec!["subscribe_test".into()])
+            vrc_core::process::manager::SpawnOptions::new("cat".to_string())
                 .env_vars(HashMap::new()),
-            )
+        )
         .await
         .unwrap();
 
-    // Should receive a vtty_full or vtty_diff notification (the diff watcher
+    let mut rx = manager.subscribe_vtty();
+
+    // Should receive a vtty_full notification (the diff watcher
     // sends vtty_full on the first poll since no previous buffer exists).
-    tokio::select! {
-        msg = rx.recv() => {
-            let (cmd_id, json) = msg.unwrap();
-            assert_eq!(cmd_id, id);
-            assert!(
-                json.contains("vtty_full") || json.contains("vtty_diff"),
-                "expected vtty_full or vtty_diff, got: {}",
-                json
-            );
-        }
-        _ = tokio::time::sleep(Duration::from_secs(2)) => {
-            // Timeout is acceptable — the notification is best-effort
-        }
-    }
+    let (cmd_id, json) = tokio::time::timeout(
+        Duration::from_secs(2),
+        rx.recv(),
+    )
+    .await
+    .expect("should receive vtty_full within 2s")
+    .unwrap();
+
+    assert_eq!(cmd_id, id);
+    assert!(
+        json.contains("vtty_full"),
+        "expected vtty_full, got: {}",
+        json
+    );
 
     let _ = manager.kill(&id, None).await;
 }
@@ -1568,4 +1570,129 @@ async fn regression_diff_watcher_broadcasts_correct_format() {
     }
 
     let _ = manager.kill(&id, None).await;
+}
+
+/// Regression: terminal updates must arrive as vtty_diff/vtty_full messages
+/// when a command produces periodic output (e.g., a loop that sleeps then writes).
+///
+/// The bug was that `BroadcastVttySink` sent dataless `vtty_dirty` messages
+/// (up to 30/sec) into the same broadcast channel as the data-rich
+/// `vtty_diff`/`vtty_full` from `spawn_diff_watcher`. The flood of dirty
+/// messages caused the channel (capacity 256) to overflow, making the receiver
+/// lag and drop the actual data-carrying messages. The terminal appeared frozen.
+///
+/// This test spawns a bash loop that sleeps 0.5s then writes a line, and
+/// verifies that multiple consecutive `vtty_diff` or `vtty_full` messages
+/// arrive — each carrying a new generation number — proving the diff watcher's
+/// messages are not drowned out by redundant dirty signals.
+#[tokio::test(flavor = "multi_thread")]
+#[cfg(feature = "vrw")]
+async fn regression_terminal_updates_arrive_for_periodic_output() {
+    let cfg = test_config();
+    let manager = Arc::new(CommandManager::new(cfg));
+
+    let script = r#"
+for i in $(seq 1 6); do
+    sleep 0.5
+    echo "tick $i"
+done
+"#.to_string();
+
+    let id = manager
+        .spawn(
+            vrc_core::process::manager::SpawnOptions::new("bash".to_string())
+                .args(vec!["-c".to_string(), script])
+                .env_vars(HashMap::new()),
+        )
+        .await
+        .unwrap();
+
+    let mut rx = manager.subscribe_vtty();
+
+    // Collect broadcast messages for up to 5 seconds (enough for 6 ticks at 0.5s).
+    // Each tick should produce at least one vtty_diff or vtty_full with new generation.
+    let mut received_gens: Vec<u64> = Vec::new();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+
+    while tokio::time::Instant::now() < deadline {
+        let remaining = deadline - tokio::time::Instant::now();
+        match tokio::time::timeout(remaining, rx.recv()).await {
+            Ok(Ok((cmd_id, json_str))) => {
+                if cmd_id != id {
+                    continue;
+                }
+                let msg: serde_json::Value = match serde_json::from_str(&json_str) {
+                    Ok(m) => m,
+                    Err(_) => continue,
+                };
+                let msg_type = msg.get("type").and_then(|v| v.as_str()).unwrap_or("");
+
+                // Skip dataless dirty signals — we only care about messages
+                // that carry actual terminal content.
+                match msg_type {
+                    "vtty_full" | "vtty_diff" => {
+                        let gen = msg
+                            .get("data")
+                            .and_then(|d| d.get("generation"))
+                            .and_then(|g| g.as_u64())
+                            .unwrap_or(0);
+                        if gen > 0 && (received_gens.is_empty() || gen != *received_gens.last().unwrap()) {
+                            received_gens.push(gen);
+                        }
+                    }
+                    "vtty_dirty" => {
+                        // These should NOT be present on the channel anymore.
+                        // If they are, they indicate the bug is not fixed.
+                        panic!(
+                            "vtty_dirty message found on broadcast channel — \
+                             BroadcastVttySink is still polluting the channel"
+                        );
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(n))) => {
+                // Lagged means messages were dropped — this is the symptom
+                // of the bug. With the fix, lag should not occur for a
+                // single command producing output every 0.5s.
+                panic!(
+                    "broadcast receiver lagged by {n} messages — \
+                     channel is being flooded, likely by vtty_dirty messages"
+                );
+            }
+            Ok(Err(tokio::sync::broadcast::error::RecvError::Closed)) => {
+                // Channel closed (manager dropped) — stop collecting.
+                break;
+            }
+            Err(_) => {
+                // Timeout — no more messages within the remaining time.
+                break;
+            }
+        }
+    }
+
+    let _ = manager.kill(&id, None).await;
+
+    // With 6 ticks at 0.5s intervals and a 200ms diff-watcher poll, we should
+    // see at least 3 distinct data-bearing messages (the watcher may coalesce
+    // some ticks but should not miss all of them).
+    assert!(
+        received_gens.len() >= 3,
+        "expected at least 3 distinct vtty_diff/vtty_full messages with \
+         advancing generations, got {} (generations: {:?})",
+        received_gens.len(),
+        received_gens
+    );
+
+    // Verify generations are strictly increasing (each update advances the buffer).
+    for i in 1..received_gens.len() {
+        assert!(
+            received_gens[i] > received_gens[i - 1],
+            "generations must be strictly increasing: gen[{}]={} <= gen[{}]={}",
+            i,
+            received_gens[i],
+            i - 1,
+            received_gens[i - 1]
+        );
+    }
 }
