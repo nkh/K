@@ -15,9 +15,8 @@ use crate::handles::{
 };
 use crate::hooks::runner::run_hook;
 use crate::process::manager::CommandManager;
-use crate::vtty::buffer::Buffer;
 use crate::vtty::emulator::VttyEmulator;
-use crate::vtty::rate_limiter::RateLimiter;
+
 use crate::vtty::sink::{BroadcastVttySink, VttyOutput};
 
 /// Default rate limit for VTTY output notifications (updates per second).
@@ -301,74 +300,27 @@ fn spawn_pty_reader(
     });
 }
 
-/// Feeds PTY output into the VTTY emulator and notifies sinks.
-/// Rate-limits notifications to `max_updates_per_sec`.
+/// Feeds PTY output into the emulator and notifies sinks on every change.
 fn spawn_emulator_writer(
     emulator: Arc<tokio::sync::RwLock<VttyEmulator>>,
     mut pty_out_rx: mpsc::Receiver<PtyOutput>,
     vtty_output: Arc<VttyOutput>,
     writer: Arc<parking_lot::Mutex<Box<dyn Write + Send>>>,
-    max_updates_per_sec: u32,
+    _max_updates_per_sec: u32,
 ) {
-    let mut rate_limiter = RateLimiter::from_config(max_updates_per_sec);
-    let flush_interval = rate_limiter.interval();
     tokio::spawn(async move {
-        // State for rate-limited buffering
-        let mut pending_snapshot: Option<Buffer> = None;
-        if rate_limiter.is_disabled() {
-            while let Some(PtyOutput(data)) = pty_out_rx.recv().await {
-                let mut emu = emulator.write().await;
-                emu.feed(&data);
-                let responses = emu.drain_responses();
-                let snapshot = emu.snapshot();
-                drop(emu);
-                if !responses.is_empty() {
-                    write_response_to_pty(&writer, &responses);
-                }
-                vtty_output.notify_sinks(&snapshot);
+        while let Some(PtyOutput(data)) = pty_out_rx.recv().await {
+            let mut emu = emulator.write().await;
+            emu.feed(&data);
+            let responses = emu.drain_responses();
+            let snapshot = emu.snapshot();
+            drop(emu);
+            if !responses.is_empty() {
+                write_response_to_pty(&writer, &responses);
             }
-        } else {
-            let mut tick = tokio::time::interval(flush_interval);
-            tick.tick().await;
-
-            loop {
-                tokio::select! {
-                    result = pty_out_rx.recv() => {
-                        match result {
-                            Some(PtyOutput(data)) => {
-                                let mut emu = emulator.write().await;
-                                emu.feed(&data);
-                                let responses = emu.drain_responses();
-                                let snapshot = emu.snapshot();
-                                drop(emu);
-                                if !responses.is_empty() {
-                                    write_response_to_pty(&writer, &responses);
-                                }
-
-                                if rate_limiter.allow() {
-                                    vtty_output.notify_sinks(&snapshot);
-                                    pending_snapshot = None;
-                                } else {
-                                    pending_snapshot = Some(snapshot);
-                                }
-                            }
-                            None => {
-                                if let Some(snapshot) = pending_snapshot.take() {
-                                    vtty_output.notify_sinks(&snapshot);
-                                }
-                                break;
-                            }
-                        }
-                    }
-                    _ = tick.tick() => {
-                        if let Some(snapshot) = pending_snapshot.take() {
-                            vtty_output.notify_sinks(&snapshot);
-                        }
-                    }
-                }
-            }
+            vtty_output.notify_sinks(&snapshot);
         }
-        // PTY closed — no parser flush needed with vte (no partial text buffering)
+        // PTY closed
         vtty_output.close();
     });
 }

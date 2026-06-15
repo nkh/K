@@ -41,6 +41,10 @@ pub struct AppState {
     /// Broadcast sender for peer registration/unregistration events.
     /// Messages are pre-serialized JSON strings forwarded to WS clients.
     pub peer_events: broadcast::Sender<String>,
+    /// Max dirty signals per session per burst window.
+    pub max_burst: u32,
+    /// Burst window duration in milliseconds.
+    pub burst_window_ms: u32,
 }
 
 impl AppState {
@@ -63,6 +67,35 @@ impl AppState {
             share_tokens: Arc::new(DashMap::new()),
             peers: Arc::new(DashMap::new()),
             peer_events: peer_events_tx,
+            max_burst: 10,
+            burst_window_ms: 1000,
+        }
+    }
+
+    /// Create AppState with explicit burst throttle settings.
+    pub fn with_throttle(
+        manager: Arc<CommandManager>,
+        shutdown_tx: broadcast::Sender<()>,
+        auth_token: Option<String>,
+        cert_store: Arc<CertificateStore>,
+        vtty_events: broadcast::Sender<(String, String)>,
+        log_events: broadcast::Sender<String>,
+        max_burst: u32,
+        burst_window_ms: u32,
+    ) -> Self {
+        let (peer_events_tx, _) = broadcast::channel::<String>(16);
+        Self {
+            manager,
+            shutdown_tx,
+            auth_token,
+            cert_store,
+            vtty_events,
+            log_events,
+            share_tokens: Arc::new(DashMap::new()),
+            peers: Arc::new(DashMap::new()),
+            peer_events: peer_events_tx,
+            max_burst,
+            burst_window_ms,
         }
     }
 

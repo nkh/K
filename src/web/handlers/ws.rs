@@ -10,6 +10,7 @@ use axum::{
 use futures::{SinkExt, StreamExt};
 use serde_json::{json, Value};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use crate::trace;
 use crate::trace::{Direction, Source};
@@ -72,6 +73,60 @@ pub async fn ws_vtty_stream(
     ws.on_upgrade(move |socket| handle_vtty_socket(socket, id, state))
 }
 
+/// Per-session dirty signal throttle.
+///
+/// Within a `window` duration, at most `max_burst` dirty events are forwarded
+/// to the client, evenly spaced.  If `max_burst == 0` or the window is zero,
+/// all events pass through (no throttling).
+struct SessionThrottle {
+    window: Duration,
+    max_burst: u32,
+    sent_in_window: u32,
+    window_start: Instant,
+    next_allowed: Instant,
+}
+
+impl SessionThrottle {
+    fn new(max_burst: u32, window_ms: u32) -> Self {
+        let window = Duration::from_millis(window_ms as u64);
+        let max_burst = if max_burst == 0 { u32::MAX } else { max_burst };
+        Self {
+            window,
+            max_burst,
+            sent_in_window: 0,
+            window_start: Instant::now(),
+            next_allowed: Instant::now(),
+        }
+    }
+
+    /// Returns true if the dirty event should be forwarded.
+    fn should_forward(&mut self, now: Instant) -> bool {
+        // No throttling
+        if self.max_burst >= u32::MAX || self.window.is_zero() {
+            return true;
+        }
+
+        // Slide the window if expired
+        if now.duration_since(self.window_start) >= self.window {
+            self.window_start = now;
+            self.sent_in_window = 0;
+            self.next_allowed = now;
+        }
+
+        if self.sent_in_window >= self.max_burst {
+            return false;
+        }
+
+        if now < self.next_allowed {
+            return false;
+        }
+
+        self.sent_in_window += 1;
+        self.next_allowed = now + self.window / self.max_burst as u32;
+        true
+    }
+}
+
 /// Generate a short session ID for tracing.
 fn session_id() -> String {
     // Use last 4 chars of a UUID for compact display.
@@ -92,6 +147,9 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
         return;
     }
 
+    // Per-session throttle for dirty signals.
+    let mut throttle = SessionThrottle::new(state.max_burst, state.burst_window_ms);
+
     // Subscribe to VTTY dirty/close notifications.
     let mut vtty_rx = state.vtty_events.subscribe();
 
@@ -110,6 +168,14 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
                     Ok((cmd_id, msg_json)) => {
                         if cmd_id != watch_id {
                             continue; // Not our command — skip
+                        }
+
+                        // vtty_close always passes through unthrottled.
+                        let is_close = msg_json.contains("vtty_close");
+
+                        // Throttle vtty_dirty per session.
+                        if !is_close && !throttle.should_forward(Instant::now()) {
+                            continue;
                         }
 
                         // Check if command still exists

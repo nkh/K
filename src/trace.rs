@@ -131,10 +131,10 @@ pub fn event(
     let ts = now.format("%H:%M:%S%.3f");
 
     let arrow = match (dir, source) {
-        (Direction::Send, Source::WebSocket) => "\u{25b6}\u{25b6}",
-        (Direction::Recv, Source::WebSocket) => "\u{25c0}\u{25c0}",
-        (Direction::Send, Source::Http) => "\u{2192}\u{2192}",
-        (Direction::Recv, Source::Http) => "\u{2190}\u{2190}",
+        (Direction::Send, Source::WebSocket) => "⇨",
+        (Direction::Recv, Source::WebSocket) => "⇦",
+        (Direction::Send, Source::Http) => "🠲",
+        (Direction::Recv, Source::Http) => "🠰",
     };
 
     let src_label = match source {
