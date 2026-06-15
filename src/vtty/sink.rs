@@ -130,6 +130,10 @@ impl VttyOutput {
 pub struct BroadcastVttySink {
     tx: broadcast::Sender<(String, String)>,
     command_id: String,
+    /// Throttle trace output to at most once per this interval.
+    /// The broadcast itself is never throttled — only the trace line.
+    last_trace: std::sync::Mutex<std::time::Instant>,
+    trace_interval: std::time::Duration,
 }
 
 impl BroadcastVttySink {
@@ -140,7 +144,12 @@ impl BroadcastVttySink {
     /// * `command_id` — included in every notification so consumers can
     ///   correlate events to specific commands.
     pub fn new(tx: broadcast::Sender<(String, String)>, command_id: String) -> Self {
-        Self { tx, command_id }
+        Self {
+            tx,
+            command_id,
+            last_trace: std::sync::Mutex::new(std::time::Instant::now()),
+            trace_interval: std::time::Duration::from_millis(100),
+        }
     }
 
     /// Obtain a new receiver for this broadcast channel.
@@ -156,16 +165,23 @@ impl VttySink for BroadcastVttySink {
             "data": { "id": &self.command_id }
         })
         .to_string();
-        // Trace the dirty signal at the source so it appears in -v output
-        // even when no WebSocket client is connected.
-        crate::trace::event(
-            crate::trace::Direction::Send,
-            crate::trace::Source::WebSocket,
-            "broadcast",
-            "vtty_dirty",
-            &msg,
-            None,
-        );
+        // Trace the dirty signal at the source (throttled) so it appears
+        // in -v output even when no WebSocket client is connected.
+        // The broadcast itself is never throttled.
+        if let Ok(mut last) = self.last_trace.lock() {
+            let now = std::time::Instant::now();
+            if now.duration_since(*last) >= self.trace_interval {
+                *last = now;
+                crate::trace::event(
+                    crate::trace::Direction::Send,
+                    crate::trace::Source::WebSocket,
+                    "broadcast",
+                    "vtty_dirty",
+                    &msg,
+                    None,
+                );
+            }
+        }
         // Best-effort, non-blocking send.  If all receivers are lagged
         // or dropped the notification is silently discarded.
         let _ = self.tx.send((self.command_id.clone(), msg));
