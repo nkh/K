@@ -201,12 +201,10 @@ pub async fn start_command(State(state): State<AppState>, Json(body): Json<Value
 pub async fn kill_command(
     State(state): State<AppState>,
     Path(id): Path<String>,
-    Json(body): Json<Value>,
+    body: Option<Json<Value>>,
 ) -> Json<Value> {
     let signal = body
-        .get("signal")
-        .and_then(|v| v.as_str())
-        .map(String::from);
+        .and_then(|Json(b)| b.get("signal").and_then(|v| v.as_str()).map(String::from));
     match state.manager.kill(&id, signal).await {
         Ok(_) => api_ok(serde_json::json!({ "id": id })),
         Err(e) => api_err(e.to_string()),
@@ -813,7 +811,7 @@ mod tests {
         let state = make_app_state();
         insert_mock_cmd(&state.manager, "cmd-1", 100);
         let body = json!({});
-        let result = kill_command(State(state.clone()), Path("cmd-1".into()), Json(body)).await;
+        let result = kill_command(State(state.clone()), Path("cmd-1".into()), Some(Json(body))).await;
         assert_eq!(result.0["status"], "ok");
         assert_eq!(result.0["data"]["id"], "cmd-1");
         // Command should be removed (not retained)

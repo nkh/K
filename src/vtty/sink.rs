@@ -160,14 +160,16 @@ impl BroadcastVttySink {
 
 impl VttySink for BroadcastVttySink {
     fn on_buffer_change(&self, _buffer: &Buffer) {
+        // Skip broadcast and trace when no WS clients are subscribed.
+        if self.tx.receiver_count() == 0 {
+            return;
+        }
         let msg = serde_json::json!({
             "type": "vtty_dirty",
             "data": { "id": &self.command_id }
         })
         .to_string();
-        // Trace the dirty signal at the source (throttled) so it appears
-        // in -v output even when no WebSocket client is connected.
-        // The broadcast itself is never throttled.
+        // Trace the dirty signal at the source (throttled).
         if let Ok(mut last) = self.last_trace.lock() {
             let now = std::time::Instant::now();
             if now.duration_since(*last) >= self.trace_interval {
@@ -182,8 +184,7 @@ impl VttySink for BroadcastVttySink {
                 );
             }
         }
-        // Best-effort, non-blocking send.  If all receivers are lagged
-        // or dropped the notification is silently discarded.
+        // Best-effort, non-blocking send.
         let _ = self.tx.send((self.command_id.clone(), msg));
     }
 
