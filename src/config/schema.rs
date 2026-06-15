@@ -758,6 +758,13 @@ pub struct Config {
     /// Set at runtime from the `--color-terminal-log` / `-F` CLI flag.
     #[serde(default, skip)]
     pub color_terminal_log: bool,
+    /// Event tracing verbosity (0=off, 1=basic, 2=verbose, 3=debug).
+    /// Set at runtime from `-v` / `--show-events` CLI flag.
+    #[serde(default, skip)]
+    pub show_events: u8,
+    /// Regex filter for event tracing. Set from `--event-regexp` CLI flag.
+    #[serde(default, skip)]
+    pub event_regexp: Option<String>,
 
     /// HTTP server bind address and port (vrw only).
     #[cfg(feature = "vrw")]

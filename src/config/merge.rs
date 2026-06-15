@@ -8,6 +8,8 @@ pub fn merge_configs(global: Config, local: Config) -> Config {
     Config {
         binary_name: local.binary_name,
         color_terminal_log: local.color_terminal_log,
+        show_events: local.show_events,
+        event_regexp: local.event_regexp,
         vtty: local.vtty,
         display: local.display,
         command_log: local.command_log,
@@ -69,6 +71,8 @@ pub fn apply_profile(base: Config, profile: &PartialConfig) -> Config {
     Config {
         binary_name: base.binary_name,
         color_terminal_log: base.color_terminal_log,
+        show_events: base.show_events,
+        event_regexp: base.event_regexp,
         vtty: profile.vtty.clone().unwrap_or(base.vtty),
         display: profile.display.clone().unwrap_or(base.display),
         command_log: profile.command_log.clone().unwrap_or(base.command_log),

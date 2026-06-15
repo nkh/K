@@ -99,12 +99,29 @@ pub async fn auth_middleware(req: Request, next: Next) -> Response {
 pub async fn request_logger(req: Request, next: Next) -> Response {
     let method = req.method().clone();
     let path = req.uri().path().to_string();
+
+    // Trace the incoming request.
+    crate::trace::http_event(
+        method.as_str(),
+        &path,
+        0,
+        "",
+    );
+
     let start = Instant::now();
 
     let response = next.run(req).await;
 
     let duration = start.elapsed();
     let status = response.status();
+
+    // Trace the outgoing response.
+    crate::trace::http_response(
+        method.as_str(),
+        &path,
+        status.as_u16(),
+        &format!("{}ms", duration.as_millis()),
+    );
 
     tracing::info!(
         method = %method,

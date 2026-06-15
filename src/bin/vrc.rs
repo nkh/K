@@ -30,6 +30,13 @@ async fn async_main(cli: Cli) -> Result<()> {
     startup::apply_detected_terminal_size(&cli, &mut cfg);
     let handle_sigwinch = cli.handle_sigwinch;
 
+    // Initialize event tracer (writes to fd 3 when -v is used).
+    vrc_core::trace::init(
+        cfg.show_events,
+        cfg.color_terminal_log,
+        cfg.event_regexp.as_deref(),
+    );
+
     let registry = InstanceRegistry::new()?;
     registry.register_current(&cfg)?;
 

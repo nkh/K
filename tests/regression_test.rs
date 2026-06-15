@@ -38,6 +38,8 @@ fn test_config() -> Config {
     Config {
         binary_name: "vrw".to_string(),
         color_terminal_log: false,
+            show_events: 0,
+            event_regexp: None,
         server: ServerConfig {
             bind: "127.0.0.1".to_string(),
             port: 0,
@@ -90,6 +92,8 @@ fn test_config() -> Config {
     Config {
         binary_name: "vrc".to_string(),
         color_terminal_log: false,
+            show_events: 0,
+            event_regexp: None,
         vtty: vrc_core::config::schema::VttyConfig {
             rows: 10,
             cols: 40,

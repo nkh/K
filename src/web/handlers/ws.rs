@@ -11,6 +11,8 @@ use futures::{SinkExt, StreamExt};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
+use crate::trace;
+use crate::trace::{Direction, Source};
 use crate::web::response::api_err;
 use crate::web::state::AppState;
 
@@ -70,12 +72,21 @@ pub async fn ws_vtty_stream(
     ws.on_upgrade(move |socket| handle_vtty_socket(socket, id, state))
 }
 
+/// Generate a short session ID for tracing.
+fn session_id() -> String {
+    // Use last 4 chars of a UUID for compact display.
+    let id = uuid::Uuid::new_v4().to_string();
+    id[id.len()-4..].to_string()
+}
+
 async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
     let (mut ws_tx, mut ws_rx) = socket.split();
+    let sid = session_id();
 
     // Send the welcome message.  The client will then fetch an initial diff
     // via HTTP to get the terminal content and a baseline UUID.
     let welcome = json!({"type": "connected", "id": &id, "cmd_id": &id}).to_string();
+    trace::event(Direction::Send, Source::WebSocket, &sid, trace::json_msg_type(&welcome), &welcome, None);
     if ws_tx.send(Message::Text(welcome)).await.is_err() {
         tracing::warn!(?id, "ws_vtty: failed to send welcome message");
         return;
@@ -104,11 +115,13 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
                         // Check if command still exists
                         if manager.get(&watch_id).is_none() {
                             let end_msg = json!({"type": "command_ended", "id": &watch_id}).to_string();
+                            trace::event(Direction::Send, Source::WebSocket, &sid, "command_ended", &end_msg, None);
                             let _ = ws_tx.send(Message::Text(end_msg)).await;
                             break;
                         }
 
                         // Forward the dirty/close signal to the client.
+                        trace::event(Direction::Send, Source::WebSocket, &sid, trace::json_msg_type(&msg_json), &msg_json, None);
                         if ws_tx.send(Message::Text(msg_json)).await.is_err() {
                             tracing::debug!(?watch_id, "ws_vtty: client disconnected");
                             break;
@@ -131,6 +144,7 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
             result = peer_rx.recv() => {
                 match result {
                     Ok(msg) => {
+                        trace::event(Direction::Send, Source::WebSocket, &sid, trace::json_msg_type(&msg), &msg, None);
                         if ws_tx.send(Message::Text(msg)).await.is_err() {
                             tracing::debug!(?watch_id, "ws_vtty: client disconnected (peer event)");
                             break;
@@ -149,7 +163,8 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
             msg = ws_rx.next() => {
                 match msg {
                     Some(Ok(Message::Text(text))) => {
-                        handle_vtty_client_message(&text, &manager, &watch_id, &mut ws_tx).await;
+                        trace::event(Direction::Recv, Source::WebSocket, &sid, trace::json_msg_type(&text), &text, None);
+                        handle_vtty_client_message(&text, &sid, &manager, &watch_id, &mut ws_tx).await;
                     }
                     Some(Ok(Message::Close(_))) | None => {
                         tracing::debug!(?watch_id, "ws_vtty: client closed connection");
@@ -172,6 +187,7 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
 /// Process a single client message on the VTTY WebSocket.
 async fn handle_vtty_client_message(
     text: &str,
+    sid: &str,
     manager: &Arc<crate::process::manager::CommandManager>,
     id: &String,
     ws_tx: &mut (impl SinkExt<Message, Error = axum::Error> + Unpin),
@@ -191,11 +207,9 @@ async fn handle_vtty_client_message(
             let keys = msg.get("keys").and_then(|v| v.as_str()).unwrap_or("");
             if !keys.is_empty() {
                 if let Err(e) = manager.send_keys(id, keys).await {
-                    let _ = ws_tx
-                        .send(Message::Text(
-                            json!({"type": "error", "message": e.to_string()}).to_string(),
-                        ))
-                        .await;
+                    let err_msg = json!({"type": "error", "message": e.to_string()}).to_string();
+                    trace::event(trace::Direction::Send, trace::Source::WebSocket, sid, "error", &err_msg, None);
+                    let _ = ws_tx.send(Message::Text(err_msg)).await;
                 }
             }
         }
@@ -206,11 +220,9 @@ async fn handle_vtty_client_message(
                 // Reject resize for exited commands — their terminal rendering
                 // is frozen and cannot be meaningfully resized (no live PTY).
                 if !handle.is_alive() {
-                    let _ = ws_tx
-                        .send(Message::Text(
-                            json!({"type": "error", "message": "Cannot resize an exited command's terminal"}).to_string(),
-                        ))
-                        .await;
+                    let err_msg = json!({"type": "error", "message": "Cannot resize an exited command's terminal"}).to_string();
+                    trace::event(trace::Direction::Send, trace::Source::WebSocket, sid, "error", &err_msg, None);
+                    let _ = ws_tx.send(Message::Text(err_msg)).await;
                 } else {
                     match handle.resize_pty(rows, cols).await {
                         Ok(()) => {
@@ -219,31 +231,27 @@ async fn handle_vtty_client_message(
                                 .log("resize", &format!("id={} pid={} name={} rows={} cols={}", id, handle.pid, handle.name, rows, cols));
                         }
                         Err(e) => {
-                            let _ = ws_tx
-                                .send(Message::Text(
-                                    json!({"type": "error", "message": e.to_string()}).to_string(),
-                                ))
-                                .await;
+                            let err_msg = json!({"type": "error", "message": e.to_string()}).to_string();
+                            trace::event(trace::Direction::Send, trace::Source::WebSocket, sid, "error", &err_msg, None);
+                            let _ = ws_tx.send(Message::Text(err_msg)).await;
                         }
                     }
                 }
             }
         }
         "ping" => {
-            let _ = ws_tx
-                .send(Message::Text(json!({"type": "pong"}).to_string()))
-                .await;
+            let pong = json!({"type": "pong"}).to_string();
+            trace::event(trace::Direction::Send, trace::Source::WebSocket, sid, "pong", &pong, None);
+            let _ = ws_tx.send(Message::Text(pong)).await;
         }
         "paste" => {
             let text = msg.get("text").and_then(|v| v.as_str()).unwrap_or("");
             if !text.is_empty() {
                 if let Some(handle) = manager.get(id) {
                     if let Err(e) = handle.send_paste(text).await {
-                        let _ = ws_tx
-                            .send(Message::Text(
-                                json!({"type": "error", "message": e.to_string()}).to_string(),
-                            ))
-                            .await;
+                        let err_msg = json!({"type": "error", "message": e.to_string()}).to_string();
+                        trace::event(trace::Direction::Send, trace::Source::WebSocket, sid, "error", &err_msg, None);
+                        let _ = ws_tx.send(Message::Text(err_msg)).await;
                     }
                 }
             }
@@ -265,9 +273,11 @@ pub async fn ws_log_stream(State(state): State<AppState>, ws: WebSocketUpgrade) 
 
 async fn handle_log_socket(socket: WebSocket, state: AppState) {
     let (mut ws_tx, mut ws_rx) = socket.split();
+    let sid = session_id();
 
     // Send the welcome message.
     let welcome = json!({"type": "connected", "stream": "logs"}).to_string();
+    trace::event(Direction::Send, Source::WebSocket, &sid, trace::json_msg_type(&welcome), &welcome, None);
     if ws_tx.send(Message::Text(welcome)).await.is_err() {
         tracing::warn!("ws_log: failed to send welcome message");
         return;
@@ -289,6 +299,7 @@ async fn handle_log_socket(socket: WebSocket, state: AppState) {
                             "type": "log_entry",
                             "data": entry
                         }).to_string();
+                        trace::event(Direction::Send, Source::WebSocket, &sid, "log_entry", &msg, None);
                         if ws_tx.send(Message::Text(msg)).await.is_err() {
                             tracing::debug!("ws_log: client disconnected");
                             break;
@@ -308,6 +319,7 @@ async fn handle_log_socket(socket: WebSocket, state: AppState) {
             result = peer_rx.recv() => {
                 match result {
                     Ok(msg) => {
+                        trace::event(Direction::Send, Source::WebSocket, &sid, trace::json_msg_type(&msg), &msg, None);
                         if ws_tx.send(Message::Text(msg)).await.is_err() {
                             tracing::debug!("ws_log: client disconnected (peer event)");
                             break;
@@ -322,12 +334,13 @@ async fn handle_log_socket(socket: WebSocket, state: AppState) {
             msg = ws_rx.next() => {
                 match msg {
                     Some(Ok(Message::Text(text))) => {
+                        trace::event(Direction::Recv, Source::WebSocket, &sid, trace::json_msg_type(&text), &text, None);
                         // Handle pings.
                         if let Ok(msg) = serde_json::from_str::<Value>(&text) {
                             if msg.get("type").and_then(|v| v.as_str()) == Some("ping") {
-                                let _ = ws_tx.send(Message::Text(
-                                    json!({"type": "pong"}).to_string()
-                                )).await;
+                                let pong = json!({"type": "pong"}).to_string();
+                                trace::event(Direction::Send, Source::WebSocket, &sid, "pong", &pong, None);
+                                let _ = ws_tx.send(Message::Text(pong)).await;
                             }
                         }
                     }

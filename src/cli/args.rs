@@ -231,6 +231,17 @@ pub struct Cli {
     #[arg(short = 'F', long)]
     pub color_terminal_log: bool,
 
+    /// Show server events (WS messages, HTTP requests) on fd 3.
+    /// Stackable: -v basic, -vv verbose, -vvv debug detail.
+    /// Redirect fd 3 to capture: `vrw -v htop 3>/tmp/events.log`
+    #[arg(short = 'v', long = "show-events", action = clap::ArgAction::Count)]
+    pub show_events: u8,
+
+    /// Filter --show-events output with a regex (applied to full line).
+    /// Example: --event-regexp 'vtty_dirty' shows only dirty signals.
+    #[arg(long, value_name = "REGEX")]
+    pub event_regexp: Option<String>,
+
     /// Subcommand
     #[command(subcommand)]
     pub command: Option<Commands>,
@@ -613,6 +624,8 @@ impl Cli {
         // Runtime fields (not from config file)
         cfg.binary_name = BINARY_NAME.to_string();
         cfg.color_terminal_log = self.color_terminal_log;
+        cfg.show_events = self.show_events;
+        cfg.event_regexp = self.event_regexp.clone();
 
         // Server (vrw only)
         #[cfg(feature = "vrw")]

@@ -8,6 +8,7 @@ pub mod interactive;
 pub mod ipc;
 pub mod logging;
 pub mod process;
+pub mod trace;
 pub mod vtty;
 
 #[cfg(feature = "vrw")]

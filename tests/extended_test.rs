@@ -510,6 +510,8 @@ fn manager_keep_nonexistent_errors() {
     let cfg = Config {
         binary_name: "test".into(),
         color_terminal_log: false,
+            show_events: 0,
+            event_regexp: None,
         server: vrc_core::config::schema::ServerConfig::default(),
         security: vrc_core::config::schema::SecurityConfig::default(),
         tls: vrc_core::config::schema::TlsConfig::default(),
@@ -542,6 +544,8 @@ fn manager_unkeep_nonexistent_errors() {
     let cfg = Config {
         binary_name: "test".into(),
         color_terminal_log: false,
+            show_events: 0,
+            event_regexp: None,
         server: vrc_core::config::schema::ServerConfig::default(),
         security: vrc_core::config::schema::SecurityConfig::default(),
         tls: vrc_core::config::schema::TlsConfig::default(),
@@ -574,6 +578,8 @@ fn manager_freeze_nonexistent_errors() {
     let cfg = Config {
         binary_name: "test".into(),
         color_terminal_log: false,
+            show_events: 0,
+            event_regexp: None,
         server: vrc_core::config::schema::ServerConfig::default(),
         security: vrc_core::config::schema::SecurityConfig::default(),
         tls: vrc_core::config::schema::TlsConfig::default(),
@@ -606,6 +612,8 @@ fn manager_thaw_nonexistent_errors() {
     let cfg = Config {
         binary_name: "test".into(),
         color_terminal_log: false,
+            show_events: 0,
+            event_regexp: None,
         server: vrc_core::config::schema::ServerConfig::default(),
         security: vrc_core::config::schema::SecurityConfig::default(),
         tls: vrc_core::config::schema::TlsConfig::default(),
