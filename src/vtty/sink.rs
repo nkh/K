@@ -156,6 +156,16 @@ impl VttySink for BroadcastVttySink {
             "data": { "id": &self.command_id }
         })
         .to_string();
+        // Trace the dirty signal at the source so it appears in -v output
+        // even when no WebSocket client is connected.
+        crate::trace::event(
+            crate::trace::Direction::Send,
+            crate::trace::Source::WebSocket,
+            "broadcast",
+            "vtty_dirty",
+            &msg,
+            None,
+        );
         // Best-effort, non-blocking send.  If all receivers are lagged
         // or dropped the notification is silently discarded.
         let _ = self.tx.send((self.command_id.clone(), msg));
@@ -167,6 +177,14 @@ impl VttySink for BroadcastVttySink {
             "data": { "id": &self.command_id }
         })
         .to_string();
+        crate::trace::event(
+            crate::trace::Direction::Send,
+            crate::trace::Source::WebSocket,
+            "broadcast",
+            "vtty_close",
+            &msg,
+            None,
+        );
         let _ = self.tx.send((self.command_id.clone(), msg));
     }
 }

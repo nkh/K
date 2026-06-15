@@ -187,7 +187,7 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
                         }
 
                         // Forward the dirty/close signal to the client.
-                        trace::event(Direction::Send, Source::WebSocket, &sid, trace::json_msg_type(&msg_json), &msg_json, None);
+                        // (trace already emitted at BroadcastVttySink source)
                         if ws_tx.send(Message::Text(msg_json)).await.is_err() {
                             tracing::debug!(?watch_id, "ws_vtty: client disconnected");
                             break;
