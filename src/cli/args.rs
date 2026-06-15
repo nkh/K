@@ -157,6 +157,11 @@ pub struct Cli {
     #[arg(long)]
     pub no_mouse: bool,
 
+    /// Max VTTY dirty signals per second (default: 10, 0 = unlimited) [vrw only]
+    #[arg(long, value_name = "N")]
+    #[cfg(feature = "vrw")]
+    pub max_updates_per_sec: Option<u32>,
+
     /// Run a command when the child exits cleanly (exit code 0)
     #[arg(long, value_name = "CMD")]
     pub on_exit: Option<String>,
@@ -731,6 +736,10 @@ impl Cli {
         }
         if self.no_mouse {
             cfg.vtty.mouse = false;
+        }
+        #[cfg(feature = "vrw")]
+        if let Some(max_updates) = self.max_updates_per_sec {
+            cfg.web.max_updates_per_sec = max_updates;
         }
 
         // Exit configuration

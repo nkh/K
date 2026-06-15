@@ -14,6 +14,11 @@ use crate::hooks::runner::run_hook;
 use crate::logging::command_log::CommandLogger;
 use crate::vtty::buffer::Buffer;
 
+/// Check if `instant` is less than `ttl` old (still valid).
+fn is_within_ttl(instant: &std::time::Instant, ttl: std::time::Duration) -> bool {
+    instant.elapsed() < ttl
+}
+
 pub type CommandId = String;
 
 /// A single entry returned by [`CommandManager::list`].
@@ -47,6 +52,10 @@ pub struct CommandManager {
     snapshots: Arc<DashMap<(CommandId, String), StoredSnapshot>>,
     /// Last-known buffer generation per command for O(1) change detection.
     last_generation: Arc<DashMap<CommandId, u64>>,
+    /// Per-client diff baselines: (command_id, baseline_uuid) -> (Buffer, last_access).
+    /// Each WS client (or poll client) has its own baseline so multiple
+    /// viewers don't clobber each other's diff state.
+    diff_baselines: Arc<DashMap<(CommandId, String), (crate::vtty::buffer::Buffer, std::time::Instant)>>,
 }
 
 /// Options for spawning a new command. Use `SpawnOptions::new()` and chain
@@ -105,6 +114,7 @@ impl CommandManager {
             vtty_change_tx,
             snapshots: Arc::new(DashMap::new()),
             last_generation: Arc::new(DashMap::new()),
+            diff_baselines: Arc::new(DashMap::new()),
         }
     }
 
@@ -121,7 +131,7 @@ impl CommandManager {
         // Use per-command exit config if provided, otherwise fall back to defaults
         let exit_config = exit_config.unwrap_or_else(|| self.config.default_exit.exit.clone());
 
-        let spawner = ProcessSpawner::new(&self.config.vtty);
+        let spawner = ProcessSpawner::new(&self.config.vtty, self.config.web.max_updates_per_sec);
         let pty_raw_log = self.config.command_log.pty_raw_log.as_deref();
         let hooks = self.config.hooks.clone();
         let mut handle = spawner
@@ -164,10 +174,6 @@ impl CommandManager {
             ),
         );
 
-        // Spawn a background watcher that detects VTTY changes and broadcasts them
-        // using the incremental diff protocol.
-        self.spawn_diff_watcher(id.clone());
-
         Ok(id)
     }
 
@@ -200,9 +206,6 @@ impl CommandManager {
 
         // Register in the internal command registry
         self.commands.insert(id.clone(), handle);
-
-        // Start the background diff-watcher for VTTY push notifications
-        self.spawn_diff_watcher(id.clone());
 
         Ok(id)
     }
@@ -251,116 +254,6 @@ impl CommandManager {
         );
         handle.handle_registry.add(name, sink);
         Ok(())
-    }
-
-    /// Spawn a background watcher that broadcasts incremental diff messages
-    /// via the Level 3 protocol. Falls back to full HTML on dimension changes
-    /// or when >90% of cells changed.
-    fn spawn_diff_watcher(&self, watch_id: String) {
-        let watch_commands = self.commands.clone();
-        let watch_tx = self.vtty_change_tx.clone();
-
-        tokio::spawn(async move {
-            let mut prev_gen: Option<u64> = None;
-            let mut prev_buffer: Option<Buffer> = None;
-            let mut prev_dims: Option<(usize, usize)> = None;
-
-            loop {
-                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-                // Clone Arc, drop lock before .await to avoid blocking kill()
-                let emulator = match watch_commands.get(&watch_id) {
-                    Some(e) => e.emulator.clone(),
-                    None => {
-                        // Command removed — stop watching
-                        break;
-                    }
-                };
-                // DashMap lock released
-                let (current_gen, current_buf, cursor, dims, cursor_visible, alt_screen) = {
-                    let emu = emulator.read().await;
-                    (
-                        emu.buffer_generation(),
-                        emu.snapshot(),
-                        emu.cursor(),
-                        emu.dimensions(),
-                        emu.is_cursor_visible(),
-                        emu.is_alternate_screen(),
-                    )
-                };
-                let (cursor_row, cursor_col) = cursor;
-                let (rows, cols) = dims;
-
-                let has_changed = match prev_gen {
-                    Some(prev) => current_gen != prev,
-                    None => true,
-                };
-
-                if !has_changed {
-                    continue;
-                }
-                prev_gen = Some(current_gen);
-
-                // If dimensions changed, send full HTML (resync) — cannot diff across different sizes
-                let dims_changed = match prev_dims {
-                    Some(prev) => prev != (rows, cols),
-                    None => true,
-                };
-
-                let need_full = dims_changed || prev_buffer.is_none();
-
-                if !need_full {
-                    // Compute diff between previous and current buffer.
-                    // prev_buffer is guaranteed Some when !need_full (see check above),
-                    // but use if-let for defense-in-depth — falls through to full HTML
-                    // if the invariant is somehow violated.
-                    if let Some(prev) = prev_buffer.as_ref() {
-                        let diff = current_buf.diff(prev);
-                        // If too many cells changed (>90%), fall back to full HTML
-                        if diff.changed_count <= (rows * cols) * 9 / 10 {
-                            let msg = serde_json::json!({
-                                "type": "vtty_diff",
-                                "data": {
-                                    "id": &watch_id,
-                                    "generation": current_gen,
-                                    "cursor": {"row": cursor_row, "col": cursor_col},
-                                    "dimensions": {"rows": rows, "cols": cols},
-                                    "alternate_screen": alt_screen,
-                                    "cursor_visible": cursor_visible,
-                                    "changed_count": diff.changed_count,
-                                    "cells": diff.cells,
-                                }
-                            })
-                            .to_string();
-                            let _ = watch_tx.send((watch_id.clone(), msg));
-                            prev_buffer = Some(current_buf);
-                            prev_dims = Some((rows, cols));
-                            continue;
-                        }
-                    }
-                    // prev_buffer unexpectedly None or >90% changed — fall through to full HTML
-                }
-
-                // Send vtty_full (resync or >90% changed)
-                let html = crate::vtty::renderer::VttyRenderer::to_html(&current_buf);
-                let msg = serde_json::json!({
-                    "type": "vtty_full",
-                    "data": {
-                        "id": &watch_id,
-                        "html": html,
-                        "cursor": {"row": cursor_row, "col": cursor_col},
-                        "dimensions": {"rows": rows, "cols": cols},
-                        "alternate_screen": alt_screen,
-                        "cursor_visible": cursor_visible,
-                        "generation": current_gen,
-                    }
-                })
-                .to_string();
-                let _ = watch_tx.send((watch_id.clone(), msg));
-                prev_buffer = Some(current_buf);
-                prev_dims = Some((rows, cols));
-            }
-        });
     }
 
     pub fn get(
@@ -474,6 +367,9 @@ impl CommandManager {
         let retain = self.commands.get(id).map(|h| h.exit_config.retain_on_exit).unwrap_or(false);
         self.logger.log("kill", &format!("id={} pid={} name={} retain={}", id, pid, name, retain));
 
+        // Clean up per-client diff baselines for this command
+        self.clear_baselines_for_command(id);
+
         // Run on_kill hook if configured
         if let Some(ref on_kill) = self.config.hooks.on_kill {
             let mut vars = std::collections::HashMap::new();
@@ -491,6 +387,7 @@ impl CommandManager {
         } else if let Some((_, handle)) = self.commands.remove(id) {
             self.last_generation.remove(id);
             self.snapshots.retain(|k, _| k.0 != *id);
+            self.clear_baselines_for_command(id);
             let _ = handle.send_bytes(vec![0x03]).await;
         }
 
@@ -567,6 +464,7 @@ impl CommandManager {
         if self.commands.remove(id).is_some() {
             self.last_generation.remove(id);
             self.snapshots.retain(|k, _| k.0 != *id);
+            self.clear_baselines_for_command(id);
             tracing::info!(id = %id, "Purged retained command from manager");
             Ok(())
         } else {
@@ -703,6 +601,102 @@ impl CommandManager {
     /// Get a clone of the VTTY change broadcast sender.
     pub fn vtty_change_sender(&self) -> broadcast::Sender<(String, String)> {
         self.vtty_change_tx.clone()
+    }
+
+    /// Compute a diff against a per-client baseline, or create a new baseline.
+    ///
+    /// * `cmd_id` — the command whose VTTY to diff.
+    /// * `baseline_uuid` — the client's baseline UUID, or `None` on first request.
+    ///
+    /// Returns `(baseline_uuid, diff, cursor, dims, gen)` where:
+    /// - `baseline_uuid` is the UUID the client should send on the next request
+    ///   (newly generated if `baseline_uuid` was `None` or expired).
+    /// - `diff` is the cell-level diff (all cells on first request).
+    pub async fn diff_with_baseline(
+        &self,
+        cmd_id: &CommandId,
+        baseline_uuid: Option<&str>,
+    ) -> Result<(
+        String,
+        crate::vtty::buffer::BufferDiff,
+        (usize, usize),
+        (usize, usize),
+        u64,
+    )> {
+        let handle = self
+            .commands
+            .get(cmd_id)
+            .ok_or_else(|| ProcessError::CommandNotFound(cmd_id.to_string()))?;
+
+        let emulator = handle.emulator.clone();
+        drop(handle); // release DashMap lock
+
+        let (current_buf, cursor, dims, gen) = {
+            let emu = emulator.read().await;
+            (emu.snapshot(), emu.cursor(), emu.dimensions(), emu.buffer_generation())
+        };
+
+        // Lazy TTL eviction (60 minutes)
+        self.evict_expired_baselines();
+
+        let now = std::time::Instant::now();
+        let ttl = std::time::Duration::from_secs(60 * 60);
+
+        match baseline_uuid {
+            Some(uuid) if self.diff_baselines.contains_key(&(cmd_id.to_string(), uuid.to_string())) => {
+                // Existing baseline — compute incremental diff
+                let diff = current_buf.diff(
+                    &self.diff_baselines
+                        .get(&(cmd_id.to_string(), uuid.to_string()))
+                        .unwrap()
+                        .value()
+                        .0,
+                );
+                // Update baseline to current
+                self.diff_baselines
+                    .insert((cmd_id.to_string(), uuid.to_string()), (current_buf, now));
+                Ok((uuid.to_string(), diff, cursor, dims, gen))
+            }
+            _ => {
+                // No baseline or expired — create new one, return all cells
+                let uuid = uuid::Uuid::new_v4().to_string();
+                let diff = crate::vtty::buffer::BufferDiff {
+                    width: current_buf.width,
+                    height: current_buf.height,
+                    changed_count: current_buf.width * current_buf.height,
+                    cells: current_buf
+                        .rows
+                        .iter()
+                        .enumerate()
+                        .flat_map(|(row_idx, row)| {
+                            row.iter().enumerate().map(move |(col_idx, cell)| {
+                                crate::vtty::buffer::CellDiff {
+                                    row: row_idx,
+                                    col: col_idx,
+                                    cell: *cell,
+                                }
+                            })
+                        })
+                        .collect(),
+                };
+                self.diff_baselines
+                    .insert((cmd_id.to_string(), uuid.clone()), (current_buf, now));
+                Ok((uuid, diff, cursor, dims, gen))
+            }
+        }
+    }
+
+    /// Remove expired diff baselines (older than 60 minutes).
+    fn evict_expired_baselines(&self) {
+        let ttl = std::time::Duration::from_secs(60 * 60);
+        self.diff_baselines
+            .retain(|_, (_, last_access)| is_within_ttl(last_access, ttl));
+    }
+
+    /// Remove all diff baselines for a command (called on kill).
+    pub fn clear_baselines_for_command(&self, cmd_id: &CommandId) {
+        self.diff_baselines
+            .retain(|(cid, _), _| cid != cmd_id);
     }
 
     pub fn logger(&self) -> Arc<CommandLogger> {

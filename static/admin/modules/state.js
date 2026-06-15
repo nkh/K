@@ -59,6 +59,9 @@ const state = {
     // Level 3: Flag indicating the client supports incremental diff.
     // Sent to server on WS connect so server knows to use vtty_diff.
     _level3Enabled: true,
+    // Per-command diff baseline UUIDs.  Each panel/viewer has its own
+    // baseline so multiple tabs don't clobber each other.
+    _diffBaselines: {},
     // VTTY update mode: 'push' (server sends dirty signals via WS)
     // or 'poll' (client polls /api/commands/:id/vtty/changed)
     updateMode: localStorage.getItem('vrw_update_mode') || 'push',

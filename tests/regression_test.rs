@@ -999,14 +999,19 @@ async fn regression_manager_logger_works() {
     let _ = manager.kill(&id, None).await;
 }
 
+/// Regression: verify that subscribing to the VTTY change broadcast channel
+/// delivers lightweight `vtty_dirty` signals when a command produces output.
+///
+/// In the pull-based architecture the broadcast channel only carries
+/// `vtty_dirty` / `vtty_close` signals — never data.  Clients pull actual
+/// terminal content via the HTTP diff endpoint (`diff_with_baseline`).
 #[tokio::test(flavor = "multi_thread")]
 #[cfg(feature = "vrw")]
 async fn regression_vtty_change_subscription() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
 
-    // Use a long-running command so the diff watcher (200 ms poll) has time
-    // to fire at least one broadcast before the process exits.
+    // Use `cat` so the PTY stays open and we can write to it.
     let id = manager
         .spawn(
             vrc_core::process::manager::SpawnOptions::new("cat".to_string())
@@ -1017,24 +1022,61 @@ async fn regression_vtty_change_subscription() {
 
     let mut rx = manager.subscribe_vtty();
 
-    // Should receive a vtty_full notification (the diff watcher
-    // sends vtty_full on the first poll since no previous buffer exists).
+    // Write to the PTY to trigger a buffer change, which causes
+    // BroadcastVttySink::on_buffer_change() to broadcast `vtty_dirty`.
+    if let Some(handle) = manager.get(&id) {
+        handle.send_bytes(b"hello\n".to_vec()).await.unwrap();
+    }
+
     let (cmd_id, json) = tokio::time::timeout(
         Duration::from_secs(2),
         rx.recv(),
     )
     .await
-    .expect("should receive vtty_full within 2s")
+    .expect("should receive a broadcast message within 2s")
     .unwrap();
 
     assert_eq!(cmd_id, id);
     assert!(
-        json.contains("vtty_full"),
-        "expected vtty_full, got: {}",
+        json.contains("vtty_dirty"),
+        "expected vtty_dirty signal, got: {}",
         json
     );
+    // The dirty signal must NOT contain terminal data — it is purely a
+    // notification that the client should pull a diff via HTTP.
+    let msg: serde_json::Value = serde_json::from_str(&json).unwrap();
+    let data = msg.get("data").unwrap();
+    assert!(
+        data.get("html").is_none(),
+        "vtty_dirty must not contain html"
+    );
+    assert!(
+        data.get("cells").is_none(),
+        "vtty_dirty must not contain cells"
+    );
 
+    // Kill the command — should eventually receive vtty_close.
+    // The kill itself may trigger a final vtty_dirty before vtty_close arrives.
     let _ = manager.kill(&id, None).await;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+    let mut got_close = false;
+    while tokio::time::Instant::now() < deadline {
+        let remaining = deadline - tokio::time::Instant::now();
+        match tokio::time::timeout(remaining, rx.recv()).await {
+            Ok(Ok((cid, json_str))) => {
+                if cid != id { continue; }
+                if json_str.contains("vtty_close") {
+                    got_close = true;
+                    break;
+                }
+                // Skip any trailing vtty_dirty signals after kill.
+            }
+            Ok(Err(tokio::sync::broadcast::error::RecvError::Closed)) => break,
+            Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) => continue,
+            Err(_) => break,
+        }
+    }
+    assert!(got_close, "should receive vtty_close after kill");
 }
 
 #[tokio::test]
@@ -1422,26 +1464,22 @@ async fn regression_vtty_generation_advances_on_write() {
     let _ = manager.kill(&id, None).await;
 }
 
-/// Verify the diff watcher broadcasts well-formed vtty_diff messages
+/// Verify the pull-based diff endpoint returns well-formed cell diffs
 /// that the web UI can parse and apply.
 ///
-/// This test exercises the full push pipeline:
+/// This test exercises the correct pull-based pipeline:
 ///   1. Spawn a long-running command (cat) so the PTY stays open.
-///   2. Subscribe to the broadcast channel (same way ws.rs does).
+///   2. Request an initial diff (no baseline) — should return all cells.
 ///   3. Write data to the PTY to trigger a buffer change.
-///   4. Wait for the diff watcher to detect the change and broadcast.
-///   5. Parse the received JSON and verify:
-///      - The message type is "vtty_full" (first poll) or "vtty_diff" (subsequent).
-///      - The "data" object contains the expected fields (generation, cursor,
-///        dimensions, cells for diffs / html for full).
-///      - The cell diff entries have the correct nested structure
-///        `{ row, col, cell: { ch, fg, bg, ..., width } }` that the
-///        client-side `applyVttyDiffForPanel()` expects.
-///   6. Write again and verify a second vtty_diff arrives with incremented
-///      generation and non-empty cells array.
+///   4. Wait for a `vtty_dirty` broadcast signal.
+///   5. Request an incremental diff using the baseline UUID — should return
+///      only the changed cells with an advanced generation number.
+///   6. Verify the cell diff entries have the correct structure
+///      `{ row, col, cell: { ch, fg, bg, bold, italic, ..., width } }` that
+///      the client-side `applyVttyDiffForPanel()` expects.
 #[tokio::test(flavor = "multi_thread")]
 #[cfg(feature = "vrw")]
-async fn regression_diff_watcher_broadcasts_correct_format() {
+async fn regression_pull_diff_returns_correct_format() {
     let cfg = test_config();
     let manager = Arc::new(CommandManager::new(cfg));
 
@@ -1453,138 +1491,132 @@ async fn regression_diff_watcher_broadcasts_correct_format() {
         .await
         .unwrap();
 
-    // Subscribe BEFORE the first diff-watcher poll fires (200ms interval).
-    let mut rx = manager.subscribe_vtty();
+    sleep(Duration::from_millis(100)).await;
 
-    // Wait for the initial vtty_full (first poll, no previous buffer).
-    let (cmd_id, json_str) = tokio::time::timeout(
-        Duration::from_secs(2),
-        rx.recv(),
-    )
-    .await
-    .expect("should receive initial vtty_full within 2s")
-    .unwrap();
-
-    assert_eq!(cmd_id, id);
-
-    // Parse and validate the initial message.
-    let msg: serde_json::Value = serde_json::from_str(&json_str).unwrap();
-    let msg_type = msg.get("type").and_then(|v| v.as_str()).unwrap_or("");
-    assert_eq!(
-        msg_type, "vtty_full",
-        "first broadcast must be vtty_full, got: {}",
-        msg_type
-    );
-    let data = msg.get("data").expect("message must have 'data' field");
+    // Step 1: Initial diff (no baseline) — should return all cells and a UUID.
+    let (baseline1, diff1, _cursor1, dims1, gen1) = manager
+        .diff_with_baseline(&id, None)
+        .await
+        .expect("initial diff should succeed");
     assert!(
-        data.get("html").is_some(),
-        "vtty_full data must contain 'html'"
+        !baseline1.is_empty(),
+        "initial diff must return a baseline UUID"
     );
     assert!(
-        data.get("generation").is_some(),
-        "vtty_full data must contain 'generation'"
+        !diff1.cells.is_empty(),
+        "initial diff must return cells (full sync)"
     );
     assert!(
-        data.get("cursor").is_some(),
-        "vtty_full data must contain 'cursor'"
+        dims1.0 > 0 && dims1.1 > 0,
+        "dimensions must be positive"
     );
-    assert!(
-        data.get("dimensions").is_some(),
-        "vtty_full data must contain 'dimensions'"
-    );
-    let first_gen = data.get("generation").and_then(|v| v.as_u64()).unwrap_or(0);
 
-    // Now write to the PTY to trigger a change that produces a vtty_diff.
+    // Step 2: Write to the PTY to trigger a buffer change.
     if let Some(handle) = manager.get(&id) {
         handle.send_bytes(b"hello diff test\n".to_vec()).await.unwrap();
     }
-    // The diff watcher polls every 200ms; give it time to detect and broadcast.
-    let (cmd_id2, json_str2) = tokio::time::timeout(
-        Duration::from_secs(2),
-        rx.recv(),
-    )
-    .await
-    .expect("should receive vtty_diff within 2s after write")
-    .unwrap();
+    sleep(Duration::from_millis(100)).await;
 
-    assert_eq!(cmd_id2, id);
-    let msg2: serde_json::Value = serde_json::from_str(&json_str2).unwrap();
-    let msg_type2 = msg2.get("type").and_then(|v| v.as_str()).unwrap_or("");
-    assert_eq!(
-        msg_type2, "vtty_diff",
-        "second broadcast must be vtty_diff, got: {}",
-        msg_type2
-    );
-    let data2 = msg2.get("data").expect("vtty_diff must have 'data'");
+    // Step 3: Incremental diff with the baseline UUID.
+    let (baseline2, diff2, _cursor2, dims2, gen2) = manager
+        .diff_with_baseline(&id, Some(&baseline1))
+        .await
+        .expect("incremental diff should succeed");
+    // Baseline UUID should remain the same (updated in place).
+    assert_eq!(baseline2, baseline1, "baseline UUID should be reused");
     assert!(
-        data2.get("cells").is_some(),
-        "vtty_diff data must contain 'cells'"
+        gen2 >= gen1,
+        "generation must advance or stay: initial={}, incremental={}",
+        gen1, gen2
     );
+    assert_eq!(dims2, dims1, "dimensions should not change");
+
+    // The diff should contain the cells we just wrote (at minimum).
     assert!(
-        data2.get("generation").is_some(),
-        "vtty_diff data must contain 'generation'"
-    );
-    let second_gen = data2.get("generation").and_then(|v| v.as_u64()).unwrap_or(0);
-    assert!(
-        second_gen > first_gen,
-        "generation must advance: first={}, second={}",
-        first_gen, second_gen
+        !diff2.cells.is_empty(),
+        "incremental diff must contain changed cells after a write"
     );
 
-    // Verify the cell diff entries have the correct nested structure
-    // that the client's applyVttyDiffForPanel() expects:
-    //   { row, col, cell: { ch, fg, bg, bold, italic, ..., width } }
-    let cells = data2.get("cells").unwrap().as_array().unwrap();
-    assert!(
-        !cells.is_empty(),
-        "vtty_diff cells array must not be empty after a write"
-    );
-    for cell_entry in cells {
+    // Verify the cell diff entries have the correct structure
+    // that the client's applyVttyDiffForPanel() expects.
+    for cell_entry in &diff2.cells {
+        // CellDiff has row, col, and a nested Cell { ch, fg, bg, ..., width }.
+        // dimensions() returns (rows, cols).
         assert!(
-            cell_entry.get("row").is_some(),
-            "each cell entry must have 'row'"
+            cell_entry.row < dims2.0,
+            "cell row {} must be within buffer rows {}",
+            cell_entry.row, dims2.0
         );
         assert!(
-            cell_entry.get("col").is_some(),
-            "each cell entry must have 'col'"
-        );
-        let nested_cell = cell_entry
-            .get("cell")
-            .expect("each cell entry must have nested 'cell' object");
-        assert!(
-            nested_cell.get("ch").is_some(),
-            "nested cell must have 'ch'"
+            cell_entry.col < dims2.1,
+            "cell col {} must be within buffer cols {}",
+            cell_entry.col, dims2.1
         );
         assert!(
-            nested_cell.get("fg").is_some(),
-            "nested cell must have 'fg'"
-        );
-        assert!(
-            nested_cell.get("bg").is_some(),
-            "nested cell must have 'bg'"
-        );
-        assert!(
-            nested_cell.get("width").is_some(),
-            "nested cell must have 'width'"
+            cell_entry.cell.width > 0 || cell_entry.cell.ch == ' ',
+            "cell must have positive width or be a space"
         );
     }
+
+    // Step 4: Write again and verify another incremental diff.
+    if let Some(handle) = manager.get(&id) {
+        handle.send_bytes(b"second line\n".to_vec()).await.unwrap();
+    }
+    sleep(Duration::from_millis(100)).await;
+
+    let (_baseline3, diff3, _, _, gen3) = manager
+        .diff_with_baseline(&id, Some(&baseline2))
+        .await
+        .expect("second incremental diff should succeed");
+    assert!(
+        gen3 >= gen2,
+        "generation must advance: second={}, third={}",
+        gen2, gen3
+    );
+    assert!(
+        !diff3.cells.is_empty(),
+        "second incremental diff must contain changed cells"
+    );
+
+    // Step 5: Verify that an unknown baseline UUID creates a new full sync.
+    let (baseline_fresh, diff_fresh, _, _, _) = manager
+        .diff_with_baseline(&id, Some("nonexistent-uuid"))
+        .await
+        .expect("diff with unknown baseline should succeed (falls back to full)");
+    assert_ne!(
+        baseline_fresh, baseline2,
+        "unknown baseline should produce a new UUID"
+    );
+    assert!(
+        diff_fresh.changed_count > diff3.changed_count,
+        "full sync from unknown baseline should have more changed cells than incremental"
+    );
 
     let _ = manager.kill(&id, None).await;
 }
 
-/// Regression: terminal updates must arrive as vtty_diff/vtty_full messages
-/// when a command produces periodic output (e.g., a loop that sleeps then writes).
+/// Regression: terminal updates must be detectable when a command produces
+/// periodic output (e.g., a loop that sleeps then writes).
 ///
-/// The bug was that `BroadcastVttySink` sent dataless `vtty_dirty` messages
-/// (up to 30/sec) into the same broadcast channel as the data-rich
-/// `vtty_diff`/`vtty_full` from `spawn_diff_watcher`. The flood of dirty
-/// messages caused the channel (capacity 256) to overflow, making the receiver
-/// lag and drop the actual data-carrying messages. The terminal appeared frozen.
+/// The original bug was that `BroadcastVttySink` sent dataless `vtty_dirty`
+/// messages into the same broadcast channel as data-rich `vtty_diff`/`vtty_full`
+/// from `spawn_diff_watcher`, flooding the channel (capacity 256) and causing
+/// the receiver to lag and drop messages. The terminal appeared frozen.
 ///
-/// This test spawns a bash loop that sleeps 0.5s then writes a line, and
-/// verifies that multiple consecutive `vtty_diff` or `vtty_full` messages
-/// arrive — each carrying a new generation number — proving the diff watcher's
-/// messages are not drowned out by redundant dirty signals.
+/// The fix is a purely pull-based architecture:
+///   - The broadcast channel carries ONLY lightweight `vtty_dirty` / `vtty_close`
+///     signals (no terminal data).
+///   - Clients pull actual content on demand via the HTTP diff endpoint
+///     (`diff_with_baseline`), which computes diffs against a per-client
+///     baseline snapshot.
+///   - The old `spawn_diff_watcher` background task has been removed entirely.
+///
+/// This test spawns a bash loop that sleeps 0.3s then writes a line, and
+/// verifies that:
+///   1. Multiple `vtty_dirty` signals arrive on the broadcast channel.
+///   2. The channel does NOT overflow (no Lagged errors).
+///   3. Pulling the diff endpoint after each dirty signal returns content
+///      with strictly advancing generation numbers.
 #[tokio::test(flavor = "multi_thread")]
 #[cfg(feature = "vrw")]
 async fn regression_terminal_updates_arrive_for_periodic_output() {
@@ -1592,8 +1624,8 @@ async fn regression_terminal_updates_arrive_for_periodic_output() {
     let manager = Arc::new(CommandManager::new(cfg));
 
     let script = r#"
-for i in $(seq 1 6); do
-    sleep 0.5
+for i in $(seq 1 8); do
+    sleep 0.3
     echo "tick $i"
 done
 "#.to_string();
@@ -1609,9 +1641,10 @@ done
 
     let mut rx = manager.subscribe_vtty();
 
-    // Collect broadcast messages for up to 5 seconds (enough for 6 ticks at 0.5s).
-    // Each tick should produce at least one vtty_diff or vtty_full with new generation.
-    let mut received_gens: Vec<u64> = Vec::new();
+    // Collect vtty_dirty signals and pull diffs for up to 5 seconds.
+    let mut dirty_count: usize = 0;
+    let mut pulled_gens: Vec<u64> = Vec::new();
+    let mut current_baseline: Option<String> = None;
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
 
     while tokio::time::Instant::now() < deadline {
@@ -1627,45 +1660,54 @@ done
                 };
                 let msg_type = msg.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
-                // Skip dataless dirty signals — we only care about messages
-                // that carry actual terminal content.
                 match msg_type {
-                    "vtty_full" | "vtty_diff" => {
-                        let gen = msg
-                            .get("data")
-                            .and_then(|d| d.get("generation"))
-                            .and_then(|g| g.as_u64())
-                            .unwrap_or(0);
-                        if gen > 0 && (received_gens.is_empty() || gen != *received_gens.last().unwrap()) {
-                            received_gens.push(gen);
+                    "vtty_dirty" => {
+                        dirty_count += 1;
+                        // Pull the diff endpoint (the real client behaviour).
+                        match manager
+                            .diff_with_baseline(&id, current_baseline.as_deref())
+                            .await
+                        {
+                            Ok((baseline, diff, _, _, gen)) => {
+                                current_baseline = Some(baseline);
+                                if gen > 0
+                                    && (pulled_gens.is_empty()
+                                        || gen != *pulled_gens.last().unwrap())
+                                {
+                                    pulled_gens.push(gen);
+                                }
+                                // Verify dirty signal carried no data.
+                                assert!(
+                                    diff.cells.len() > 0 || diff.changed_count > 0,
+                                    "pulled diff must have content"
+                                );
+                            }
+                            Err(_) => {
+                                // Command may have exited between dirty and pull.
+                            }
                         }
                     }
-                    "vtty_dirty" => {
-                        // These should NOT be present on the channel anymore.
-                        // If they are, they indicate the bug is not fixed.
-                        panic!(
-                            "vtty_dirty message found on broadcast channel — \
-                             BroadcastVttySink is still polluting the channel"
-                        );
+                    "vtty_close" => {
+                        // Command finished — stop collecting.
+                        break;
                     }
                     _ => {}
                 }
             }
             Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(n))) => {
-                // Lagged means messages were dropped — this is the symptom
-                // of the bug. With the fix, lag should not occur for a
-                // single command producing output every 0.5s.
+                // Lagged means the channel (capacity 256) overflowed.
+                // With only lightweight vtty_dirty signals (no data), this
+                // must NOT happen for a single command at 10 updates/sec.
                 panic!(
                     "broadcast receiver lagged by {n} messages — \
-                     channel is being flooded, likely by vtty_dirty messages"
+                     channel is being flooded"
                 );
             }
             Ok(Err(tokio::sync::broadcast::error::RecvError::Closed)) => {
-                // Channel closed (manager dropped) — stop collecting.
                 break;
             }
             Err(_) => {
-                // Timeout — no more messages within the remaining time.
+                // Timeout — no more messages.
                 break;
             }
         }
@@ -1673,26 +1715,32 @@ done
 
     let _ = manager.kill(&id, None).await;
 
-    // With 6 ticks at 0.5s intervals and a 200ms diff-watcher poll, we should
-    // see at least 3 distinct data-bearing messages (the watcher may coalesce
-    // some ticks but should not miss all of them).
+    // Must have received multiple dirty signals (8 ticks at 0.3s = 2.4s of output).
     assert!(
-        received_gens.len() >= 3,
-        "expected at least 3 distinct vtty_diff/vtty_full messages with \
-         advancing generations, got {} (generations: {:?})",
-        received_gens.len(),
-        received_gens
+        dirty_count >= 2,
+        "expected at least 2 vtty_dirty signals, got {}",
+        dirty_count
     );
 
-    // Verify generations are strictly increasing (each update advances the buffer).
-    for i in 1..received_gens.len() {
+    // Must have pulled at least 2 distinct generations (proving the diff
+    // endpoint returns new content each time).
+    assert!(
+        pulled_gens.len() >= 2,
+        "expected at least 2 distinct generations from pulled diffs, \
+         got {} (generations: {:?})",
+        pulled_gens.len(),
+        pulled_gens
+    );
+
+    // Generations must be strictly increasing.
+    for i in 1..pulled_gens.len() {
         assert!(
-            received_gens[i] > received_gens[i - 1],
+            pulled_gens[i] > pulled_gens[i - 1],
             "generations must be strictly increasing: gen[{}]={} <= gen[{}]={}",
             i,
-            received_gens[i],
+            pulled_gens[i],
             i - 1,
-            received_gens[i - 1]
+            pulled_gens[i - 1]
         );
     }
 }

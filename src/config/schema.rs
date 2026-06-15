@@ -609,8 +609,6 @@ pub struct WebConfig {
     /// How the web UI discovers buffer changes. Default: push.
     #[serde(default)]
     pub update_mode: UpdateMode,
-    /// Server-side dirty-check interval in ms (push mode). Default: 200.
-    pub dirty_check_ms: u64,
     /// Client-side polling interval in ms (poll mode). Default: 500.
     pub default_poll_ms: u64,
     /// Per-server panel header colors. Empty = built-in dark palette.
@@ -636,7 +634,6 @@ impl Default for WebConfig {
     fn default() -> Self {
         Self {
             update_mode: UpdateMode::default(),
-            dirty_check_ms: 200,
             default_poll_ms: 500,
             panel_colors: Vec::new(),
             max_updates_per_sec: default_max_updates_per_sec(),
@@ -645,7 +642,7 @@ impl Default for WebConfig {
 }
 
 #[cfg(feature = "vrw")]
-fn default_max_updates_per_sec() -> u32 { 30 }
+fn default_max_updates_per_sec() -> u32 { 10 }
 
 // ── daemon ──
 

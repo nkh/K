@@ -10,57 +10,19 @@ use axum::{
 use futures::{SinkExt, StreamExt};
 use serde_json::{json, Value};
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
-use crate::vtty::emulator::VttyEmulator;
 use crate::web::response::api_err;
 use crate::web::state::AppState;
-
-// ---------------------------------------------------------------------------
-// Helper: build a `vtty_full` JSON message
-// ---------------------------------------------------------------------------
-
-/// Build a `vtty_full` JSON message from the given emulator.
-///
-/// The caller **must** clone the `emulator` `Arc` from the `CommandHandle` and
-/// drop any DashMap guard *before* calling this, so we never hold the map lock
-/// across the `.await` on the emulator read-lock.
-async fn build_vtty_full_json(
-    emulator: &Arc<RwLock<VttyEmulator>>,
-    cmd_id: &str,
-) -> String {
-    let (html, cursor_row, cursor_col, rows, cols, alt_screen, cursor_visible, generation) = {
-        let emu = emulator.read().await;
-        let buf = emu.snapshot();
-        let html = crate::vtty::renderer::VttyRenderer::to_html(&buf);
-        let (cr, cc) = emu.cursor();
-        let (r, c) = emu.dimensions();
-        let alt = emu.is_alternate_screen();
-        let cv = emu.is_cursor_visible();
-        let gen = emu.buffer_generation();
-        (html, cr, cc, r, c, alt, cv, gen)
-    };
-    json!({
-        "type": "vtty_full",
-        "cmd_id": cmd_id,
-        "data": {
-            "id": cmd_id,
-            "html": html,
-            "cursor": {"row": cursor_row, "col": cursor_col},
-            "dimensions": {"rows": rows, "cols": cols},
-            "alternate_screen": alt_screen,
-            "cursor_visible": cursor_visible,
-            "generation": generation,
-        }
-    })
-    .to_string()
-}
 
 // ---------------------------------------------------------------------------
 // VTTY WebSocket stream — GET /api/commands/:id/ws
 // ---------------------------------------------------------------------------
 
 /// Upgrade an HTTP request to a WebSocket for real-time VTTY streaming.
+///
+/// The WS only carries lightweight signals (`vtty_dirty`, `vtty_close`).
+/// The client fetches actual terminal content via HTTP diff requests
+/// (`GET /api/commands/:id/vtty/diff?baseline=<uuid>`).
 ///
 /// # Security Note
 ///
@@ -111,27 +73,15 @@ pub async fn ws_vtty_stream(
 async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
     let (mut ws_tx, mut ws_rx) = socket.split();
 
-    // Send the welcome message.
+    // Send the welcome message.  The client will then fetch an initial diff
+    // via HTTP to get the terminal content and a baseline UUID.
     let welcome = json!({"type": "connected", "id": &id, "cmd_id": &id}).to_string();
     if ws_tx.send(Message::Text(welcome)).await.is_err() {
         tracing::warn!(?id, "ws_vtty: failed to send welcome message");
         return;
     }
 
-    // Send the initial full HTML snapshot so the client has a complete picture.
-    // Clone the emulator Arc to avoid holding the DashMap lock across .await calls.
-    if let Some(handle) = state.manager.get(&id) {
-        let emulator = handle.emulator.clone();
-        drop(handle); // Release DashMap lock immediately
-
-        let full_msg = build_vtty_full_json(&emulator, &id).await;
-        if ws_tx.send(Message::Text(full_msg)).await.is_err() {
-            tracing::warn!(?id, "ws_vtty: failed to send initial snapshot");
-            return;
-        }
-    }
-
-    // Subscribe to VTTY change notifications (diff messages).
+    // Subscribe to VTTY dirty/close notifications.
     let mut vtty_rx = state.vtty_events.subscribe();
 
     // Subscribe to peer registration events for server-level notifications.
@@ -158,23 +108,17 @@ async fn handle_vtty_socket(socket: WebSocket, id: String, state: AppState) {
                             break;
                         }
 
-                        // Forward the dirty signal directly to the client.
-                        // The message is pre-serialized JSON from the diff watcher.
+                        // Forward the dirty/close signal to the client.
                         if ws_tx.send(Message::Text(msg_json)).await.is_err() {
                             tracing::debug!(?watch_id, "ws_vtty: client disconnected");
                             break;
                         }
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                        tracing::warn!(?watch_id, lagged = n, "ws_vtty: broadcast lagged, catching up");
-                        // Re-send a full snapshot to resync
-                        if let Some(handle) = manager.get(&watch_id) {
-                            let emulator = handle.emulator.clone();
-                            drop(handle); // Release DashMap lock before .await
-
-                            let resync_msg = build_vtty_full_json(&emulator, &watch_id).await;
-                            let _ = ws_tx.send(Message::Text(resync_msg)).await;
-                        }
+                        // Some dirty signals were dropped — not critical.
+                        // The next dirty signal that gets through will cause
+                        // the client to fetch a diff that catches up.
+                        tracing::debug!(?watch_id, lagged = n, "ws_vtty: broadcast lagged, will catch up on next dirty");
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => {
                         tracing::debug!(?watch_id, "ws_vtty: broadcast channel closed");
@@ -302,16 +246,6 @@ async fn handle_vtty_client_message(
                             .await;
                     }
                 }
-            }
-        }
-        "request_full" => {
-            // Client requests an immediate full HTML resync (e.g., after cell grid desync).
-            if let Some(handle) = manager.get(id) {
-                let emulator = handle.emulator.clone();
-                drop(handle); // Release DashMap lock before .await
-
-                let full_msg = build_vtty_full_json(&emulator, id).await;
-                let _ = ws_tx.send(Message::Text(full_msg)).await;
             }
         }
         _ => {

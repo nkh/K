@@ -151,13 +151,14 @@ impl BroadcastVttySink {
 
 impl VttySink for BroadcastVttySink {
     fn on_buffer_change(&self, _buffer: &Buffer) {
-        // Intentionally a no-op.  The dataless "vtty_dirty" push used to
-        // flood the shared broadcast channel (capacity 256), causing
-        // `vtty_diff`/`vtty_full` messages from `spawn_diff_watcher` to
-        // be lagged and dropped — making the web UI terminal appear frozen.
-        // The diff watcher (200 ms poll) already detects all buffer
-        // changes and broadcasts data-rich messages, so this immediate
-        // push path is redundant and harmful.
+        let msg = serde_json::json!({
+            "type": "vtty_dirty",
+            "data": { "id": &self.command_id }
+        })
+        .to_string();
+        // Best-effort, non-blocking send.  If all receivers are lagged
+        // or dropped the notification is silently discarded.
+        let _ = self.tx.send((self.command_id.clone(), msg));
     }
 
     fn on_close(&self) {

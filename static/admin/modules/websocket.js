@@ -65,8 +65,10 @@ function _setupWs(obj, prefix, instUrl, cmdId, opts) {
         try {
             const msg = JSON.parse(event.data);
             switch (msg.type) {
-                case 'vtty_full':
-                case 'vtty_diff':
+                case 'vtty_dirty':
+                    if (opts.onVtty) opts.onVtty(msg);
+                    break;
+                case 'vtty_close':
                     if (opts.onVtty) opts.onVtty(msg);
                     break;
                 case 'command_ended':
@@ -147,17 +149,15 @@ function connectPanelWs(panelId) {
         _setupWs(panelObj, 'ws', instUrl, cmdId, {
             isFocused,
             onVtty(msg) {
-                const panelEl = document.getElementById(panelObj.id);
-                if (!panelEl) return;
-                const badge = panelEl.querySelector('.alt-screen-badge');
-                if (msg.type === 'vtty_full' && msg.data) {
-                    if (!_throttleRefresh()) updateVttyDisplayForPanel(panelObj, panelEl, msg.data);
-                    if (badge) badge.classList.toggle('visible', !!msg.data.alternate_screen);
-                } else if (msg.type === 'vtty_diff' && msg.data) {
-                    if (!_throttleRefresh()) applyVttyDiffForPanel(panelObj, panelEl, msg.data);
+                if (msg.type === 'vtty_dirty') {
+                    fetchVttyDiffForPanel(panelObj.id, instUrl, cmdId);
+                } else if (msg.type === 'vtty_close') {
+                    // Terminal closed — discard baseline so a reconnection starts fresh
+                    delete state._diffBaselines[cmdId];
                 }
             },
             onEnded() {
+                delete state._diffBaselines[cmdId];
                 notifyCommandEnded(cmdId);
             },
             onPong(latency) {
@@ -170,7 +170,7 @@ function connectPanelWs(panelId) {
             onPeer(msg) { handlePeerEvent(msg); },
             onDisconnect() {
                 if (panelObj.selectedInstUrl && panelObj.selectedCmdId) {
-                    scheduleVttyHttpForPanel(panelObj.id, panelObj.selectedInstUrl, panelObj.selectedCmdId, 0);
+                    fetchVttyDiffForPanel(panelObj.id, panelObj.selectedInstUrl, panelObj.selectedCmdId, 0);
                 }
             },
             reconnectGuard() {
@@ -180,6 +180,9 @@ function connectPanelWs(panelId) {
     } catch (e) {
         console.error('WebSocket connect failed (panel ' + panelId + '):', e);
     }
+
+    // Fetch initial terminal content via diff endpoint (no baseline yet).
+    fetchVttyDiffForPanel(panelObj.id, instUrl, cmdId, 0);
 
     // Also connect secondary WS if panel is split
     if (panelObj.split && panelObj.split.secondaryCmdId && panelObj.split.secondaryInstUrl) {
@@ -271,20 +274,17 @@ function _connectSecondaryWs(panelObj) {
         _setupWs(s, 'secondaryWs', s.secondaryInstUrl, s.secondaryCmdId, {
             isFocused: false,
             onVtty(msg) {
-                const panelEl = document.getElementById(panelObj.id);
-                if (!panelEl) return;
-                const vttyEl = document.getElementById('vtty-' + panelObj.id + '-secondary');
-                if (!vttyEl) return;
-                if (msg.type === 'vtty_full' && msg.data) {
-                    if (!_throttleRefresh()) updateSecondaryVttyDisplay(panelObj, vttyEl, msg.data);
-                } else if (msg.type === 'vtty_diff' && msg.data) {
-                    if (!_throttleRefresh()) applySecondaryVttyDiff(panelObj, vttyEl, msg.data);
+                if (msg.type === 'vtty_dirty') {
+                    fetchSecondaryVttyDiff(panelObj);
                 }
             },
-            onEnded() { notifyCommandEnded(s.secondaryCmdId); },
+            onEnded() {
+                delete state._diffBaselines[s.secondaryCmdId];
+                notifyCommandEnded(s.secondaryCmdId);
+            },
             onPeer(msg) { handlePeerEvent(msg); },
             onDisconnect() {
-                if (s.secondaryInstUrl && s.secondaryCmdId) scheduleSecondaryVttyHttp(panelObj, 0);
+                if (s.secondaryInstUrl && s.secondaryCmdId) fetchSecondaryVttyDiff(panelObj, 0);
             },
             reconnectGuard() {
                 return s.secondaryInstUrl && s.secondaryCmdId && state.updateMode === 'push';
@@ -293,6 +293,77 @@ function _connectSecondaryWs(panelObj) {
     } catch (e) {
         console.error('Secondary WebSocket connect failed (panel ' + panelObj.id + '):', e);
     }
+
+    // Fetch initial terminal content for secondary
+    fetchSecondaryVttyDiff(panelObj, 0);
+}
+
+// ─── Diff fetch for push mode ───
+// Debounce timer per panel to avoid hammering the server.
+const _diffTimers = {};
+
+function fetchVttyDiffForPanel(panelId, instUrl, cmdId, delayMs) {
+    const timerKey = '_diffTimer_' + panelId;
+    if (_diffTimers[timerKey]) clearTimeout(_diffTimers[timerKey]);
+    _diffTimers[timerKey] = setTimeout(() => {
+        _diffTimers[timerKey] = null;
+        _doFetchVttyDiff(panelId, instUrl, cmdId, false);
+    }, delayMs);
+}
+
+async function _doFetchVttyDiff(panelId, instUrl, cmdId, isSecondary) {
+    const panelObj = state.panels.find(p => p.id === panelId);
+    if (!panelObj) return;
+    const panelEl = document.getElementById(panelId);
+    if (!panelEl) return;
+
+    const baseline = state._diffBaselines[cmdId] || null;
+    try {
+        const json = await api.getVttyDiff(instUrl, cmdId, baseline);
+        if (json.status === 'ok' && json.data) {
+            // Store the baseline UUID for next request
+            state._diffBaselines[cmdId] = json.data.baseline;
+
+            if (json.data.full_sync_required) {
+                // Too many cells changed — fetch full HTML instead
+                const htmlJson = await api.getVttyHtml(instUrl, cmdId);
+                if (htmlJson.status === 'ok' && htmlJson.data) {
+                    // Reset baseline since we skipped the diff
+                    state._diffBaselines[cmdId] = null;
+                    const htmlResp = await api.getVttyDiff(instUrl, cmdId, null);
+                    if (htmlResp.status === 'ok' && htmlResp.data) {
+                        state._diffBaselines[cmdId] = htmlResp.data.baseline;
+                        htmlResp.data.html = htmlJson.data.html;
+                        if (isSecondary) {
+                            const vttyEl = document.getElementById('vtty-' + panelId + '-secondary');
+                            if (vttyEl) updateSecondaryVttyDisplay(panelObj, vttyEl, htmlResp.data);
+                        } else {
+                            updateVttyDisplayForPanel(panelObj, panelEl, htmlResp.data);
+                        }
+                    }
+                }
+            } else if (isSecondary) {
+                const vttyEl = document.getElementById('vtty-' + panelId + '-secondary');
+                if (vttyEl) applySecondaryVttyDiff(panelObj, vttyEl, json.data);
+            } else {
+                applyVttyDiffForPanel(panelObj, panelEl, json.data);
+            }
+        }
+    } catch (e) {
+        // Silently ignore — next dirty signal will retry
+    }
+}
+
+function fetchSecondaryVttyDiff(panelObj, delayMs) {
+    if (!panelObj || !panelObj.split) return;
+    const s = panelObj.split;
+    if (!s.secondaryCmdId || !s.secondaryInstUrl) return;
+    const timerKey = '_secondaryDiffTimer_' + panelObj.id;
+    if (_diffTimers[timerKey]) clearTimeout(_diffTimers[timerKey]);
+    _diffTimers[timerKey] = setTimeout(() => {
+        _diffTimers[timerKey] = null;
+        _doFetchVttyDiff(panelObj.id, s.secondaryInstUrl, s.secondaryCmdId, true);
+    }, delayMs || 0);
 }
 
 // ─── VTTY Update Mode Start/Stop ───
@@ -315,5 +386,6 @@ function stopPanelUpdateMode(panelId) {
         startPanelPoll, stopPanelPoll, pollOncePanel,
         startPanelUpdateMode, stopPanelUpdateMode,
         _connectSecondaryWs, _disconnectSecondaryWs,
+        fetchVttyDiffForPanel, fetchSecondaryVttyDiff,
     });
 })();

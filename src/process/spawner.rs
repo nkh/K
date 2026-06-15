@@ -21,7 +21,7 @@ use crate::vtty::rate_limiter::RateLimiter;
 use crate::vtty::sink::{BroadcastVttySink, VttyOutput};
 
 /// Default rate limit for VTTY output notifications (updates per second).
-const DEFAULT_RATE_LIMIT: u32 = 30;
+const DEFAULT_RATE_LIMIT: u32 = 10;
 
 pub struct ProcessSpawner {
     vtty_cfg: VttyConfig,
@@ -56,10 +56,10 @@ impl ExitStatus {
 }
 
 impl ProcessSpawner {
-    pub fn new(vtty_cfg: &VttyConfig) -> Self {
+    pub fn new(vtty_cfg: &VttyConfig, max_updates_per_sec: u32) -> Self {
         Self {
             vtty_cfg: vtty_cfg.clone(),
-            max_updates_per_sec: DEFAULT_RATE_LIMIT,
+            max_updates_per_sec: if max_updates_per_sec > 0 { max_updates_per_sec } else { DEFAULT_RATE_LIMIT },
         }
     }
 

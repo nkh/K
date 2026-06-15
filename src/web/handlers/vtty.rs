@@ -257,25 +257,31 @@ pub async fn get_vtty_png(
     }
 }
 
-/// GET /api/commands/:id/vtty/diff
+/// GET /api/commands/:id/vtty/diff?baseline=<uuid>
 ///
-/// Returns a cell-level diff between the last transmitted snapshot and the
-/// current buffer state. Used by clients in poll mode (no WebSocket) for
-/// incremental DOM patching (Level 3 optimization).
+/// Returns a cell-level diff against a per-client baseline snapshot.
+/// On the first request (no `?baseline=`), returns all cells as changed
+/// and a new `baseline` UUID.  Subsequent requests with `?baseline=<uuid>`
+/// return only the cells that changed since the last request.
 ///
-/// Response includes `changed_count` and a `cells` array of CellDiff entries.
-/// If the terminal dimensions changed since the last diff, returns a flag
-/// `full_sync_required: true` and the client should fetch full HTML instead.
+/// The `baseline` UUID identifies a per-viewer diff state stored on the
+/// server.  Multiple viewers (browser tabs, separate clients) get their
+/// own independent baselines so they don't clobber each other.
+///
+/// Response fields: `baseline`, `id`, `generation`, `cursor`, `dimensions`,
+/// `changed_count`, `full_sync_required`, `cells`.
 pub async fn get_vtty_diff(
     State(state): State<AppState>,
     Path(id): Path<String>,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Json<Value> {
-    match state.manager.get(&id) {
-        Some(handle) => {
-            let (diff, cursor, dims, gen) = handle.vtty_diff_and_state().await;
+    let baseline = params.get("baseline").map(|s| s.as_str());
+    match state.manager.diff_with_baseline(&id, baseline).await {
+        Ok((baseline_uuid, diff, cursor, dims, gen)) => {
             let (rows, cols) = dims;
             api_ok(serde_json::json!({
                 "id": id,
+                "baseline": baseline_uuid,
                 "generation": gen,
                 "cursor": { "row": cursor.0, "col": cursor.1 },
                 "dimensions": { "rows": rows, "cols": cols },
@@ -284,7 +290,7 @@ pub async fn get_vtty_diff(
                 "cells": diff.cells,
             }))
         }
-        None => api_err(format!("Command {} not found", id)),
+        Err(e) => api_err(e.to_string()),
     }
 }
 
@@ -478,11 +484,14 @@ mod tests {
     async fn test_get_vtty_diff_success() {
         let state = make_app_state();
         insert_mock_cmd(&state.manager, "cmd-1", 1);
-        let result = get_vtty_diff(State(state), Path("cmd-1".into())).await;
+        let params: HashMap<String, String> = HashMap::new();
+        let result = get_vtty_diff(State(state), Path("cmd-1".into()), Query(params)).await;
         assert_eq!(result.0["status"], "ok");
         assert_eq!(result.0["data"]["id"], "cmd-1");
         assert!(result.0["data"]["cells"].is_array());
         assert!(result.0["data"]["dimensions"].is_object());
+        // Must include a baseline UUID
+        assert!(result.0["data"]["baseline"].is_string());
     }
 
 }

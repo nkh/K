@@ -140,6 +140,11 @@
             return _jsonGet('/api/commands/' + cmdId + '/vtty/html', instUrl);
         },
 
+        getVttyDiff(instUrl, cmdId, baseline) {
+            const qs = baseline ? '?baseline=' + encodeURIComponent(baseline) : '';
+            return _jsonGet('/api/commands/' + cmdId + '/vtty/diff' + qs, instUrl);
+        },
+
         getVttyPng(instUrl, cmdId, params) {
             const qs = params ? '?' + new URLSearchParams(params).toString() : '';
             return _blobGet('/api/commands/' + cmdId + '/vtty/png' + qs, instUrl);

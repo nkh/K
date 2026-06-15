@@ -358,9 +358,9 @@ pub async fn get_info(State(state): State<AppState>) -> Json<Value> {
         "server_name": server_config.name,
         "web": {
             "update_mode": web_config.update_mode,
-            "dirty_check_ms": web_config.dirty_check_ms,
             "default_poll_ms": web_config.default_poll_ms,
             "panel_colors": panel_colors,
+            "max_updates_per_sec": web_config.max_updates_per_sec,
         },
         "vtty": {
             "screenshot_font_size": vtty_config.screenshot_font_size,
