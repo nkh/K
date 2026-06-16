@@ -12,12 +12,13 @@ function updateVttyDisplayForPanel(panelObj, panelEl, data) {
     if (!pre) return;
 
     const cmdId = panelObj.selectedCmdId;
+    const genKey = panelObj.id + '/' + cmdId;
     if (cmdId && data.generation !== undefined) {
-        if (state._lastGeneration[cmdId] === data.generation) {
+        if (state._lastGeneration[genKey] === data.generation) {
             updateVttyMetadataForPanel(panelObj, panelEl, vttyEl, data);
             return;
         }
-        state._lastGeneration[cmdId] = data.generation;
+        state._lastGeneration[genKey] = data.generation;
     }
 
     if (data.html !== undefined && data.html !== null) {
@@ -92,15 +93,16 @@ function applyVttyDiffForPanel(panelObj, panelEl, data) {
     const pre = vttyEl ? vttyEl.querySelector('pre') : null;
     if (!pre) return;
 
+    const genKey = panelObj.id + '/' + cmdId;
     // Skip if generation unchanged (only update cursor/dimensions/mouse metadata)
-    if (data.generation !== undefined && state._lastGeneration[cmdId] === data.generation) {
+    if (data.generation !== undefined && state._lastGeneration[genKey] === data.generation) {
         if (data.cursor || data.dimensions || data.mouse_tracking !== undefined) {
             updateVttyMetadataForPanel(panelObj, panelEl, vttyEl, data);
         }
         return;
     }
     if (data.generation !== undefined) {
-        state._lastGeneration[cmdId] = data.generation;
+        state._lastGeneration[genKey] = data.generation;
     }
 
     // If full HTML is embedded (e.g. from vtty_dirty fallback), use it directly

@@ -289,7 +289,7 @@
                 const panelObj = state.panels.find(p => p.id === (state._focusedPanelId || state.panels[0].id));
                 if (panelObj) { panelObj.selectedInstUrl = primary.url; panelObj.selectedCmdId = firstCmd.id; }
                 getSelectedPanel();
-                if (vtty.generation !== undefined) state._lastGeneration[firstCmd.id] = vtty.generation;
+                if (vtty.generation !== undefined) state._lastGeneration[(panelObj ? panelObj.id : 'panel-0') + '/' + firstCmd.id] = vtty.generation;
                 const panelEl = document.getElementById(panelObj ? panelObj.id : (state._focusedPanelId || (state.panels[0] || {}).id));
                 if (panelEl) {
                     const vttyEl = panelEl.querySelector('.vtty-container');
