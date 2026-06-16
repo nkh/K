@@ -105,6 +105,13 @@ pub struct Cli {
     #[arg(long)]
     pub no_display: bool,
 
+    /// Keep vrw/vrc running after all commands have exited.
+    /// Without this (and without --display or --daemon), vrw/vrc exits
+    /// when the initial command finishes. With --keep-running, the
+    /// process stays alive until terminated by SIGINT/SIGTERM.
+    #[arg(long)]
+    pub keep_running: bool,
+
     /// Display refresh interval in milliseconds
     #[arg(long, value_name = "MS")]
     pub refresh_ms: Option<u64>,

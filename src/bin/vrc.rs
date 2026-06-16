@@ -71,9 +71,19 @@ async fn async_main(cli: Cli) -> Result<()> {
         )
         .await;
     } else if !cli.no_terminal_log && !cli.quiet {
-        startup::run_non_display_event_loop(&manager, spawned_id.as_deref(), shutdown_rx).await;
+        if cli.keep_running {
+            let rx = shutdown_tx.subscribe();
+            startup::run_non_display_event_loop(&manager, None, rx).await;
+        } else {
+            startup::run_non_display_event_loop(&manager, spawned_id.as_deref(), shutdown_rx).await;
+        }
     } else if let Some(ref id) = spawned_id {
-        wait_for_child(&manager, id, shutdown_rx).await;
+        if cli.keep_running {
+            let mut rx = shutdown_tx.subscribe();
+            let _ = rx.recv().await;
+        } else {
+            wait_for_child(&manager, id, shutdown_rx).await;
+        }
     } else {
         tracing::info!("No command specified and no display. Exiting.");
     }

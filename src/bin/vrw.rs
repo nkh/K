@@ -267,11 +267,21 @@ async fn async_main(cli: Cli) -> Result<()> {
         )
         .await;
     } else if !cli.no_terminal_log && !cli.quiet {
-        let rx = shutdown_tx.subscribe();
-        startup::run_non_display_event_loop(&manager, spawned_id.as_deref(), rx).await;
+        if cli.keep_running {
+            let rx = shutdown_tx.subscribe();
+            startup::run_non_display_event_loop(&manager, None, rx).await;
+        } else {
+            let rx = shutdown_tx.subscribe();
+            startup::run_non_display_event_loop(&manager, spawned_id.as_deref(), rx).await;
+        }
     } else if let Some(ref id) = spawned_id {
-        let rx = shutdown_tx.subscribe();
-        wait_for_child(&manager, id, rx).await;
+        if cli.keep_running {
+            let mut rx = shutdown_tx.subscribe();
+            let _ = rx.recv().await;
+        } else {
+            let rx = shutdown_tx.subscribe();
+            wait_for_child(&manager, id, rx).await;
+        }
     } else {
         let mut rx = shutdown_tx.subscribe();
         let _ = rx.recv().await;
