@@ -562,10 +562,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 /* Server connections bar — shows non-origin servers with reach indicator + close */
 .server-connections-bar { display:flex;flex-wrap:wrap;gap:0.3rem;padding:0.2rem 0.3rem;margin-bottom:0.15rem;border-bottom:1px solid var(--border);align-items:center; }
 .server-conn-item { display:flex;align-items:center;gap:0.25rem;padding:0.1rem 0.2rem;background:var(--bg-tertiary);border-radius:3px;font-size:var(--ui-fs); }
-.server-reach-dot { width:6px;height:6px;border-radius:50%;flex-shrink:0; }
-.server-reach-dot.reachable { background:var(--green); }
-.server-reach-dot.unreachable { background:var(--red); }
-.server-reach-dot.unknown { background:var(--yellow); }
+.server-reach-dot, .panel-reach-dot { width:6px;height:6px;border-radius:50%;flex-shrink:0; }
+.server-reach-dot.reachable, .panel-reach-dot.reachable { background:var(--green); }
+.server-reach-dot.unreachable, .panel-reach-dot.unreachable { background:var(--red); }
+.server-reach-dot.unknown, .panel-reach-dot.unknown { background:var(--yellow); }
 .server-conn-label { color:var(--text-secondary);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 .server-conn-close-btn { background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:var(--ui-fs);padding:0 0.2rem;line-height:1;flex-shrink:0; }
 .server-conn-close-btn:hover { color:var(--red); }

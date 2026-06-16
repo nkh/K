@@ -199,8 +199,9 @@ function _buildSidebar() {
             const serverBadge = showServerBadge
                 ? `<span class="resource-badge" style="font-size:0.55rem;opacity:0.7;" title="${escHtml(inst.url)}">${escHtml(inst.label)}</span>`
                 : '';
+            const reachCls = inst.reachable === true ? 'reachable' : inst.reachable === false ? 'unreachable' : 'unknown';
             const dimStyle = inst.reachable === false ? 'opacity:0.4;' : ((isAlive || isFrozen) ? '' : 'opacity:0.6;');
-            out += `<div class="cmd-item${selected}${isFrozen ? ' frozen' : ''}${!isAlive && !isFrozen ? ' exited' : ''}${inst.reachable === false ? ' unreachable' : ''}" data-action="SelectCommand" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" data-cmd-retained="${retainOnExit}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" draggable="true" ondragstart="onCmdDragStart(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true',this.dataset.cmdRetained==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)}${unreachableTitle}" style="${dimStyle}"><div class="cmd-item-row"><button class="cmd-kill-btn" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-retained="${retainOnExit}" data-cmd-alive="${isAlive}">&#x2715;</button>${keepBtnHtml}<button class="pin-btn${isPinned ? ' active' : ''}" data-action="TogglePinCmd" data-cmd-name="${escHtml(cmdName)}" title="${isPinned ? 'Unpin' : 'Pin'}">${isPinned ? '◉' : '◎'}</button><span class="cmd-grab-handle" onmousedown="_cmdReorderMouseDown(event,'${escHtml(inst.url)}','${escHtml(cmd.id)}','${escHtml(cmdName)}')" title="Drag to reorder / drop on pane to open">&#x2807;</span><span class="name">${escHtml(cmdName)}</span><span class="cmd-detail-inline">${dp.map(p => escHtml(p)).join(' · ')}</span>${serverBadge}${certBadge}${exitBadge}${freezeBtnHtml}</div>${dp.length > 0 ? `<div class="cmd-detail-row">${dp.join(' · ')}</div>` : ''}</div>`;
+            out += `<div class="cmd-item${selected}${isFrozen ? ' frozen' : ''}${!isAlive && !isFrozen ? ' exited' : ''}${inst.reachable === false ? ' unreachable' : ''}" data-action="SelectCommand" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" data-cmd-retained="${retainOnExit}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" draggable="true" ondragstart="onCmdDragStart(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true',this.dataset.cmdRetained==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)}${unreachableTitle}" style="${dimStyle}"><div class="cmd-item-row"><button class="cmd-kill-btn" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-retained="${retainOnExit}" data-cmd-alive="${isAlive}">&#x2715;</button><span class="server-reach-dot ${reachCls}" style="flex-shrink:0;"></span>${keepBtnHtml}<button class="pin-btn${isPinned ? ' active' : ''}" data-action="TogglePinCmd" data-cmd-name="${escHtml(cmdName)}" title="${isPinned ? 'Unpin' : 'Pin'}">${isPinned ? '◉' : '◎'}</button><span class="cmd-grab-handle" onmousedown="_cmdReorderMouseDown(event,'${escHtml(inst.url)}','${escHtml(cmd.id)}','${escHtml(cmdName)}')" title="Drag to reorder / drop on pane to open">&#x2807;</span><span class="name">${escHtml(cmdName)}</span><span class="cmd-detail-inline">${dp.map(p => escHtml(p)).join(' · ')}</span>${serverBadge}${certBadge}${exitBadge}${freezeBtnHtml}</div>${dp.length > 0 ? `<div class="cmd-detail-row">${dp.join(' · ')}</div>` : ''}</div>`;
         }
         return out;
     }
@@ -302,18 +303,16 @@ function updateTerminalDisconnectedOverlay() {
     for (const panelObj of state.panels) {
         const panelEl = document.getElementById(panelObj.id);
         if (!panelEl) continue;
-        let overlay = panelEl.querySelector('.disconnected-overlay');
+        // Remove any stale overlay
+        const old = panelEl.querySelector('.disconnected-overlay');
+        if (old) old.remove();
+        // Update the reach dot in the panel header
+        const dot = panelEl.querySelector('.panel-reach-dot');
         const inst = panelObj.selectedInstUrl ? state.connections.find(i => i.url === panelObj.selectedInstUrl) : null;
-        if (inst && inst.reachable === false) {
-            if (!overlay) {
-                overlay = document.createElement('div');
-                overlay.className = 'disconnected-overlay';
-                overlay.innerHTML = '<span>&#9888; Server unreachable &mdash; output is stale</span>';
-                const vttyEl = panelEl.querySelector('.vtty-container');
-                if (vttyEl) vttyEl.appendChild(overlay);
-            }
-        } else if (overlay) {
-            overlay.remove();
+        if (dot && inst) {
+            const rCls = inst.reachable === true ? 'reachable' : inst.reachable === false ? 'unreachable' : 'unknown';
+            dot.className = 'panel-reach-dot ' + rCls;
+            dot.title = inst.reachable === true ? 'Server connected' : inst.reachable === false ? 'Server unreachable' : 'Checking server...';
         }
     }
 }

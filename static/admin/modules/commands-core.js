@@ -131,6 +131,12 @@
             const argsEl = el.querySelector(':scope > .panel-header .cmd-args');
             const metaEl = el.querySelector(':scope > .panel-header .panel-header-meta');
             const freezeBtn = el.querySelector(':scope > .panel-header .panel-freeze-btn');
+            const reachDot = el.querySelector(':scope > .panel-header .panel-reach-dot');
+            if (reachDot && inst) {
+                const rCls = inst.reachable === true ? 'reachable' : inst.reachable === false ? 'unreachable' : 'unknown';
+                reachDot.className = 'panel-reach-dot ' + rCls;
+                reachDot.title = inst.reachable === true ? 'Server connected' : inst.reachable === false ? 'Server unreachable' : 'Checking server...';
+            }
             if (metaEl && cmd) {
                 const sLabel = _getServerLabel(inst, p.selectedInstUrl);
                 const pid = cmd.pid || '';
