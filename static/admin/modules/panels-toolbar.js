@@ -48,18 +48,6 @@ function updateSharedToolbar() {
     }
     const restartBtn = document.getElementById('stRestartBtn');
     if (restartBtn) restartBtn.classList.toggle('hidden', !panelObj.selectedCmdId);
-    const freezeBtn = document.getElementById('stFreezeBtn');
-    if (freezeBtn) {
-        if (panelObj.selectedCmdId) {
-            const cmd = _findCmd(panelObj.selectedInstUrl, panelObj.selectedCmdId);
-            const isAlive = cmd && cmd.alive !== false, isFrozen = cmd && cmd.frozen === true;
-            freezeBtn.classList.toggle('hidden', !isAlive);
-            freezeBtn.textContent = isFrozen ? '\u25B6' : '\u2161';
-            freezeBtn.title = isFrozen ? 'Thaw command' : 'Freeze command';
-            freezeBtn.classList.toggle('btn-primary', isFrozen);
-            freezeBtn.classList.toggle('btn-warning', !isFrozen);
-        } else { freezeBtn.classList.add('hidden'); }
-    }
     _setToggleBtn(['stMaxFitBtn', 'maxFitBtn-' + pid], !!(_maxFitState[pid]?.active), 'Auto-fit terminal to panel', 'Restore previous size');
     _setToggleBtn(['stMaxFontBtn', 'maxFontBtn-' + pid], !!(_maxFontState[pid]?.active), 'Maximize font to fit', 'Restore previous font size');
 }

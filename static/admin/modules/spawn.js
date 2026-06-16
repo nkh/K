@@ -186,6 +186,10 @@ function _clearPanelVtty(panel) {
     if (nameEl) nameEl.textContent = '';
     const argsEl = panel.querySelector('.cmd-args');
     if (argsEl) argsEl.textContent = '';
+    const metaEl = panel.querySelector('.panel-header-meta');
+    if (metaEl) metaEl.textContent = '';
+    const freezeBtn = panel.querySelector('.panel-freeze-btn');
+    if (freezeBtn) freezeBtn.classList.add('hidden');
 }
 
 async function _purgeCmd(instUrl, cmdId, skipConfirm, cmdName) {

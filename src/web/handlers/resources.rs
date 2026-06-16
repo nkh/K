@@ -22,6 +22,7 @@ pub async fn get_resources(State(state): State<AppState>, Path(id): Path<String>
 
     let pid = handle.pid;
     let is_alive = handle.is_alive();
+    let is_frozen = handle.is_frozen();
 
     if !is_alive {
         return api_ok(serde_json::json!({
@@ -30,6 +31,19 @@ pub async fn get_resources(State(state): State<AppState>, Path(id): Path<String>
             "memory_mb": null,
             "threads": null,
             "alive": false,
+            "frozen": false,
+        }));
+    }
+
+    // Frozen processes (SIGSTOP) consume no CPU — return 0 immediately
+    if is_frozen {
+        return api_ok(serde_json::json!({
+            "pid": pid,
+            "cpu_percent": Some(0.0),
+            "memory_mb": None,
+            "threads": None,
+            "alive": true,
+            "frozen": true,
         }));
     }
 
@@ -42,6 +56,7 @@ pub async fn get_resources(State(state): State<AppState>, Path(id): Path<String>
         "memory_mb": result.memory_mb,
         "threads": result.threads,
         "alive": true,
+        "frozen": false,
     }))
 }
 

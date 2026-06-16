@@ -195,7 +195,6 @@ function _buildSidebar() {
             if (isFrozen) dp.push('PAUSED');
             if (res && res.cpu_percent != null) dp.push(res.cpu_percent.toFixed(1) + '%');
             if (res && res.memory_mb != null) { const mb = res.memory_mb; dp.push(mb >= 1024 ? (mb / 1024).toFixed(1) + 'G' : mb.toFixed(1) + 'M'); }
-            if (cmd.pid) dp.push(escHtml(String(cmd.pid)));
             const unreachableTitle = inst.reachable === false ? ' [disconnected]' : '';
             const serverBadge = showServerBadge
                 ? `<span class="resource-badge" style="font-size:0.55rem;opacity:0.7;" title="${escHtml(inst.url)}">${escHtml(inst.label)}</span>`

@@ -603,14 +603,26 @@ pub async fn get_snapshot(State(state): State<AppState>) -> Json<Value> {
     for (id, _, _, pid, _) in &commands {
         if let Some(handle) = state.manager.get(id) {
             if handle.is_alive() {
-                let result = read_proc_stats(*pid);
-                resources[id] = serde_json::json!({
-                    "pid": pid,
-                    "cpu_percent": result.cpu_percent,
-                    "memory_mb": result.memory_mb,
-                    "threads": result.threads,
-                    "alive": true,
-                });
+                if handle.is_frozen() {
+                    resources[id] = serde_json::json!({
+                        "pid": pid,
+                        "cpu_percent": Some(0.0),
+                        "memory_mb": None,
+                        "threads": None,
+                        "alive": true,
+                        "frozen": true,
+                    });
+                } else {
+                    let result = read_proc_stats(*pid);
+                    resources[id] = serde_json::json!({
+                        "pid": pid,
+                        "cpu_percent": result.cpu_percent,
+                        "memory_mb": result.memory_mb,
+                        "threads": result.threads,
+                        "alive": true,
+                        "frozen": false,
+                    });
+                }
             }
         }
     }

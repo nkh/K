@@ -194,7 +194,6 @@ function updateSidebarResourceText() {
                 const mb = res.memory_mb;
                 parts.push(mb >= 1024 ? (mb / 1024).toFixed(1) + 'G' : mb.toFixed(1) + 'M');
             }
-            if (cmd.pid) parts.push(String(cmd.pid));
             let detailRow = item.querySelector('.cmd-detail-row');
             if (!parts.length) { if (detailRow) detailRow.remove(); }
             else {

@@ -129,13 +129,17 @@
             const cmd = inst && inst._commands ? inst._commands.find(c => c.id === p.selectedCmdId) : null;
             const nameEl = el.querySelector(':scope > .panel-header .cmd-fullname');
             const argsEl = el.querySelector(':scope > .panel-header .cmd-args');
-            const sLabel = _getServerLabel(inst, p.selectedInstUrl);
-            const sBadge = el.querySelector(':scope > .panel-header .panel-server-badge');
-            if (sBadge) { sBadge.textContent = sLabel; sBadge.classList.toggle('hidden', !sLabel); }
+            const metaEl = el.querySelector(':scope > .panel-header .panel-header-meta');
+            const freezeBtn = el.querySelector(':scope > .panel-header .panel-freeze-btn');
+            if (metaEl && cmd) {
+                const sLabel = _getServerLabel(inst, p.selectedInstUrl);
+                metaEl.textContent = (sLabel || '') + (p.selectedCmdId ? ' - ' + p.selectedCmdId : '');
+                metaEl.title = p.selectedInstUrl || '';
+            }
             if (nameEl && cmd) {
                 const fullName = cmd.name || cmd.id;
                 nameEl.textContent = p.customTitle || fullName;
-                nameEl.title = fullName + (sLabel ? ' (' + sLabel + ')' : '') + (p.customTitle ? ' (title: ' + p.customTitle + ')' : '');
+                nameEl.title = fullName + (p.customTitle ? ' (title: ' + p.customTitle + ')' : '');
                 if (argsEl) { const a = (cmd.args || []).join(' '); argsEl.textContent = a; argsEl.title = a || ''; }
                 const pauseBtn = el.querySelector('[id^="pauseRunBtn-"]');
                 if (pauseBtn) {
@@ -147,6 +151,12 @@
                 }
                 const restartBtn = el.querySelector('[id^="restartBtn-"]');
                 if (restartBtn) restartBtn.classList.remove('hidden');
+                if (freezeBtn && cmd.alive !== false) {
+                    freezeBtn.classList.remove('hidden');
+                    freezeBtn.textContent = cmd.frozen ? '\u25B6' : '\u2161';
+                    freezeBtn.title = cmd.frozen ? 'Thaw command' : 'Freeze command';
+                    freezeBtn.classList.toggle('active', cmd.frozen);
+                } else if (freezeBtn) { freezeBtn.classList.add('hidden'); }
                 const resEl = el.querySelector('[id^="resourceBadge-"]');
                 if (resEl) {
                     const res = state._resourceCache[cmd.id];
