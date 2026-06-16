@@ -247,9 +247,9 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .sidebar-wide .cmd-detail-inline { display: inline !important; flex: 0 0 auto !important; min-width: 0; }
 .sidebar-wide .cmd-item-row { flex-wrap: wrap; }
 .cmd-item .cmd-detail-row .detail-sep { color: var(--border); }
-.cmd-freeze-btn { font-size: var(--ui-fs); padding: 0 0.1rem; cursor: pointer; border-radius: 2px; flex-shrink: 0; line-height: 1; height: calc(var(--ui-fs) + 0.25rem); min-width: calc(var(--ui-fs) + 0.25rem); display: inline-flex; align-items: center; justify-content: center; background: var(--yellow); color: #000; border-color: var(--yellow); }
+.cmd-freeze-btn { font-size: var(--ui-fs); padding: 0 0.1rem; cursor: pointer; border-radius: 2px; flex-shrink: 0; line-height: 1; height: calc(var(--ui-fs) + 0.25rem); min-width: calc(var(--ui-fs) + 0.25rem); display: inline-flex; align-items: center; justify-content: center; background: #FE9F14; color: #000; border: none; }
 .cmd-freeze-btn:hover { filter: brightness(1.1); }
-.cmd-freeze-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+.cmd-freeze-btn.active { background: var(--accent); border: none; color: #fff; }
 .cmd-item .cmd-detail-inline { font-family: var(--font-mono); font-size: var(--ui-fs); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 0%; min-width: 0; }
 .cmd-item .cmd-detail-inline:empty { display: none; }
 .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
@@ -349,7 +349,7 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .btn-primary:hover { background: #2ea043; }
 .btn-danger { background: #da3633; border-color: #f85149; color: #fff; }
 .btn-danger:hover { background: #f85149; }
-.btn-warning { background: var(--yellow); border-color: var(--yellow); color: #000; }
+.btn-warning { background: #FE9F14; border: none; color: #000; }
 .btn-warning:hover { filter: brightness(1.1); }
 /* Legacy button classes (backward compat with app.js generated HTML) */
 button.small { padding: 0 0.2rem; font-size: var(--ui-fs); line-height: 1; }
