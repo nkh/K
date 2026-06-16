@@ -118,6 +118,7 @@
             }
         }
         _debouncedBuildSidebar();
+    }
 
     function updatePanelCommandInfo() {
         for (const p of state.panels) {
