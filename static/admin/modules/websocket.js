@@ -153,11 +153,11 @@ function connectPanelWs(panelId) {
                     fetchVttyDiffForPanel(panelObj.id, instUrl, cmdId);
                 } else if (msg.type === 'vtty_close') {
                     // Terminal closed — discard baseline so a reconnection starts fresh
-                    delete state._diffBaselines[cmdId];
+                    delete state._diffBaselines[panelObj.id + '/' + cmdId];
                 }
             },
             onEnded() {
-                delete state._diffBaselines[cmdId];
+                delete state._diffBaselines[panelObj.id + '/' + cmdId];
                 notifyCommandEnded(cmdId);
             },
             onPong(latency) {
@@ -279,7 +279,7 @@ function _connectSecondaryWs(panelObj) {
                 }
             },
             onEnded() {
-                delete state._diffBaselines[s.secondaryCmdId];
+                delete state._diffBaselines[panelObj.id + '/' + s.secondaryCmdId];
                 notifyCommandEnded(s.secondaryCmdId);
             },
             onPeer(msg) { handlePeerEvent(msg); },
@@ -317,22 +317,23 @@ async function _doFetchVttyDiff(panelId, instUrl, cmdId, isSecondary) {
     const panelEl = document.getElementById(panelId);
     if (!panelEl) return;
 
-    const baseline = state._diffBaselines[cmdId] || null;
+    const blKey = panelId + '/' + cmdId;
+    const baseline = state._diffBaselines[blKey] || null;
     try {
         const json = await api.getVttyDiff(instUrl, cmdId, baseline);
         if (json.status === 'ok' && json.data) {
             // Store the baseline UUID for next request
-            state._diffBaselines[cmdId] = json.data.baseline;
+            state._diffBaselines[blKey] = json.data.baseline;
 
             if (json.data.full_sync_required) {
                 // Too many cells changed — fetch full HTML instead
                 const htmlJson = await api.getVttyHtml(instUrl, cmdId);
                 if (htmlJson.status === 'ok' && htmlJson.data) {
                     // Reset baseline since we skipped the diff
-                    state._diffBaselines[cmdId] = null;
+                    state._diffBaselines[blKey] = null;
                     const htmlResp = await api.getVttyDiff(instUrl, cmdId, null);
                     if (htmlResp.status === 'ok' && htmlResp.data) {
-                        state._diffBaselines[cmdId] = htmlResp.data.baseline;
+                        state._diffBaselines[blKey] = htmlResp.data.baseline;
                         htmlResp.data.html = htmlJson.data.html;
                         if (isSecondary) {
                             const vttyEl = document.getElementById('vtty-' + panelId + '-secondary');
