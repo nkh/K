@@ -146,6 +146,7 @@ const _actions = {
 
     // ── Sidebar: dynamic command list ──
     'DisconnectServer':         { handler: 'disconnectServer', sig: 'inst-url', stop: true },
+    'FreezeThawServer':         { handler: '_freezeThawServer', sig: 'inst-url', stop: true },
     'SortSidebarBy':            { handler: '_sortSidebarBy', sig: 'data-value' },
     'ToggleKeepCmd':            { handler: 'toggleKeepCmd', sig: 'cmd-id', stop: true },
     'TogglePauseRunByIdx':      { handler: 'togglePauseRunPanelByIdx', sig: 'cmd-id', stop: true },

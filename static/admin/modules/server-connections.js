@@ -207,6 +207,7 @@ async function _fetchServerName(conn) {
 function disconnectServer(url) {
     const inst = state.connections.find(c => c.url === url);
     if (!inst) return;
+    if (url === window.location.origin) { alert('Cannot disconnect from the default server.'); return; }
     const active = state.panels.filter(p => p.selectedInstUrl === url && p.selectedCmdId);
     const msg = active.length
         ? `Disconnect from "${inst.label}"? ${active.length} panel(s) will keep their last state.`

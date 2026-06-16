@@ -91,6 +91,32 @@
         }));
         if (changed) updateDisconnectedUI();
 
+        // Process URL-based command opening (state._urlCmdSpecs set from ?cmd=&server= params)
+        if (state._urlCmdSpecs && state._urlCmdSpecs.length > 0) {
+            const specs = state._urlCmdSpecs;
+            state._urlCmdSpecs = null; // consume once
+            let opened = 0;
+            for (const spec of specs) {
+                if (!spec.cmd) continue;
+                const inst = state.connections.find(c => c.url === spec.server);
+                if (!inst || !inst._commands) continue;
+                const cmd = inst._commands.find(c => (c.name || c.id) === spec.cmd);
+                if (!cmd) continue;
+                if (opened === 0) {
+                    const panel = state.panels[0];
+                    if (panel) {
+                        focusPanel(panel.id);
+                        _selectCommandForPanel(panel, spec.server, cmd.id);
+                    }
+                } else {
+                    const p = addPanelDirect();
+                    _selectCommandForPanel(p, spec.server, cmd.id);
+                }
+                opened++;
+            }
+            if (opened > 0) renderPanels();
+        }
+
         const hasAny = state.connections.some(i => i._commands && i._commands.length > 0);
         const showWelcome = !hasAny && !state.selectedCmdId && !state.serverReachable;
         if (showWelcome !== state._showingWelcome) { state._showingWelcome = showWelcome; renderPanels(); }

@@ -19,6 +19,8 @@ function _panelDragMouseDown(e) {
         panelId: panelEl.id,
         startX: e.clientX,
         startY: e.clientY,
+        lastX: e.clientX,
+        lastY: e.clientY,
         rect: rect,
         offsetX: e.clientX - rect.left,
         offsetY: e.clientY - rect.top,
@@ -32,6 +34,8 @@ function _panelDragMouseDown(e) {
 function _panelDragMouseMove(e) {
     if (!_panelDrag) return;
     const d = _panelDrag;
+    d.lastX = e.clientX;
+    d.lastY = e.clientY;
     // Require 4px movement before starting drag
     if (!d.started) {
         if (Math.abs(e.clientX - d.startX) < 4 && Math.abs(e.clientY - d.startY) < 4) return;
@@ -80,31 +84,35 @@ function _panelDragMouseUp() {
     if (el && d.started) {
         // Restore element style
         ['position','left','top','width','height','zIndex','opacity','pointerEvents'].forEach(p => el.style[p] = '');
-        // Find drop target
-        const under = document.elementFromPoint(d.startX, d.startY);
+        // Find drop target using last known mouse position
+        const under = document.elementFromPoint(d.lastX, d.lastY);
         const targetPanel = under?.closest('.panel');
         const container = document.getElementById('view-vtty');
         if (targetPanel && targetPanel.id !== d.panelId && container) {
             const rect = targetPanel.getBoundingClientRect();
             const midX = rect.left + rect.width / 2;
-            // Insert placeholder reference
-            if (d.placeholder && d.placeholder.parentNode) {
-                container.insertBefore(el, d.placeholder);
-                d.placeholder.remove();
-                // Also move the resize handle
-                const handle = el.nextElementSibling;
-                if (handle?.classList.contains('panel-resize-handle')) {
-                    container.removeChild(handle);
-                    container.insertBefore(handle, el.nextElementSibling);
+            const insertBefore = d.lastX < midX;
+            // Remove placeholder first
+            if (d.placeholder && d.placeholder.parentNode) d.placeholder.remove();
+            // Insert element relative to the target panel
+            if (insertBefore) {
+                container.insertBefore(el, targetPanel);
+            } else {
+                // Insert after target panel (and its resize handle if any)
+                const nextEl = targetPanel.nextElementSibling;
+                if (nextEl?.classList.contains('panel-resize-handle')) {
+                    container.insertBefore(el, nextEl.nextElementSibling);
+                } else {
+                    container.insertBefore(el, targetPanel.nextElementSibling);
                 }
-                // Update state order
-                const newOrder = [];
-                container.querySelectorAll('.panel').forEach(p => { const pp = state.panels.find(x => x.id === p.id); if (pp) newOrder.push(pp); });
-                state.panels = newOrder;
-                localStorage.setItem('vrw_panel_order', JSON.stringify(newOrder.map(p => p.id)));
             }
-        } else if (d.placeholder) {
-            d.placeholder.remove();
+            // Update state order
+            const newOrder = [];
+            container.querySelectorAll('.panel').forEach(p => { const pp = state.panels.find(x => x.id === p.id); if (pp) newOrder.push(pp); });
+            state.panels = newOrder;
+            localStorage.setItem('vrw_panel_order', JSON.stringify(newOrder.map(p => p.id)));
+        } else {
+            if (d.placeholder && d.placeholder.parentNode) d.placeholder.remove();
         }
     } else if (d.placeholder) {
         d.placeholder.remove();

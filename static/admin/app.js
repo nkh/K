@@ -59,6 +59,10 @@
 
     // Parse URL arguments for multi-instance
     const params = new URLSearchParams(window.location.search);
+
+    // no_reconnect: skip restoring saved server connections from localStorage
+    const noReconnect = params.has('no_reconnect') || params.has('no-reconnect');
+
     const instances = params.getAll('instance');
     if (instances.length > 0) {
         // Multiple instances from URL params — add as connections
@@ -78,12 +82,26 @@
         }];
     }
 
+    // Parse URL-based server+command pane opening: ?cmd=CMD_NAME&server=URL
+    // Multiple panes: ?cmd=CMD1&server=URL1&cmd=CMD2&server=URL2
+    const urlCmds = params.getAll('cmd');
+    const urlCmdServers = params.getAll('server');
+
     // Create initial panels
     addConnection(state.connections[0].url, state.connections[0].label, state.connections[0].token);
     addPanelDirect();
 
-    // Restore saved server connections from localStorage
-    const restoredConnections = _restoreConnections();
+    // Restore saved server connections from localStorage (unless no_reconnect)
+    const restoredConnections = noReconnect ? null : _restoreConnections();
+
+    // If URL specifies servers, add them as connections
+    if (instances.length > 0) {
+        for (let i = 0; i < instances.length; i++) {
+            if (instances[i] !== window.location.origin) {
+                addConnection(instances[i], params.getAll('label')[i] || '', params.getAll('token')[i] || '');
+            }
+        }
+    }
 
     // Health-check restored connections: remove ones that don't respond
     // after 5 retries at 500ms intervals
@@ -153,6 +171,18 @@
     const pathname = window.location.pathname.replace(/^\/+|\/+$/g, '');
     if (pathname && pathname !== 'admin' && !pathname.startsWith('api/')) {
         lookupAndSelectCommand(pathname);
+    }
+
+    // ── URL-based server+command pane opening ──
+    // ?cmd=CMD_NAME&server=http://host:port  (repeatable for multiple panes)
+    // If only ?cmd= is given without ?server=, uses the default server (origin).
+    // Example: /admin?cmd=my-server&server=http://host:9090&cmd=logs
+    if (urlCmds.length > 0) {
+        // Store the URL cmd specs in state; loadCommands will process them after first load
+        state._urlCmdSpecs = urlCmds.map((cmdName, i) => ({
+            cmd: cmdName,
+            server: urlCmdServers[i] || window.location.origin,
+        }));
     }
 
     // ── Sidebar resize ──

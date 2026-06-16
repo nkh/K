@@ -107,6 +107,60 @@ function updateCmdToolbarVisibility() {
     if (freezeAllBtn) freezeAllBtn.classList.toggle('hidden', !show);
 }
 
+// Click-delay mechanism to distinguish single-click from double-click on cmd-items.
+// When a cmd-item is clicked, we delay the SelectCommand action by 250ms.
+// If a dblclick arrives within that window, we cancel the pending click and handle dblclick instead.
+let _cmdClickTimer = null;
+let _cmdClickPending = null;
+
+function _cancelPendingCmdClick() {
+    if (_cmdClickTimer) { clearTimeout(_cmdClickTimer); _cmdClickTimer = null; }
+    _cmdClickPending = null;
+}
+
+function _handleCmdItemClick(e) {
+    // Skip clicks on buttons (kill, freeze, pin, keep, grab-handle) — they have their own handlers
+    if (e.target.closest('button')) return;
+    const item = e.target.closest('.cmd-item[data-cmd-id]');
+    if (!item) return;
+    // If ctrl/meta is held, always open new pane immediately (no delay needed)
+    if (e.ctrlKey || e.metaKey) {
+        _cancelPendingCmdClick();
+        _openCommandInNewPane(item.dataset.instUrl, item.dataset.cmdId, item.dataset.cmdName);
+        e.stopPropagation();
+        e.preventDefault();
+        return;
+    }
+    // Delay single-click to wait for possible double-click
+    _cancelPendingCmdClick();
+    const instUrl = item.dataset.instUrl;
+    const cmdId = item.dataset.cmdId;
+    const cmdName = item.dataset.cmdName;
+    _cmdClickPending = { instUrl, cmdId, cmdName };
+    _cmdClickTimer = setTimeout(() => {
+        if (_cmdClickPending) {
+            selectCommand(_cmdClickPending.instUrl, _cmdClickPending.cmdId, _cmdClickPending.cmdName);
+            _cmdClickPending = null;
+        }
+        _cmdClickTimer = null;
+    }, 250);
+    e.stopPropagation();
+    e.preventDefault();
+}
+
+function _handleCmdItemDblClick(e) {
+    if (e.target.closest('button')) return;
+    const item = e.target.closest('.cmd-item[data-cmd-id]');
+    if (!item) return;
+    e.stopPropagation();
+    _cancelPendingCmdClick();
+    if (e.ctrlKey || e.metaKey) {
+        _openCommandInNewPane(item.dataset.instUrl, item.dataset.cmdId, item.dataset.cmdName);
+    } else {
+        selectCommand(item.dataset.instUrl, item.dataset.cmdId, item.dataset.cmdName);
+    }
+}
+
 function _buildSidebar() {
     const filter = (document.getElementById('cmdFilter') || {}).value || '';
     const filterLower = filter.toLowerCase();
@@ -125,16 +179,6 @@ function _buildSidebar() {
     let html = '';
 
     const originUrl = window.location.origin;
-    const nonOrigin = state.connections.filter(c => c.url !== originUrl);
-    if (nonOrigin.length > 0) {
-        html += '<div class="server-connections-bar">';
-        for (const inst of nonOrigin) {
-            const cls = inst.reachable === true ? 'reachable' : inst.reachable === false ? 'unreachable' : 'unknown';
-            const lbl = inst.reachable === true ? 'connected' : inst.reachable === false ? 'unreachable' : 'checking...';
-            html += `<div class="server-conn-item" title="${escHtml(inst.url)} — ${lbl}"><span class="server-reach-dot ${cls}"></span><span class="server-conn-label">${escHtml(_shortLabel(inst))}</span><button class="server-conn-close-btn" data-action="DisconnectServer" data-inst-url="${escHtml(inst.url)}" title="Disconnect from ${escHtml(inst.label)}">&#x2715;</button></div>`;
-        }
-        html += '</div>';
-    }
 
     // Server tabs — always shown (All + one per server)
     html += '<div class="sidebar-sort-bar">';
@@ -142,8 +186,14 @@ function _buildSidebar() {
     for (const inst of state.connections) {
         const rCls = inst.reachable === true ? 'reachable' : inst.reachable === false ? 'unreachable' : 'unknown';
         const isActive = state._sidebarSort === inst.url;
-        const hasAlive = (inst._commands || []).some(c => c.alive !== false);
-        html += `<span class="sidebar-sort-item${isActive ? ' active' : ''}" data-action="SortSidebarBy" data-value="${escHtml(inst.url)}"><span class="server-reach-dot ${rCls}" style="margin-right:0.15rem;"></span>${escHtml(_shortLabel(inst))}${inst.url !== originUrl ? `<button class="server-tab-btn" data-action="DisconnectServer" data-inst-url="${escHtml(inst.url)}" title="Disconnect">&#x2715;</button>` : ''}</span>`;
+        // Determine freeze/thaw state for this server
+        const instCmds = inst._commands || [];
+        const aliveCmds = instCmds.filter(c => c.alive !== false);
+        const allFrozen = aliveCmds.length > 0 && aliveCmds.every(c => c.frozen);
+        const anyFrozen = aliveCmds.some(c => c.frozen);
+        const freezeIcon = allFrozen ? '&#9654;' : '&#8545;';
+        const freezeActive = allFrozen ? ' active' : '';
+        html += `<span class="sidebar-sort-item${isActive ? ' active' : ''}" data-action="SortSidebarBy" data-value="${escHtml(inst.url)}"><span class="server-reach-dot ${rCls}" style="margin-right:0.15rem;"></span>${escHtml(_shortLabel(inst))}<button class="server-tab-freeze-btn${freezeActive}" data-action="FreezeThawServer" data-inst-url="${escHtml(inst.url)}" title="${allFrozen ? 'Thaw all' : 'Freeze all'}">${freezeIcon}</button><button class="server-tab-btn" data-action="DisconnectServer" data-inst-url="${escHtml(inst.url)}" title="Disconnect">&#x2715;</button></span>`;
     }
     html += '</div>';
 
@@ -212,26 +262,17 @@ function _buildSidebar() {
                 : '';
             const reachCls = inst.reachable === true ? 'reachable' : inst.reachable === false ? 'unreachable' : 'unknown';
             const dimStyle = inst.reachable === false ? 'opacity:0.4;' : ((isAlive || isFrozen) ? '' : 'opacity:0.6;');
-            out += `<div class="cmd-item${selected}${isFrozen ? ' frozen' : ''}${!isAlive && !isFrozen ? ' exited' : ''}${inst.reachable === false ? ' unreachable' : ''}" data-action="SelectCommand" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" data-cmd-retained="${retainOnExit}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" draggable="true" ondragstart="onCmdDragStart(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true',this.dataset.cmdRetained==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)}${unreachableTitle}" style="${dimStyle}"><div class="cmd-item-row"><button class="cmd-kill-btn" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-retained="${retainOnExit}" data-cmd-alive="${isAlive}">&#x2715;</button><span class="server-reach-dot ${reachCls}" style="flex-shrink:0;"></span>${keepBtnHtml}<button class="pin-btn${isPinned ? ' active' : ''}" data-action="TogglePinCmd" data-cmd-name="${escHtml(cmdName)}" title="${isPinned ? 'Unpin' : 'Pin'}">${isPinned ? '◉' : '◎'}</button><span class="cmd-grab-handle" onmousedown="_cmdReorderMouseDown(event,'${escHtml(inst.url)}','${escHtml(cmd.id)}','${escHtml(cmdName)}')" title="Drag to reorder / drop on pane to open">&#x2807;</span><span class="name">${escHtml(cmdName)}</span><span class="cmd-detail-inline">${dp.map(p => escHtml(p)).join(' · ')}</span>${serverBadge}${certBadge}${exitBadge}${freezeBtnHtml}</div>${dp.length > 0 ? `<div class="cmd-detail-row">${dp.join(' · ')}</div>` : ''}</div>`;
+            out += `<div class="cmd-item${selected}${isFrozen ? ' frozen' : ''}${!isAlive && !isFrozen ? ' exited' : ''}${inst.reachable === false ? ' unreachable' : ''}" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" data-cmd-retained="${retainOnExit}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" draggable="true" ondragstart="onCmdDragStart(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true',this.dataset.cmdRetained==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)}${unreachableTitle}" style="${dimStyle}"><div class="cmd-item-row"><button class="cmd-kill-btn" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-retained="${retainOnExit}" data-cmd-alive="${isAlive}">&#x2715;</button><span class="server-reach-dot ${reachCls}" style="flex-shrink:0;"></span>${keepBtnHtml}<button class="pin-btn${isPinned ? ' active' : ''}" data-action="TogglePinCmd" data-cmd-name="${escHtml(cmdName)}" title="${isPinned ? 'Unpin' : 'Pin'}">${isPinned ? '◉' : '◎'}</button><span class="cmd-grab-handle" onmousedown="_cmdReorderMouseDown(event,'${escHtml(inst.url)}','${escHtml(cmd.id)}','${escHtml(cmdName)}')" title="Drag to reorder / drop on pane to open">&#x2807;</span><span class="name">${escHtml(cmdName)}</span><span class="cmd-detail-inline">${dp.map(p => escHtml(p)).join(' · ')}</span>${serverBadge}${certBadge}${exitBadge}${freezeBtnHtml}</div>${dp.length > 0 ? `<div class="cmd-detail-row">${dp.join(' · ')}</div>` : ''}</div>`;
         }
         return out;
     }
 
     rearrangePinnedCommands(container);
     container.innerHTML = html || '<div style="padding:1rem;color:var(--text-muted);text-align:center;">No running commands</div>';
-    container.ondblclick = (e) => {
-        const item = e.target.closest('.cmd-item[data-cmd-id]');
-        if (!item) return;
-        e.stopPropagation();
-        const instUrl = item.dataset.instUrl;
-        const cmdId = item.dataset.cmdId;
-        const cmdName = item.dataset.cmdName;
-        if (e.ctrlKey || e.metaKey) {
-            _openCommandInNewPane(instUrl, cmdId, cmdName);
-        } else {
-            selectCommand(instUrl, cmdId, cmdName);
-        }
-    };
+    // Use click/dblclick handlers with delay to distinguish single from double click.
+    // The cmd-items no longer have data-action="SelectCommand" — clicks are handled here.
+    container.onclick = _handleCmdItemClick;
+    container.ondblclick = _handleCmdItemDblClick;
     updateInstanceDropdown();
     updateCmdToolbarVisibility();
 
@@ -624,6 +665,14 @@ document.addEventListener('click', (e) => {
         _sortSidebarBy(sortKey) { state._sidebarSort = sortKey; if (sortKey !== 'name') window._userSpawnInstUrl = sortKey; loadCommands(); },
         togglePauseRunPanelByIdx(instUrl, cmdId) {
             _doFreezeThaw(instUrl, cmdId).then(() => loadCommands()).catch(() => {});
+        },
+        _freezeThawServer(instUrl) {
+            const inst = state.connections.find(i => i.url === instUrl);
+            if (!inst || !inst._commands) return;
+            const aliveCmds = inst._commands.filter(c => c.alive !== false);
+            const allFrozen = aliveCmds.length > 0 && aliveCmds.every(c => c.frozen);
+            const promises = aliveCmds.map(c => _doFreezeThaw(instUrl, c.id));
+            Promise.all(promises).then(() => loadCommands()).catch(() => loadCommands());
         },
         showDocs, fetchEnvironments, activateEnvironment, getCmdGroups, createCmdGroup,
         deleteCmdGroup, renameCmdGroup, toggleCmdInGroup, toggleGroupCollapse, renderGroups,

@@ -156,7 +156,8 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .layout-preset-menu button:hover { background: var(--accent); color: var(--bg-primary); }
 .cmd-history-btn { padding: 0 0.2rem; font-size: var(--ui-fs); opacity: 0.7; }
 .cmd-history-btn:hover { opacity: 1; }
-.panel-header { display: flex; align-items: center; gap: 0.1rem; padding: 0 0.1rem; background: var(--bg-tertiary); flex-shrink: 0; overflow: hidden; white-space: nowrap; cursor: pointer; border: none; -webkit-user-drag: auto; }
+.panel-header { display: flex; align-items: center; gap: 0.1rem; padding: 0 0.1rem; background: var(--bg-tertiary); flex-shrink: 0; overflow: hidden; white-space: nowrap; cursor: grab; border: none; -webkit-user-drag: none; user-select: none; }
+.panel-header:active { cursor: grabbing; }
 .panel-header .panel-server-badge { font-family: var(--font-mono); color: var(--text-secondary); font-size: var(--ui-fs); }
 .panel-header .split-server-label { color: var(--text-secondary); }
 .panel-header .split-cmd-label { color: var(--text-primary); }
@@ -561,9 +562,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .cmd-item.cmd-drag-over-top { border-top:2px solid var(--accent); }
 .cmd-item.cmd-drag-over-bottom { border-bottom:2px solid var(--accent); }
 
-/* Server connections bar — shows non-origin servers with reach indicator + close */
-.server-connections-bar { display:flex;flex-wrap:wrap;gap:0.3rem;padding:0.2rem 0.3rem;margin-bottom:0.15rem;border-bottom:1px solid var(--border);align-items:center; }
-.server-conn-item { display:flex;align-items:center;gap:0.25rem;padding:0.1rem 0.2rem;background:var(--bg-tertiary);border-radius:3px;font-size:var(--ui-fs); }
+/* Server connections bar — removed, tabs handle this now */
 .server-reach-dot, .panel-reach-dot { width:6px;height:6px;border-radius:50%;flex-shrink:0; }
 .server-reach-dot.reachable, .panel-reach-dot.reachable { background:var(--green); }
 .server-reach-dot.unreachable, .panel-reach-dot.unreachable { background:var(--red); }
@@ -573,12 +572,15 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .server-conn-close-btn:hover { color:var(--red); }
 
 /* Sidebar sort bar */
-.sidebar-sort-bar { display:flex;gap:0.2rem;padding:0.15rem 0.2rem;margin-bottom:0.15rem;border-bottom:1px solid var(--border); }
+.sidebar-sort-bar { display:flex;flex-wrap:wrap;gap:0.2rem;padding:0.15rem 0.2rem;margin-bottom:0.15rem;border-bottom:1px solid var(--border); }
 .sidebar-sort-item { font-size:var(--ui-fs);color:var(--text-secondary);cursor:pointer;padding:0.1rem 0.35rem;border-radius:2px;white-space:nowrap;display:inline-flex;align-items:center;gap:0.1rem; }
 .sidebar-sort-item:hover { color:var(--text-primary);background:var(--bg-tertiary); }
 .sidebar-sort-item.active { color:var(--accent);background:var(--accent-dim);font-weight:600; }
-.server-tab-btn { background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:var(--ui-fs);padding:0 0.1rem;line-height:1;margin-left:0.1rem; }
-.server-tab-btn:hover { color:var(--red); }
+.server-tab-btn { background:none;border:none;cursor:pointer;color:var(--text-muted) !important;font-size:var(--ui-fs);padding:0 0.1rem;line-height:1;margin-left:0.1rem; }
+.server-tab-btn:hover { color:var(--red) !important; }
+.server-tab-freeze-btn { background:none;border:none;cursor:pointer;color:var(--text-muted) !important;font-size:var(--ui-fs);padding:0 0.1rem;line-height:1;margin-left:0.05rem; }
+.server-tab-freeze-btn:hover { color:var(--yellow) !important; }
+.server-tab-freeze-btn.active { color:var(--green) !important; }
 
 /* Command templates */
 .template-card { background:var(--bg-tertiary);border:1px solid var(--border);border-radius:4px;padding:0.5rem;cursor:pointer;transition:background 0.1s;margin-bottom:0.4rem; }
