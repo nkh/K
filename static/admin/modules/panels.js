@@ -75,7 +75,7 @@ function renderPanels() {
             html += `<div class="panel${focused ? ' focused' : ''}" id="${panel.id}" draggable="false" ondragover="onPanelDragOver(event)" ondrop="onPanelDrop(event,'${panel.id}')" ondragleave="onPanelDragLeave(event)"${mHide}>
 <div class="panel-header" data-panel-id="${panel.id}" oncontextmenu="showPanelContextMenu(event,'${panel.id}')" tabindex="0" role="button" aria-label="Panel: ${escHtml(panel.selectedInstUrl || 'empty')}" style="background:${color};color:${textColor};">
     ${multi ? `<span class="drag-handle" draggable="true" ondragstart="onPanelDragStart(event,'${panel.id}')" ondragend="onPanelDragEnd(event)" title="Drag to reorder">&#x2840;</span>` : ''}
-    <button class="btn btn-xs btn-danger panel-close-btn" data-action="ClosePanelContent" data-panel="${panel.id}" title="Close panel">&#x2715;</button>
+    <button class="panel-close-btn" data-action="ClosePanelContent" data-panel="${panel.id}" title="Close panel">&#x2715;</button>
     <button class="btn btn-xs cmd-history-btn hidden" id="histBack-${panel.id}" data-action="PanelHistoryBack" data-panel="${panel.id}" title="Back">&#x25C0;</button>
     <button class="btn btn-xs cmd-history-btn hidden" id="histFwd-${panel.id}" data-action="PanelHistoryForward" data-panel="${panel.id}" title="Forward">&#x25B6;</button>
     <div class="cmd-info" id="cmdInfo-${panel.id}">
@@ -83,7 +83,7 @@ function renderPanels() {
         <span class="cmd-args" id="cmdArgs-${panel.id}"></span>
     </div>
     <span class="panel-header-meta" id="panelMeta-${panel.id}"></span>
-    <button class="cmd-freeze-btn panel-freeze-btn hidden" id="panelFreezeBtn-${panel.id}" data-action="TogglePauseRunPanel" data-panel="${panel.id}" title="Freeze/Thaw command">&#8545;</button>
+    <button class="cmd-freeze-btn panel-freeze-btn hidden" id="panelFreezeBtn-${panel.id}" data-action="TogglePauseRunPanel" data-panel="${panel.id}" title="Freeze/Thaw command" style="background:none;border:none;color:var(--text-muted);">&#8545;</button>
 </div>
 ${panel.split ? _renderSplitContainer(panel) : _renderVttyContainer(panel)}
 </div>

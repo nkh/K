@@ -31,7 +31,7 @@ function toggleBottombar() {
     const btn = document.getElementById('statusBtn');
     bar.classList.toggle('hidden');
     const isHidden = bar.classList.contains('hidden');
-    if (btn) { btn.style.background = isHidden ? '' : 'var(--accent)'; btn.style.color = isHidden ? '' : '#fff'; }
+    if (btn) { btn.style.background = isHidden ? '' : 'var(--accent)'; btn.style.color = isHidden ? '' : 'var(--bg-primary)'; }
     localStorage.setItem('vrw_bottombar_hidden', isHidden ? 'true' : 'false');
 }
 
@@ -40,13 +40,13 @@ function initBottombar() {
     const bar = document.getElementById('bottomBar');
     const btn = document.getElementById('statusBtn');
     if (shouldHide) { bar.classList.add('hidden'); }
-    else { bar.classList.remove('hidden'); if (btn) { btn.style.background = 'var(--accent)'; btn.style.color = '#fff'; } }
+    else { bar.classList.remove('hidden'); if (btn) { btn.style.background = 'var(--accent)'; btn.style.color = 'var(--bg-primary)'; } }
 }
 
 function _setViewBtnStyle(btn, active) {
     if (!btn) return;
     btn.style.background = active ? 'var(--accent)' : '';
-    btn.style.color = active ? '#fff' : '';
+    btn.style.color = active ? 'var(--bg-primary)' : '';
 }
 
 function toggleLogsView() {
@@ -200,7 +200,7 @@ function _buildSidebar() {
                 ? `<span class="resource-badge" style="font-size:0.55rem;opacity:0.7;" title="${escHtml(inst.url)}">${escHtml(inst.label)}</span>`
                 : '';
             const dimStyle = inst.reachable === false ? 'opacity:0.4;' : ((isAlive || isFrozen) ? '' : 'opacity:0.6;');
-            out += `<div class="cmd-item${selected}${isFrozen ? ' frozen' : ''}${!isAlive && !isFrozen ? ' exited' : ''}${inst.reachable === false ? ' unreachable' : ''}" data-action="SelectCommand" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" data-cmd-retained="${retainOnExit}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" draggable="true" ondragstart="onCmdDragStart(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true',this.dataset.cmdRetained==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)}${unreachableTitle}" style="${dimStyle}"><div class="cmd-item-row"><button class="btn btn-xs btn-danger cmd-kill-btn" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-retained="${retainOnExit}" data-cmd-alive="${isAlive}">&#x2715;</button>${keepBtnHtml}<button class="pin-btn${isPinned ? ' active' : ''}" data-action="TogglePinCmd" data-cmd-name="${escHtml(cmdName)}" title="${isPinned ? 'Unpin' : 'Pin'}">${isPinned ? '◉' : '◎'}</button><span class="cmd-grab-handle" onmousedown="_cmdReorderMouseDown(event,'${escHtml(inst.url)}','${escHtml(cmd.id)}','${escHtml(cmdName)}')" title="Drag to reorder / drop on pane to open">&#x2807;</span><span class="name">${escHtml(cmdName)}</span><span class="cmd-detail-inline">${dp.map(p => escHtml(p)).join(' · ')}</span>${serverBadge}${certBadge}${exitBadge}${freezeBtnHtml}</div>${dp.length > 0 ? `<div class="cmd-detail-row">${dp.join(' · ')}</div>` : ''}</div>`;
+            out += `<div class="cmd-item${selected}${isFrozen ? ' frozen' : ''}${!isAlive && !isFrozen ? ' exited' : ''}${inst.reachable === false ? ' unreachable' : ''}" data-action="SelectCommand" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" data-cmd-retained="${retainOnExit}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" draggable="true" ondragstart="onCmdDragStart(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true',this.dataset.cmdRetained==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)}${unreachableTitle}" style="${dimStyle}"><div class="cmd-item-row"><button class="cmd-kill-btn" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-retained="${retainOnExit}" data-cmd-alive="${isAlive}">&#x2715;</button>${keepBtnHtml}<button class="pin-btn${isPinned ? ' active' : ''}" data-action="TogglePinCmd" data-cmd-name="${escHtml(cmdName)}" title="${isPinned ? 'Unpin' : 'Pin'}">${isPinned ? '◉' : '◎'}</button><span class="cmd-grab-handle" onmousedown="_cmdReorderMouseDown(event,'${escHtml(inst.url)}','${escHtml(cmd.id)}','${escHtml(cmdName)}')" title="Drag to reorder / drop on pane to open">&#x2807;</span><span class="name">${escHtml(cmdName)}</span><span class="cmd-detail-inline">${dp.map(p => escHtml(p)).join(' · ')}</span>${serverBadge}${certBadge}${exitBadge}${freezeBtnHtml}</div>${dp.length > 0 ? `<div class="cmd-detail-row">${dp.join(' · ')}</div>` : ''}</div>`;
         }
         return out;
     }
