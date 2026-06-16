@@ -137,6 +137,7 @@ const _actions = {
     'FreezeAllCommands':        { handler: 'freezeAllCommands' },
     'LoadCommands':             { handler: 'loadCommands' },
     'SpawnCommand':             { handler: 'spawnCommand' },
+    'SpawnOnServer':             { handler: '_spawnOnServer' },
     'AutofitTerminalSize':      { handler: 'autofitTerminalSize' },
     'ShowAddTemplateForm':      { handler: 'showAddTemplateForm' },
     'SaveTemplate':             { handler: 'saveTemplate' },

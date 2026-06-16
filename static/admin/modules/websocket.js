@@ -1,6 +1,7 @@
 // ─── WebSocket Management ───
-// Pure WS lifecycle: connect, disconnect, ping/pong, reconnect, poll.
-// All VTTY display logic lives in vtty.js.
+// Uses a shared WS pool: one WebSocket per instUrl/cmdId, broadcast to
+// all panels subscribed to that command.  This avoids the server dropping
+// older connections when multiple panels view the same command.
 (function() {
     'use strict';
 
@@ -13,124 +14,174 @@ function _buildWsUrl(instUrl, cmdId) {
     return `${wsUrl}/api/commands/${cmdId}/ws${sep}${token ? 'token=' + encodeURIComponent(token) : ''}`;
 }
 
-/// Generic WS cleanup: clears timers, resets counters, closes socket, nulls properties.
-function _cleanupWs(obj, prefix) {
-    const t = obj[prefix + 'ReconnectTimer'];
-    if (t) { clearTimeout(t); obj[prefix + 'ReconnectTimer'] = null; }
-    clearInterval(obj[prefix + 'PingInterval']);
-    obj[prefix + 'PingInterval'] = null;
-    obj[prefix + 'PingSendTime'] = 0;
-    obj[prefix + 'Latency'] = 0;
-    obj[prefix + 'ReconnectCount'] = 0;
-    const ws = obj[prefix];
-    if (ws) {
-        ws.onclose = null;
-        ws.close();
-        obj[prefix] = null;
-        obj[prefix + 'InstUrl'] = null;
-        obj[prefix + 'CmdId'] = null;
+// ─── Shared WS Subscription Pool ───
+// Key: "instUrl/cmdId" → { ws, instUrl, cmdId, panels: Set<panelId>,
+//                           reconnectTimer, reconnectCount, pingInterval, pingSendTime, latency, closed }
+const _sharedSubs = {};
+
+function _subKey(instUrl, cmdId) { return instUrl + '/' + cmdId; }
+
+function _connectSharedSub(sub) {
+    if (sub.ws) return;
+    const url = _buildWsUrl(sub.instUrl, sub.cmdId);
+    sub.closed = false;
+    try {
+        const ws = new WebSocket(url);
+        sub.ws = ws;
+
+        ws.onopen = () => {
+            clearInterval(sub.pingInterval);
+            sub.pingInterval = setInterval(() => {
+                if (sub.ws && sub.ws.readyState === WebSocket.OPEN) {
+                    sub.pingSendTime = Date.now();
+                    sub.ws.send(JSON.stringify({ type: 'ping' }));
+                }
+            }, 10000);
+            // Update conn status if any subscribed panel is focused
+            _updateConnStatus(sub);
+            updateWsQualityIndicator();
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                switch (msg.type) {
+                    case 'vtty_dirty':
+                        // Broadcast to ALL panels subscribed to this command
+                        for (const pid of sub.panels) {
+                            fetchVttyDiffForPanel(pid, sub.instUrl, sub.cmdId);
+                        }
+                        break;
+                    case 'vtty_close':
+                        for (const pid of sub.panels) {
+                            delete state._diffBaselines[pid + '/' + sub.cmdId];
+                        }
+                        break;
+                    case 'command_ended':
+                        for (const pid of sub.panels) {
+                            delete state._diffBaselines[pid + '/' + sub.cmdId];
+                        }
+                        notifyCommandEnded(sub.cmdId);
+                        _closeSharedSub(sub);
+                        break;
+                    case 'pong':
+                        if (sub.pingSendTime > 0) {
+                            sub.latency = Date.now() - sub.pingSendTime;
+                            sub.pingSendTime = 0;
+                            updateWsQualityIndicator();
+                            _updateConnStatus(sub);
+                        }
+                        break;
+                    case 'peer_registered':
+                    case 'peer_unregistered':
+                        handlePeerEvent(msg);
+                        break;
+                }
+            } catch (e) {
+                console.error('WS message parse error:', e);
+            }
+        };
+
+        ws.onclose = () => {
+            if (sub.ws !== ws) return;
+            sub.ws = null;
+            clearInterval(sub.pingInterval);
+            sub.pingInterval = null;
+            sub.pingSendTime = 0;
+            sub.latency = 0;
+            sub.closed = true;
+            _updateConnStatus(sub);
+            updateWsQualityIndicator();
+            // HTTP fallback fetch for all subscribed panels
+            for (const pid of sub.panels) {
+                const p = state.panels.find(pp => pp.id === pid);
+                if (p && p.selectedInstUrl && p.selectedCmdId) {
+                    fetchVttyDiffForPanel(pid, p.selectedInstUrl, p.selectedCmdId, 0);
+                }
+            }
+            // Auto-reconnect (max 5 attempts) if still has subscribers
+            if (sub.panels.size > 0 && !sub.reconnectTimer) {
+                sub.reconnectCount++;
+                if (sub.reconnectCount <= 5) {
+                    sub.reconnectTimer = setTimeout(() => {
+                        sub.reconnectTimer = null;
+                        if (sub.panels.size > 0 && state.updateMode === 'push') {
+                            const inst = state.connections.find(i => i.url === sub.instUrl);
+                            if (inst && inst.reachable !== false) {
+                                _connectSharedSub(sub);
+                            }
+                        }
+                    }, 2000);
+                }
+            }
+        };
+
+        ws.onerror = (err) => {
+            console.error('WebSocket error:', err);
+        };
+    } catch (e) {
+        console.error('WebSocket connect failed:', e);
     }
 }
 
-/// Shared WS setup: creates WebSocket, sets up ping/pong, reconnect, and
-/// message dispatch. Returns the WebSocket instance.
-/// @param {object} obj      - The state object holding WS properties (panelObj or panelObj.split)
-/// @param {string} prefix   - Property prefix ('ws' for primary, 'secondaryWs' for secondary)
-/// @param {string} instUrl  - Server instance URL
-/// @param {string} cmdId    - Command ID
-/// @param {object} opts    - { onVtty, onEnded, onPong, onPeer, onError, isFocused, reconnectGuard }
-function _setupWs(obj, prefix, instUrl, cmdId, opts) {
-    _cleanupWs(obj, prefix);
-    const url = _buildWsUrl(instUrl, cmdId);
-    const ws = new WebSocket(url);
-    obj[prefix] = ws;
-    obj[prefix + 'InstUrl'] = instUrl;
-    obj[prefix + 'CmdId'] = cmdId;
+function _closeSharedSub(sub) {
+    if (sub.reconnectTimer) { clearTimeout(sub.reconnectTimer); sub.reconnectTimer = null; }
+    clearInterval(sub.pingInterval);
+    sub.pingInterval = null;
+    sub.pingSendTime = 0;
+    sub.latency = 0;
+    sub.reconnectCount = 0;
+    if (sub.ws) {
+        sub.ws.onclose = null;
+        sub.ws.close();
+        sub.ws = null;
+    }
+    sub.closed = true;
+}
 
-    ws.onopen = () => {
-        clearInterval(obj[prefix + 'PingInterval']);
-        obj[prefix + 'PingInterval'] = setInterval(() => {
-            if (obj[prefix] && obj[prefix].readyState === WebSocket.OPEN) {
-                obj[prefix + 'PingSendTime'] = Date.now();
-                obj[prefix].send(JSON.stringify({ type: 'ping' }));
-            }
-        }, 10000);
-        if (opts.isFocused) {
-            document.getElementById('connStatus').textContent = 'WS Connected';
-            updateWsQualityIndicator();
-        }
-    };
+function _updateConnStatus(sub) {
+    // Only update if a subscribed panel is focused
+    const focusedId = state._focusedPanelId;
+    if (!sub.panels.has(focusedId)) return;
+    const connEl = document.getElementById('connStatus');
+    if (!connEl) return;
+    if (sub.ws && sub.ws.readyState === WebSocket.OPEN) {
+        if (sub.latency > 0) connEl.textContent = 'Connected (' + sub.latency + 'ms)';
+        else connEl.textContent = 'WS Connected';
+    } else {
+        connEl.textContent = 'WS Disconnected';
+    }
+}
 
-    ws.onmessage = (event) => {
-        try {
-            const msg = JSON.parse(event.data);
-            switch (msg.type) {
-                case 'vtty_dirty':
-                    if (opts.onVtty) opts.onVtty(msg);
-                    break;
-                case 'vtty_close':
-                    if (opts.onVtty) opts.onVtty(msg);
-                    break;
-                case 'command_ended':
-                    if (opts.isFocused) {
-                        document.getElementById('connStatus').textContent = 'Command ended';
-                    }
-                    _cleanupWs(obj, prefix);
-                    if (opts.onEnded) opts.onEnded();
-                    break;
-                case 'pong':
-                    if (obj[prefix + 'PingSendTime'] > 0) {
-                        obj[prefix + 'Latency'] = Date.now() - obj[prefix + 'PingSendTime'];
-                        obj[prefix + 'PingSendTime'] = 0;
-                        if (opts.onPong) opts.onPong(obj[prefix + 'Latency']);
-                    }
-                    break;
-                case 'peer_registered':
-                case 'peer_unregistered':
-                    if (opts.onPeer) opts.onPeer(msg);
-                    break;
-            }
-        } catch (e) {
-            console.error('WS message parse error:', e);
-        }
-    };
+// Subscribe a panel to a command's shared WS
+function _subscribePanel(panelId, instUrl, cmdId) {
+    const key = _subKey(instUrl, cmdId);
+    let sub = _sharedSubs[key];
+    if (!sub) {
+        sub = { instUrl, cmdId, panels: new Set(), ws: null, reconnectTimer: null, reconnectCount: 0, pingInterval: null, pingSendTime: 0, latency: 0, closed: false };
+        _sharedSubs[key] = sub;
+    }
+    const wasEmpty = sub.panels.size === 0;
+    sub.panels.add(panelId);
+    if (wasEmpty || !sub.ws || sub.ws.readyState !== WebSocket.OPEN) {
+        if (sub.ws) { sub.ws.onclose = null; sub.ws.close(); sub.ws = null; }
+        sub.reconnectCount = 0;
+        _connectSharedSub(sub);
+    }
+    // Fetch initial content for this panel
+    fetchVttyDiffForPanel(panelId, instUrl, cmdId, 0);
+}
 
-    ws.onclose = () => {
-        if (obj[prefix] !== ws) return;
-        obj[prefix] = null;
-        clearInterval(obj[prefix + 'PingInterval']);
-        obj[prefix + 'PingInterval'] = null;
-        obj[prefix + 'PingSendTime'] = 0;
-        obj[prefix + 'Latency'] = 0;
-        if (opts.isFocused) {
-            document.getElementById('connStatus').textContent = 'WS Disconnected';
-            updateWsQualityIndicator();
-        }
-        // Schedule HTTP fallback
-        if (opts.onDisconnect) opts.onDisconnect();
-        // Auto-reconnect (max 5 attempts)
-        if (instUrl && cmdId && !obj[prefix + 'ReconnectTimer']) {
-            obj[prefix + 'ReconnectCount']++;
-            if (obj[prefix + 'ReconnectCount'] <= 5) {
-                obj[prefix + 'ReconnectTimer'] = setTimeout(() => {
-                    obj[prefix + 'ReconnectTimer'] = null;
-                    if (opts.reconnectGuard && opts.reconnectGuard()) {
-                        const inst = state.connections.find(i => i.url === instUrl);
-                        if (inst && inst.reachable !== false) {
-                            _setupWs(obj, prefix, instUrl, cmdId, opts);
-                        }
-                    }
-                }, 2000);
-            }
-        }
-    };
-
-    ws.onerror = (err) => {
-        console.error('WebSocket error:', err);
-        if (opts.onError) opts.onError(err);
-    };
-
-    return ws;
+// Unsubscribe a panel from a command's shared WS
+function _unsubscribePanel(panelId, instUrl, cmdId) {
+    const key = _subKey(instUrl, cmdId);
+    const sub = _sharedSubs[key];
+    if (!sub) return;
+    sub.panels.delete(panelId);
+    if (sub.panels.size === 0) {
+        _closeSharedSub(sub);
+        delete _sharedSubs[key];
+    }
 }
 
 // ─── Per-Panel WebSocket Management ───
@@ -143,46 +194,10 @@ function connectPanelWs(panelId) {
 
     const instUrl = panelObj.selectedInstUrl;
     const cmdId = panelObj.selectedCmdId;
-    const isFocused = panelObj.id === state._focusedPanelId;
 
-    try {
-        _setupWs(panelObj, 'ws', instUrl, cmdId, {
-            isFocused,
-            onVtty(msg) {
-                if (msg.type === 'vtty_dirty') {
-                    fetchVttyDiffForPanel(panelObj.id, instUrl, cmdId);
-                } else if (msg.type === 'vtty_close') {
-                    // Terminal closed — discard baseline so a reconnection starts fresh
-                    delete state._diffBaselines[panelObj.id + '/' + cmdId];
-                }
-            },
-            onEnded() {
-                delete state._diffBaselines[panelObj.id + '/' + cmdId];
-                notifyCommandEnded(cmdId);
-            },
-            onPong(latency) {
-                if (isFocused) {
-                    updateWsQualityIndicator();
-                    const connEl = document.getElementById('connStatus');
-                    if (connEl) connEl.textContent = 'Connected (' + latency + 'ms)';
-                }
-            },
-            onPeer(msg) { handlePeerEvent(msg); },
-            onDisconnect() {
-                if (panelObj.selectedInstUrl && panelObj.selectedCmdId) {
-                    fetchVttyDiffForPanel(panelObj.id, panelObj.selectedInstUrl, panelObj.selectedCmdId, 0);
-                }
-            },
-            reconnectGuard() {
-                return panelObj.selectedInstUrl && panelObj.selectedCmdId && state.updateMode === 'push';
-            }
-        });
-    } catch (e) {
-        console.error('WebSocket connect failed (panel ' + panelId + '):', e);
+    if (state.updateMode === 'push') {
+        _subscribePanel(panelId, instUrl, cmdId);
     }
-
-    // Fetch initial terminal content via diff endpoint (no baseline yet).
-    fetchVttyDiffForPanel(panelObj.id, instUrl, cmdId, 0);
 
     // Also connect secondary WS if panel is split
     if (panelObj.split && panelObj.split.secondaryCmdId && panelObj.split.secondaryInstUrl) {
@@ -193,7 +208,14 @@ function connectPanelWs(panelId) {
 function disconnectPanelWs(panelId) {
     const panelObj = state.panels.find(p => p.id === panelId);
     if (!panelObj) return;
-    _cleanupWs(panelObj, 'ws');
+    // Unsubscribe from shared pool
+    if (panelObj.wsInstUrl && panelObj.wsCmdId) {
+        _unsubscribePanel(panelId, panelObj.wsInstUrl, panelObj.wsCmdId);
+    }
+    panelObj.wsInstUrl = null;
+    panelObj.wsCmdId = null;
+    // Keep panelObj.ws for backward compat reads (updateWsQualityIndicator)
+    // but the actual WS is now in the shared pool
     if (panelObj.split) {
         _disconnectSecondaryWs(panelObj);
         if (panelObj.split.secondaryPollTimer) {
@@ -208,10 +230,19 @@ function updateWsQualityIndicator() {
     const el = document.getElementById('wsQuality');
     if (!el) return;
 
-    const focusedPanel = state.panels.find(p => p.id === state._focusedPanelId);
-    const latency = focusedPanel ? focusedPanel.wsLatency : 0;
-    const reconnects = focusedPanel ? focusedPanel.wsReconnectCount : 0;
-    const isConnected = focusedPanel && focusedPanel.ws && focusedPanel.ws.readyState === WebSocket.OPEN;
+    const focusedId = state._focusedPanelId;
+    const focusedPanel = state.panels.find(p => p.id === focusedId);
+    if (!focusedPanel || !focusedPanel.selectedInstUrl || !focusedPanel.selectedCmdId) {
+        el.textContent = '--';
+        el.style.color = 'var(--red)';
+        el.title = 'Disconnected';
+        return;
+    }
+
+    const key = _subKey(focusedPanel.selectedInstUrl, focusedPanel.selectedCmdId);
+    const sub = _sharedSubs[key];
+    const isConnected = sub && sub.ws && sub.ws.readyState === WebSocket.OPEN;
+    const latency = sub ? sub.latency : 0;
 
     if (!isConnected && latency === 0) {
         el.textContent = '--';
@@ -228,7 +259,7 @@ function updateWsQualityIndicator() {
 
     el.textContent = latency > 0 ? latency + 'ms' : '...';
     el.style.color = color;
-    el.title = 'Latency: ' + (latency > 0 ? latency + 'ms' : 'measuring...') + ' | Reconnects: ' + reconnects;
+    el.title = 'Latency: ' + (latency > 0 ? latency + 'ms' : 'measuring...');
 }
 
 // ─── Poll Mode ───
@@ -258,6 +289,25 @@ async function pollOncePanel(panelId) {
 }
 
 // ─── Secondary WebSocket for Split Panels ───
+// Secondary panes are always unique (different command), so keep per-object WS.
+
+function _cleanupWs(obj, prefix) {
+    const t = obj[prefix + 'ReconnectTimer'];
+    if (t) { clearTimeout(t); obj[prefix + 'ReconnectTimer'] = null; }
+    clearInterval(obj[prefix + 'PingInterval']);
+    obj[prefix + 'PingInterval'] = null;
+    obj[prefix + 'PingSendTime'] = 0;
+    obj[prefix + 'Latency'] = 0;
+    obj[prefix + 'ReconnectCount'] = 0;
+    const ws = obj[prefix];
+    if (ws) {
+        ws.onclose = null;
+        ws.close();
+        obj[prefix] = null;
+        obj[prefix + 'InstUrl'] = null;
+        obj[prefix + 'CmdId'] = null;
+    }
+}
 
 function _disconnectSecondaryWs(panelObj) {
     if (!panelObj || !panelObj.split) return;
@@ -270,26 +320,66 @@ function _connectSecondaryWs(panelObj) {
     if (!s.secondaryCmdId || !s.secondaryInstUrl) return;
     _disconnectSecondaryWs(panelObj);
 
+    const url = _buildWsUrl(s.secondaryInstUrl, s.secondaryCmdId);
     try {
-        _setupWs(s, 'secondaryWs', s.secondaryInstUrl, s.secondaryCmdId, {
-            isFocused: false,
-            onVtty(msg) {
+        const ws = new WebSocket(url);
+        s.secondaryWs = ws;
+        s.secondaryWsInstUrl = s.secondaryInstUrl;
+        s.secondaryWsCmdId = s.secondaryCmdId;
+
+        ws.onopen = () => {
+            clearInterval(s.secondaryWsPingInterval);
+            s.secondaryWsPingInterval = setInterval(() => {
+                if (s.secondaryWs && s.secondaryWs.readyState === WebSocket.OPEN) {
+                    s.secondaryWsPingSendTime = Date.now();
+                    s.secondaryWs.send(JSON.stringify({ type: 'ping' }));
+                }
+            }, 10000);
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
                 if (msg.type === 'vtty_dirty') {
                     fetchSecondaryVttyDiff(panelObj);
+                } else if (msg.type === 'vtty_close') {
+                    delete state._diffBaselines[panelObj.id + '/' + s.secondaryCmdId];
+                } else if (msg.type === 'command_ended') {
+                    delete state._diffBaselines[panelObj.id + '/' + s.secondaryCmdId];
+                    notifyCommandEnded(s.secondaryCmdId);
+                    _disconnectSecondaryWs(panelObj);
+                } else if (msg.type === 'peer_registered' || msg.type === 'peer_unregistered') {
+                    handlePeerEvent(msg);
                 }
-            },
-            onEnded() {
-                delete state._diffBaselines[panelObj.id + '/' + s.secondaryCmdId];
-                notifyCommandEnded(s.secondaryCmdId);
-            },
-            onPeer(msg) { handlePeerEvent(msg); },
-            onDisconnect() {
-                if (s.secondaryInstUrl && s.secondaryCmdId) fetchSecondaryVttyDiff(panelObj, 0);
-            },
-            reconnectGuard() {
-                return s.secondaryInstUrl && s.secondaryCmdId && state.updateMode === 'push';
+            } catch (e) {
+                console.error('Secondary WS message parse error:', e);
             }
-        });
+        };
+
+        ws.onclose = () => {
+            if (s.secondaryWs !== ws) return;
+            s.secondaryWs = null;
+            clearInterval(s.secondaryWsPingInterval);
+            s.secondaryWsPingInterval = null;
+            s.secondaryWsPingSendTime = 0;
+            s.secondaryWsLatency = 0;
+            if (s.secondaryInstUrl && s.secondaryCmdId) fetchSecondaryVttyDiff(panelObj, 0);
+            // Reconnect
+            if (s.secondaryInstUrl && s.secondaryCmdId && !s.secondaryWsReconnectTimer && state.updateMode === 'push') {
+                s.secondaryWsReconnectCount = (s.secondaryWsReconnectCount || 0) + 1;
+                if (s.secondaryWsReconnectCount <= 5) {
+                    s.secondaryWsReconnectTimer = setTimeout(() => {
+                        s.secondaryWsReconnectTimer = null;
+                        const inst = state.connections.find(i => i.url === s.secondaryInstUrl);
+                        if (inst && inst.reachable !== false) _connectSecondaryWs(panelObj);
+                    }, 2000);
+                }
+            }
+        };
+
+        ws.onerror = (err) => {
+            console.error('Secondary WebSocket error:', err);
+        };
     } catch (e) {
         console.error('Secondary WebSocket connect failed (panel ' + panelObj.id + '):', e);
     }
