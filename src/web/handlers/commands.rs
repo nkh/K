@@ -607,8 +607,8 @@ pub async fn get_snapshot(State(state): State<AppState>) -> Json<Value> {
                     resources[id] = serde_json::json!({
                         "pid": pid,
                         "cpu_percent": Some(0.0),
-                        "memory_mb": None,
-                        "threads": None,
+                        "memory_mb": null,
+                        "threads": null,
                         "alive": true,
                         "frozen": true,
                     });
