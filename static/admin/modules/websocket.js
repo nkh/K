@@ -195,8 +195,15 @@ function connectPanelWs(panelId) {
     const instUrl = panelObj.selectedInstUrl;
     const cmdId = panelObj.selectedCmdId;
 
+    // Track subscription on panel so disconnectPanelWs can unsubscribe
+    panelObj.wsInstUrl = instUrl;
+    panelObj.wsCmdId = cmdId;
+
     if (state.updateMode === 'push') {
         _subscribePanel(panelId, instUrl, cmdId);
+        // Store WS ref on panel for backward compat (tests, quality indicator)
+        const key = _subKey(instUrl, cmdId);
+        panelObj.ws = _sharedSubs[key] ? _sharedSubs[key].ws : null;
     }
 
     // Also connect secondary WS if panel is split
@@ -214,8 +221,10 @@ function disconnectPanelWs(panelId) {
     }
     panelObj.wsInstUrl = null;
     panelObj.wsCmdId = null;
-    // Keep panelObj.ws for backward compat reads (updateWsQualityIndicator)
-    // but the actual WS is now in the shared pool
+    panelObj.ws = null;
+    panelObj.wsReconnectCount = 0;
+    panelObj.wsPingSendTime = 0;
+    panelObj.wsLatency = 0;
     if (panelObj.split) {
         _disconnectSecondaryWs(panelObj);
         if (panelObj.split.secondaryPollTimer) {
@@ -478,5 +487,6 @@ function stopPanelUpdateMode(panelId) {
         startPanelUpdateMode, stopPanelUpdateMode,
         _connectSecondaryWs, _disconnectSecondaryWs,
         fetchVttyDiffForPanel, fetchSecondaryVttyDiff,
+        _sharedSubs,
     });
 })();

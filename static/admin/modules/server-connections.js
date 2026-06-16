@@ -257,7 +257,6 @@ async function confirmAddServer() {
     panelObj.selectedInstUrl = url;
     focusPanel(panelObj.id);
     _selectCommandForPanel(panelObj, url, targetCmd.id);
-    renderPanels();
 }
 
 // ─── Restart Command ───

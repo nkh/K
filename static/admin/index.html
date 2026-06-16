@@ -29,7 +29,6 @@
             <button class="btn btn-xs" id="statusBtn" data-action="ToggleBottombar" title="Toggle status bar">Status</button>
 
             <div class="token-bar">
-                <label for="authToken">Token:</label>
                 <input type="password" id="authToken" placeholder="Bearer token" title="Authorization token">
                 <button class="btn btn-xs" data-action="SaveToken">Set</button>
             </div>
@@ -293,8 +292,9 @@
             <label>Auth Token (optional)</label>
             <input type="text" id="addServerToken" placeholder="Bearer token">
         </div>
-        <div class="field checkbox-field" style="margin-bottom:0.75rem;">
-            <label><input type="checkbox" id="addServerOpenPane" checked> Open pane</label>
+        <div class="field" style="display:flex;align-items:center;gap:0.4rem;margin-bottom:0.75rem;">
+            <input type="checkbox" id="addServerOpenPane" checked>
+            <label for="addServerOpenPane" style="margin:0;">Show first command in a new panel</label>
         </div>
         <div class="actions">
             <button class="btn" data-action="CloseAddServerModal">Cancel</button>

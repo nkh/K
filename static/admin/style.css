@@ -162,7 +162,7 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .panel-header .split-server-label { color: var(--text-secondary); }
 .panel-header .split-cmd-label { color: var(--text-primary); }
 .panel-header .title { font-size: var(--ui-fs); color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; }
-.panel-header .cmd-info { display: flex; flex-direction: column; min-width: 0; flex-shrink: 1; gap: 0; overflow: hidden; }
+.panel-header .cmd-info { display: flex; flex-direction: column; min-width: 0; flex-shrink: 1; gap: 0; overflow: hidden; margin-right: 0.3rem; }
 .panel-header .cmd-fullname { font-family: var(--font-mono); font-size: var(--ui-fs); color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .panel-header .cmd-fullname.panel-title-editing { outline: 1px solid var(--accent); outline-offset: 1px; background: var(--bg-primary); padding: 0 0.15rem; border-radius: 2px; cursor: text; overflow: visible; text-overflow: unset; white-space: pre; min-width: 3ch; }
 .panel-header .cmd-args { font-family: var(--font-mono); font-size: var(--ui-fs); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

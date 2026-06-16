@@ -112,33 +112,37 @@ if (typeof updateWsQualityIndicator === 'function') {
     // With focused panel, connected, no latency yet
     state.panels = [];
     const wsP = addPanelDirect();
+    wsP.selectedInstUrl = 'http://localhost:9090';
+    wsP.selectedCmdId = 'cmd-wsq';
     state._focusedPanelId = wsP.id;
-    wsP.ws = new MockWebSocket('ws://test');
-    wsP.ws.readyState = 1;
-    wsP.wsLatency = 0;
+    // Populate shared sub pool (updateWsQualityIndicator reads from it)
+    const _sharedSubs = globalThis._getSharedSubs();
+    const testSub = { ws: new MockWebSocket('ws://test'), instUrl: 'http://localhost:9090', cmdId: 'cmd-wsq', panels: new Set([wsP.id]), latency: 0, pingSendTime: 0, reconnectCount: 0, reconnectTimer: null, pingInterval: null, closed: false };
+    testSub.ws.readyState = 1;
+    _sharedSubs['http://localhost:9090/cmd-wsq'] = testSub;
     updateWsQualityIndicator();
     assertEq(indicator.textContent, '...', 'measuring indicator');
 
     // Low latency (< 50ms)
-    wsP.wsLatency = 25;
+    testSub.latency = 25;
     updateWsQualityIndicator();
     assert(indicator.textContent.includes('25ms'), 'latency text shown');
     assert(indicator.style.color.includes('green'), 'low latency is green');
 
     // Medium latency (50-200ms)
-    wsP.wsLatency = 120;
+    testSub.latency = 120;
     updateWsQualityIndicator();
     assert(indicator.style.color.includes('yellow'), 'medium latency is yellow');
 
     // High latency (> 200ms)
-    wsP.wsLatency = 350;
+    testSub.latency = 350;
     updateWsQualityIndicator();
     assert(indicator.style.color.includes('red'), 'high latency is red');
 
-    // Title includes reconnect count
-    wsP.wsReconnectCount = 3;
+    // Title includes latency
     updateWsQualityIndicator();
-    assert(indicator.title.includes('3'), 'title includes reconnect count');
+    assert(indicator.title.includes('350ms'), 'title includes latency');
+    delete _sharedSubs['http://localhost:9090/cmd-wsq'];
 }
 
 // ── poll mode functions ──

@@ -182,7 +182,7 @@ function _buildSidebar() {
 
     // Server tabs — always shown (All + one per server)
     html += '<div class="sidebar-sort-bar">';
-    html += `<span class="sidebar-sort-item${state._sidebarSort === 'name' ? ' active' : ''}" data-action="SortSidebarBy" data-value="name">All<button class="server-tab-spawn-btn" data-action="SwitchSidebarTab" data-tab="spawn" title="Spawn command">&#x271A;</button></span>`;
+    html += `<span class="sidebar-sort-item${state._sidebarSort === 'name' ? ' active' : ''}" data-action="SortSidebarBy" data-value="name">All<span class="server-tab-spawn-btn" data-action="SwitchSidebarTab" data-tab="spawn" title="Spawn command">+</span></span>`;
     for (const inst of state.connections) {
         const rCls = inst.reachable === true ? 'reachable' : inst.reachable === false ? 'unreachable' : 'unknown';
         const isActive = state._sidebarSort === inst.url;
@@ -193,7 +193,7 @@ function _buildSidebar() {
         const anyFrozen = aliveCmds.some(c => c.frozen);
         const freezeIcon = allFrozen ? '&#9654;' : '&#8545;';
         const freezeActive = allFrozen ? ' active' : '';
-        html += `<span class="sidebar-sort-item${isActive ? ' active' : ''}" data-action="SortSidebarBy" data-value="${escHtml(inst.url)}"><span class="server-reach-dot ${rCls}" style="margin-right:0.15rem;"></span>${escHtml(_shortLabel(inst))}<button class="server-tab-spawn-btn" data-action="SpawnOnServer" data-inst-url="${escHtml(inst.url)}" title="Spawn on this server">&#x271A;</button><button class="server-tab-freeze-btn${freezeActive}" data-action="FreezeThawServer" data-inst-url="${escHtml(inst.url)}" title="${allFrozen ? 'Thaw all' : 'Freeze all'}">${freezeIcon}</button><button class="server-tab-btn" data-action="DisconnectServer" data-inst-url="${escHtml(inst.url)}" title="Disconnect">&#x2715;</button></span>`;
+        html += `<span class="sidebar-sort-item${isActive ? ' active' : ''}" data-action="SortSidebarBy" data-value="${escHtml(inst.url)}"><span class="server-reach-dot ${rCls}" style="margin-right:0.15rem;"></span>${escHtml(_shortLabel(inst))}<span class="server-tab-spawn-btn" data-action="SpawnOnServer" data-inst-url="${escHtml(inst.url)}" title="Spawn on this server">+</span><button class="server-tab-freeze-btn${freezeActive}" data-action="FreezeThawServer" data-inst-url="${escHtml(inst.url)}" title="${allFrozen ? 'Thaw all' : 'Freeze all'}">${freezeIcon}</button><button class="server-tab-btn" data-action="DisconnectServer" data-inst-url="${escHtml(inst.url)}" title="Disconnect">&#x2715;</button></span>`;
     }
     html += '</div>';
 

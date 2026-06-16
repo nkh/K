@@ -823,7 +823,7 @@ globalThis.resetTestState = function() {
         state._cellGrids = {};
         state._cachedDomPre = {};
         state._cachedScrollPos = {};
-        state._resourceCache = {};
+        state._diffBaselines = {};
         state._wsLatency = 0;
         state._wsPingInterval = null;
         state._wsReconnectCount = 0;
@@ -846,3 +846,6 @@ globalThis.resetTestState = function() {
 };
 
 console.log('[setup] Browser environment mocks loaded, all modules evaluated.');
+
+// Expose shared sub pool for test access
+globalThis._getSharedSubs = function() { return globalThis._sharedSubs || {}; };
