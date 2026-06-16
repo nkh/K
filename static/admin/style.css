@@ -588,8 +588,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .template-card .template-actions { display:flex;gap:0.3rem;margin-top:0.3rem;justify-content:flex-end; }
 
 /* Drag-and-drop panel reorder */
-.drag-handle { cursor:grab;color:var(--text-muted);font-size:var(--ui-fs);padding:0 0.15rem;user-select:none;flex-shrink:0; }
-.drag-handle:active { cursor:grabbing; }
+/* Panel dragging — header acts as drag handle */
 .panel.dragging { opacity:0.5; }
 .panel.drag-over-left { border-left:2px solid var(--accent); }
 .panel.drag-over-right { border-right:2px solid var(--accent); }

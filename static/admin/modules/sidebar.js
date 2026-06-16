@@ -219,6 +219,19 @@ function _buildSidebar() {
 
     rearrangePinnedCommands(container);
     container.innerHTML = html || '<div style="padding:1rem;color:var(--text-muted);text-align:center;">No running commands</div>';
+    container.ondblclick = (e) => {
+        const item = e.target.closest('.cmd-item[data-cmd-id]');
+        if (!item) return;
+        e.stopPropagation();
+        const instUrl = item.dataset.instUrl;
+        const cmdId = item.dataset.cmdId;
+        const cmdName = item.dataset.cmdName;
+        if (e.ctrlKey || e.metaKey) {
+            _openCommandInNewPane(instUrl, cmdId, cmdName);
+        } else {
+            selectCommand(instUrl, cmdId, cmdName);
+        }
+    };
     updateInstanceDropdown();
     updateCmdToolbarVisibility();
 

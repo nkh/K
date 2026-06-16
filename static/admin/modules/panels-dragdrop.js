@@ -2,24 +2,135 @@
 (function() {
     'use strict';
 
-// ─── Drag-and-Drop Panel Reorder ───
-let _draggedPanelId = null;
+// ─── Drag-and-Drop Panel Reorder (mousedown on header) ───
+let _panelDrag = null;
 
-function onPanelDragStart(e, panelId) {
-    _draggedPanelId = panelId;
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', panelId);
-    setTimeout(() => { const el = document.getElementById(panelId); if (el) el.classList.add('dragging'); }, 0);
+function _panelDragMouseDown(e) {
+    // Only left click, not on buttons/inputs
+    if (e.button !== 0) return;
+    if (e.target.closest('button') || e.target.closest('input') || e.target.closest('select')) return;
+    const header = e.target.closest('.panel-header');
+    if (!header) return;
+    const panelEl = header.closest('.panel');
+    if (!panelEl) return;
+    e.preventDefault();
+    const rect = panelEl.getBoundingClientRect();
+    _panelDrag = {
+        panelId: panelEl.id,
+        startX: e.clientX,
+        startY: e.clientY,
+        rect: rect,
+        offsetX: e.clientX - rect.left,
+        offsetY: e.clientY - rect.top,
+        started: false,
+        placeholder: null,
+    };
+    document.addEventListener('mousemove', _panelDragMouseMove);
+    document.addEventListener('mouseup', _panelDragMouseUp);
 }
 
-function onPanelDragOver(e) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = _draggedPanelId ? 'move' : 'copy';
-    const panel = e.target.closest('.panel');
-    if (!panel || panel.id === _draggedPanelId) return;
-    const rect = panel.getBoundingClientRect(), midX = rect.left + rect.width / 2;
-    panel.classList.remove('drag-over-left', 'drag-over-right');
-    panel.classList.add(e.clientX < midX ? 'drag-over-left' : 'drag-over-right');
+function _panelDragMouseMove(e) {
+    if (!_panelDrag) return;
+    const d = _panelDrag;
+    // Require 4px movement before starting drag
+    if (!d.started) {
+        if (Math.abs(e.clientX - d.startX) < 4 && Math.abs(e.clientY - d.startY) < 4) return;
+        d.started = true;
+        const el = document.getElementById(d.panelId);
+        if (!el) { _panelDragMouseUp(); return; }
+        // Create placeholder
+        const ph = document.createElement('div');
+        ph.className = 'panel';
+        ph.style.cssText = 'border:2px dashed var(--accent);opacity:0.3;min-height:100px;';
+        d.placeholder = ph;
+        el.parentNode.insertBefore(ph, el);
+        Object.assign(el.style, {
+            position: 'fixed', left: d.rect.left + 'px', top: d.rect.top + 'px',
+            width: d.rect.width + 'px', height: d.rect.height + 'px',
+            zIndex: '1000', opacity: '0.85', pointerEvents: 'none',
+        });
+        el.classList.add('dragging');
+    }
+    const el = document.getElementById(d.panelId);
+    if (el) {
+        el.style.left = (e.clientX - d.offsetX) + 'px';
+        el.style.top = (e.clientY - d.offsetY) + 'px';
+    }
+    // Highlight drop target
+    document.querySelectorAll('.panel').forEach(p => {
+        if (p.id === d.panelId || p.classList.contains('dragging')) return;
+        p.classList.remove('drag-over-left', 'drag-over-right');
+    });
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    const targetPanel = under?.closest('.panel');
+    if (targetPanel && targetPanel.id !== d.panelId && !targetPanel.classList.contains('dragging')) {
+        const rect = targetPanel.getBoundingClientRect();
+        const midX = rect.left + rect.width / 2;
+        targetPanel.classList.add(e.clientX < midX ? 'drag-over-left' : 'drag-over-right');
+    }
+}
+
+function _panelDragMouseUp() {
+    document.removeEventListener('mousemove', _panelDragMouseMove);
+    document.removeEventListener('mouseup', _panelDragMouseUp);
+    if (!_panelDrag) return;
+    const d = _panelDrag;
+    const el = document.getElementById(d.panelId);
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('drag-over-left', 'drag-over-right', 'dragging'));
+    if (el && d.started) {
+        // Restore element style
+        ['position','left','top','width','height','zIndex','opacity','pointerEvents'].forEach(p => el.style[p] = '');
+        // Find drop target
+        const under = document.elementFromPoint(d.startX, d.startY);
+        const targetPanel = under?.closest('.panel');
+        const container = document.getElementById('view-vtty');
+        if (targetPanel && targetPanel.id !== d.panelId && container) {
+            const rect = targetPanel.getBoundingClientRect();
+            const midX = rect.left + rect.width / 2;
+            // Insert placeholder reference
+            if (d.placeholder && d.placeholder.parentNode) {
+                container.insertBefore(el, d.placeholder);
+                d.placeholder.remove();
+                // Also move the resize handle
+                const handle = el.nextElementSibling;
+                if (handle?.classList.contains('panel-resize-handle')) {
+                    container.removeChild(handle);
+                    container.insertBefore(handle, el.nextElementSibling);
+                }
+                // Update state order
+                const newOrder = [];
+                container.querySelectorAll('.panel').forEach(p => { const pp = state.panels.find(x => x.id === p.id); if (pp) newOrder.push(pp); });
+                state.panels = newOrder;
+                localStorage.setItem('vrw_panel_order', JSON.stringify(newOrder.map(p => p.id)));
+            }
+        } else if (d.placeholder) {
+            d.placeholder.remove();
+        }
+    } else if (d.placeholder) {
+        d.placeholder.remove();
+    }
+    _panelDrag = null;
+}
+
+// Setup header drag delegation (done once)
+let _panelDragDelegated = false;
+function setupPanelHeaderDrag() {
+    if (_panelDragDelegated) return;
+    _panelDragDelegated = true;
+    const container = document.getElementById('view-vtty');
+    if (container) container.addEventListener('mousedown', _panelDragMouseDown);
+}
+
+// ─── Command drag from sidebar (keep HTML5 for sidebar→panel) ───
+function onPanelDragOver(e) { e.preventDefault(); }
+
+function onPanelDrop(e, targetPanelId) {
+    e.preventDefault(); if (e.stopPropagation) e.stopPropagation();
+    try {
+        const cmdData = JSON.parse(e.dataTransfer.getData('application/x-cmd'));
+        if (cmdData?.cmdId) { _openCommandInNewPane(cmdData.instUrl, cmdData.cmdId, cmdData.cmdName); return; }
+    } catch {}
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('drag-over-left', 'drag-over-right'));
 }
 
 function onPanelDragLeave(e) {
@@ -27,31 +138,8 @@ function onPanelDragLeave(e) {
     if (panel) panel.classList.remove('drag-over-left', 'drag-over-right');
 }
 
-function onPanelDrop(e, targetPanelId) {
-    e.preventDefault(); if (e.stopPropagation) e.stopPropagation();
-    if (!_draggedPanelId) {
-        try {
-            const cmdData = JSON.parse(e.dataTransfer.getData('application/x-cmd'));
-            if (cmdData?.cmdId) { document.querySelectorAll('.panel').forEach(p => p.classList.remove('drag-over-left', 'drag-over-right')); _openCommandInNewPane(cmdData.instUrl, cmdData.cmdId, cmdData.cmdName); return; }
-        } catch {}
-        onPanelDragEnd(e); return;
-    }
-    if (_draggedPanelId === targetPanelId) { onPanelDragEnd(e); return; }
-    const container = document.getElementById('view-vtty');
-    const draggedEl = document.getElementById(_draggedPanelId), targetEl = document.getElementById(targetPanelId);
-    if (!draggedEl || !targetEl || !container) { onPanelDragEnd(e); return; }
-    const rect = targetEl.getBoundingClientRect(), midX = rect.left + rect.width / 2;
-    container.insertBefore(draggedEl, e.clientX < midX ? targetEl : targetEl.nextSibling);
-    const handle = draggedEl.nextElementSibling;
-    if (handle?.classList.contains('panel-resize-handle')) {
-        container.removeChild(handle);
-        container.insertBefore(handle, draggedEl.nextElementSibling);
-    }
-    const newOrder = [];
-    container.querySelectorAll('.panel').forEach(el => { const p = state.panels.find(pp => pp.id === el.id); if (p) newOrder.push(p); });
-    state.panels = newOrder;
-    localStorage.setItem('vrw_panel_order', JSON.stringify(newOrder.map(p => p.id)));
-    onPanelDragEnd(e);
+function onPanelDragEnd() {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('dragging', 'drag-over-left', 'drag-over-right'));
 }
 
 function onPanelAreaDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }
@@ -61,16 +149,8 @@ function onPanelAreaDrop(e) {
     try { const d = JSON.parse(e.dataTransfer.getData('application/x-cmd')); if (d?.cmdId) _openCommandInNewPane(d.instUrl, d.cmdId, d.cmdName); } catch {}
 }
 
-function onPanelDragEnd() {
-    _draggedPanelId = null;
-    document.querySelectorAll('.panel').forEach(p => p.classList.remove('dragging', 'drag-over-left', 'drag-over-right'));
-}
-
 // ─── Drag-and-Drop (Sidebar Commands) ───
-let _draggedCmd = null;
-
 function onCmdDragStart(e, instUrl, cmdId, cmdName) {
-    _draggedCmd = { instUrl, cmdId, cmdName };
     e.dataTransfer.effectAllowed = 'copy';
     e.dataTransfer.setData('text/plain', cmdId);
     e.dataTransfer.setData('application/x-cmd', JSON.stringify({ instUrl, cmdId, cmdName }));
@@ -172,8 +252,9 @@ function _cmdReorderMouseUp() {
 
     // ── Exports ──
     Object.assign(window, {
-        onPanelDragStart, onPanelDragOver, onPanelDragLeave, onPanelDrop, onPanelDragEnd,
+        onPanelDragOver, onPanelDrop, onPanelDragLeave, onPanelDragEnd,
         onPanelAreaDragOver, onPanelAreaDrop,
         onCmdDragStart, getCmdOrder, setCmdOrder, getOrderedCmds,
+        setupPanelHeaderDrag,
     });
 })();

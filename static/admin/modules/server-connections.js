@@ -244,29 +244,18 @@ async function confirmAddServer() {
     const conn = addConnection(url, label, token);
     closeAddServerModal();
     _fetchServerName(conn);
-    loadCommands();
     loadCertificates();
     fetchServerTemplates();
-    if (!openPane) return;
+    if (!openPane) { loadCommands(); return; }
 
     await loadCommands();
-    const targetCmd = (conn._commands || []).find(c => c.spawn_order === 0) || (conn._commands || [])[0];
+    const cmds = conn._commands || [];
+    if (cmds.length === 0) { renderPanels(); return; }
+    const targetCmd = cmds.find(c => c.spawn_order === 0) || cmds[0];
     const panelObj = addPanelDirect();
     panelObj.selectedInstUrl = url;
     focusPanel(panelObj.id);
-    if (targetCmd) {
-        _cacheTerminalForSwitch();
-        panelObj.selectedCmdId = targetCmd.id;
-        state.selectedInstUrl = url;
-        state.selectedCmdId = targetCmd.id;
-        state.bufferView = 'current';
-        _restoreCachedDom(targetCmd.id);
-        updatePanelCommandInfo();
-        updateTerminalDisconnectedOverlay();
-        updateSidebarSelection();
-        loadVttyHttpForPanel(panelObj.id, url, targetCmd.id);
-        startPanelUpdateMode(panelObj.id);
-    }
+    _selectCommandForPanel(panelObj, url, targetCmd.id);
     renderPanels();
 }
 
