@@ -188,7 +188,7 @@ function _buildSidebar() {
                 ? `<button class="keep-btn${retainOnExit ? ' active' : ''}" data-action="ToggleKeepCmd" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" title="${retainOnExit ? 'Unkeep (terminal will be removed on exit)' : 'Keep (retain terminal after exit)'}">${retainOnExit ? '&#9733;' : '&#9734;'}</button>`
                 : (retainOnExit ? '<span class="keep-badge" title="Terminal kept after exit">&#9733;</span>' : '');
             const freezeBtnHtml = isAlive
-                ? `<button class="cmd-freeze-btn${isFrozen ? ' active' : ''}" data-action="TogglePauseRunByIdx" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" title="${isFrozen ? 'Thaw' : 'Freeze'}">${isFrozen ? '&#9654;' : '&#10074;&#10074;'}</button>`
+                ? `<button class="cmd-freeze-btn${isFrozen ? ' active' : ''}" data-action="TogglePauseRunByIdx" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" title="${isFrozen ? 'Thaw' : 'Freeze'}">${isFrozen ? '&#9654;' : '&#8545;'}</button>`
                 : '';
             const dp = [];
             if (runtimeStr) dp.push(escHtml(runtimeStr));

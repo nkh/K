@@ -141,7 +141,7 @@
                 if (pauseBtn) {
                     if (cmd.alive !== false) {
                         pauseBtn.classList.remove('hidden');
-                        pauseBtn.textContent = cmd.frozen ? '\u25B6 Run' : '\u275A\u275A Pause';
+                        pauseBtn.textContent = cmd.frozen ? '\u25B6 Run' : '\u2161 Pause';
                         pauseBtn.className = 'btn btn-xs' + (cmd.frozen ? ' btn-primary' : '');
                     } else pauseBtn.classList.add('hidden');
                 }

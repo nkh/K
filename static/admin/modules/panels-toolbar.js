@@ -54,7 +54,7 @@ function updateSharedToolbar() {
             const cmd = _findCmd(panelObj.selectedInstUrl, panelObj.selectedCmdId);
             const isAlive = cmd && cmd.alive !== false, isFrozen = cmd && cmd.frozen === true;
             freezeBtn.classList.toggle('hidden', !isAlive);
-            freezeBtn.textContent = isFrozen ? '\u25B6' : '\u275A\u275A';
+            freezeBtn.textContent = isFrozen ? '\u25B6' : '\u2161';
             freezeBtn.title = isFrozen ? 'Thaw command' : 'Freeze command';
             freezeBtn.classList.toggle('btn-primary', isFrozen);
             freezeBtn.classList.toggle('btn-warning', !isFrozen);
