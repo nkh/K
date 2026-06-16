@@ -130,6 +130,9 @@ function autoFitActiveTerminal() {
     if (!panel) return;
     const vttyEl = panel.querySelector('.vtty-container');
     if (!vttyEl) return;
+    // Skip if terminal has no real content yet (new panel, command not loaded)
+    const pre = vttyEl.querySelector('pre');
+    if (!pre || !pre.children.length) return;
     const rect = vttyEl.getBoundingClientRect();
     if (rect.width < 10 || rect.height < 10) return;
     const charW = state.fontSize * 0.6, charH = state.fontSize * 1.2;

@@ -19,11 +19,10 @@
             <button class="btn btn-xs" data-action="ToggleSidebar" title="Toggle sidebar">&#9776;</button>
             <button class="btn btn-xs" data-action="NavigatePrevCommand" title="Previous command">&#x25C0;</button>
             <button class="btn btn-xs" data-action="NavigateNextCommand" title="Next command">&#x25B6;</button>
-            <button class="btn btn-xs" data-action="AddPanel" title="Add panel">+ Panel</button>
-            <button class="btn btn-xs" id="globalSearchBtn" data-action="OpenGlobalSearch" title="Search output">&#128269;</button>
         </div>
 
         <div class="topbar-group topbar-group-right">
+            <button class="btn btn-xs" id="globalSearchBtn" data-action="OpenGlobalSearch" title="Search output">&#128269;</button>
             <button class="btn btn-xs" id="themeToggle" data-action="ToggleGlobalTheme" title="Toggle theme (cycles: Auto → Grey → Dark → Auto)"></button>
             <button class="btn btn-xs" id="soundBtn" data-action="ToggleSoundNotifications" title="Toggle sound notifications">&#128276;</button>
             <button class="btn btn-xs" id="logsBtn" data-action="ToggleLogsView" title="Toggle log viewer">Logs</button>
@@ -191,7 +190,7 @@
                     <div class="panel-send-row" id="stSendRow">
                         <input type="text" id="stKeyInput" placeholder="Send keys..." onkeydown="if(event.key==='Enter'){event.preventDefault();sendKeysToPanel(getActivePanelId())}">
                         <button class="btn btn-xs" data-action="SendKeysToPanel" title="Send keys to terminal">Send</button>
-                        <button class="btn btn-xs" data-action="ShowSpecialKeysHelp" title="Special keys reference">&#63;</button>
+                        <button class="btn btn-xs" data-action="ShowSpecialKeysHelp" title="Special keys reference">&#128430;</button>
                     </div>
                     <span class="shared-toolbar-sep"></span>
                     <button class="btn btn-xs hidden" data-action="TogglePanelLayout" id="stLayoutBtn" title="Toggle horizontal/vertical layout">&#x21C4;</button>

@@ -82,7 +82,7 @@ function renderPanels() {
         <span class="cmd-fullname" id="cmdName-${panel.id}" ondblclick="event.stopPropagation();startRenamePanel('${panel.id}')" title="Double-click to rename"></span>
         <span class="cmd-args" id="cmdArgs-${panel.id}"></span>
     </div>
-    <span class="panel-header-meta" id="panelMeta-${panel.id}" style="font-size:var(--ui-fs);font-weight:300;opacity:0.7;flex-shrink:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+    <span class="panel-header-meta" id="panelMeta-${panel.id}"></span>
     <button class="cmd-freeze-btn panel-freeze-btn hidden" id="panelFreezeBtn-${panel.id}" data-action="TogglePauseRunPanel" data-panel="${panel.id}" title="Freeze/Thaw command">&#8545;</button>
 </div>
 ${panel.split ? _renderSplitContainer(panel) : _renderVttyContainer(panel)}

@@ -133,7 +133,8 @@
             const freezeBtn = el.querySelector(':scope > .panel-header .panel-freeze-btn');
             if (metaEl && cmd) {
                 const sLabel = _getServerLabel(inst, p.selectedInstUrl);
-                metaEl.textContent = (sLabel || '') + (p.selectedCmdId ? ' - ' + p.selectedCmdId : '');
+                const pid = cmd.pid || '';
+                metaEl.textContent = (sLabel || '') + (pid ? ' - ' + pid : '');
                 metaEl.title = p.selectedInstUrl || '';
             }
             if (nameEl && cmd) {

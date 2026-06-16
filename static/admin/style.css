@@ -164,7 +164,7 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .panel-header .cmd-fullname { font-family: var(--font-mono); font-size: var(--ui-fs); color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .panel-header .cmd-fullname.panel-title-editing { outline: 1px solid var(--accent); outline-offset: 1px; background: var(--bg-primary); padding: 0 0.15rem; border-radius: 2px; cursor: text; overflow: visible; text-overflow: unset; white-space: pre; min-width: 3ch; }
 .panel-header .cmd-args { font-family: var(--font-mono); font-size: var(--ui-fs); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.panel-header .panel-header-meta { font-family: var(--font-mono); font-size: var(--ui-fs); color: var(--text-muted); font-weight: 300; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.panel-header .panel-header-meta { font-family: var(--font-mono); font-size: var(--ui-fs); color: var(--text-muted); font-weight: 300; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: 0.3rem; }
 .panel-freeze-btn { flex-shrink: 0; }
 .panel-header .instance-url { font-size: var(--ui-fs); color: var(--text-muted); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
 .panel-header-label { font-size: var(--ui-fs); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; font-family: var(--font-mono); }
@@ -249,9 +249,9 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .sidebar-wide .cmd-detail-inline { display: inline !important; flex: 0 0 auto !important; min-width: 0; }
 .sidebar-wide .cmd-item-row { flex-wrap: wrap; }
 .cmd-item .cmd-detail-row .detail-sep { color: var(--border); }
-.cmd-freeze-btn { font-size: calc(var(--ui-fs) + 0.15rem); padding: 0 0.15rem; cursor: pointer; border-radius: 2px; flex-shrink: 0; line-height: 1; height: calc(var(--ui-fs) + 0.25rem); min-width: calc(var(--ui-fs) + 0.25rem); display: inline-flex; align-items: center; justify-content: center; background: #FE9F14; color: #000; border: none; }
+.cmd-freeze-btn, .panel-freeze-btn { font-size: var(--ui-fs); padding: 0 0.15rem; cursor: pointer; border-radius: 2px; flex-shrink: 0; line-height: 1; height: calc(var(--ui-fs) + 0.25rem); min-width: calc(var(--ui-fs) + 0.25rem); display: inline-flex; align-items: center; justify-content: center; background: #FE9F14; color: #000; border: none; }
 .cmd-freeze-btn:hover { background: #e08e10; }
-.cmd-freeze-btn.active { background: #3fb950; color: #000; }
+.cmd-freeze-btn.active, .panel-freeze-btn.active { background: #3fb950; color: #000; }
 .cmd-item .cmd-detail-inline { font-family: var(--font-mono); font-size: var(--ui-fs); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 0%; min-width: 0; }
 .cmd-item .cmd-detail-inline:empty { display: none; }
 .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
