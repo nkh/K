@@ -168,8 +168,12 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .panel-freeze-btn { flex-shrink: 0; }
 .panel-header .instance-url { font-size: var(--ui-fs); color: var(--text-muted); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
 .panel-header-label { font-size: var(--ui-fs); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; font-family: var(--font-mono); }
-.panel-close-btn { background:none; border:none; cursor:pointer; color:var(--text-muted); font-size:var(--ui-fs); padding:0 0.15rem; line-height:1; flex-shrink:0; }
-.panel-close-btn:hover { color:var(--red); }
+.panel-close-btn { background:none; border:none; cursor:pointer; color:var(--text-muted) !important; font-size:var(--ui-fs); padding:0 0.15rem; line-height:1; flex-shrink:0; }
+.panel-close-btn:hover { color:var(--red) !important; }
+#killAllBtn { background:none !important; border:none !important; cursor:pointer; }
+#killAllBtn:hover { color:var(--red) !important; }
+#freezeAllBtn { background:none !important; border:none !important; cursor:pointer; }
+#freezeAllBtn:hover { color:var(--yellow) !important; }
 
 /* VTTY */
 .vtty-container { flex: 1; overflow: auto; background: var(--vtty-bg, #000); position: relative; cursor: text; }
@@ -238,8 +242,8 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .cmd-item-row .resource-badge { flex-shrink: 0; }
 .cmd-item-row .cert-badge { flex-shrink: 0; }
 .cmd-item-row .frozen-badge, .cmd-item-row .runtime-str { flex-shrink: 0; }
-.cmd-kill-btn { background:none; border:none; cursor:pointer; color:var(--text-muted); font-size:var(--ui-fs); padding:0 0.15rem; line-height:1; flex-shrink:0 !important; opacity:1 !important; }
-.cmd-kill-btn:hover { color:var(--red); }
+.cmd-kill-btn { background:none !important; border:none !important; cursor:pointer; color:var(--text-muted) !important; font-size:var(--ui-fs); padding:0 0.15rem; line-height:1; flex-shrink:0 !important; opacity:1 !important; }
+.cmd-kill-btn:hover { color:var(--red) !important; }
 .cmd-item .name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: var(--ui-fs); color: var(--text-primary); }
 .cmd-item .pid { color: var(--text-muted); font-size: var(--ui-fs); font-family: var(--font-mono); flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60px; }
 /* Detail row: secondary info (runtime, cpu, memory, pid) shown on a separate
@@ -250,10 +254,10 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .sidebar-wide .cmd-detail-inline { display: inline !important; flex: 0 0 auto !important; min-width: 0; }
 .sidebar-wide .cmd-item-row { flex-wrap: wrap; }
 .cmd-item .cmd-detail-row .detail-sep { color: var(--border); }
-.cmd-freeze-btn, .panel-freeze-btn { background:none; border:none; cursor:pointer; color:var(--text-muted); font-size:var(--ui-fs); padding:0 0.15rem; line-height:1; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; }
-.cmd-freeze-btn:hover, .panel-freeze-btn:hover { color:var(--yellow); }
-.cmd-freeze-btn.active, .panel-freeze-btn.active { color:var(--green); }
-.panel-freeze-btn.active:hover { color:var(--green); filter:brightness(0.88); }
+.cmd-freeze-btn, .panel-freeze-btn { background:none; border:none; cursor:pointer; color:var(--text-muted) !important; font-size:var(--ui-fs); padding:0 0.15rem; line-height:1; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; }
+.cmd-freeze-btn:hover, .panel-freeze-btn:hover { color:var(--yellow) !important; }
+.cmd-freeze-btn.active, .panel-freeze-btn.active { color:var(--green) !important; }
+.panel-freeze-btn.active:hover { color:var(--green) !important; filter:brightness(0.88); }
 .cmd-item .cmd-detail-inline { font-family: var(--font-mono); font-size: var(--ui-fs); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 0%; min-width: 0; }
 .cmd-item .cmd-detail-inline:empty { display: none; }
 .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
