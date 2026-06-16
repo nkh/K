@@ -9,6 +9,16 @@ function _lsSet(key, val) {
     try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
 }
 
+function _shortLabel(inst) {
+    const label = inst._serverName || inst.label || inst.url;
+    // For localhost:port, show just the port
+    try {
+        const u = new URL(inst.url);
+        if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') return u.port || label;
+    } catch {}
+    return label;
+}
+
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
     sidebar.classList.toggle('collapsed');
@@ -121,19 +131,21 @@ function _buildSidebar() {
         for (const inst of nonOrigin) {
             const cls = inst.reachable === true ? 'reachable' : inst.reachable === false ? 'unreachable' : 'unknown';
             const lbl = inst.reachable === true ? 'connected' : inst.reachable === false ? 'unreachable' : 'checking...';
-            html += `<div class="server-conn-item" title="${escHtml(inst.url)} — ${lbl}"><span class="server-reach-dot ${cls}"></span><span class="server-conn-label">${escHtml(inst.label)}</span><button class="server-conn-close-btn" data-action="DisconnectServer" data-inst-url="${escHtml(inst.url)}" title="Disconnect from ${escHtml(inst.label)}">&#x2715;</button></div>`;
+            html += `<div class="server-conn-item" title="${escHtml(inst.url)} — ${lbl}"><span class="server-reach-dot ${cls}"></span><span class="server-conn-label">${escHtml(_shortLabel(inst))}</span><button class="server-conn-close-btn" data-action="DisconnectServer" data-inst-url="${escHtml(inst.url)}" title="Disconnect from ${escHtml(inst.label)}">&#x2715;</button></div>`;
         }
         html += '</div>';
     }
 
-    if (state.connections.length > 1) {
-        html += '<div class="sidebar-sort-bar">';
-        html += `<span class="sidebar-sort-item${state._sidebarSort === 'name' ? ' active' : ''}" data-action="SortSidebarBy" data-value="name">All</span>`;
-        for (const inst of state.connections) {
-            html += `<span class="sidebar-sort-item${state._sidebarSort === inst.url ? ' active' : ''}" data-action="SortSidebarBy" data-value="${escHtml(inst.url)}">${escHtml(inst.label)}</span>`;
-        }
-        html += '</div>';
+    // Server tabs — always shown (All + one per server)
+    html += '<div class="sidebar-sort-bar">';
+    html += `<span class="sidebar-sort-item${state._sidebarSort === 'name' ? ' active' : ''}" data-action="SortSidebarBy" data-value="name">All</span>`;
+    for (const inst of state.connections) {
+        const rCls = inst.reachable === true ? 'reachable' : inst.reachable === false ? 'unreachable' : 'unknown';
+        const isActive = state._sidebarSort === inst.url;
+        const hasAlive = (inst._commands || []).some(c => c.alive !== false);
+        html += `<span class="sidebar-sort-item${isActive ? ' active' : ''}" data-action="SortSidebarBy" data-value="${escHtml(inst.url)}"><span class="server-reach-dot ${rCls}" style="margin-right:0.15rem;"></span>${escHtml(_shortLabel(inst))}${inst.url !== originUrl ? `<button class="server-tab-btn" data-action="DisconnectServer" data-inst-url="${escHtml(inst.url)}" title="Disconnect">&#x2715;</button>` : ''}</span>`;
     }
+    html += '</div>';
 
     let allCmds = [];
     for (const inst of state.connections) {
@@ -161,9 +173,8 @@ function _buildSidebar() {
         for (const inst of state.connections) {
             if (inst.url !== grouped) continue;
             const instCmds = allCmds.filter(c => c.inst.url === inst.url);
-            if (inst._lastError) { html += `<div style="padding:0.5rem;color:var(--red);font-size:0.7rem;">${escHtml(inst.label)}: ${escHtml(inst._lastError)}</div>`; continue; }
-            if (state.connections.length > 1) html += `<div class="pinned-section-header">${escHtml(inst.label)}<button class="server-close-btn" data-action="DisconnectServer" data-inst-url="${escHtml(inst.url)}" title="Disconnect this server">&#x2715;</button></div>`;
-            if (instCmds.length === 0) { html += '<div style="padding:0.3rem 0.4rem;color:var(--text-muted);font-size:0.7rem;">No commands</div>'; continue; }
+            if (inst._lastError) { html += `<div style="padding:0.5rem;color:var(--red);font-size:var(--ui-fs);">${escHtml(inst.label)}: ${escHtml(inst._lastError)}</div>`; continue; }
+            if (instCmds.length === 0) { html += '<div style="padding:0.3rem 0.4rem;color:var(--text-muted);font-size:var(--ui-fs);">No commands</div>'; continue; }
             const orderedCmds = getOrderedCmds(inst.url, instCmds);
             orderedCmds.sort((a, b) => a.cmdName.localeCompare(b.cmdName));
             html += renderCmdList(orderedCmds);

@@ -26,10 +26,17 @@ function _findPanelVtty(pid) {
 
 function _getServerLabel(inst, instUrl) {
     if (inst?._serverName) return inst._serverName;
-    if (inst?.label) return inst.label;
+    if (inst?.label) {
+        try {
+            const u = new URL(inst.url);
+            if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') return u.port || inst.label;
+        } catch {}
+        return inst.label;
+    }
     if (!instUrl) return '';
     try {
         const u = new URL(instUrl);
+        if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') return u.port || '';
         if (u.port) return u.port;
         const def = u.protocol === 'https:' ? 443 : u.protocol === 'http:' ? 80 : 0;
         return String(def || '');
@@ -183,10 +190,10 @@ function _renderSplitPane(panel, side, paneId, widthPct, serverLabel, color, tex
     const bannerStyle = side === 'secondary' ? ' style="display:none;"' : ' class="hidden"';
     const noCmdText = cmdLabel === 'No command' ? '<span style="color:var(--text-muted);">No command selected — select a command from the sidebar</span>' : '';
     return `<div class="split-pane" data-split-side="${side}" data-panel="${panel.id}" style="flex: 0 0 ${widthPct}%; display:flex; flex-direction:column; min-width:0; min-height:0;">
-<div class="split-header panel-header" data-panel-id="${panel.id}" data-split-side="${side}" style="background:${color};color:${textColor};">
+<div class="split-header panel-header" data-panel-id="${panel.id}" data-split-side="${side}" style="--ph-bg:${color};--ph-fg:${textColor};background:var(--ph-bg);color:var(--ph-fg);">
     <span class="split-server-label" style="font-size:var(--ui-fs);opacity:0.8;">${escHtml(serverLabel)}</span>
     <span class="split-cmd-label" style="font-size:var(--ui-fs);font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">${escHtml(cmdLabel)}</span>
-    <button class="btn btn-xs btn-danger" data-action="UnsplitPanel" data-panel="${panel.id}" title="Close split">&#x2715;</button>
+    <button class="panel-close-btn" data-action="UnsplitPanel" data-panel="${panel.id}" title="Close split">&#x2715;</button>
 </div>
 <div class="vtty-container${selMode}" id="vtty-${paneId}" data-split-side="${side}" data-panel="${panel.id}" ${themeAttr} style="font-size: ${panel.fontSize}px; flex:1; min-height:0;">
     <div class="exited-banner"${bannerStyle} id="exitedBanner-${paneId}"></div>
