@@ -49,7 +49,7 @@
 
     function _blobGet(path, instUrl) {
         return fetch(_url(path, instUrl), { headers: _headers(instUrl) })
-            .then(r => r.ok ? r.blob() : r.blob().then(b => Promise.reject(b)));
+            .then(r => r.ok ? r.blob() : r.text().then(t => Promise.reject(new Error(t))));
     }
 
     // ── Public API ──

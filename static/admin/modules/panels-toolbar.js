@@ -54,9 +54,10 @@ function updateSharedToolbar() {
             const cmd = _findCmd(panelObj.selectedInstUrl, panelObj.selectedCmdId);
             const isAlive = cmd && cmd.alive !== false, isFrozen = cmd && cmd.frozen === true;
             freezeBtn.classList.toggle('hidden', !isAlive);
-            freezeBtn.textContent = isFrozen ? '\u25B6' : '\u23F8';
+            freezeBtn.textContent = isFrozen ? '\u25B6' : '\u275A\u275A';
             freezeBtn.title = isFrozen ? 'Thaw command' : 'Freeze command';
             freezeBtn.classList.toggle('btn-primary', isFrozen);
+            freezeBtn.classList.toggle('btn-warning', !isFrozen);
         } else { freezeBtn.classList.add('hidden'); }
     }
     _setToggleBtn(['stMaxFitBtn', 'maxFitBtn-' + pid], !!(_maxFitState[pid]?.active), 'Auto-fit terminal to panel', 'Restore previous size');
