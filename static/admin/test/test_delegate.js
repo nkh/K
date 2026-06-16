@@ -34,6 +34,7 @@ const expectedActions = [
     'ActivateEnvironment', 'ToggleGroupCollapse', 'RenameCmdGroup', 'DeleteCmdGroup',
     'ToggleCmdInGroup', 'LoadWorkspace', 'DeleteWorkspace',
     'CloseCmdPicker', 'PickCommand', 'CloseWorkspaceManage',
+    'FreezeThawServer', 'SpawnOnServer',
     // Shared toolbar
     'RestartCommand', 'ToggleResources', 'ChangePanelFontSize',
     'ResizeTerminalPanel', 'ToggleMaxFit', 'ToggleMaxFont',
@@ -54,7 +55,7 @@ for (const action of expectedActions) {
 }
 assertEq(Object.keys(window._actions).length, expectedActions.length,
     'action count matches expected (' + expectedActions.length + ')');
-console.log('  (' + expectedActions.length + ' actions registered)');
+console.log('  (' + Object.keys(window._actions).length + ' actions registered)');
 
 // ── Signature registry ──
 const expectedSigs = ['none', 'event', 'tab-el', 'panelId', 'panelId-delta', 'preset', 'delta', 'panelId-value', 'value',

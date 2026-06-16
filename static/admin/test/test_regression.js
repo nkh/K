@@ -40,7 +40,7 @@ assert(typeof saveToken === 'function', 'misc loaded');
 // ════════════════════════════════════════════════════════════════════
 console.log('[REG-02] No duplicate function definitions');
 const criticalFunctions = [
-    'addPanelDirect', 'addPanel', 'closePanelModal', 'confirmAddPanel',
+    'addPanelDirect', 'addPanel', 'closePanelModal',
     'togglePanelTheme', 'applyPanelTheme', 'escHtml', 'updateVttyDisplayForPanel',
     '_disconnectSecondaryWs', '_connectSecondaryWs', 'scheduleSecondaryVttyHttp',
     'updateSecondaryVttyDisplay', 'applySecondaryVttyDiff',
@@ -224,10 +224,11 @@ console.log('\n[REGRESSION] All regression tests complete');
 // ════════════════════════════════════════════════════════════════════
 // REG-BUG-009: onPanelDragOver sets correct dropEffect for drag type
 // ────────────────────────────────────────────────────────────────────
-console.log('[REG-BUG-009] onPanelDragOver dropEffect for command vs panel drag');
-assert(typeof onPanelDragOver === 'function', 'onPanelDragOver exported');
-assert(typeof onPanelDragStart === 'function', 'onPanelDragStart exported');
+console.log('[REG-BUG-009] onPanelDragOver dropEffect for command drag');
+assert(typeof onPanelDragOver === 'function', 'onPanelOver exported');
 assert(typeof onPanelDragEnd === 'function', 'onPanelDragEnd exported');
+// onPanelDragStart removed — panel drag now uses mousedown on header
+// onPanelDragOver no longer sets dropEffect (panel drag uses mousedown, not HTML5 drag)
 
 onPanelDragEnd({});
 const cmdDOverEvt = {
@@ -237,30 +238,9 @@ const cmdDOverEvt = {
     dataTransfer: { dropEffect: undefined },
 };
 onPanelDragOver(cmdDOverEvt);
-assertEq(cmdDOverEvt.dataTransfer.dropEffect, 'copy',
-    'dropEffect is "copy" for sidebar command drag (no _draggedPanelId)');
-
-onPanelDragEnd({});
-state.panels = [];
-const p1 = addPanelDirect();
-const panelEl2 = document.createElement('div');
-panelEl2.id = p1.id;
-_elementRegistry.set(p1.id, panelEl2);
-panelEl2.getBoundingClientRect = () => ({ left: 0, width: 800, top: 0, height: 600 });
-const panelDSEvt = {
-    target: panelEl2,
-    dataTransfer: { effectAllowed: 'move', setData() {} },
-};
-onPanelDragStart(panelDSEvt, p1.id);
-const panelDOverEvt = {
-    target: panelEl,
-    clientX: 400,
-    preventDefault() {},
-    dataTransfer: { dropEffect: undefined },
-};
-onPanelDragOver(panelDOverEvt);
-assertEq(panelDOverEvt.dataTransfer.dropEffect, 'move',
-    'dropEffect is "move" for panel reorder drag (_draggedPanelId set)');
+// onPanelDragOver just prevents default, doesn't set dropEffect anymore
+assertEq(cmdDOverEvt.dataTransfer.dropEffect, undefined,
+    'dropEffect is not set for command drag (HTML5 drag for commands only sets effectAllowed)');
 onPanelDragEnd({});
 
 // ════════════════════════════════════════════════════════════════════

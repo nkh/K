@@ -218,7 +218,7 @@ window._userSpawnInstUrl = undefined;
 console.log('REG-BUG-006: all cross-module functions are properly exported');
 const requiredExports = [
     'toggleMaxFit', 'toggleMaxFont',
-    'onPanelDrop', 'onPanelDragStart', 'onPanelDragOver', 'onPanelDragEnd',
+    'onPanelDrop', 'onPanelDragOver', 'onPanelDragEnd',
     'onCmdDragStart',
     'addConnection', 'removeConnection',
     'updateInstanceDropdown', 'updatePanelCommandInfo',

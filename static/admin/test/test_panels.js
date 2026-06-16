@@ -199,9 +199,13 @@ if (typeof _getServerLabel === 'function') {
     const inst1 = { _serverName: 'my-server', label: 'Label', url: 'http://localhost:9090' };
     assertEq(_getServerLabel(inst1), 'my-server', '_getServerLabel prefers _serverName');
 
-    // Without _serverName, with label
-    const inst2 = { _serverName: null, label: 'MyLabel', url: 'http://localhost:9090' };
+    // Without _serverName, with label on non-localhost URL
+    const inst2 = { _serverName: null, label: 'MyLabel', url: 'http://example.com:9090' };
     assertEq(_getServerLabel(inst2), 'MyLabel', '_getServerLabel falls back to label');
+
+    // Without _serverName, with label on localhost URL — returns port
+    const inst2b = { _serverName: null, label: 'MyLabel', url: 'http://localhost:9090' };
+    assertEq(_getServerLabel(inst2b), '9090', '_getServerLabel returns port for localhost');
 
     // Without both, with URL with port
     const inst3 = { _serverName: null, label: '', url: 'http://192.168.1.1:8080' };

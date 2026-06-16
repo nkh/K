@@ -57,20 +57,12 @@ assert(typeof removeConnection === 'function', 'removeConnection is exported');
 assertEq(escHtml('Remote Server'), 'Remote Server', 'escHtml passes through normal text');
 assertEq(escHtml('<script>'), '&lt;script&gt;', 'escHtml escapes HTML entities');
 
-// Verify that the rendering code includes the server-connections-bar pattern
-// by testing the sidebar module source directly
+// Verify sidebar uses reach dots and DisconnectServer delegation
 const sidebarSource = require('fs').readFileSync(
     require('path').join(__dirname, '..', 'modules', 'sidebar.js'), 'utf8'
 );
-assertOk(sidebarSource.includes('server-connections-bar'), 'sidebar.js source contains server-connections-bar');
-assertOk(sidebarSource.includes('server-conn-item'), 'sidebar.js source contains server-conn-item');
 assertOk(sidebarSource.includes('server-reach-dot'), 'sidebar.js source contains server-reach-dot');
-assertOk(sidebarSource.includes('server-conn-close-btn'), 'sidebar.js source contains server-conn-close-btn');
 assertOk(sidebarSource.includes('data-action="DisconnectServer"'), 'sidebar.js close button uses data-action=DisconnectServer delegation');
-assertOk(sidebarSource.includes("window.location.origin"), 'sidebar.js uses window.location.origin to skip origin server');
-
-// Verify the origin server is excluded from the close button bar
-assertOk(sidebarSource.includes('c.url !== originUrl'), 'sidebar.js filters out origin server');
 
 // ═══════════════════════════════════════════════════════════════
 // 1b. Reach indicator dot reflects server state
@@ -198,15 +190,11 @@ assertEq(state.connections[0].url, 'http://localhost:9090', 'origin server remai
 // ═══════════════════════════════════════════════════════════════
 // 6. CSS classes for server connections bar exist
 // ═══════════════════════════════════════════════════════════════
-console.log('[6] Server connections bar CSS');
-assertOk(cssContent.includes('.server-connections-bar'), 'CSS has .server-connections-bar');
-assertOk(cssContent.includes('.server-conn-item'), 'CSS has .server-conn-item');
+console.log('[6] Server tab CSS');
 assertOk(cssContent.includes('.server-reach-dot'), 'CSS has .server-reach-dot');
 assertOk(cssContent.includes('.server-reach-dot.reachable'), 'CSS has .reachable variant');
 assertOk(cssContent.includes('.server-reach-dot.unreachable'), 'CSS has .unreachable variant');
 assertOk(cssContent.includes('.server-reach-dot.unknown'), 'CSS has .unknown variant');
-assertOk(cssContent.includes('.server-conn-label'), 'CSS has .server-conn-label');
-assertOk(cssContent.includes('.server-conn-close-btn'), 'CSS has .server-conn-close-btn');
 
 // ═══════════════════════════════════════════════════════════════
 // 7. Duplicate removeConnection removed from server-connections.js

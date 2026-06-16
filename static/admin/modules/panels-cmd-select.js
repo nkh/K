@@ -123,6 +123,9 @@ function selectCommand(instUrl, cmdId, name) {
 }
 
 function _openCommandInNewPane(instUrl, cmdId, cmdName) {
+    // Don't open a pane for commands from unreachable servers
+    const inst = state.connections.find(i => i.url === instUrl);
+    if (inst && inst.reachable === false) return;
     const p = addPanelDirect();
     if (p) _selectCommandForPanel(p, instUrl, cmdId);
 }

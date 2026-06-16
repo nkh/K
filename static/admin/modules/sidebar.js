@@ -107,43 +107,20 @@ function updateCmdToolbarVisibility() {
     if (freezeAllBtn) freezeAllBtn.classList.toggle('hidden', !show);
 }
 
-// Click-delay mechanism to distinguish single-click from double-click on cmd-items.
-// When a cmd-item is clicked, we delay the SelectCommand action by 250ms.
-// If a dblclick arrives within that window, we cancel the pending click and handle dblclick instead.
-let _cmdClickTimer = null;
-let _cmdClickPending = null;
-
-function _cancelPendingCmdClick() {
-    if (_cmdClickTimer) { clearTimeout(_cmdClickTimer); _cmdClickTimer = null; }
-    _cmdClickPending = null;
-}
-
 function _handleCmdItemClick(e) {
-    // Skip clicks on buttons (kill, freeze, pin, keep, grab-handle) — they have their own handlers
+    // Skip clicks on buttons (kill, freeze, pin, keep, grab-handle, spawn) — they have their own handlers
     if (e.target.closest('button')) return;
     const item = e.target.closest('.cmd-item[data-cmd-id]');
     if (!item) return;
-    // If ctrl/meta is held, always open new pane immediately (no delay needed)
+    // If ctrl/meta is held, open in a new pane immediately (no delay)
     if (e.ctrlKey || e.metaKey) {
-        _cancelPendingCmdClick();
         _openCommandInNewPane(item.dataset.instUrl, item.dataset.cmdId, item.dataset.cmdName);
         e.stopPropagation();
         e.preventDefault();
         return;
     }
-    // Delay single-click to wait for possible double-click
-    _cancelPendingCmdClick();
-    const instUrl = item.dataset.instUrl;
-    const cmdId = item.dataset.cmdId;
-    const cmdName = item.dataset.cmdName;
-    _cmdClickPending = { instUrl, cmdId, cmdName };
-    _cmdClickTimer = setTimeout(() => {
-        if (_cmdClickPending) {
-            selectCommand(_cmdClickPending.instUrl, _cmdClickPending.cmdId, _cmdClickPending.cmdName);
-            _cmdClickPending = null;
-        }
-        _cmdClickTimer = null;
-    }, 250);
+    // Normal click: select command in the focused panel
+    selectCommand(item.dataset.instUrl, item.dataset.cmdId, item.dataset.cmdName);
     e.stopPropagation();
     e.preventDefault();
 }
@@ -153,7 +130,6 @@ function _handleCmdItemDblClick(e) {
     const item = e.target.closest('.cmd-item[data-cmd-id]');
     if (!item) return;
     e.stopPropagation();
-    _cancelPendingCmdClick();
     if (e.ctrlKey || e.metaKey) {
         _openCommandInNewPane(item.dataset.instUrl, item.dataset.cmdId, item.dataset.cmdName);
     } else {
