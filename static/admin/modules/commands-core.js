@@ -141,14 +141,6 @@
                 nameEl.textContent = p.customTitle || fullName;
                 nameEl.title = fullName + (p.customTitle ? ' (title: ' + p.customTitle + ')' : '');
                 if (argsEl) { const a = (cmd.args || []).join(' '); argsEl.textContent = a; argsEl.title = a || ''; }
-                const pauseBtn = el.querySelector('[id^="pauseRunBtn-"]');
-                if (pauseBtn) {
-                    if (cmd.alive !== false) {
-                        pauseBtn.classList.remove('hidden');
-                        pauseBtn.textContent = cmd.frozen ? '\u25B6 Run' : '\u2161 Pause';
-                        pauseBtn.className = 'btn btn-xs' + (cmd.frozen ? ' btn-primary' : '');
-                    } else pauseBtn.classList.add('hidden');
-                }
                 const restartBtn = el.querySelector('[id^="restartBtn-"]');
                 if (restartBtn) restartBtn.classList.remove('hidden');
                 if (freezeBtn && cmd.alive !== false) {
@@ -178,7 +170,6 @@
             } else if (nameEl) {
                 nameEl.textContent = p.customTitle || '';
                 if (argsEl) argsEl.textContent = '';
-                const pb = el.querySelector('[id^="pauseRunBtn-"]'); if (pb) pb.classList.add('hidden');
                 const rb = el.querySelector('[id^="restartBtn-"]'); if (rb) rb.classList.add('hidden');
                 const eb = el.querySelector('[id^="exitedBanner-"]'); if (eb) eb.classList.add('hidden');
             }
