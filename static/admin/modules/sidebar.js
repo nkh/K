@@ -182,7 +182,7 @@ function _buildSidebar() {
 
     // Server tabs — always shown (All + one per server)
     html += '<div class="sidebar-sort-bar">';
-    html += `<span class="sidebar-sort-item${state._sidebarSort === 'name' ? ' active' : ''}" data-action="SortSidebarBy" data-value="name">All</span>`;
+    html += `<span class="sidebar-sort-item${state._sidebarSort === 'name' ? ' active' : ''}" data-action="SortSidebarBy" data-value="name">All<button class="server-tab-spawn-btn" data-action="SwitchSidebarTab" data-tab="spawn" title="Spawn command">&#x271A;</button></span>`;
     for (const inst of state.connections) {
         const rCls = inst.reachable === true ? 'reachable' : inst.reachable === false ? 'unreachable' : 'unknown';
         const isActive = state._sidebarSort === inst.url;

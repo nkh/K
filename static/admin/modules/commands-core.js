@@ -173,7 +173,7 @@
                 const fullName = cmd.name || cmd.id;
                 nameEl.textContent = p.customTitle || fullName;
                 nameEl.title = fullName + (p.customTitle ? ' (title: ' + p.customTitle + ')' : '');
-                if (argsEl) { const a = (cmd.args || []).join(' '); argsEl.textContent = a; argsEl.title = a || ''; }
+                if (argsEl) { const a = (cmd.args || []).join(' '); argsEl.textContent = a ? ' ' + a : ''; argsEl.title = a || ''; }
                 const restartBtn = el.querySelector('[id^="restartBtn-"]');
                 if (restartBtn) restartBtn.classList.remove('hidden');
                 if (freezeBtn && cmd.alive !== false) {
@@ -192,11 +192,11 @@
                             (res.memory_mb != null ? res.memory_mb.toFixed(1) + 'MB' : '');
                     } else { resEl.textContent = ''; if (!state.showResources) resEl.classList.add('hidden'); }
                 }
-                const exitBanner = el.querySelector('[id^="exitedBanner-"]');
+                const exitBanner = el.querySelector(':scope > .panel-header .panel-exit-banner');
                 if (exitBanner) {
                     if (cmd.alive === false && cmd.frozen !== true) {
                         const ec = cmd.exit_code != null ? cmd.exit_code : '?';
-                        exitBanner.innerHTML = `<span class="exited-banner-icon">&#9632;</span> Command exited <span class="exit-badge ${cmd.exit_code === 0 ? 'success' : 'failure'}">exit ${ec}</span>`;
+                        exitBanner.innerHTML = `&#9632; exited <span class="exit-badge ${cmd.exit_code === 0 ? 'success' : 'failure'}">${ec}</span>`;
                         exitBanner.classList.remove('hidden');
                     } else exitBanner.classList.add('hidden');
                 }
@@ -204,7 +204,7 @@
                 nameEl.textContent = p.customTitle || '';
                 if (argsEl) argsEl.textContent = '';
                 const rb = el.querySelector('[id^="restartBtn-"]'); if (rb) rb.classList.add('hidden');
-                const eb = el.querySelector('[id^="exitedBanner-"]'); if (eb) eb.classList.add('hidden');
+                const eb = el.querySelector(':scope > .panel-header .panel-exit-banner'); if (eb) eb.classList.add('hidden');
             }
         }
         const fp = state.panels.find(p => p.id === state._focusedPanelId);

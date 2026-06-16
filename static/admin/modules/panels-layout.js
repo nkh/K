@@ -153,7 +153,6 @@ function unsplitPanel(panelId) {
 function _renderVttyContainer(panel) {
     const themeAttr = panel.theme ? 'data-panel-theme="' + panel.theme + '"' : '';
     return `<div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" ${themeAttr} style="font-size: ${panel.fontSize}px;">
-    <div class="exited-banner hidden" id="exitedBanner-${panel.id}"></div>
     ${_renderSearchBar(panel.id)}
     <pre style="color:var(--text-muted);">No command selected — select a command from the sidebar to view its output</pre>
     <div class="cursor-indicator hidden"></div>
@@ -187,7 +186,6 @@ function _renderSplitPane(panel, side, paneId, widthPct, serverLabel, color, tex
     const selMode = panel.selectionMode ? ' selection-mode' : '';
     const themeAttr = panel.theme ? 'data-panel-theme="' + panel.theme + '"' : '';
     const searchHtml = showSearch ? _renderSearchBar(paneId) : '';
-    const bannerStyle = side === 'secondary' ? ' style="display:none;"' : ' class="hidden"';
     const noCmdText = cmdLabel === 'No command' ? '<span style="color:var(--text-muted);">No command selected — select a command from the sidebar</span>' : '';
     return `<div class="split-pane" data-split-side="${side}" data-panel="${panel.id}" style="flex: 0 0 ${widthPct}%; display:flex; flex-direction:column; min-width:0; min-height:0;">
 <div class="split-header panel-header" data-panel-id="${panel.id}" data-split-side="${side}" style="--ph-bg:${color};--ph-fg:${textColor};background:var(--ph-bg);color:var(--ph-fg);">
@@ -196,7 +194,6 @@ function _renderSplitPane(panel, side, paneId, widthPct, serverLabel, color, tex
     <button class="panel-close-btn" data-action="UnsplitPanel" data-panel="${panel.id}" title="Close split">&#x2715;</button>
 </div>
 <div class="vtty-container${selMode}" id="vtty-${paneId}" data-split-side="${side}" data-panel="${panel.id}" ${themeAttr} style="font-size: ${panel.fontSize}px; flex:1; min-height:0;">
-    <div class="exited-banner"${bannerStyle} id="exitedBanner-${paneId}"></div>
     ${searchHtml}
     <pre>${noCmdText}</pre>
     <div class="cursor-indicator hidden"></div>
@@ -233,7 +230,7 @@ function _updateSplitPanelHeader(panelObj) {
         nameEl.textContent = panelObj.customTitle || fullName;
         nameEl.title = fullName;
         const argsEl = el.querySelector(':scope > .panel-header .cmd-args');
-        if (argsEl && cmd) argsEl.textContent = (cmd.args || []).join(' ');
+        if (argsEl && cmd) { const a = (cmd.args || []).join(' '); argsEl.textContent = a ? ' ' + a : ''; }
     }
 }
 

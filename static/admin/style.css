@@ -275,7 +275,12 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .exit-badge.success { background:rgba(63,185,80,0.15);color:var(--green); }
 .exit-badge.failure { background:rgba(248,81,73,0.15);color:var(--red); }
 
-/* Exited command banner — overlaid on the VTTY container */
+.panel-exit-banner { font-family:var(--font-mono); font-size:var(--ui-fs); color:var(--red); flex-shrink:0; white-space:nowrap; display:inline-flex; align-items:center; gap:0.2rem; }
+.panel-exit-banner .exit-badge { font-size:var(--ui-fs);padding:0 0.2rem;border-radius:2px;font-family:var(--font-mono); }
+.panel-exit-banner .exit-badge.success { background:rgba(63,185,80,0.15);color:var(--green); }
+.panel-exit-banner .exit-badge.failure { background:rgba(248,81,73,0.15);color:var(--red); }
+
+/* Exited command banner — legacy, kept for any remaining references */
 .exited-banner {
     display: flex;
     align-items: center;
@@ -581,6 +586,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .server-tab-freeze-btn { background:none;border:none;cursor:pointer;color:var(--text-muted) !important;font-size:var(--ui-fs);padding:0 0.1rem;line-height:1;margin-left:0.05rem; }
 .server-tab-freeze-btn:hover { color:var(--yellow) !important; }
 .server-tab-freeze-btn.active { color:var(--green) !important; }
+.server-tab-spawn-btn { background:none;border:none;cursor:pointer;color:var(--text-muted) !important;font-size:var(--ui-fs);padding:0 0.1rem;line-height:1;margin-left:0.15rem; }
+.server-tab-spawn-btn:hover { color:var(--green) !important; }
 
 /* Command templates */
 .template-card { background:var(--bg-tertiary);border:1px solid var(--border);border-radius:4px;padding:0.5rem;cursor:pointer;transition:background 0.1s;margin-bottom:0.4rem; }
