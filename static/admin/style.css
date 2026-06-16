@@ -300,17 +300,12 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
     border-radius: 3px;
     color: var(--red);
     font-size: var(--ui-fs);
-    font-weight: 600;
-    animation: pulse-disconnected 2s ease-in-out infinite;
 }
 .disconnected-icon {
     font-size: var(--ui-fs);
     flex-shrink: 0;
 }
-@keyframes pulse-disconnected {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
-}
+
 
 /* Disconnected overlay — shown on terminal when viewing a stale command */
 .disconnected-overlay {

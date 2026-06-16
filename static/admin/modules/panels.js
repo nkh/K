@@ -83,7 +83,7 @@ function renderPanels() {
         <span class="cmd-args" id="cmdArgs-${panel.id}"></span>
     </div>
     <span class="panel-header-meta" id="panelMeta-${panel.id}"></span>
-    <button class="cmd-freeze-btn panel-freeze-btn hidden" id="panelFreezeBtn-${panel.id}" data-action="TogglePauseRunPanel" data-panel="${panel.id}" title="Freeze/Thaw command" style="background:none;border:none;color:var(--text-muted);">&#8545;</button>
+    <button class="cmd-freeze-btn panel-freeze-btn hidden" id="panelFreezeBtn-${panel.id}" data-action="TogglePauseRunPanel" data-panel="${panel.id}" title="Freeze/Thaw command">&#8545;</button>
 </div>
 ${panel.split ? _renderSplitContainer(panel) : _renderVttyContainer(panel)}
 </div>
