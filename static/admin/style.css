@@ -170,10 +170,10 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .panel-header-label { font-size: var(--ui-fs); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; font-family: var(--font-mono); }
 .panel-close-btn { background:none; border:none; cursor:pointer; color:var(--text-muted) !important; font-size:var(--ui-fs); padding:0 0.15rem; line-height:1; flex-shrink:0; }
 .panel-close-btn:hover { color:var(--red) !important; }
-#killAllBtn { background:none !important; border:none !important; cursor:pointer; }
-#killAllBtn:hover { color:var(--red) !important; }
-#freezeAllBtn { background:none !important; border:none !important; cursor:pointer; }
-#freezeAllBtn:hover { color:var(--yellow) !important; }
+#killAllBtn { background:none !important; border:none !important; color:var(--text-muted) !important; cursor:pointer; }
+#killAllBtn:hover { color:var(--red) !important; background:none !important; border:none !important; }
+#freezeAllBtn { background:none !important; border:none !important; color:var(--text-muted) !important; cursor:pointer; }
+#freezeAllBtn:hover { color:var(--yellow) !important; background:none !important; border:none !important; }
 
 /* VTTY */
 .vtty-container { flex: 1; overflow: auto; background: var(--vtty-bg, #000); position: relative; cursor: text; }
