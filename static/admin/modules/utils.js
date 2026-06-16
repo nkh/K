@@ -210,7 +210,7 @@ function initTheme() {
 
 function toggleGlobalTheme() {
     const current = document.documentElement.getAttribute('data-theme') || '';
-    const next = current === '' ? 'grey' : current === 'grey' ? 'dark' : '';
+    const next = current === '' ? 'light' : current === 'light' ? 'grey' : current === 'grey' ? 'dark' : '';
     if (next) {
         document.documentElement.setAttribute('data-theme', next);
         localStorage.setItem('vrw_theme', next);
@@ -227,13 +227,16 @@ function updateThemeButton() {
     const theme = document.documentElement.getAttribute('data-theme') || '';
     if (!theme) {
         const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
-        btn.textContent = prefersLight ? '☾' : '☀';
+        btn.textContent = prefersLight ? '\u263E' : '\u2600';
         btn.title = 'Theme: Auto (click to toggle)';
+    } else if (theme === 'light') {
+        btn.textContent = '\u2600';
+        btn.title = 'Theme: Light (click to toggle)';
     } else if (theme === 'grey') {
-        btn.textContent = '◼';
+        btn.textContent = '\u25FC';
         btn.title = 'Theme: Grey (click to toggle)';
     } else if (theme === 'dark') {
-        btn.textContent = '☀';
+        btn.textContent = '\u2600';
         btn.title = 'Theme: Dark (click to toggle)';
     }
 }

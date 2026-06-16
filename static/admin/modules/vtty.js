@@ -2,9 +2,9 @@
 (function() {
     'use strict';
 
-// ─── Per-Panel VTTY Display ───
-// These functions route VTTY updates to a specific panel's DOM,
-// rather than always targeting the focused panel.
+// ─── VTTY Display & Incremental Updates ───
+// Handles full HTML replacement, cell-level diff patching (Level 3),
+// cursor/metadata updates, scrollback, and secondary split pane VTTY.
 
 function updateVttyDisplayForPanel(panelObj, panelEl, data) {
     const vttyEl = panelEl.querySelector('.vtty-container');
@@ -408,7 +408,7 @@ function updateVttyMetadataFromHttp(data, panelEl, panelObj, sbOffset) {
     document.getElementById('termDims').textContent = `${dims.rows || '-'}x${dims.cols || '-'}`;
 
     // Update alt screen badge
-    const badge = document.getElementById('altScreenBadge-' + panel.id);
+    const badge = document.getElementById('altScreenBadge-' + panelObj.id);
     if (badge) {
         badge.classList.toggle('visible', !!data.alternate_screen);
     }

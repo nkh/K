@@ -15,7 +15,7 @@ assertType(window._dispatchModalBackdrop, 'function', '_dispatchModalBackdrop is
 
 // ── Action map completeness ──
 const expectedActions = [
-    'ToggleSidebar', 'NavigatePrevCommand', 'NavigateNextCommand', 'AddPanel',
+    'ToggleSidebar', 'NavigatePrevCommand', 'NavigateNextCommand',
     'OpenGlobalSearch', 'ToggleGlobalTheme', 'ToggleSoundNotifications',
     'ToggleLogsView', 'ToggleBottombar', 'SaveToken', 'ShowDocs', 'ShowShortcuts',
     'SwitchSidebarTab', 'ShowAddServerModal', 'KillAllCommands', 'FreezeAllCommands',
@@ -44,7 +44,6 @@ const expectedActions = [
     'TogglePanelTheme', 'ToggleBufferDropdown',
     'SearchLogs', 'ClearLogSearch', 'LoadLog',
     'ExecuteGlobalSearch', 'CloseGlobalSearch', 'ToggleSearchFreeze',
-    'ClosePanelModal', 'ConfirmAddPanel',
     'CloseAddServerModal', 'ConfirmAddServer',
     'CloseCmdManager', 'CmdManagerKillAll',
     'SwitchUpdateMode', 'ApplyPollInterval', 'ApplyRefreshMs',
@@ -330,12 +329,12 @@ for (const sig of expectedSigs) {
 // 17. _dispatchModalBackdrop: clicking overlay directly (target === currentTarget) closes
 {
     let called = false;
-    const savedClose = window.closePanelModal;
-    window.closePanelModal = function() { called = true; };
+    const savedClose = window.closeAddServerModal;
+    window.closeAddServerModal = function() { called = true; };
 
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
-    overlay.setAttribute('data-close-action', 'ClosePanelModal');
+    overlay.setAttribute('data-close-action', 'CloseAddServerModal');
 
     // Click the overlay directly (target === currentTarget)
     const ev1 = createMockEvent({ target: overlay, currentTarget: overlay });
@@ -351,7 +350,7 @@ for (const sig of expectedSigs) {
     assertEq(result2, false, 'child click does not close modal');
     assert(!called, 'close handler not called for child click');
 
-    window.closePanelModal = savedClose;
+    window.closeAddServerModal = savedClose;
 }
 
 // 18. _dispatchModalBackdrop: uses fallback handler name when action not in registry

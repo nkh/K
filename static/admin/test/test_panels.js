@@ -169,12 +169,15 @@ if (typeof togglePanelLayout === 'function') {
 // ── getActivePanelId ──
 console.log('getActivePanelId tests');
 if (typeof getActivePanelId === 'function') {
-    state._focusedPanelId = 'panel-123';
-    assertEq(getActivePanelId(), 'panel-123', 'getActivePanelId returns focused panel');
+    state.panels = [];
+    const p = addPanelDirect();
+    state._focusedPanelId = p.id;
+    assertEq(getActivePanelId(), p.id, 'getActivePanelId returns focused panel');
     state._focusedPanelId = null;
     // Should return first panel or null
     const result = getActivePanelId();
     assert(result === null || typeof result === 'string', 'getActivePanelId returns null or string when no focus');
+    state.panels = [];
 }
 
 // ── changePanelFontSize ──
@@ -346,15 +349,8 @@ if (typeof _applyPanelLayoutClass === 'function') {
     state._mobileTabbedLayout = false;
 }
 
-// ── closePanelModal ──
-console.log('closePanelModal tests');
-if (typeof closePanelModal === 'function') {
-    const modal = document.createElement('div');
-    modal.id = 'panelModal';
-    modal.classList.remove('hidden');
-    closePanelModal();
-    assert(modal.classList.contains('hidden'), 'closePanelModal hides modal');
-}
+// ── closePanelModal (removed — dead modal) ──
+console.log('closePanelModal tests — skipped (removed dead modal)');
 
 // ── _renderMinimizedPanels ──
 console.log('_renderMinimizedPanels tests');

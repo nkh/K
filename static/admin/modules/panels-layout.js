@@ -87,37 +87,6 @@ function addPanel() {
     if (newPanel) focusPanel(newPanel.id);
 }
 
-function closePanelModal() {
-    releaseCurrentFocusTrap();
-    document.getElementById('panelModal').classList.add('hidden');
-}
-
-function confirmAddPanel() {
-    const url = document.getElementById('panelUrl').value.trim();
-    if (!url) return;
-    const token = document.getElementById('panelToken').value.trim();
-    const splitDir = document.getElementById('panelSplitDir').value;
-    let label = document.getElementById('panelLabel').value.trim();
-    if (!label) { try { label = new URL(url).host; } catch (e) { label = url; } }
-    try {
-        addConnection(url, label, token);
-        addPanelDirect();
-        closePanelModal();
-        if (splitDir === 'vertical') state.panelLayout = 'column';
-        else if (splitDir === 'horizontal') state.panelLayout = 'row';
-        localStorage.setItem('vrw_panel_layout', state.panelLayout);
-        const newPanel = state.panels[state.panels.length - 1];
-        if (newPanel) { newPanel.selectedInstUrl = url; state._pendingSelectId = null; }
-        renderPanels();
-        loadCommands();
-        loadCertificates();
-        fetchServerTemplates();
-    } catch (e) {
-        console.error('[vrw] confirmAddPanel failed:', e);
-        closePanelModal();
-    }
-}
-
 function removePanel(id) {
     disconnectPanelWs(id);
     stopPanelPoll(id);
@@ -179,7 +148,7 @@ function _renderVttyContainer(panel) {
     return `<div class="vtty-container${panel.selectionMode ? ' selection-mode' : ''}" id="vtty-${panel.id}" ${themeAttr} style="font-size: ${panel.fontSize}px;">
     <div class="exited-banner hidden" id="exitedBanner-${panel.id}"></div>
     ${_renderSearchBar(panel.id)}
-    <pre style="color:#484f58;">No command selected — select a command from the sidebar to view its output</pre>
+    <pre style="color:var(--text-muted);">No command selected — select a command from the sidebar to view its output</pre>
     <div class="cursor-indicator hidden"></div>
     <div class="copy-feedback" id="copyFeedback-${panel.id}">Copied!</div>
     <button class="scroll-bottom-btn" id="scrollBtn-${panel.id}" data-action="ScrollTerminalBottom" data-panel="${panel.id}" title="Scroll to bottom">&#x25BC;</button>
@@ -212,7 +181,7 @@ function _renderSplitPane(panel, side, paneId, widthPct, serverLabel, color, tex
     const themeAttr = panel.theme ? 'data-panel-theme="' + panel.theme + '"' : '';
     const searchHtml = showSearch ? _renderSearchBar(paneId) : '';
     const bannerStyle = side === 'secondary' ? ' style="display:none;"' : ' class="hidden"';
-    const noCmdText = cmdLabel === 'No command' ? '<span style="color:#484f58;">No command selected — select a command from the sidebar</span>' : '';
+    const noCmdText = cmdLabel === 'No command' ? '<span style="color:var(--text-muted);">No command selected — select a command from the sidebar</span>' : '';
     return `<div class="split-pane" data-split-side="${side}" data-panel="${panel.id}" style="flex: 0 0 ${widthPct}%; display:flex; flex-direction:column; min-width:0; min-height:0;">
 <div class="split-header panel-header" data-panel-id="${panel.id}" data-split-side="${side}" style="background:${color};color:${textColor};">
     <span class="split-server-label" style="font-size:var(--ui-fs);opacity:0.8;">${escHtml(serverLabel)}</span>
@@ -416,7 +385,7 @@ function finishRenamePanel(panelId, save) {
 
     // ── Exports ──
     Object.assign(window, {
-        addPanelDirect, addPanel, closePanelModal, confirmAddPanel,
+        addPanelDirect, addPanel,
         removePanel, closePanelContent, toggleMinimizePanel, splitPanel, unsplitPanel,
         togglePanelLayout, toggleLayoutPresetMenu, applyLayoutPreset,
         startRenamePanel, finishRenamePanel,

@@ -23,7 +23,7 @@
 
         <div class="topbar-group topbar-group-right">
             <button class="btn btn-xs" id="globalSearchBtn" data-action="OpenGlobalSearch" title="Search output">&#128269;</button>
-            <button class="btn btn-xs" id="themeToggle" data-action="ToggleGlobalTheme" title="Toggle theme (cycles: Auto → Grey → Dark → Auto)"></button>
+            <button class="btn btn-xs" id="themeToggle" data-action="ToggleGlobalTheme" title="Toggle theme (cycles: Auto → Light → Grey → Dark → Auto)"></button>
             <button class="btn btn-xs" id="soundBtn" data-action="ToggleSoundNotifications" title="Toggle sound notifications">&#128276;</button>
             <button class="btn btn-xs" id="logsBtn" data-action="ToggleLogsView" title="Toggle log viewer">Logs</button>
             <button class="btn btn-xs" id="statusBtn" data-action="ToggleBottombar" title="Toggle status bar">Status</button>
@@ -238,7 +238,7 @@
         <span class="cmd-label" id="cmdLabel"></span>
         <span class="cursor-pos" id="cursorPos">Cursor: --</span>
         <span class="dims" id="termDims">--</span>
-        <span class="cursor-pos" id="scrollbackIndicator" class="hidden" style="color:var(--yellow);">SCROLLBACK</span>
+        <span class="cursor-pos hidden" id="scrollbackIndicator" style="color:var(--yellow);">SCROLLBACK</span>
         <span class="spacer"></span>
         <label for="updateMode" style="font-size:var(--ui-fs);color:var(--text-muted);">Update:</label>
         <select id="updateMode" data-action="SwitchUpdateMode" title="How the web UI detects VTTY buffer changes" style="font-size:var(--ui-fs);padding:0.05rem 0.15rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:2px;">
@@ -273,37 +273,6 @@
         </div>
         <div class="search-modal-results" id="globalSearchResults">
             <div style="padding:1rem;color:var(--text-muted);text-align:center;font-size:0.75rem;">Type a query and press Enter to search across all command output</div>
-        </div>
-    </div>
-</div>
-
-<!-- Add panel modal -->
-<div class="modal-overlay hidden" id="panelModal" data-close-action="ClosePanelModal">
-    <div class="modal">
-        <h2>Add Server &amp; Panel</h2>
-        <div class="field">
-            <label>Server URL</label>
-            <input type="text" id="panelUrl" placeholder="http://localhost:9090" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmAddPanel()}">
-        </div>
-        <div class="field">
-            <label>Server Label (optional)</label>
-            <input type="text" id="panelLabel" placeholder="Instance 2" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmAddPanel()}">
-        </div>
-        <div class="field">
-            <label>Auth Token (optional)</label>
-            <input type="text" id="panelToken" placeholder="Bearer token for this instance" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmAddPanel()}">
-        </div>
-        <div class="field">
-            <label>Split direction</label>
-            <select id="panelSplitDir">
-                <option value="auto">Auto (stack based on panel count)</option>
-                <option value="horizontal">Horizontal (side by side)</option>
-                <option value="vertical">Vertical (stacked)</option>
-            </select>
-        </div>
-        <div class="actions">
-            <button class="btn" data-action="ClosePanelModal">Cancel</button>
-            <button class="btn btn-primary" data-action="ConfirmAddPanel">Add Panel</button>
         </div>
     </div>
 </div>

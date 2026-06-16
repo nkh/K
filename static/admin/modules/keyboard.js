@@ -20,8 +20,7 @@ const _CTRL_MAP = { '[': '\x1b', '\\': '\x1c', ']': '\x1d', '^': '\x1e', '_': '\
 
 // ─── Helpers ───
 function _handleEscape() {
-    const pm = document.getElementById('panelModal');
-    if (pm && !pm.classList.contains('hidden')) { closePanelModal(); return true; }
+    closeContextMenu();
     const cp = document.getElementById('cmdPicker');
     if (cp) { releaseCurrentFocusTrap(); cp.remove(); return true; }
     const panel = getSelectedPanel();
@@ -161,7 +160,7 @@ document.addEventListener('keydown', (e) => {
 
 // ─── Direct key sending (when terminal is focused) ───
 async function sendDirectKey(e, panelObj) {
-    if (!state.selectedCmdId || !panelObj.selectedInstUrl) return;
+    if (!panelObj.selectedCmdId || !panelObj.selectedInstUrl) return;
 
     let seq = '';
     if (e.ctrlKey && !e.altKey && !e.metaKey) {
@@ -178,9 +177,9 @@ async function sendDirectKey(e, panelObj) {
     if (!seq) return;
 
     try {
-        const json = await api.sendKeys(panelObj.selectedInstUrl, state.selectedCmdId, { keys: seq });
+        const json = await api.sendKeys(panelObj.selectedInstUrl, panelObj.selectedCmdId, { keys: seq });
         if (json.status === 'ok')
-            scheduleVttyHttpForPanel(panelObj.id, panelObj.selectedInstUrl, state.selectedCmdId, 50);
+            scheduleVttyHttpForPanel(panelObj.id, panelObj.selectedInstUrl, panelObj.selectedCmdId, 50);
     } catch (err) { console.error('Direct key send error:', err); }
 }
 
@@ -320,7 +319,7 @@ document.addEventListener('mousemove', (e) => {
 });
 
 async function sendMouseEvent(panelObj, eventType, button, e) {
-    if (!state.selectedCmdId || !panelObj.selectedInstUrl) return;
+    if (!panelObj.selectedCmdId || !panelObj.selectedInstUrl) return;
     const vttyEl = document.getElementById(panelObj.id)?.querySelector('.vtty-container');
     if (!vttyEl) return;
 
@@ -330,8 +329,8 @@ async function sendMouseEvent(panelObj, eventType, button, e) {
     const y = Math.max(1, Math.floor((e.clientY - rect.top) / charH) + 1);
 
     try {
-        await api.sendMouse(panelObj.selectedInstUrl, state.selectedCmdId, { event: eventType, button, x, y });
-        scheduleVttyHttpForPanel(panelObj.id, panelObj.selectedInstUrl, state.selectedCmdId, 30);
+        await api.sendMouse(panelObj.selectedInstUrl, panelObj.selectedCmdId, { event: eventType, button, x, y });
+        scheduleVttyHttpForPanel(panelObj.id, panelObj.selectedInstUrl, panelObj.selectedCmdId, 30);
     } catch (err) { /* best-effort */ }
 }
 

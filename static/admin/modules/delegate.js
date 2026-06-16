@@ -121,7 +121,6 @@ const _actions = {
     'ToggleSidebar':            { handler: 'toggleSidebar' },
     'NavigatePrevCommand':      { handler: 'navigatePrevCommand' },
     'NavigateNextCommand':      { handler: 'navigateNextCommand' },
-    'AddPanel':                 { handler: 'addPanel' },
     'OpenGlobalSearch':         { handler: 'openGlobalSearch' },
     'ToggleGlobalTheme':        { handler: 'toggleGlobalTheme' },
     'ToggleSoundNotifications': { handler: 'toggleSoundNotifications' },
@@ -229,10 +228,6 @@ const _actions = {
     'ExecuteGlobalSearch':      { handler: 'executeGlobalSearch' },
     'CloseGlobalSearch':        { handler: 'closeGlobalSearch' },
     'ToggleSearchFreeze':       { handler: '_toggleSearchFreezeCommands' },
-
-    // ── Add panel modal ──
-    'ClosePanelModal':          { handler: 'closePanelModal' },
-    'ConfirmAddPanel':          { handler: 'confirmAddPanel' },
 
     // ── Add server modal ──
     'CloseAddServerModal':      { handler: 'closeAddServerModal' },

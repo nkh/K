@@ -68,6 +68,11 @@
         if (t) selectCommand(t.instUrl, t.cmdId, t.name);
     }
 
+    function _debouncedBuildSidebar() {
+        if (state._sidebarBuildTimer) return;
+        state._sidebarBuildTimer = setTimeout(() => { state._sidebarBuildTimer = null; _buildSidebar(); }, 150);
+    }
+
     async function loadCommands() {
         let changed = false;
         await Promise.all(state.connections.map(async inst => {
@@ -112,13 +117,7 @@
                 }
             }
         }
-        _buildSidebar();
-    }
-
-    function findCmd(instUrl, cmdId) {
-        const inst = state.connections.find(i => i.url === instUrl);
-        return inst && inst._commands ? inst._commands.find(c => c.id === cmdId) || null : null;
-    }
+        _debouncedBuildSidebar();
 
     function updatePanelCommandInfo() {
         for (const p of state.panels) {
@@ -176,7 +175,7 @@
             }
         }
         const fp = state.panels.find(p => p.id === state._focusedPanelId);
-        if (fp && fp.selectedCmdId) updateBottomBarLabel(findCmd(fp.selectedInstUrl, fp.selectedCmdId));
+        if (fp && fp.selectedCmdId) updateBottomBarLabel(_findCmd(fp.selectedInstUrl, fp.selectedCmdId));
         else updateBottomBarLabel(null);
         updateSharedToolbar();
     }
@@ -273,7 +272,7 @@
                 startPanelUpdateMode(state._focusedPanelId);
             } else { state._showingWelcome = showWelcome; updateDisconnectedUI(); }
             await peersDone;
-            _buildSidebar();
+            _debouncedBuildSidebar();
         } catch (e) {
             primary._commands = primary._commands || [];
             primary.reachable = false; primary._lastError = 'connection lost';

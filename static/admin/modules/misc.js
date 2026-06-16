@@ -172,12 +172,6 @@ async function pollResources() {
     updateSidebarResourceText();
 }
 
-function _formatRuntime(secs) {
-    if (secs < 60) return Math.floor(secs) + 's';
-    if (secs < 3600) return Math.floor(secs / 60) + 'm ' + Math.floor(secs % 60) + 's';
-    return Math.floor(secs / 3600) + 'h ' + Math.floor((secs % 3600) / 60) + 'm';
-}
-
 function updateSidebarResourceText() {
     for (const inst of state.connections) {
         if (!inst._commands) continue;
@@ -187,7 +181,7 @@ function updateSidebarResourceText() {
             const item = document.querySelector(`.cmd-item[data-cmd-id="${cmd.id}"]`);
             if (!item) continue;
             const parts = [];
-            if (cmd.runtime_secs > 0) parts.push(_formatRuntime(cmd.runtime_secs));
+            if (cmd.runtime_secs > 0) parts.push(formatRuntime(cmd.runtime_secs));
             if (cmd.frozen === true) parts.push('PAUSED');
             if (res && res.cpu_percent != null) parts.push(res.cpu_percent.toFixed(1) + '%');
             if (res && res.memory_mb != null) {
@@ -336,7 +330,7 @@ function renderTemplates() {
             if (t.workdir) extras.push('dir: ' + t.workdir);
             if (t.certificate) extras.push('cert: ' + t.certificate);
             if (t.rows || t.cols) extras.push((t.rows || '?') + 'x' + (t.cols || '?'));
-            return `<div class="template-card" data-action="SpawnServerTemplate" data-index="${i}" title="Click to spawn"><div style="display:flex;align-items:center;gap:0.3rem;"><div class="template-name">${escHtml(t.name)}</div><span style="font-size:0.5rem;background:var(--accent);color:#fff;padding:0 0.25rem;border-radius:2px;">config</span></div><div class="template-cmd">${escHtml([t.cmd, t.args].filter(Boolean).join(' '))}</div>${extras.length ? `<div style="font-size:0.6rem;color:var(--text-muted);padding-left:0.2rem;">${escHtml(extras.join(' | '))}</div>` : ''}</div>`;
+            return `<div class="template-card" data-action="SpawnServerTemplate" data-index="${i}" title="Click to spawn"><div style="display:flex;align-items:center;gap:0.3rem;"><div class="template-name">${escHtml(t.name)}</div><span style="font-size:0.5rem;background:var(--accent);color:var(--bg-primary);padding:0 0.25rem;border-radius:2px;">config</span></div><div class="template-cmd">${escHtml([t.cmd, t.args].filter(Boolean).join(' '))}</div>${extras.length ? `<div style="font-size:0.6rem;color:var(--text-muted);padding-left:0.2rem;">${escHtml(extras.join(' | '))}</div>` : ''}</div>`;
         }).join('');
     }
     if (user.length) {
