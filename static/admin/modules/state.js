@@ -30,6 +30,11 @@ const state = {
     _searchFrozenCmdIds: [], // { instUrl, cmdId, wasFrozen }
 
     panels: [],
+    // Window system: each window contains a set of panel IDs.
+    // The active window's panels are the ones rendered. Panels from
+    // other windows exist in state.panels but are hidden.
+    windows: [],
+    activeWindowId: null,
     // Store instUrl and cmdId separately to avoid ':' conflicts in URLs.
     selectedInstUrl: null,
     selectedCmdId: null,

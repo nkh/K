@@ -238,6 +238,11 @@ const _actions = {
     'CloseAddServerModal':      { handler: 'closeAddServerModal' },
     'ConfirmAddServer':         { handler: 'confirmAddServer' },
 
+    // ── Windows ──
+    'SwitchWindow':             { handler: 'switchWindow', sig: 'data-value' },
+    'CreateWindow':             { handler: 'createWindow' },
+    'CloseWindow':              { handler: 'closeWindow', sig: 'data-value' },
+
     // ── Command manager modal ──
     'CloseCmdManager':          { handler: 'closeCmdManager' },
     'CmdManagerKillAll':        { handler: 'cmdManagerKillAll' },

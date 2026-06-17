@@ -72,9 +72,19 @@ function _loadPanel(po) {
 }
 
 // ─── Keyboard shortcut bindings ───
-const _shortcuts = [
-    { key: 'Escape', action: _handleEscape },
-    { key: 'ContextMenu', shift: 'F10', action(e) {
+// Default shortcuts — can be overridden by user-defined shortcuts (localStorage).
+// Each entry: { key, ctrl?, shift?, alt?, meta?, noInput?, action, label?, id? }
+// 'id' is a stable name used for user customization (e.g. 'split-vertical').
+
+function _switchWindowByIndex(e, idx) {
+    e.preventDefault();
+    if (typeof state.windows === 'undefined' || !state.windows.length) return;
+    if (idx < state.windows.length) switchWindow(state.windows[idx].id);
+}
+
+const _defaultShortcuts = [
+    { id: 'escape', key: 'Escape', action: _handleEscape, label: 'Dismiss popup / close search' },
+    { id: 'context-menu', key: 'ContextMenu', shift: 'F10', action(e) {
         e.preventDefault();
         const t = document.activeElement;
         if (!t) return;
@@ -86,24 +96,101 @@ const _shortcuts = [
             const r = t.getBoundingClientRect();
             showCmdContextMenu({ preventDefault(){}, clientX: r.left + r.width/2, clientY: r.bottom }, t.dataset.instUrl, t.dataset.cmdId, t.dataset.cmdName, t.dataset.cmdAlive === 'true');
         }
-    }},
-    { key: 'c', ctrl: true, shift: true, action: _withPanel(copyTerminalSelection) },
-    { key: 's', ctrl: true, shift: true, action: _withPanel(toggleSelectionMode) },
-    { key: 's', alt: true, action: _withPanel(toggleSelectionMode) },
-    { key: '?', noInput: true, action: showShortcuts },
-    { key: 'e', ctrl: true, shift: true, noInput: true, action: _withPanel(exportTerminal) },
-    { key: 'r', ctrl: true, shift: true, noInput: true, action: _withPanel(restartCommand) },
-    { key: 't', alt: true, noInput: true, action(e) { e.preventDefault(); const id = getActivePanelId(); if (id) togglePanelTheme(id); } },
-    { key: 'n', alt: true, noInput: true, action(e) { e.preventDefault(); addPanel(); } },
-    { key: 'ArrowLeft', alt: true, noInput: true, action(e) {
+    }, label: 'Context menu' },
+    { id: 'copy', key: 'c', ctrl: true, shift: true, action: _withPanel(copyTerminalSelection), label: 'Copy selection' },
+    { id: 'selection-mode', key: 's', ctrl: true, shift: true, action: _withPanel(toggleSelectionMode), label: 'Toggle selection mode' },
+    { id: 'selection-mode-alt', key: 's', alt: true, action: _withPanel(toggleSelectionMode), label: 'Toggle selection mode (Alt)' },
+    { id: 'shortcuts-help', key: '?', noInput: true, action: showShortcuts, label: 'Show shortcuts' },
+    { id: 'export', key: 'e', ctrl: true, shift: true, noInput: true, action: _withPanel(exportTerminal), label: 'Export terminal' },
+    { id: 'restart', key: 'r', ctrl: true, shift: true, noInput: true, action: _withPanel(restartCommand), label: 'Restart command' },
+    { id: 'panel-theme', key: 't', alt: true, noInput: true, action(e) { e.preventDefault(); const id = getActivePanelId(); if (id) togglePanelTheme(id); }, label: 'Toggle panel theme' },
+    { id: 'new-panel', key: 'n', alt: true, noInput: true, action(e) { e.preventDefault(); addPanel(); }, label: 'New panel' },
+    { id: 'split-vertical', key: '|', alt: true, noInput: true, action(e) {
+        e.preventDefault();
+        const id = getActivePanelId();
+        if (id) { const p = state.panels.find(x => x.id === id); if (p && !p.split) splitPanel(id, 'vertical'); }
+    }, label: 'Split pane vertically' },
+    { id: 'split-horizontal', key: '-', alt: true, noInput: true, action(e) {
+        e.preventDefault();
+        const id = getActivePanelId();
+        if (id) { const p = state.panels.find(x => x.id === id); if (p && !p.split) splitPanel(id, 'horizontal'); }
+    }, label: 'Split pane horizontally' },
+    { id: 'unsplit', key: 'u', alt: true, noInput: true, action(e) {
+        e.preventDefault();
+        const id = getActivePanelId();
+        if (id) { const p = state.panels.find(x => x.id === id); if (p && p.split) unsplitPanel(id); }
+    }, label: 'Remove split' },
+    { id: 'new-window', key: 'w', alt: true, noInput: true, action(e) { e.preventDefault(); createWindow(); }, label: 'New window' },
+    { id: 'close-window', key: 'W', alt: true, noInput: true, action(e) {
+        e.preventDefault();
+        if (state.activeWindowId) closeWindow(state.activeWindowId);
+    }, label: 'Close window' },
+    { id: 'win-1', key: '1', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 0); }, label: 'Switch to window 1' },
+    { id: 'win-2', key: '2', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 1); }, label: 'Switch to window 2' },
+    { id: 'win-3', key: '3', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 2); }, label: 'Switch to window 3' },
+    { id: 'win-4', key: '4', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 3); }, label: 'Switch to window 4' },
+    { id: 'win-5', key: '5', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 4); }, label: 'Switch to window 5' },
+    { id: 'win-6', key: '6', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 5); }, label: 'Switch to window 6' },
+    { id: 'win-7', key: '7', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 6); }, label: 'Switch to window 7' },
+    { id: 'win-8', key: '8', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 7); }, label: 'Switch to window 8' },
+    { id: 'win-9', key: '9', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 8); }, label: 'Switch to window 9' },
+    { id: 'nav-prev', key: 'ArrowLeft', alt: true, noInput: true, action(e) {
         const p = getSelectedPanel(), po = p && state.panels.find(x => x.id === p.id);
         if (!(po && po.focused)) { e.preventDefault(); navigatePrevCommand(); }
-    }},
-    { key: 'ArrowRight', alt: true, noInput: true, action(e) {
+    }, label: 'Previous command' },
+    { id: 'nav-next', key: 'ArrowRight', alt: true, noInput: true, action(e) {
         const p = getSelectedPanel(), po = p && state.panels.find(x => x.id === p.id);
         if (!(po && po.focused)) { e.preventDefault(); navigateNextCommand(); }
-    }},
+    }, label: 'Next command' },
 ];
+
+// ─── User-definable shortcut system ───
+// Custom shortcuts are stored in localStorage as vrw_custom_shortcuts.
+// Format: { "split-vertical": { key: "|", alt: true }, "new-panel": { key: "p", alt: true, ctrl: true }, ... }
+// Only the key/modifier fields are customizable; the action is always from the default.
+
+function _loadCustomShortcuts() {
+    try {
+        const raw = localStorage.getItem('vrw_custom_shortcuts');
+        return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+}
+
+function _saveCustomShortcut(id, binding) {
+    const customs = _loadCustomShortcuts();
+    if (!binding || (!binding.key && !binding.shift)) {
+        delete customs[id];
+    } else {
+        customs[id] = { key: binding.key };
+        if (binding.ctrl) customs[id].ctrl = true;
+        if (binding.shift) customs[id].shift = true;
+        if (binding.alt) customs[id].alt = true;
+        if (binding.meta) customs[id].meta = true;
+    }
+    localStorage.setItem('vrw_custom_shortcuts', JSON.stringify(customs));
+    _rebuildShortcuts();
+}
+
+function _rebuildShortcuts() {
+    const customs = _loadCustomShortcuts();
+    const active = new Set();  // track which default ids are overridden
+    const merged = [];
+    // Apply custom overrides
+    for (const def of _defaultShortcuts) {
+        if (!def.id) { merged.push(def); continue; }
+        if (customs[def.id]) {
+            const c = customs[def.id];
+            merged.push({ ...def, key: c.key, ctrl: !!c.ctrl, shift: !!c.shift, alt: !!c.alt, meta: !!c.meta, _custom: true });
+            active.add(def.id);
+        } else {
+            merged.push(def);
+        }
+    }
+    _shortcuts = merged;
+}
+
+let _shortcuts = [];
+_rebuildShortcuts();
 
 // ─── Keyboard handling ───
 document.addEventListener('keydown', (e) => {
@@ -334,5 +421,5 @@ async function sendMouseEvent(panelObj, eventType, button, e) {
     } catch (err) { /* best-effort */ }
 }
 
-Object.assign(window, { _KEY_MAP });
+Object.assign(window, { _KEY_MAP, _defaultShortcuts, _loadCustomShortcuts, _saveCustomShortcut, _rebuildShortcuts });
 })();

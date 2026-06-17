@@ -15,7 +15,9 @@ function _renderSearchBar(pid) {
 
 function renderPanels() {
     const container = document.getElementById('view-vtty');
-    const visible = state.panels.filter(p => !p.minimized);
+    // Use window system to filter visible panels
+    const visiblePanels = (typeof _getVisiblePanels === 'function') ? _getVisiblePanels() : state.panels;
+    const visible = visiblePanels.filter(p => !p.minimized);
     const multi = visible.length > 1;
 
     let hasCmds = state.connections.some(i => i._commands?.length > 0);
@@ -23,7 +25,7 @@ function renderPanels() {
     if (showWelcome !== state._showingWelcome) state._showingWelcome = showWelcome;
 
     const cached = {};
-    for (const panel of state.panels) {
+    for (const panel of visiblePanels) {
         const el = document.getElementById(panel.id);
         if (!el) continue;
         _cacheVtty(panel.id, document.getElementById('vtty-' + panel.id), panel.selectedCmdId, cached);
@@ -50,10 +52,13 @@ function renderPanels() {
         const tb = document.getElementById('sharedToolbar');
         if (tb) tb.classList.remove('hidden');
 
+        // Render window tab bar (only if >1 window)
+        if (typeof _renderWindowBar === 'function') html += _renderWindowBar();
+
         const isMobile = state._mobileTabbedLayout;
-        if (isMobile && state.panels.length > 1) {
+        if (isMobile && visible.length > 1) {
             html += '<div class="mobile-tab-bar" id="mobileTabBar">';
-            for (const panel of state.panels) {
+            for (const panel of visible) {
                 const focused = panel.id === state._focusedPanelId;
                 const label = _getPanelLabel(panel);
                 html += `<div class="mobile-tab${focused ? ' active' : ''}" data-action="FocusPanel" data-panel="${panel.id}" title="${escHtml(label)}">
@@ -64,7 +69,7 @@ function renderPanels() {
             html += '</div>';
         }
 
-        for (const panel of state.panels) {
+        for (const panel of visible) {
             if (panel.minimized) continue;
             const conn = panel.selectedInstUrl ? state.connections.find(i => i.url === panel.selectedInstUrl) : null;
             const serverLabel = _getServerLabel(conn, panel.selectedInstUrl);
@@ -74,7 +79,6 @@ function renderPanels() {
             const mHide = isMobile && multi && !focused ? ' hidden' : '';
             html += `<div class="panel${focused ? ' focused' : ''}" id="${panel.id}" ondragover="onPanelDragOver(event)" ondrop="onPanelDrop(event,'${panel.id}')" ondragleave="onPanelDragLeave(event)"${mHide}>
 <div class="panel-header" data-panel-id="${panel.id}" oncontextmenu="showPanelContextMenu(event,'${panel.id}')" tabindex="0" role="button" aria-label="Panel: ${escHtml(panel.selectedInstUrl || 'empty')}" style="--ph-bg:${color};--ph-fg:${textColor};background:var(--ph-bg);color:var(--ph-fg);">
-    <button class="panel-close-btn" data-action="ClosePanelContent" data-panel="${panel.id}" title="Close panel">&#x2715;</button>
     <button class="btn btn-xs cmd-history-btn hidden" id="histBack-${panel.id}" data-action="PanelHistoryBack" data-panel="${panel.id}" title="Back">&#x25C0;</button>
     <button class="btn btn-xs cmd-history-btn hidden" id="histFwd-${panel.id}" data-action="PanelHistoryForward" data-panel="${panel.id}" title="Forward">&#x25B6;</button>
     <div class="cmd-info" id="cmdInfo-${panel.id}">
@@ -85,6 +89,7 @@ function renderPanels() {
     <span class="panel-reach-dot unknown" id="panelReachDot-${panel.id}" title="Server state"></span>
     <span class="panel-header-meta" id="panelMeta-${panel.id}"></span>
     <button class="cmd-freeze-btn panel-freeze-btn hidden" id="panelFreezeBtn-${panel.id}" data-action="TogglePauseRunPanel" data-panel="${panel.id}" title="Freeze/Thaw command">&#8545;</button>
+    <button class="panel-close-btn" data-action="ClosePanelContent" data-panel="${panel.id}" title="Close panel">&#x2715;</button>
 </div>
 ${panel.split ? _renderSplitContainer(panel) : _renderVttyContainer(panel)}
 </div>
@@ -111,7 +116,7 @@ ${multi ? `<div class="panel-resize-handle" data-panel="${panel.id}"></div>` : '
     if (!state._showingWelcome) updateSharedToolbar();
 
     if (!state._showingWelcome && state.bufferView === 'current') {
-        for (const p of state.panels) {
+        for (const p of visiblePanels) {
             if (p.selectedCmdId && p.selectedInstUrl && (!p.ws || p.ws.readyState !== WebSocket.OPEN)) {
                 startPanelUpdateMode(p.id);
             }
