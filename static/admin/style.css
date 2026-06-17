@@ -516,6 +516,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .modal h2 { font-size: var(--ui-fs); color: var(--accent); margin-bottom: 1rem; font-weight: 600; }
 .modal .field { margin-bottom: 0.75rem; }
 .modal label { display: block; font-size: var(--ui-fs); color: var(--text-secondary); margin-bottom: 0.2rem; }
+.modal .checkbox-field { display: flex; align-items: center; margin-top: 0.3rem; }
+.modal .checkbox-field label { display: inline-flex; align-items: center; gap: 0.3rem; margin-bottom: 0; cursor: pointer; }
+.modal .checkbox-field input[type="checkbox"] { width: auto; }
 .modal input { width: 100%; font-size: var(--ui-fs); }
 .modal select { font-size: var(--ui-fs); }
 .modal .actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
