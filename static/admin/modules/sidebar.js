@@ -653,7 +653,9 @@ document.addEventListener('click', (e) => {
         _spawnOnServer(instUrl) {
             window._userSpawnInstUrl = instUrl;
             const spawnEl = document.getElementById('tab-spawn');
+            const serversEl = document.getElementById('tab-servers');
             if (spawnEl) spawnEl.classList.remove('hidden');
+            if (serversEl) serversEl.classList.add('hidden');
             updateInstanceDropdown();
             const input = document.getElementById('spawnCmd');
             if (input) input.focus();
@@ -661,14 +663,18 @@ document.addEventListener('click', (e) => {
         _showSpawnModal() {
             window._userSpawnInstUrl = undefined;
             const spawnEl = document.getElementById('tab-spawn');
+            const serversEl = document.getElementById('tab-servers');
             if (spawnEl) spawnEl.classList.remove('hidden');
+            if (serversEl) serversEl.classList.add('hidden');
             updateInstanceDropdown();
             const input = document.getElementById('spawnCmd');
             if (input) input.focus();
         },
         _closeSpawnModal() {
             const spawnEl = document.getElementById('tab-spawn');
+            const serversEl = document.getElementById('tab-servers');
             if (spawnEl) spawnEl.classList.add('hidden');
+            if (serversEl) serversEl.classList.remove('hidden');
         },
         showDocs, fetchEnvironments, activateEnvironment, getCmdGroups, createCmdGroup,
         deleteCmdGroup, renameCmdGroup, toggleCmdInGroup, toggleGroupCollapse, renderGroups,

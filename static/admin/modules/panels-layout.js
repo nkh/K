@@ -131,9 +131,9 @@ function splitPanel(panelId, direction) {
     if (!p || p.split) return;
     p.split = {
         direction, splitRatio: 0.5, activeSide: 'primary',
-        // Inherit the parent's command so the new pane shows the same terminal (tmux-like)
-        secondaryCmdId: p.selectedCmdId || null,
-        secondaryInstUrl: p.selectedInstUrl || null,
+        // Independent pane — no command inherited; user selects one via drag-drop or sidebar
+        secondaryCmdId: null,
+        secondaryInstUrl: null,
         secondaryWs: null, secondaryWsCmdId: null, secondaryWsInstUrl: null,
         secondaryWsReconnectCount: 0, secondaryWsReconnectTimer: null,
         secondaryWsPingInterval: null, secondaryWsPingSendTime: 0, secondaryWsLatency: 0,
@@ -480,6 +480,9 @@ addPanelDirect = function() {
     const win = _getActiveWindow();
     if (!win.panelIds) win.panelIds = [];
     win.panelIds.push(panel.id);
+    // Re-render: _origAddPanelDirect called renderPanels() before this panel
+    // was in the window's panelIds, so it wasn't visible. Re-render now.
+    renderPanels();
     return panel;
 };
 

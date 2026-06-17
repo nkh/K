@@ -192,6 +192,22 @@ function _rebuildShortcuts() {
 let _shortcuts = [];
 _rebuildShortcuts();
 
+// ─── Shortcut matching (extracted so it can be called from focused-terminal path) ───
+function _tryShortcut(e) {
+    for (const s of _shortcuts) {
+        const keyMatch = e.key === s.key || (s.shift && typeof s.shift === 'string' && e.shiftKey && e.key === s.shift);
+        if (!keyMatch) continue;
+        const ctrlOk = !s.ctrl || e.ctrlKey || e.metaKey;
+        const altOk = s.alt ? e.altKey : !e.altKey;
+        const shiftOk = !s.shift || e.shiftKey;
+        const metaOk = !s.meta || e.metaKey;
+        if (ctrlOk && altOk && shiftOk && metaOk) {
+            if (!(s.noInput && _inInput(e))) { s.action(e); return true; }
+        }
+    }
+    return false;
+}
+
 // ─── Keyboard handling ───
 document.addEventListener('keydown', (e) => {
     // Direct terminal keyboard input: capture keystrokes and send to PTY
@@ -208,6 +224,9 @@ document.addEventListener('keydown', (e) => {
                     _handleEscape(); return;
                 } else if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
                     e.preventDefault(); _openSearch(panel.id); return;
+                } else if (_tryShortcut(e)) {
+                    // A shortcut matched (e.g. Alt+|, Alt+-, Alt+n) — don't send to terminal
+                    return;
                 } else {
                     e.preventDefault(); sendDirectKey(e, panelObj); return;
                 }
@@ -232,17 +251,8 @@ document.addEventListener('keydown', (e) => {
         }
     }
 
-    // Shortcut table dispatch
-    for (const s of _shortcuts) {
-        const keyMatch = e.key === s.key || (s.shift && e.shiftKey && e.key === s.shift);
-        if (!keyMatch) continue;
-        if ((!s.ctrl || e.ctrlKey || e.metaKey) &&
-            (s.alt ? e.altKey : !e.altKey) &&
-            (!s.shift || e.shiftKey) &&
-            (!s.meta || e.metaKey)) {
-            if (!(s.noInput && _inInput(e))) { s.action(e); return; }
-        }
-    }
+    // Shortcut table dispatch (for non-focused paths)
+    _tryShortcut(e);
 });
 
 // ─── Direct key sending (when terminal is focused) ───

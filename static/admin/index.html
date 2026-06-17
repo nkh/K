@@ -54,10 +54,13 @@
                     </div>
                     <div id="commandList"></div>
                 </div>
-                <!-- Spawn form (used as modal, triggered from server tab + buttons) -->
-                <div id="tab-spawn" class="hidden" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:100;display:flex;align-items:center;justify-content:center;" onclick="if(event.target===this)_closeSpawnModal()">
-                    <div class="spawn-form" style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:1rem;min-width:340px;max-width:90vw;max-height:90vh;overflow-y:auto;position:relative;">
-                        <button class="btn btn-xs" data-action="CloseSpawnModal" title="Close" style="position:absolute;top:0.3rem;right:0.3rem;">&#x2715;</button>
+                <!-- Spawn form (inline sidebar section, triggered from server tab + buttons) -->
+                <div id="tab-spawn" class="hidden">
+                    <div class="spawn-form">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.3rem;">
+                            <span style="font-size:var(--ui-fs);color:var(--text-secondary);font-weight:600;">Spawn Command</span>
+                            <button class="btn btn-xs" data-action="CloseSpawnModal" title="Close">&#x2715;</button>
+                        </div>
                         <div class="field">
                             <label>Target Instance</label>
                             <select id="spawnInstance" onchange="_userSpawnInstUrl=this.value"></select>
@@ -68,7 +71,7 @@
                         </div>
                         <div class="field">
                             <label>Environment Variables</label>
-                            <textarea id="spawnEnv" rows="3" placeholder="KEY=value&#10;PATH=/custom/bin&#10;DEBUG=true" onkeydown="if(event.key==='Enter'&&event.ctrlKey){event.preventDefault();spawnCommand()}"></textarea>
+                            <textarea id="spawnEnv" rows="2" placeholder="KEY=value&#10;PATH=/custom/bin" onkeydown="if(event.key==='Enter'&&event.ctrlKey){event.preventDefault();spawnCommand()}"></textarea>
                         </div>
                         <div class="field">
                             <label>Working Directory</label>
@@ -83,7 +86,7 @@
                                 <label>Cols</label>
                                 <input type="number" id="spawnCols" value="" min="1" max="1000" placeholder="default">
                             </div>
-                            <button class="btn btn-xs" data-action="AutofitTerminalSize" title="Calculate optimal terminal size from the panel container" style="align-self:flex-end;margin-bottom:0.2rem;">Auto-fit</button>
+                            <button class="btn btn-xs" data-action="AutofitTerminalSize" title="Calculate optimal terminal size" style="align-self:flex-end;margin-bottom:0.2rem;">Auto-fit</button>
                         </div>
                         <div class="autofit-hint" id="autofitHint"></div>
                         <div class="field">
@@ -93,12 +96,12 @@
                             </select>
                         </div>
                         <div class="field checkbox-field">
-                            <label><input type="checkbox" id="spawnRetainOnExit"> Keep terminal after command exits (retain on exit)</label>
+                            <label><input type="checkbox" id="spawnRetainOnExit"> Keep terminal after command exits</label>
                         </div>
                         <div class="field checkbox-field">
                             <label><input type="checkbox" id="spawnOpenPanel" checked> Open in new panel</label>
                         </div>
-                        <div class="spawn-open-panel-hint" id="spawnOpenPanelHint" style="font-size:var(--ui-fs);color:var(--text-muted);margin-top:-0.2rem;margin-bottom:0.3rem;">Shows the main command or the oldest command in a new panel after spawning.</div>
+                        <div class="spawn-open-panel-hint" id="spawnOpenPanelHint" style="font-size:var(--ui-fs);color:var(--text-muted);margin-top:-0.2rem;margin-bottom:0.3rem;">Shows the command in a new panel after spawning.</div>
                         <button class="btn btn-primary" data-action="SpawnCommand" style="width:100%;margin-top:0.5rem;">Spawn Command</button>
                     </div>
                 </div>

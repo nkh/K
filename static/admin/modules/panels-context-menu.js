@@ -104,10 +104,23 @@ function showPanelContextMenu(e, panelId) {
     }
     _addCtxSep(menu);
     if (!panel.split) {
-        menu.appendChild(_createCtxMenuItem('Split Horizontal', () => splitPanel(panelId, 'horizontal')));
-        menu.appendChild(_createCtxMenuItem('Split Vertical', () => splitPanel(panelId, 'vertical')));
+        menu.appendChild(_createCtxMenuItem('Split Horizontal (Alt+-)', () => splitPanel(panelId, 'horizontal')));
+        menu.appendChild(_createCtxMenuItem('Split Vertical (Alt+|)', () => splitPanel(panelId, 'vertical')));
     } else {
-        menu.appendChild(_createCtxMenuItem('Unsplit', () => unsplitPanel(panelId)));
+        menu.appendChild(_createCtxMenuItem('Remove Split (Alt+u)', () => unsplitPanel(panelId)));
+    }
+    _addCtxSep(menu);
+    menu.appendChild(_createCtxMenuItem('New Window (Alt+w)', () => createWindow()));
+    if (typeof state !== 'undefined' && state.windows && state.windows.length > 1) {
+        menu.appendChild(_createCtxMenuItem('Close Window (Alt+W)', () => { if (state.activeWindowId) closeWindow(state.activeWindowId); }, true));
+        _addCtxSep(menu);
+        const winSub = document.createElement('div');
+        winSub.className = 'ctx-menu-sub';
+        for (let i = 0; i < state.windows.length && i < 9; i++) {
+            const w = state.windows[i];
+            const label = 'Window ' + escHtml(w.name) + (w.id === state.activeWindowId ? ' (active)' : '');
+            menu.appendChild(_createCtxMenuItem(label, () => switchWindow(w.id)));
+        }
     }
     _addCtxSep(menu);
     if (state.panels.length > 1) menu.appendChild(_createCtxMenuItem('Remove Panel', () => removePanel(panelId), true));
