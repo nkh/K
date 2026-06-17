@@ -549,10 +549,17 @@ function renderGroups() {
         container.innerHTML = '<div style="padding:0.5rem;color:var(--text-muted);font-size:0.7rem;text-align:center;">No groups created yet. Right-click a command in the Servers tab to add it to a group.</div>';
         return;
     }
+    // Build a map from command name → array of { inst, cmd, cmdName } so that
+    // multiple commands sharing the same binary name (e.g. "ls" and "ls --color=always")
+    // are all available for selection instead of silently dropping duplicates.
     const cmdMap = {};
     for (const inst of state.connections) {
         if (!inst._commands) continue;
-        for (const cmd of inst._commands) { const cmdName = cmd.name || cmd.id; if (!cmdMap[cmdName]) cmdMap[cmdName] = { inst, cmd, cmdName }; }
+        for (const cmd of inst._commands) {
+            const cmdName = cmd.name || cmd.id;
+            if (!cmdMap[cmdName]) cmdMap[cmdName] = [];
+            cmdMap[cmdName].push({ inst, cmd, cmdName });
+        }
     }
     let html = '';
     for (const gName of groupNames) {
@@ -568,13 +575,17 @@ function renderGroups() {
                 html += '<div style="padding:0.3rem 0.5rem 0.3rem 1.5rem;color:var(--text-muted);font-size:0.65rem;font-style:italic;">Empty — right-click a command to add it here</div>';
             } else {
                 for (const cmdName of cmdNames) {
-                    const entry = cmdMap[cmdName];
-                    if (entry) {
-                        const isAlive = entry.cmd.alive !== false;
-                        const dot = isAlive ? (entry.cmd.frozen ? 'frozen' : 'running') : 'exited';
-                        const selected = (state.selectedInstUrl === entry.inst.url && state.selectedCmdId === entry.cmd.id) ? ' group-cmd-selected' : '';
-                        const unreachableStyle = entry.inst.reachable === false ? ' style="opacity:0.4;"' : '';
-                        html += `<div class="group-cmd-item${selected}" data-inst-url="${escHtml(entry.inst.url)}" data-cmd-id="${escHtml(entry.cmd.id)}" data-cmd-name="${escHtml(cmdName)}"${unreachableStyle} data-action="SelectCommand" title="${escHtml(entry.inst.label)} / ${escHtml(cmdName)}"><span class="status-dot status-${dot}"></span><span class="group-cmd-name">${escHtml(cmdName)}</span><button class="btn btn-xs" data-action="ToggleCmdInGroup" data-name="${escHtml(gName)}" data-cmd-name="${escHtml(cmdName)}" title="Remove from group" style="margin-left:auto;padding:0 0.2rem;font-size:0.55rem;">&#x2715;</button></div>`;
+                    const entries = cmdMap[cmdName];
+                    if (entries && entries.length > 0) {
+                        for (const entry of entries) {
+                            const isAlive = entry.cmd.alive !== false;
+                            const dot = isAlive ? (entry.cmd.frozen ? 'frozen' : 'running') : 'exited';
+                            const selected = (state.selectedInstUrl === entry.inst.url && state.selectedCmdId === entry.cmd.id) ? ' group-cmd-selected' : '';
+                            const unreachableStyle = entry.inst.reachable === false ? ' style="opacity:0.4;"' : '';
+                            const argsStr = (entry.cmd.args || []).join(' ');
+                            const label = argsStr ? (cmdName + ' ' + argsStr) : cmdName;
+                            html += `<div class="group-cmd-item${selected}" data-inst-url="${escHtml(entry.inst.url)}" data-cmd-id="${escHtml(entry.cmd.id)}" data-cmd-name="${escHtml(label)}"${unreachableStyle} data-action="SelectCommand" title="${escHtml(entry.inst.label)} / ${escHtml(label)}"><span class="status-dot status-${dot}"></span><span class="group-cmd-name">${escHtml(label)}</span><button class="btn btn-xs" data-action="ToggleCmdInGroup" data-name="${escHtml(gName)}" data-cmd-name="${escHtml(cmdName)}" title="Remove from group" style="margin-left:auto;padding:0 0.2rem;font-size:0.55rem;">&#x2715;</button></div>`;
+                        }
                     } else {
                         html += `<div class="group-cmd-item" style="opacity:0.4;cursor:default;"><span class="group-cmd-name" style="text-decoration:line-through;">${escHtml(cmdName)}</span><span style="font-size:0.55rem;color:var(--text-muted);margin-left:auto;">(not running)</span><button class="btn btn-xs" data-action="ToggleCmdInGroup" data-name="${escHtml(gName)}" data-cmd-name="${escHtml(cmdName)}" title="Remove from group" style="margin-left:auto;padding:0 0.2rem;font-size:0.55rem;">&#x2715;</button></div>`;
                     }
