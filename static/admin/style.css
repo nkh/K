@@ -591,6 +591,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .server-tab-freeze-btn.active { color:var(--green) !important; }
 .server-tab-spawn-btn { background:none;border:none;cursor:pointer;color:var(--text-muted) !important;font-size:var(--ui-fs);padding:0 0.1rem;line-height:1;margin-left:0.15rem; }
 .server-tab-spawn-btn:hover { color:var(--green) !important; }
+.sidebar-tab-add-server-btn { background:none;border:none;cursor:pointer;color:var(--text-muted) !important;font-size:var(--ui-fs);padding:0 0.15rem;margin-left:0.2rem;line-height:1; }
+.sidebar-tab-add-server-btn:hover { color:var(--green) !important; }
 
 /* Command templates */
 .template-card { background:var(--bg-tertiary);border:1px solid var(--border);border-radius:4px;padding:0.5rem;cursor:pointer;transition:background 0.1s;margin-bottom:0.4rem; }

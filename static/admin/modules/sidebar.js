@@ -78,34 +78,15 @@ function toggleLogsView() {
 function switchSidebarTab(tab, el) {
     document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
     el.classList.add('active');
-    ['servers', 'spawn', 'templates', 'certs', 'groups'].forEach(t =>
+    ['servers', 'templates', 'certs', 'groups'].forEach(t =>
         document.getElementById('tab-' + t).classList.toggle('hidden', t !== tab));
     if (tab === 'templates') renderTemplates();
     if (tab === 'groups') renderGroups();
 }
 
-function updateSidebarTabsVisibility() {
-    const spawnTab = document.querySelector('.sidebar-tab:nth-child(2)');
-    const spawnContent = document.getElementById('tab-spawn');
-    const anyReachable = state.connections.some(i => i.reachable === true);
-    const show = anyReachable;
-    if (spawnTab) spawnTab.classList.toggle('hidden', !show);
-    if (!show && spawnContent) spawnContent.classList.add('hidden');
-    if (show && spawnContent && spawnTab && spawnTab.classList.contains('active')) spawnContent.classList.remove('hidden');
-    if (!show && spawnTab && spawnTab.classList.contains('active')) {
-        const cmdsTab = document.querySelector('.sidebar-tab:first-child');
-        if (cmdsTab) switchSidebarTab('commands', cmdsTab);
-    }
-}
+function updateSidebarTabsVisibility() {}
 
-function updateCmdToolbarVisibility() {
-    const killAllBtn = document.getElementById('killAllBtn');
-    if (!killAllBtn) return;
-    const show = state.connections.some(i => i.reachable === true) && state.connections.some(i => i._commands && i._commands.length > 0);
-    killAllBtn.classList.toggle('hidden', !show);
-    const freezeAllBtn = document.getElementById('freezeAllBtn');
-    if (freezeAllBtn) freezeAllBtn.classList.toggle('hidden', !show);
-}
+function updateCmdToolbarVisibility() {}
 
 function _handleCmdItemClick(e) {
     // Skip clicks on buttons (kill, freeze, pin, keep, grab-handle, spawn) — they have their own handlers
@@ -193,7 +174,7 @@ function _buildSidebar() {
 
     if (state._sidebarSort === 'name') {
         allCmds.sort((a, b) => a.cmdName.localeCompare(b.cmdName));
-        html += renderCmdList(allCmds, state.connections.length > 1);
+        html += renderCmdList(allCmds, true);
     } else {
         const grouped = state._sidebarSort;
         for (const inst of state.connections) {
@@ -238,7 +219,7 @@ function _buildSidebar() {
                 : '';
             const reachCls = inst.reachable === true ? 'reachable' : inst.reachable === false ? 'unreachable' : 'unknown';
             const dimStyle = inst.reachable === false ? 'opacity:0.4;' : ((isAlive || isFrozen) ? '' : 'opacity:0.6;');
-            out += `<div class="cmd-item${selected}${isFrozen ? ' frozen' : ''}${!isAlive && !isFrozen ? ' exited' : ''}${inst.reachable === false ? ' unreachable' : ''}" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" data-cmd-retained="${retainOnExit}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" draggable="true" ondragstart="onCmdDragStart(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true',this.dataset.cmdRetained==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)}${unreachableTitle}" style="${dimStyle}"><div class="cmd-item-row"><button class="cmd-kill-btn" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-retained="${retainOnExit}" data-cmd-alive="${isAlive}">&#x2715;</button><span class="server-reach-dot ${reachCls}" style="flex-shrink:0;"></span>${keepBtnHtml}<button class="pin-btn${isPinned ? ' active' : ''}" data-action="TogglePinCmd" data-cmd-name="${escHtml(cmdName)}" title="${isPinned ? 'Unpin' : 'Pin'}">${isPinned ? '◉' : '◎'}</button><span class="cmd-grab-handle" onmousedown="_cmdReorderMouseDown(event,'${escHtml(inst.url)}','${escHtml(cmd.id)}','${escHtml(cmdName)}')" title="Drag to reorder / drop on pane to open">&#x2807;</span><span class="name">${escHtml(cmdName)}</span><span class="cmd-detail-inline">${dp.map(p => escHtml(p)).join(' · ')}</span>${serverBadge}${certBadge}${exitBadge}${freezeBtnHtml}</div>${dp.length > 0 ? `<div class="cmd-detail-row">${dp.join(' · ')}</div>` : ''}</div>`;
+            out += `<div class="cmd-item${selected}${isFrozen ? ' frozen' : ''}${!isAlive && !isFrozen ? ' exited' : ''}${inst.reachable === false ? ' unreachable' : ''}" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-name="${escHtml(cmdName)}" data-cmd-alive="${isAlive}" data-cmd-frozen="${isFrozen}" data-cmd-retained="${retainOnExit}" tabindex="0" role="button" aria-label="Command ${escHtml(cmdName)}" draggable="true" ondragstart="onCmdDragStart(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName)" oncontextmenu="showCmdContextMenu(event,this.dataset.instUrl,this.dataset.cmdId,this.dataset.cmdName,this.dataset.cmdAlive==='true',this.dataset.cmdRetained==='true')" title="${escHtml(inst.label)} / ${escHtml(cmdName)}${unreachableTitle}" style="${dimStyle}"><div class="cmd-item-row"><button class="cmd-kill-btn" data-action="KillCommand" data-inst-url="${escHtml(inst.url)}" data-cmd-id="${escHtml(cmd.id)}" data-cmd-retained="${retainOnExit}" data-cmd-alive="${isAlive}">&#x2715;</button><span class="server-reach-dot ${reachCls}" style="flex-shrink:0;"></span>${keepBtnHtml}<button class="pin-btn${isPinned ? ' active' : ''}" data-action="TogglePinCmd" data-cmd-name="${escHtml(cmdName)}" title="${isPinned ? 'Unpin' : 'Pin'}">${isPinned ? '◉' : '◎'}</button><span class="cmd-grab-handle" onmousedown="_cmdReorderMouseDown(event,'${escHtml(inst.url)}','${escHtml(cmd.id)}','${escHtml(cmdName)}')" title="Drag to reorder / drop on pane to open">&#x2807;</span><span class="name">${escHtml(cmdName)}</span><span class="cmd-detail-inline">${dp.map(p => escHtml(p)).join(' · ')}</span>${serverBadge}${certBadge}${exitBadge}${freezeBtnHtml}</div>${dp.length > 0 ? `<div class="cmd-detail-row">${dp.join(' · ')}</div>` : ''}</div>`;
         }
         return out;
     }
@@ -663,9 +644,15 @@ document.addEventListener('click', (e) => {
         },
         _spawnOnServer(instUrl) {
             window._userSpawnInstUrl = instUrl;
-            const spawnTab = document.querySelector('.sidebar-tab[data-tab="spawn"]');
-            if (spawnTab) switchSidebarTab('spawn', spawnTab);
+            const spawnEl = document.getElementById('tab-spawn');
+            if (spawnEl) spawnEl.classList.remove('hidden');
             updateInstanceDropdown();
+            const input = document.getElementById('spawnCmd');
+            if (input) input.focus();
+        },
+        _closeSpawnModal() {
+            const spawnEl = document.getElementById('tab-spawn');
+            if (spawnEl) spawnEl.classList.add('hidden');
         },
         showDocs, fetchEnvironments, activateEnvironment, getCmdGroups, createCmdGroup,
         deleteCmdGroup, renameCmdGroup, toggleCmdInGroup, toggleGroupCollapse, renderGroups,

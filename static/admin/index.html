@@ -41,8 +41,7 @@
         <!-- Sidebar -->
         <div class="sidebar" id="sidebar">
             <div class="sidebar-tabs">
-                <div class="sidebar-tab active" data-action="SwitchSidebarTab" data-tab="servers">Servers</div>
-                <div class="sidebar-tab" data-action="SwitchSidebarTab" data-tab="spawn">Spawn</div>
+                <div class="sidebar-tab active" data-action="SwitchSidebarTab" data-tab="servers">Servers<span class="sidebar-tab-add-server-btn" data-action="ShowAddServerModal" title="Add server">+</span></div>
                 <div class="sidebar-tab" data-action="SwitchSidebarTab" data-tab="templates">Templates</div>
                 <div class="sidebar-tab" data-action="SwitchSidebarTab" data-tab="certs">Certs</div>
                 <div class="sidebar-tab" data-action="SwitchSidebarTab" data-tab="groups">Groups</div>
@@ -52,15 +51,13 @@
                 <div id="tab-servers">
                     <div style="padding:0.2rem 0.3rem;display:flex;gap:0.2rem;align-items:center;">
                         <input type="text" id="cmdFilter" placeholder="Filter commands..." oninput="loadCommands()" style="flex:1;min-width:0;font-size:var(--ui-fs);padding:0.1rem 0.3rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:2px;">
-                        <button class="btn btn-xs" data-action="ShowAddServerModal" title="Add server connection">+ Server</button>
-                        <button class="btn btn-xs hidden" id="killAllBtn" data-action="KillAllCommands" title="Kill all running commands" style="color:var(--text-muted);">&#x2715; All</button>
-                        <button class="btn btn-xs hidden" id="freezeAllBtn" data-action="FreezeAllCommands" title="Freeze/thaw all running commands" style="color:var(--text-muted);">&#8545; All</button>
                     </div>
                     <div id="commandList"></div>
                 </div>
-                <!-- Spawn tab -->
-                <div id="tab-spawn" class="hidden">
-                    <div class="spawn-form">
+                <!-- Spawn form (used as modal, triggered from server tab + buttons) -->
+                <div id="tab-spawn" class="hidden" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:100;display:flex;align-items:center;justify-content:center;" onclick="if(event.target===this)_closeSpawnModal()">
+                    <div class="spawn-form" style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:1rem;min-width:340px;max-width:90vw;max-height:90vh;overflow-y:auto;position:relative;">
+                        <button class="btn btn-xs" data-action="CloseSpawnModal" title="Close" style="position:absolute;top:0.3rem;right:0.3rem;">&#x2715;</button>
                         <div class="field">
                             <label>Target Instance</label>
                             <select id="spawnInstance" onchange="_userSpawnInstUrl=this.value"></select>

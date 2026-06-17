@@ -198,6 +198,8 @@ const _actions = {
     'CloseCmdPicker':           { handler: 'closeCmdPicker' },
     'PickCommand':              { handler: 'pickCommand', sig: 'cmd-select' },
     'CloseWorkspaceManage':     { handler: 'closeWorkspaceManage' },
+    'CloseSpawnModal':          { handler: '_closeSpawnModal' },
+    'ShowAddServerModal':       { handler: 'showAddServerModal', stop: true },
 
     // ── Shared toolbar ──
     'RestartCommand':           { handler: 'restartCommand', sig: 'panelId' },
