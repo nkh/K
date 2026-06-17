@@ -139,7 +139,15 @@ function _buildSidebar() {
 
     // Server tabs — always shown (All + one per server)
     html += '<div class="sidebar-sort-bar">';
-    html += `<span class="sidebar-sort-item${state._sidebarSort === 'name' ? ' active' : ''}" data-action="SortSidebarBy" data-value="name">All<span class="server-tab-spawn-btn" data-action="ShowSpawnModal" title="Spawn command">+</span></span>`;
+    // Compute freeze/thaw state across ALL servers for the All tab
+    const allCmdsForFreeze = [];
+    for (const inst of state.connections) {
+        for (const cmd of (inst._commands || [])) { if (cmd.alive !== false) allCmdsForFreeze.push(cmd); }
+    }
+    const allAllFrozen = allCmdsForFreeze.length > 0 && allCmdsForFreeze.every(c => c.frozen);
+    const allFreezeIcon = allAllFrozen ? '&#9654;' : '&#8545;';
+    const allFreezeActive = allAllFrozen ? ' active' : '';
+    html += `<span class="sidebar-sort-item${state._sidebarSort === 'name' ? ' active' : ''}" data-action="SortSidebarBy" data-value="name">All<span class="server-tab-spawn-btn" data-action="ShowSpawnModal" title="Spawn command">+</span><button class="server-tab-freeze-btn${allFreezeActive}" data-action="FreezeAllCommands" title="${allAllFrozen ? 'Thaw all' : 'Freeze all'}">${allFreezeIcon}</button><button class="server-tab-btn" data-action="KillAllCommands" title="Kill all">&#x2715;</button></span>`;
     for (const inst of state.connections) {
         const rCls = inst.reachable === true ? 'reachable' : inst.reachable === false ? 'unreachable' : 'unknown';
         const isActive = state._sidebarSort === inst.url;
@@ -215,7 +223,7 @@ function _buildSidebar() {
             if (res && res.memory_mb != null) { const mb = res.memory_mb; dp.push(mb >= 1024 ? (mb / 1024).toFixed(1) + 'G' : mb.toFixed(1) + 'M'); }
             const unreachableTitle = inst.reachable === false ? ' [disconnected]' : '';
             const serverBadge = showServerBadge
-                ? `<span class="resource-badge" style="font-size:0.55rem;opacity:0.7;" title="${escHtml(inst.url)}">${escHtml(_shortLabel(inst))}</span>`
+                ? `<span class="resource-badge" style="font-size:0.55rem;opacity:0.7;" title="${escHtml(inst.url)}">${escHtml(inst.label)}</span>`
                 : '';
             const reachCls = inst.reachable === true ? 'reachable' : inst.reachable === false ? 'unreachable' : 'unknown';
             const dimStyle = inst.reachable === false ? 'opacity:0.4;' : ((isAlive || isFrozen) ? '' : 'opacity:0.6;');

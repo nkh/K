@@ -160,10 +160,14 @@ if (typeof _buildSidebar === 'function') {
     state._sidebarSort = 'name';
     _buildSidebar();
     const html = container.innerHTML;
+    // All tab header must have kill-all and freeze-all buttons
+    assert(html.includes('data-action="KillAllCommands"'), 'All tab header has KillAllCommands button');
+    assert(html.includes('data-action="FreezeAllCommands"'), 'All tab header has FreezeAllCommands button');
+    // Server badges present for ALL commands
     assert(html.includes('resource-badge'), 'server badges present in All tab');
-    // Main server badge should use short label (port only for localhost), not full label
-    assert(html.includes('>9090<'), 'main server badge uses short label (port)');
-    assert(html.includes('>Production<'), 'remote server badge shows label');
+    // Both servers must use inst.label — same format for all entries
+    assert(html.includes('>localhost:9090<'), 'main server badge uses inst.label (full label)');
+    assert(html.includes('>Production<'), 'remote server badge uses inst.label');
     // All commands should have kill button with data-action
     const killBtnCount = (html.match(/data-action="KillCommand"/g) || []).length;
     assertEq(killBtnCount, 2, 'All tab: every command has kill button with KillCommand action');
