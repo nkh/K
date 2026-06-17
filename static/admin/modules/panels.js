@@ -24,17 +24,30 @@ function renderPanels() {
     if (showWelcome !== state._showingWelcome) state._showingWelcome = showWelcome;
 
     const cached = {};
-    for (const panel of visiblePanels) {
+    // Cache VTTY content from ALL panels whose DOM still exists (not just visible).
+    // Panels from other windows may still be in the DOM from a previous render.
+    // For panels whose DOM was already destroyed, clear their generation cache
+    // so the next HTTP fetch will apply fresh content instead of being skipped.
+    for (const panel of state.panels) {
         const el = document.getElementById(panel.id);
-        if (!el) continue;
+        if (!el) {
+            // DOM was destroyed — clear generation cache so re-fetch applies content
+            if (panel.selectedCmdId) {
+                const gk = panel.id + '/' + panel.selectedCmdId;
+                delete state._lastGeneration[gk];
+            }
+            if (panel.split?.secondaryCmdId) {
+                const sgk = panel.id + '-secondary/' + panel.split.secondaryCmdId;
+                delete state._lastGeneration[sgk];
+            }
+            continue;
+        }
         _cacheVtty(panel.id, document.getElementById('vtty-' + panel.id), panel.selectedCmdId, cached);
         if (panel.split?.secondaryCmdId) {
             const sid = panel.id + '-secondary';
             _cacheVtty(sid, document.getElementById('vtty-' + sid), panel.split.secondaryCmdId, cached);
         }
     }
-
-    _applyPanelLayoutClass(container);
     let html = '';
 
     if (showWelcome) {
@@ -104,6 +117,9 @@ ${multi ? `<div class="panel-resize-handle" data-panel="${panel.id}"></div>` : '
 
     html += _renderMinimizedPanels();
     container.innerHTML = html;
+    // Apply layout class AFTER innerHTML so #panelArea exists in the DOM.
+    // Never fall back to the container itself — #view-vtty must stay flex-column.
+    _applyPanelLayoutClass(container);
     setupPanelHeaderDrag();
 
     for (const [id, c] of Object.entries(cached)) {

@@ -383,9 +383,11 @@ function applyLayoutPreset(preset) {
 }
 
 function _applyPanelLayoutClass(container) {
-    // Target #panelArea (inside container) for layout direction.
-    // Container itself is always flex-direction: column (window-bar on top).
-    const area = document.getElementById('panelArea') || container;
+    // Target ONLY #panelArea for layout direction.
+    // #view-vtty (container) must ALWAYS stay flex-direction: column
+    // (window-bar stacked above panel-area). Never fall back to container.
+    const area = document.getElementById('panelArea');
+    if (!area) return;
     if (state._mobileTabbedLayout) {
         area.classList.remove('grid-2x2', 'grid-1-2', 'grid-2-1');
         area.style.flexDirection = 'column';

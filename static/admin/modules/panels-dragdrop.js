@@ -221,8 +221,8 @@ function _cmdReorderMouseMove(e) {
     const s = _reorderState;
     if (Math.abs(e.clientY - s.startY) < 4 && !s.placeholder) return;
     const container = document.getElementById('commandList');
-    if (!container) return;
     if (!s.placeholder) {
+        if (!container) return;
         const ph = document.createElement('div');
         ph.className = 'cmd-reorder-placeholder';
         ph.style.cssText = 'border-top:2px solid var(--accent);margin:0;pointer-events:none;';
@@ -239,11 +239,15 @@ function _cmdReorderMouseMove(e) {
     const overArea = underEl?.closest('#view-vtty') && !underEl.closest('#sidebar');
     const wasOverPane = s.overPane;
     s.overPane = !!(overPanel || overArea);
+    // Track the specific target panel and split side for proper drop handling
+    s._targetPanelId = overPanel?.id || null;
+    s._targetSplitSide = underEl?.closest('[data-split-side]')?.dataset.splitSide || null;
     if (s.overPane !== wasOverPane) {
         document.querySelectorAll('.panel').forEach(p => p.classList.toggle('drag-over-left', s.overPane));
-        if (!s.overPane) container.querySelectorAll('.cmd-item').forEach(el => el.classList.remove('cmd-drag-over-top', 'cmd-drag-over-bottom'));
+        if (!s.overPane && container) container.querySelectorAll('.cmd-item').forEach(el => el.classList.remove('cmd-drag-over-top', 'cmd-drag-over-bottom'));
     }
     if (s.overPane) return;
+    if (!container) return;
     container.querySelectorAll('.cmd-item').forEach(el => el.classList.remove('cmd-drag-over-top', 'cmd-drag-over-bottom'));
     const target = underEl?.closest('.cmd-item');
     if (!target || target === s.srcEl) return;
@@ -256,7 +260,7 @@ function _cmdReorderMouseUp() {
     document.removeEventListener('mousemove', _cmdReorderMouseMove);
     document.removeEventListener('mouseup', _cmdReorderMouseUp);
     if (!_reorderState) return;
-    const { srcEl, placeholder, instUrl, cmdId, cmdName, overPane } = _reorderState;
+    const { srcEl, placeholder, instUrl, cmdId, cmdName, overPane, _targetPanelId, _targetSplitSide } = _reorderState;
     if (srcEl) {
         ['position','left','top','width','zIndex','opacity','pointerEvents'].forEach(p => srcEl.style[p] = '');
         srcEl.classList.remove('cmd-dragging');
@@ -264,7 +268,32 @@ function _cmdReorderMouseUp() {
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('drag-over-left'));
     const container = document.getElementById('commandList');
     if (container) container.querySelectorAll('.cmd-item').forEach(el => el.classList.remove('cmd-drag-over-top', 'cmd-drag-over-bottom'));
-    if (overPane && placeholder) { placeholder.remove(); _openCommandInNewPane(instUrl, cmdId, cmdName); _reorderState = null; return; }
+    if (overPane) {
+        if (placeholder) placeholder.remove();
+        // Find the target panel and handle drop properly (assign to panel/split side)
+        const targetPanelObj = _targetPanelId ? state.panels.find(p => p.id === _targetPanelId) : null;
+        if (targetPanelObj) {
+            if (targetPanelObj.split) {
+                const side = _targetSplitSide || (targetPanelObj.split.activeSide || 'primary');
+                if (side === 'secondary') {
+                    _handleSecondarySelect(targetPanelObj, instUrl, cmdId);
+                } else {
+                    _pushPanelHistory(targetPanelObj);
+                    _selectCommandForPanel(targetPanelObj, instUrl, cmdId);
+                }
+            } else if (!targetPanelObj.selectedCmdId) {
+                _pushPanelHistory(targetPanelObj);
+                _selectCommandForPanel(targetPanelObj, instUrl, cmdId);
+            } else {
+                _openCommandInNewPane(instUrl, cmdId, cmdName);
+            }
+        } else {
+            // Dropped on the terminal area but not on a specific panel — open new pane
+            _openCommandInNewPane(instUrl, cmdId, cmdName);
+        }
+        _reorderState = null;
+        return;
+    }
     if (placeholder && container) {
         const nextEl = placeholder.nextElementSibling;
         const targetCmdId = nextEl?.classList.contains('cmd-item') ? nextEl.dataset.cmdId : null;
