@@ -296,7 +296,7 @@
                     const pre = vttyEl ? vttyEl.querySelector('pre') : null;
                     if (pre) {
                         pre.innerHTML = vtty.html;
-                        if (state._level3Enabled && vtty.dimensions) buildCellGrid(firstCmd.id, pre, vtty.dimensions.rows, vtty.dimensions.cols);
+                        if (state._level3Enabled && vtty.dimensions) buildCellGrid((panelObj ? panelObj.id : 'panel-0') + '/' + firstCmd.id, pre, vtty.dimensions.rows, vtty.dimensions.cols);
                         updateVttyMetadataFromHttp(vtty, panelEl, panelObj, 0);
                     }
                 }

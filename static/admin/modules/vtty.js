@@ -26,7 +26,7 @@ function updateVttyDisplayForPanel(panelObj, panelEl, data) {
         const oldScrollHeight = vttyEl.scrollHeight;
         pre.innerHTML = data.html;
         if (state._level3Enabled && data.dimensions) {
-            buildCellGrid(cmdId, pre, data.dimensions.rows, data.dimensions.cols);
+            buildCellGrid(genKey, pre, data.dimensions.rows, data.dimensions.cols);
         }
         if (wasAtBottom) {
             vttyEl.scrollTop = vttyEl.scrollHeight;
@@ -111,7 +111,7 @@ function applyVttyDiffForPanel(panelObj, panelEl, data) {
         const oldScrollHeight = vttyEl.scrollHeight;
         pre.innerHTML = data.html;
         if (state._level3Enabled && data.dimensions) {
-            buildCellGrid(cmdId, pre, data.dimensions.rows, data.dimensions.cols);
+            buildCellGrid(cgKey, pre, data.dimensions.rows, data.dimensions.cols);
         }
         if (wasAtBottom) {
             vttyEl.scrollTop = vttyEl.scrollHeight;
@@ -129,7 +129,8 @@ function applyVttyDiffForPanel(panelObj, panelEl, data) {
         return;
     }
 
-    const cg = state._cellGrids[cmdId];
+    const cgKey = panelObj.id + '/' + cmdId;
+    const cg = state._cellGrids[cgKey];
     if (!cg || !data.cells || !data.cells.length) {
         // No grid or no cells — fall back to full HTML fetch
         scheduleVttyHttpForPanel(panelObj.id, panelObj.selectedInstUrl, cmdId, 0);
@@ -139,7 +140,7 @@ function applyVttyDiffForPanel(panelObj, panelEl, data) {
     // Check for dimension mismatch — if dimensions changed, need full resync
     const dims = data.dimensions || {};
     if (dims.rows !== cg.rows || dims.cols !== cg.cols) {
-        delete state._cellGrids[cmdId];
+        delete state._cellGrids[cgKey];
         scheduleVttyHttpForPanel(panelObj.id, panelObj.selectedInstUrl, cmdId, 0);
         return;
     }
@@ -235,7 +236,7 @@ async function loadVttyHttpForPanel(panelId, instUrl, cmdId) {
 // applyVttyDiff() to patch individual cells without destroying the entire
 // DOM tree (no innerHTML replacement).
 
-function buildCellGrid(cmdId, pre, rows, cols) {
+function buildCellGrid(gridKey, pre, rows, cols) {
     const grid = [];
     let currentRow = [];
     for (const child of pre.childNodes) {
@@ -272,7 +273,7 @@ function buildCellGrid(cmdId, pre, rows, cols) {
         grid.push(currentRow);
     }
 
-    state._cellGrids[cmdId] = { grid, rows, cols };
+    state._cellGrids[gridKey] = { grid, rows, cols };
 }
 
 // Generate the inline style string for a cell, matching the server's

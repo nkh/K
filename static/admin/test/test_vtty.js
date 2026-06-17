@@ -167,7 +167,8 @@ if (typeof applyVttyDiffForPanel === 'function') {
     pre.appendChild(spanC);
 
     // Manually set up the cell grid (normally done by buildCellGrid)
-    state._cellGrids['test-cmd-diff'] = {
+    // Key must be panelId/cmdId (per-panel cell grids)
+    state._cellGrids[p.id + '/test-cmd-diff'] = {
         grid: [
             [
                 { span: spanA, idx: 0, len: 1 },
@@ -179,7 +180,7 @@ if (typeof applyVttyDiffForPanel === 'function') {
         cols: 3,
     };
     // Set a previous generation so the diff is not skipped
-    state._lastGeneration['test-cmd-diff'] = 1;
+    state._lastGeneration[p.id + '/test-cmd-diff'] = 1;
 
     // Send a vtty_diff in the exact server format.
     // Change cell (0,1) from 'B' to 'X' with bold red on black.
@@ -276,8 +277,8 @@ if (typeof applyVttyDiffForPanel === 'function') {
 
     // Cleanup
     document.body.removeChild(panelEl);
-    delete state._cellGrids['test-cmd-diff'];
-    delete state._lastGeneration['test-cmd-diff'];
+    delete state._cellGrids[p.id + '/test-cmd-diff'];
+    delete state._lastGeneration[p.id + '/test-cmd-diff'];
 }
 
 // ── scheduleVttyHttpForPanel ──
