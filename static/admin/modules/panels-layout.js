@@ -137,9 +137,9 @@ function _renderWindowBar() {
     for (const w of state.windows) {
         const active = w.id === state.activeWindowId;
         const closeBtn = state.windows.length > 1
-            ? `<button class="window-tab-close" data-action="CloseWindow" data-window="${w.id}" title="Close window">&#x2715;</button>`
+            ? `<button class="window-tab-close" data-action="CloseWindow" data-value="${w.id}" title="Close window">&#x2715;</button>`
             : '';
-        html += `<div class="window-tab${active ? ' active' : ''}" data-action="SwitchWindow" data-window="${w.id}" title="Window ${escHtml(w.name)}"><span class="window-tab-label">${escHtml(w.name)}</span>${closeBtn}</div>`;
+        html += `<div class="window-tab${active ? ' active' : ''}" data-action="SwitchWindow" data-value="${w.id}" title="Window ${escHtml(w.name)}"><span class="window-tab-label">${escHtml(w.name)}</span>${closeBtn}</div>`;
     }
     html += `<button class="window-tab-add" data-action="CreateWindow" title="New window">+</button>`;
     html += '</div>';
