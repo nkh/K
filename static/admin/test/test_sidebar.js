@@ -25,8 +25,7 @@ assert(typeof switchSidebarTab === 'function', 'switchSidebarTab is a function')
 // Create tab elements
 const tabServers = document.createElement('div');
 tabServers.id = 'tab-servers';
-const tabSpawn = document.createElement('div');
-tabSpawn.id = 'tab-spawn';
+// Spawn is now a modal, not a tab — no tab-spawn in sidebar tabs
 const tabTemplates = document.createElement('div');
 tabTemplates.id = 'tab-templates';
 const tabEnvs = document.createElement('div');
@@ -46,9 +45,8 @@ globalThis.renderGroups = function() {};
 state.connections = [];
 
 assert(() => { switchSidebarTab('servers', sidebarTab1); }, 'switchSidebarTab servers does not throw');
-assert(() => { switchSidebarTab('spawn', sidebarTab1); }, 'switchSidebarTab spawn does not throw');
+// spawn is no longer a sidebar tab — removed from switchSidebarTab
 assert(() => { switchSidebarTab('templates', sidebarTab1); }, 'switchSidebarTab templates does not throw');
-assert(() => { switchSidebarTab('envs', sidebarTab1); }, 'switchSidebarTab envs does not throw');
 assert(() => { switchSidebarTab('certs', sidebarTab1); }, 'switchSidebarTab certs does not throw');
 assert(() => { switchSidebarTab('groups', sidebarTab1); }, 'switchSidebarTab groups does not throw');
 
@@ -119,6 +117,63 @@ if (typeof updateSidebarBanner === 'function') {
 console.log('updateTerminalDisconnectedOverlay tests');
 if (typeof updateTerminalDisconnectedOverlay === 'function') {
     assert(() => { updateTerminalDisconnectedOverlay(); }, 'updateTerminalDisconnectedOverlay does not throw');
+}
+
+// ── _showSpawnModal ──
+console.log('_showSpawnModal tests');
+if (typeof _showSpawnModal === 'function') {
+    const spawnEl = document.getElementById('tab-spawn');
+    assert(spawnEl !== null, 'tab-spawn element exists');
+    spawnEl.classList.add('hidden');
+    _showSpawnModal();
+    assert(!spawnEl.classList.contains('hidden'), '_showSpawnModal reveals spawn modal');
+    assertEq(window._userSpawnInstUrl, undefined, '_showSpawnModal clears spawn server');
+}
+
+// ── _spawnOnServer ──
+console.log('_spawnOnServer tests');
+if (typeof _spawnOnServer === 'function') {
+    const spawnEl = document.getElementById('tab-spawn');
+    spawnEl.classList.add('hidden');
+    _spawnOnServer('http://localhost:9090');
+    assert(!spawnEl.classList.contains('hidden'), '_spawnOnServer reveals spawn modal');
+    assertEq(window._userSpawnInstUrl, 'http://localhost:9090', '_spawnOnServer sets spawn server');
+}
+
+// ── _closeSpawnModal ──
+console.log('_closeSpawnModal tests');
+if (typeof _closeSpawnModal === 'function') {
+    const spawnEl = document.getElementById('tab-spawn');
+    spawnEl.classList.remove('hidden');
+    _closeSpawnModal();
+    assert(spawnEl.classList.contains('hidden'), '_closeSpawnModal hides spawn modal');
+}
+
+// ── renderCmdList shows server badge for ALL servers (including main) ──
+console.log('renderCmdList server badge consistency tests');
+if (typeof _buildSidebar === 'function') {
+    const container = document.getElementById('commandList');
+    state.connections = [
+        { url: 'http://localhost:9090', label: 'localhost:9090', reachable: true, _commands: [{ id: 'c1', name: 'bash', alive: true }] },
+        { url: 'http://remote:8080', label: 'Production', reachable: true, _commands: [{ id: 'c2', name: 'node', alive: true }] }
+    ];
+    state._sidebarSort = 'name';
+    _buildSidebar();
+    const html = container.innerHTML;
+    assert(html.includes('resource-badge'), 'server badges present in All tab');
+    // Main server badge should use short label (port only for localhost), not full label
+    assert(html.includes('>9090<'), 'main server badge uses short label (port)');
+    assert(html.includes('>Production<'), 'remote server badge shows label');
+    // All commands should have kill button with data-action
+    const killBtnCount = (html.match(/data-action="KillCommand"/g) || []).length;
+    assertEq(killBtnCount, 2, 'All tab: every command has kill button with KillCommand action');
+    // All alive commands should have freeze button
+    const freezeBtnCount = (html.match(/data-action="TogglePauseRunByIdx"/g) || []).length;
+    assertEq(freezeBtnCount, 2, 'All tab: every alive command has freeze button');
+    // No command should reference SwitchSidebarTab or data-tab=spawn
+    assert(!html.includes('SwitchSidebarTab'), 'No SwitchSidebarTab in command list');
+    assert(!html.includes('data-tab="spawn"'), 'No data-tab=spawn in command list');
+    state.connections = [];
 }
 
 console.log('\n[sidebar.js] Tests complete');

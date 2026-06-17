@@ -139,7 +139,7 @@ function _buildSidebar() {
 
     // Server tabs — always shown (All + one per server)
     html += '<div class="sidebar-sort-bar">';
-    html += `<span class="sidebar-sort-item${state._sidebarSort === 'name' ? ' active' : ''}" data-action="SortSidebarBy" data-value="name">All<span class="server-tab-spawn-btn" data-action="SwitchSidebarTab" data-tab="spawn" title="Spawn command">+</span></span>`;
+    html += `<span class="sidebar-sort-item${state._sidebarSort === 'name' ? ' active' : ''}" data-action="SortSidebarBy" data-value="name">All<span class="server-tab-spawn-btn" data-action="ShowSpawnModal" title="Spawn command">+</span></span>`;
     for (const inst of state.connections) {
         const rCls = inst.reachable === true ? 'reachable' : inst.reachable === false ? 'unreachable' : 'unknown';
         const isActive = state._sidebarSort === inst.url;
@@ -215,7 +215,7 @@ function _buildSidebar() {
             if (res && res.memory_mb != null) { const mb = res.memory_mb; dp.push(mb >= 1024 ? (mb / 1024).toFixed(1) + 'G' : mb.toFixed(1) + 'M'); }
             const unreachableTitle = inst.reachable === false ? ' [disconnected]' : '';
             const serverBadge = showServerBadge
-                ? `<span class="resource-badge" style="font-size:0.55rem;opacity:0.7;" title="${escHtml(inst.url)}">${escHtml(inst.label)}</span>`
+                ? `<span class="resource-badge" style="font-size:0.55rem;opacity:0.7;" title="${escHtml(inst.url)}">${escHtml(_shortLabel(inst))}</span>`
                 : '';
             const reachCls = inst.reachable === true ? 'reachable' : inst.reachable === false ? 'unreachable' : 'unknown';
             const dimStyle = inst.reachable === false ? 'opacity:0.4;' : ((isAlive || isFrozen) ? '' : 'opacity:0.6;');
@@ -644,6 +644,14 @@ document.addEventListener('click', (e) => {
         },
         _spawnOnServer(instUrl) {
             window._userSpawnInstUrl = instUrl;
+            const spawnEl = document.getElementById('tab-spawn');
+            if (spawnEl) spawnEl.classList.remove('hidden');
+            updateInstanceDropdown();
+            const input = document.getElementById('spawnCmd');
+            if (input) input.focus();
+        },
+        _showSpawnModal() {
+            window._userSpawnInstUrl = undefined;
             const spawnEl = document.getElementById('tab-spawn');
             if (spawnEl) spawnEl.classList.remove('hidden');
             updateInstanceDropdown();

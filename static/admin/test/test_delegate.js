@@ -34,7 +34,7 @@ const expectedActions = [
     'ActivateEnvironment', 'ToggleGroupCollapse', 'RenameCmdGroup', 'DeleteCmdGroup',
     'ToggleCmdInGroup', 'LoadWorkspace', 'DeleteWorkspace',
     'CloseCmdPicker', 'PickCommand', 'CloseWorkspaceManage',
-    'FreezeThawServer', 'SpawnOnServer',
+    'FreezeThawServer', 'SpawnOnServer', 'ShowSpawnModal', 'CloseSpawnModal',
     // Shared toolbar
     'RestartCommand', 'ToggleResources', 'ChangePanelFontSize',
     'ResizeTerminalPanel', 'ToggleMaxFit', 'ToggleMaxFont',
@@ -199,10 +199,10 @@ for (const sig of expectedSigs) {
 
     const div = document.createElement('div');
     div.setAttribute('data-action', 'SwitchSidebarTab');
-    div.setAttribute('data-tab', 'spawn');
+    div.setAttribute('data-tab', 'templates');
     const ev = createMockEvent({ target: div });
     _dispatchAction(ev);
-    assertDeepEq(receivedArgs, ['spawn', div], 'tab-el handler receives (tab, element)');
+    assertDeepEq(receivedArgs, ['templates', div], 'tab-el handler receives (tab, element)');
 
     window.switchSidebarTab = savedHandler;
 }
@@ -368,6 +368,37 @@ for (const sig of expectedSigs) {
     assert(called, 'fallback handler was called');
 
     delete window._testFallbackClose;
+}
+
+// SpawnOnServer uses inst-url sig — passes data-inst-url to handler
+{
+    let receivedArgs = null;
+    const savedHandler = window._spawnOnServer;
+    window._spawnOnServer = function(instUrl) { receivedArgs = [instUrl]; };
+
+    const btn = document.createElement('button');
+    btn.setAttribute('data-action', 'SpawnOnServer');
+    btn.setAttribute('data-inst-url', 'http://prod:8080');
+    const ev = createMockEvent({ target: btn });
+    _dispatchAction(ev);
+    assertDeepEq(receivedArgs, ['http://prod:8080'], 'SpawnOnServer passes inst-url from data attribute');
+
+    window._spawnOnServer = savedHandler;
+}
+
+// ShowSpawnModal calls handler with no args
+{
+    let called = false;
+    const savedHandler = window._showSpawnModal;
+    window._showSpawnModal = function() { called = true; };
+
+    const btn = document.createElement('button');
+    btn.setAttribute('data-action', 'ShowSpawnModal');
+    const ev = createMockEvent({ target: btn });
+    _dispatchAction(ev);
+    assert(called, 'ShowSpawnModal dispatches to _showSpawnModal');
+
+    window._showSpawnModal = savedHandler;
 }
 
 console.log('\n  [delegate] all dispatch, signatures, and modal backdrop verified');
