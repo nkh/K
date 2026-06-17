@@ -78,7 +78,7 @@ function _loadPanel(po) {
 
 function _switchWindowByIndex(e, idx) {
     e.preventDefault();
-    if (typeof state.windows === 'undefined' || !state.windows.length) return;
+    if (!state.windows || !state.windows.length) return;
     if (idx < state.windows.length) switchWindow(state.windows[idx].id);
 }
 

@@ -48,6 +48,8 @@ const expectedActions = [
     'CloseAddServerModal', 'ConfirmAddServer',
     'CloseCmdManager', 'CmdManagerKillAll',
     'SwitchUpdateMode', 'ApplyPollInterval', 'ApplyRefreshMs',
+    // Window management
+    'SwitchWindow', 'CreateWindow', 'CloseWindow',
 ];
 
 for (const action of expectedActions) {

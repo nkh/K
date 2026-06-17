@@ -15,8 +15,7 @@ function _renderSearchBar(pid) {
 
 function renderPanels() {
     const container = document.getElementById('view-vtty');
-    // Use window system to filter visible panels
-    const visiblePanels = (typeof _getVisiblePanels === 'function') ? _getVisiblePanels() : state.panels;
+    const visiblePanels = _getVisiblePanels();
     const visible = visiblePanels.filter(p => !p.minimized);
     const multi = visible.length > 1;
 

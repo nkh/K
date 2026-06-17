@@ -68,6 +68,84 @@ function _getPanelCmdLabel(cmdId, instUrl) {
     return cmd ? (cmd.name || cmd.id) : cmdId;
 }
 
+// ─── Window Management ───
+// Windows are tmux-like tabs that each contain their own set of panels.
+function _initWindows() {
+    if (state.windows.length > 0) return;
+    const winId = 'win-0';
+    state.windows = [{ id: winId, name: '1', panelIds: [] }];
+    state.activeWindowId = winId;
+}
+
+function _getActiveWindow() {
+    _initWindows();
+    return state.windows.find(w => w.id === state.activeWindowId) || state.windows[0];
+}
+
+function _getVisiblePanels() {
+    const win = _getActiveWindow();
+    const ids = new Set(win.panelIds || []);
+    return state.panels.filter(p => ids.has(p.id));
+}
+
+function switchWindow(winId) {
+    if (state.activeWindowId === winId) return;
+    for (const p of _getVisiblePanels()) {
+        stopPanelUpdateMode(p.id);
+        if (p.split) _disconnectSecondaryWs(p);
+    }
+    state.activeWindowId = winId;
+    const visible = _getVisiblePanels();
+    if (visible.length > 0) {
+        focusPanel(visible[0].id);
+    }
+    renderPanels();
+}
+
+function createWindow() {
+    _initWindows();
+    const id = 'win-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+    const name = String(state.windows.length + 1);
+    state.windows.push({ id, name, panelIds: [] });
+    switchWindow(id);
+    addPanel();
+}
+
+function closeWindow(winId) {
+    if (state.windows.length <= 1) return;
+    const idx = state.windows.findIndex(w => w.id === winId);
+    if (idx < 0) return;
+    const win = state.windows[idx];
+    for (const pid of (win.panelIds || [])) {
+        disconnectPanelWs(pid);
+        stopPanelPoll(pid);
+        state.panels = state.panels.filter(p => p.id !== pid);
+    }
+    state.windows.splice(idx, 1);
+    if (state.activeWindowId === winId) {
+        const newIdx = Math.min(idx, state.windows.length - 1);
+        state.activeWindowId = state.windows[newIdx].id;
+    }
+    renderPanels();
+    updateSharedToolbar();
+}
+
+function _renderWindowBar() {
+    _initWindows();
+    if (state.windows.length <= 1) return '';
+    let html = '<div class="window-bar" id="windowBar">';
+    for (const w of state.windows) {
+        const active = w.id === state.activeWindowId;
+        const closeBtn = state.windows.length > 1
+            ? `<button class="window-tab-close" data-action="CloseWindow" data-window="${w.id}" title="Close window">&#x2715;</button>`
+            : '';
+        html += `<div class="window-tab${active ? ' active' : ''}" data-action="SwitchWindow" data-window="${w.id}" title="Window ${escHtml(w.name)}"><span class="window-tab-label">${escHtml(w.name)}</span>${closeBtn}</div>`;
+    }
+    html += `<button class="window-tab-add" data-action="CreateWindow" title="New window">+</button>`;
+    html += '</div>';
+    return html;
+}
+
 // ─── Panels (Multi-view) ───
 function addPanelDirect() {
     const id = 'panel-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
@@ -84,6 +162,11 @@ function addPanelDirect() {
         cmdHistory: [], cmdHistoryIdx: -1,
     };
     state.panels.push(panel);
+    // Register in active window BEFORE rendering so _getVisiblePanels includes it
+    _initWindows();
+    const win = _getActiveWindow();
+    if (!win.panelIds) win.panelIds = [];
+    win.panelIds.push(panel.id);
     renderPanels();
     return panel;
 }
@@ -98,6 +181,10 @@ function removePanel(id) {
     disconnectPanelWs(id);
     stopPanelPoll(id);
     state.panels = state.panels.filter(p => p.id !== id);
+    // Remove from all windows' panelIds
+    for (const w of state.windows) {
+        if (w.panelIds) w.panelIds = w.panelIds.filter(pid => pid !== id);
+    }
     if (state.panels.length <= 1) {
         state.panelLayout = 'row';
         localStorage.setItem('vrw_panel_layout', state.panelLayout);
@@ -400,118 +487,7 @@ function finishRenamePanel(panelId, save) {
         _updateSplitPanelHeader, _renderMinimizedPanels, _applyPanelLayoutClass,
         _updatePanelMultiUI, _getPanelLabel, _renderSplitPane,
         _findCmd, _findPanelVtty, _cacheVtty,
-    });
-})();
-
-// ─── Window Management ───
-// Windows are tmux-like tabs that each contain their own set of panels.
-// Wrapped in IIFE for clean scoping; overrides addPanelDirect/removePanel via
-// patching window.* references set by the main IIFE above.
-(function() {
-'use strict';
-
-function _initWindows() {
-    if (state.windows.length > 0) return;
-    const winId = 'win-0';
-    state.windows = [{ id: winId, name: '1' }];
-    state.activeWindowId = winId;
-}
-
-function _getActiveWindow() {
-    _initWindows();
-    return state.windows.find(w => w.id === state.activeWindowId) || state.windows[0];
-}
-
-function _getWindowPanelIds() {
-    return _getActiveWindow().panelIds || [];
-}
-
-function _getVisiblePanels() {
-    const ids = new Set(_getWindowPanelIds());
-    return state.panels.filter(p => ids.has(p.id));
-}
-
-function switchWindow(winId) {
-    if (state.activeWindowId === winId) return;
-    for (const p of _getVisiblePanels()) {
-        stopPanelUpdateMode(p.id);
-        if (p.split) _disconnectSecondaryWs(p);
-    }
-    state.activeWindowId = winId;
-    const visible = _getVisiblePanels();
-    if (visible.length > 0) {
-        focusPanel(visible[0].id);
-    }
-    renderPanels();
-}
-
-function createWindow() {
-    _initWindows();
-    const id = 'win-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
-    const name = String(state.windows.length + 1);
-    state.windows.push({ id, name, panelIds: [] });
-    switchWindow(id);
-    addPanel();
-}
-
-function closeWindow(winId) {
-    if (state.windows.length <= 1) return;
-    const idx = state.windows.findIndex(w => w.id === winId);
-    if (idx < 0) return;
-    const win = state.windows[idx];
-    for (const pid of (win.panelIds || [])) {
-        disconnectPanelWs(pid);
-        stopPanelPoll(pid);
-        state.panels = state.panels.filter(p => p.id !== pid);
-    }
-    state.windows.splice(idx, 1);
-    if (state.activeWindowId === winId) {
-        const newIdx = Math.min(idx, state.windows.length - 1);
-        state.activeWindowId = state.windows[newIdx].id;
-    }
-    renderPanels();
-    updateSharedToolbar();
-}
-
-const _origAddPanelDirect = addPanelDirect;
-addPanelDirect = function() {
-    _initWindows();
-    const panel = _origAddPanelDirect();
-    const win = _getActiveWindow();
-    if (!win.panelIds) win.panelIds = [];
-    win.panelIds.push(panel.id);
-    // Re-render: _origAddPanelDirect called renderPanels() before this panel
-    // was in the window's panelIds, so it wasn't visible. Re-render now.
-    renderPanels();
-    return panel;
-};
-
-const _origRemovePanel = removePanel;
-removePanel = function(id) {
-    _origRemovePanel(id);
-    for (const w of state.windows) {
-        if (w.panelIds) w.panelIds = w.panelIds.filter(pid => pid !== id);
-    }
-};
-
-function _renderWindowBar() {
-    _initWindows();
-    if (state.windows.length <= 1) return '';
-    let html = '<div class="window-bar" id="windowBar">';
-    for (const w of state.windows) {
-        const active = w.id === state.activeWindowId;
-        const closeBtn = state.windows.length > 1
-            ? `<button class="window-tab-close" data-action="CloseWindow" data-window="${w.id}" title="Close window">&#x2715;</button>`
-            : '';
-        html += `<div class="window-tab${active ? ' active' : ''}" data-action="SwitchWindow" data-window="${w.id}" title="Window ${escHtml(w.name)}"><span class="window-tab-label">${escHtml(w.name)}</span>${closeBtn}</div>`;
-    }
-    html += `<button class="window-tab-add" data-action="CreateWindow" title="New window">+</button>`;
-    html += '</div>';
-    return html;
-}
-
-    Object.assign(window, {
         switchWindow, createWindow, closeWindow, _renderWindowBar,
-        _getActiveWindow, _getWindowPanelIds, _getVisiblePanels,
+        _getActiveWindow, _getVisiblePanels,
     });
 })();
