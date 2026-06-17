@@ -215,8 +215,9 @@ function connectPanelWs(panelId) {
 function disconnectPanelWs(panelId) {
     const panelObj = state.panels.find(p => p.id === panelId);
     if (!panelObj) return;
-    // Unsubscribe from shared pool
+    // Clear diff baselines so reconnection gets a full refresh (not a stale empty diff)
     if (panelObj.wsInstUrl && panelObj.wsCmdId) {
+        delete state._diffBaselines[panelId + '/' + panelObj.wsCmdId];
         _unsubscribePanel(panelId, panelObj.wsInstUrl, panelObj.wsCmdId);
     }
     panelObj.wsInstUrl = null;
@@ -226,6 +227,10 @@ function disconnectPanelWs(panelId) {
     panelObj.wsPingSendTime = 0;
     panelObj.wsLatency = 0;
     if (panelObj.split) {
+        // Clear secondary diff baseline too
+        if (panelObj.split.secondaryCmdId) {
+            delete state._diffBaselines[panelId + '/' + panelObj.split.secondaryCmdId];
+        }
         _disconnectSecondaryWs(panelObj);
         if (panelObj.split.secondaryPollTimer) {
             clearInterval(panelObj.split.secondaryPollTimer);
