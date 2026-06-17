@@ -132,7 +132,8 @@ function _removeSpawnHistoryDropdown() {
 }
 
 function _applySpawnHistoryEntry(entry) {
-    document.getElementById('spawnCmd').value = entry.cmd || '';
+    const fullCmd = entry.args ? (entry.cmd || '') + ' ' + entry.args : (entry.cmd || '');
+    document.getElementById('spawnCmd').value = fullCmd;
     document.getElementById('spawnDir').value = entry.dir || '';
     document.getElementById('spawnEnv').value = entry.env || '';
 }
@@ -407,6 +408,7 @@ function switchBufferPanel(panelId, view) {
 Object.assign(window, {
     spawnCmdTabComplete, _resetSpawnCompletion, _removeSpawnHistoryDropdown,
     _onSpawnCmdFocus, _onSpawnCmdKeydownForHistory, spawnCommand,
+    _applySpawnHistoryEntry, _addSpawnHistoryEntry, _loadSpawnHistory,
     toggleKeepCmd, killCommand, purgeCommand, purgeKeptCommand,
     killAllCommands, freezeAllCommands, resizeTerminalPanel, switchBufferPanel,
 });

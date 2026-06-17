@@ -153,6 +153,66 @@ if (typeof switchBufferPanel === 'function') {
     assert(() => { switchBufferPanel(p.id, 'alt'); }, 'switchBufferPanel does not throw');
 }
 
+// ── _applySpawnHistoryEntry — full command reconstruction ──
+console.log('_applySpawnHistoryEntry tests');
+if (typeof _applySpawnHistoryEntry === 'function') {
+    // Old-format entry: cmd and args stored separately (pre cmd+arg merge)
+    // This is the reported bug: clicking 'ls --color=always' selected 'ls'
+    spawnCmd.value = '';
+    document.getElementById('spawnDir').value = '';
+    document.getElementById('spawnEnv').value = '';
+    _applySpawnHistoryEntry({ cmd: 'ls', args: '--color=always', dir: '/tmp', env: '' });
+    assertEq(spawnCmd.value, 'ls --color=always', 'old-format entry: full command restored in spawnCmd');
+
+    // New-format entry: full command in cmd, args is empty
+    spawnCmd.value = '';
+    _applySpawnHistoryEntry({ cmd: 'vim -O file1 file2', args: '', dir: '', env: '' });
+    assertEq(spawnCmd.value, 'vim -O file1 file2', 'new-format entry: full command preserved');
+
+    // Entry with no args
+    spawnCmd.value = '';
+    _applySpawnHistoryEntry({ cmd: 'htop', args: '', dir: '', env: '' });
+    assertEq(spawnCmd.value, 'htop', 'no-args entry: cmd only');
+
+    // Entry with cmd but undefined args (defensive)
+    spawnCmd.value = '';
+    _applySpawnHistoryEntry({ cmd: 'git log', dir: '', env: '' });
+    assertEq(spawnCmd.value, 'git log', 'undefined args: cmd used as-is');
+
+    // Dir and env are also restored
+    spawnCmd.value = '';
+    document.getElementById('spawnDir').value = '';
+    document.getElementById('spawnEnv').value = '';
+    _applySpawnHistoryEntry({ cmd: 'make', args: '-j4', dir: '/build', env: 'CC=clang\nCFLAGS=-O2' });
+    assertEq(spawnCmd.value, 'make -j4', 'full entry: command correct');
+    assertEq(document.getElementById('spawnDir').value, '/build', 'full entry: dir restored');
+    assertEq(document.getElementById('spawnEnv').value, 'CC=clang\nCFLAGS=-O2', 'full entry: env restored');
+
+    // Entry with only cmd, no other fields (minimal)
+    spawnCmd.value = '';
+    _applySpawnHistoryEntry({ cmd: 'bash' });
+    assertEq(spawnCmd.value, 'bash', 'minimal entry: cmd only');
+}
+
+// ── _addSpawnHistoryEntry stores full command in cmd field ──
+console.log('_addSpawnHistoryEntry full-cmd storage tests');
+if (typeof _addSpawnHistoryEntry === 'function' && typeof _loadSpawnHistory === 'function') {
+    localStorage.removeItem('vrw_spawn_history');
+    _addSpawnHistoryEntry('ls --color=always', '', '/home', '');
+    const h = _loadSpawnHistory();
+    assertEq(h.length, 1, 'one entry stored');
+    assertEq(h[0].cmd, 'ls --color=always', 'full command stored in cmd field');
+    assertEq(h[0].args, '', 'args is empty string');
+    assertEq(h[0].dir, '/home', 'dir stored');
+
+    // Applying this new-format entry back must give full command
+    spawnCmd.value = '';
+    document.getElementById('spawnDir').value = '';
+    _applySpawnHistoryEntry(h[0]);
+    assertEq(spawnCmd.value, 'ls --color=always', 'round-trip: new-format entry restores full command');
+    assertEq(document.getElementById('spawnDir').value, '/home', 'round-trip: dir restored');
+}
+
 // ── spawnCmdTabComplete ──
 console.log('spawnCmdTabComplete tests');
 if (typeof spawnCmdTabComplete === 'function') {
