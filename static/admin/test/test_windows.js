@@ -439,9 +439,9 @@ console.log('WIN-011: onPanelDrop on primary side of split pane assigns to prima
 }
 
 // ──────────────────────────────────────────────────────────────
-// WIN-012: onPanelDrop on non-split panel still creates new pane
+// WIN-012: onPanelDrop on non-split panel WITH existing command creates new pane
 // ──────────────────────────────────────────────────────────────
-console.log('WIN-012: onPanelDrop on non-split panel creates new pane (existing behavior)');
+console.log('WIN-012: onPanelDrop on non-split panel with command creates new pane');
 {
     state.windows = [];
     state.activeWindowId = null;
@@ -474,7 +474,208 @@ console.log('WIN-012: onPanelDrop on non-split panel creates new pane (existing 
 
     onPanelDrop(ev, p.id);
 
-    // Should have created a new panel (existing behavior for non-split panels)
+    // Should have created a new panel (panel already has a command)
     assertEq(state.panels.length, panelCountBefore + 1,
-        'WIN-012a: new pane created when dropping on non-split panel');
+        'WIN-012a: new pane created when dropping on non-split panel that has a command');
+}
+
+// ──────────────────────────────────────────────────────────────
+// WIN-013: onPanelDrop on non-split EMPTY panel assigns to that panel
+// ──────────────────────────────────────────────────────────────
+console.log('WIN-013: onPanelDrop on non-split empty panel assigns to that panel');
+{
+    state.windows = [];
+    state.activeWindowId = null;
+    state.panels = [];
+    state.connections = [];
+
+    const p = addPanelDirect();
+    // Panel has NO command selected
+    p.selectedInstUrl = null;
+    p.selectedCmdId = null;
+    state._focusedPanelId = p.id;
+    state.connections.push({ url: 'http://localhost:9090', label: 'Local', token: '', reachable: true, _commands: [] });
+
+    const panelCountBefore = state.panels.length;
+
+    const cmdData = JSON.stringify({ instUrl: 'http://localhost:9090', cmdId: 'cmd-assigned', cmdName: 'my-cmd' });
+
+    const regularDiv = document.createElement('div');
+    regularDiv.className = 'vtty-container';
+
+    let selectReceived = null;
+    const savedSelect = window._selectCommandForPanel;
+    window._selectCommandForPanel = function(panelObj, instUrl, cmdId) {
+        selectReceived = { panelId: panelObj.id, instUrl, cmdId };
+    };
+
+    const ev = {
+        preventDefault: function() {},
+        stopPropagation: function() {},
+        dataTransfer: {
+            getData: function(mime) { return mime === 'application/x-cmd' ? cmdData : ''; },
+        },
+        target: regularDiv,
+    };
+
+    onPanelDrop(ev, p.id);
+
+    // Should NOT have created a new panel — empty panel should be reused
+    assertEq(state.panels.length, panelCountBefore,
+        'WIN-013a: no new panel created when dropping on empty panel');
+
+    // Should have called _selectCommandForPanel for the existing panel
+    assert(selectReceived !== null,
+        'WIN-013b: _selectCommandForPanel was called for the empty panel');
+    if (selectReceived) {
+        assertEq(selectReceived.panelId, p.id,
+            'WIN-013c: command assigned to the existing panel');
+        assertEq(selectReceived.cmdId, 'cmd-assigned',
+            'WIN-013d: correct cmdId passed');
+    }
+
+    window._selectCommandForPanel = savedSelect;
+}
+
+// ──────────────────────────────────────────────────────────────
+// WIN-014: onPanelDrop on split panel without specific side uses activeSide
+// ──────────────────────────────────────────────────────────────
+console.log('WIN-014: onPanelDrop on split panel without specific side uses activeSide');
+{
+    state.windows = [];
+    state.activeWindowId = null;
+    state.panels = [];
+    state.connections = [];
+
+    const p = addPanelDirect();
+    p.selectedInstUrl = 'http://localhost:9090';
+    p.selectedCmdId = 'cmd-existing';
+    state._focusedPanelId = p.id;
+    splitPanel(p.id, 'horizontal');
+    p.split.activeSide = 'secondary';
+    state.connections.push({ url: 'http://localhost:9090', label: 'Local', token: '', reachable: true, _commands: [] });
+
+    const panelCountBefore = state.panels.length;
+
+    const cmdData = JSON.stringify({ instUrl: 'http://localhost:9090', cmdId: 'cmd-new', cmdName: 'new-cmd' });
+
+    // Drop target is the panel header (OUTSIDE split-container, no data-split-side)
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'panel-header';
+    // No data-split-side attribute — simulates dropping on the panel header
+
+    let secondaryReceived = null;
+    const savedSecondary = window._handleSecondarySelect;
+    window._handleSecondarySelect = function(panelObj, instUrl, cmdId) {
+        secondaryReceived = { panelId: panelObj.id, instUrl, cmdId };
+    };
+
+    const ev = {
+        preventDefault: function() {},
+        stopPropagation: function() {},
+        dataTransfer: {
+            getData: function(mime) { return mime === 'application/x-cmd' ? cmdData : ''; },
+        },
+        target: headerDiv,
+    };
+
+    onPanelDrop(ev, p.id);
+
+    // Should NOT have created a new panel
+    assertEq(state.panels.length, panelCountBefore,
+        'WIN-014a: no new panel created when dropping on split panel header');
+
+    // Should have used activeSide (secondary) since no data-split-side on target
+    assert(secondaryReceived !== null,
+        'WIN-014b: _handleSecondarySelect was called (activeSide is secondary)');
+    if (secondaryReceived) {
+        assertEq(secondaryReceived.cmdId, 'cmd-new',
+            'WIN-014c: correct cmdId passed to secondary select');
+    }
+
+    window._handleSecondarySelect = savedSecondary;
+}
+
+// ──────────────────────────────────────────────────────────────
+// WIN-015: switchWindow does NOT disconnect WS for old window panels
+// ──────────────────────────────────────────────────────────────
+console.log('WIN-015: switchWindow does NOT disconnect WS');
+{
+    state.windows = [];
+    state.activeWindowId = null;
+    state.panels = [];
+    state._diffBaselines = {};
+
+    const p1 = addPanelDirect();
+    p1.selectedInstUrl = 'http://localhost:9090';
+    p1.selectedCmdId = 'cmd-abc';
+    p1.wsInstUrl = 'http://localhost:9090';
+    p1.wsCmdId = 'cmd-abc';
+
+    const p2 = addPanelDirect();
+    state._focusedPanelId = p1.id;
+
+    state.windows = [
+        { id: 'win-ws-1', name: '1', panelIds: [p1.id] },
+        { id: 'win-ws-2', name: '2', panelIds: [p2.id] },
+    ];
+    state.activeWindowId = 'win-ws-1';
+
+    // Simulate WS being connected
+    p1.ws = { readyState: 1 }; // 1 = OPEN
+
+    // Switch to window 2
+    switchWindow('win-ws-2');
+
+    // Window 1's panel WS should NOT be disconnected
+    assertEq(p1.wsInstUrl, 'http://localhost:9090',
+        'WIN-015a: wsInstUrl preserved after switchWindow');
+    assertEq(p1.wsCmdId, 'cmd-abc',
+        'WIN-015b: wsCmdId preserved after switchWindow');
+    assert(p1.ws !== null,
+        'WIN-015c: ws reference preserved after switchWindow');
+    assertEq(p1.selectedCmdId, 'cmd-abc',
+        'WIN-015d: selectedCmdId preserved after switchWindow');
+
+    // Diff baselines should NOT be cleared
+    assert(state._diffBaselines !== undefined,
+        'WIN-015e: _diffBaselines still exists');
+}
+
+// ──────────────────────────────────────────────────────────────
+// WIN-016: switchWindow sets _panelsNeedingFetch for visible panels
+// ──────────────────────────────────────────────────────────────
+console.log('WIN-016: switchWindow marks visible panels for content re-fetch');
+{
+    state.windows = [];
+    state.activeWindowId = null;
+    state.panels = [];
+
+    const p1 = addPanelDirect();
+    p1.selectedInstUrl = 'http://localhost:9090';
+    p1.selectedCmdId = 'cmd-1';
+
+    const p2 = addPanelDirect();
+    p2.selectedInstUrl = 'http://localhost:9090';
+    p2.selectedCmdId = 'cmd-2';
+
+    state.windows = [
+        { id: 'win-fetch-1', name: '1', panelIds: [p1.id] },
+        { id: 'win-fetch-2', name: '2', panelIds: [p2.id] },
+    ];
+    state.activeWindowId = 'win-fetch-1';
+
+    // Clear any previous _panelsNeedingFetch
+    state._panelsNeedingFetch = null;
+
+    // Switch to window 2 — p2 should be marked for fetch
+    switchWindow('win-fetch-2');
+
+    assert(state._panelsNeedingFetch !== null,
+        'WIN-016a: _panelsNeedingFetch is set after switchWindow');
+    // Note: renderPanels is mocked, so _panelsNeedingFetch is NOT consumed
+    assert(state._panelsNeedingFetch.has(p2.id),
+        'WIN-016b: window 2 panel is in _panelsNeedingFetch');
+    assert(!state._panelsNeedingFetch.has(p1.id),
+        'WIN-016c: window 1 panel is NOT in _panelsNeedingFetch');
 }

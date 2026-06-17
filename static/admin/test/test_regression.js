@@ -314,6 +314,13 @@ state.panels = [];
 const dp = addPanelDirect();
 assertEq(dp.selectedCmdId, null, 'panel starts with no command');
 
+// Mock _selectCommandForPanel since it depends on network/DOM
+let _regBug012Select = null;
+const _savedSelectForPanel = window._selectCommandForPanel;
+window._selectCommandForPanel = function(panelObj, instUrl, cmdId) {
+    _regBug012Select = { panelId: panelObj.id, instUrl, cmdId };
+};
+
 const cmdDropEvt = {
     preventDefault() {},
     stopPropagation() {},
@@ -328,20 +335,20 @@ const cmdDropEvt = {
 };
 onPanelDrop(cmdDropEvt, dp.id);
 
-// Dropping a command now creates a NEW panel (not reassigning the target).
-// The original panel should remain empty.
-assertEq(dp.selectedCmdId, null,
-    'command drop does NOT reassign target panel');
-// A new panel should have been created
-assert(state.panels.length === 2,
-    'command drop creates a new panel');
-// The new panel should have the command
-const newPanel = state.panels.find(p => p.id !== dp.id);
-assertEq(newPanel && newPanel.selectedCmdId, 'cmd-drop-test',
-    'new panel has the dropped command');
-assertEq(newPanel && newPanel.selectedInstUrl, 'http://localhost:9090',
-    'new panel has the correct inst URL');
+// Dropping on an empty panel assigns the command to that panel.
+assert(_regBug012Select !== null,
+    'command drop assigns to the empty target panel');
+assertEq(_regBug012Select.panelId, dp.id,
+    'command assigned to the correct panel');
+assertEq(_regBug012Select.cmdId, 'cmd-drop-test',
+    'command ID is correct');
+assertEq(_regBug012Select.instUrl, 'http://localhost:9090',
+    'inst URL is correct');
+// No new panel should have been created
+assert(state.panels.length === 1,
+    'no new panel created when dropping on empty panel');
 
+window._selectCommandForPanel = _savedSelectForPanel;
 onPanelDragEnd({});
 
 // ════════════════════════════════════════════════════════════════════

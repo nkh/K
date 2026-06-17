@@ -137,18 +137,25 @@ function onPanelDrop(e, targetPanelId) {
     try {
         const cmdData = JSON.parse(e.dataTransfer.getData('application/x-cmd'));
         if (cmdData?.cmdId) {
+            const panelObj = state.panels.find(p => p.id === targetPanelId);
+            if (!panelObj) return;
             // Check if the drop landed on a specific side of a split panel
             const splitEl = e.target && e.target.closest ? e.target.closest('[data-split-side]') : null;
-            const panelObj = state.panels.find(p => p.id === targetPanelId);
-            if (splitEl && panelObj && panelObj.split) {
-                const side = splitEl.dataset.splitSide;
+            if (panelObj.split) {
+                // Determine which side: from the DOM element, or fall back to activeSide
+                const side = splitEl ? splitEl.dataset.splitSide : (panelObj.split.activeSide || 'primary');
                 if (side === 'secondary') {
                     _handleSecondarySelect(panelObj, cmdData.instUrl, cmdData.cmdId);
                 } else {
                     _pushPanelHistory(panelObj);
                     _selectCommandForPanel(panelObj, cmdData.instUrl, cmdData.cmdId);
                 }
+            } else if (!panelObj.selectedCmdId) {
+                // Non-split panel with no command — assign to this panel
+                _pushPanelHistory(panelObj);
+                _selectCommandForPanel(panelObj, cmdData.instUrl, cmdData.cmdId);
             } else {
+                // Non-split panel already has a command — open a new pane
                 _openCommandInNewPane(cmdData.instUrl, cmdData.cmdId, cmdData.cmdName);
             }
             return;

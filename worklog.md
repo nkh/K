@@ -86,3 +86,109 @@ Stage Summary:
 - All 16 red-zone files now have test coverage
 - Commit: 03a269f pushed to origin/web_ui_fix2
 
+---
+Task ID: 1
+Agent: main
+Task: Fix spawn history autocomplete bug (5th report) — clicking 'ls --color=always' selects 'ls'
+
+Work Log:
+- Checked worklog first — found window system, shared WS pool, and test file naming already resolved on main
+- Confirmed 1225 tests pass on main before any changes
+- Traced spawn autocomplete code path in spawn.js
+- Found root cause: _applySpawnHistoryEntry(entry) set spawnCmd.value = entry.cmd only, ignoring entry.args
+- Old-format localStorage entries store cmd='ls' and args='--color=always' separately
+- Dropdown displays entry.cmd + displayArgs (shows 'ls --color=always') but click applies only 'ls'
+- Wrote 19 tests FIRST — 2 failed confirming the bug (old-format and full entry cases)
+- Fixed _applySpawnHistoryEntry to reconstruct full command: entry.args ? entry.cmd + ' ' + entry.args : entry.cmd
+- Exported _applySpawnHistoryEntry, _addSpawnHistoryEntry, _loadSpawnHistory for testing
+- All 1244 tests pass (19 new), 0 failures
+- Pushed as 834e57b to main (no force push, pull --rebase first)
+
+Stage Summary:
+- Root cause: _applySpawnHistoryEntry only used entry.cmd, ignoring entry.args
+- Fix: reconstruct full command from cmd + args when args is truthy
+- Handles both old-format (separate cmd/args) and new-format (full cmd, empty args) entries
+- 19 new tests, 1244 total pass
+- Commit: 834e57b on main, pushed to origin
+
+---
+Task ID: 2
+Agent: main
+Task: Fix window/split system — broken patch pattern causing panels to disappear
+
+Work Log:
+- Checked worklog — confirmed spawn autocomplete already fixed, shared WS pool already fixed
+- Traced all window/split code: panels-layout.js had window system in a SECOND IIFE
+- Second IIFE patched window.addPanelDirect after main IIFE closed
+- Found root cause: internal callers (addPanel, applyLayoutPreset, closePanelContent) used
+  closure-local references, bypassing the patch. Panels created via Alt+N or layout
+  presets were never added to window.panelIds and disappeared on next renderPanels()
+- Also found: patched addPanelDirect called renderPanels() twice (double render/flicker)
+- Fix: moved all window functions into the main IIFE. addPanelDirect now registers in
+  panelIds BEFORE calling renderPanels(). removePanel cleans panelIds directly.
+- Deleted stale test_fixes_af5902e.js (-207 lines)
+- Updated delegate test action count (97 → 100, added window actions)
+- Removed unnecessary typeof guard for _getVisiblePanels in panels.js
+- All 1267 tests pass, 0 failures
+- Pushed as 0be4bda to main (no force push)
+
+Stage Summary:
+- Root cause: patch-after-close-IIFE pattern — closure-local refs bypassed window patch
+- Fix: window management integrated into main IIFE, no patching needed
+- Single render per addPanel, all callers go through window-aware code
+- Deleted test_fixes_af5902e.js
+- 1267 tests pass, -115 net lines removed
+
+---
+Task ID: 3
+Agent: main
+Task: Fix window handling — can't close, can't switch, adding breaks previous
+
+Work Log:
+- Checked worklog first — spawn autocomplete and IIFE patch pattern already fixed
+- Traced window tab clicks through delegate system
+- Found root cause: _renderWindowBar generated data-window="..." but delegate maps
+  SwitchWindow/CloseWindow to sig 'data-value' which reads el.dataset.value → undefined
+- closeWindow(undefined) → findIndex returns -1 → no-op (can't close)
+- switchWindow(undefined) → stops updates on current panels, falls back to windows[0] (can't switch, breaks previous)
+- Wrote 28 tests FIRST in test_windows.js — 2 failed confirming the bug (WIN-004d/e)
+- Fix: changed data-window to data-value in _renderWindowBar HTML (2 lines)
+- Also added stop:true to CloseWindow delegate (close btn nested in SwitchWindow tab)
+- All 1295 tests pass, 0 failures
+- Pushed as 0fec769 to main (no force push)
+
+Stage Summary:
+- Root cause: delegate sig 'data-value' reads el.dataset.value, but HTML used data-window
+- Fix: data-window → data-value in _renderWindowBar (2 attribute changes)
+- Added stop:true to CloseWindow delegate entry
+- 28 new tests in test_windows.js covering full lifecycle
+- 1295 total tests pass, 0 failures
+- Commit: 0fec769 on main, pushed to origin
+
+---
+Task ID: 4
+Agent: main
+Task: Fix window switch loses terminal + drop on split pane creates new pane
+
+Work Log:
+- Traced window switch: switchWindow calls stopPanelUpdateMode → disconnectPanelWs
+- disconnectPanelWs cleared ws/wsInstUrl/wsCmdId but NOT state._diffBaselines
+- On reconnect, _subscribePanel sent stale baseline → server returned empty diff
+- Terminal permanently showed "No command selected" after window switch
+- Fix: delete _diffBaselines[panelId/cmdId] in disconnectPanelWs before unsubscribing
+- Also clears secondary baseline for split panels
+- Traced split pane drop: onPanelDrop always called _openCommandInNewPane (addPanelDirect)
+- Never checked if target was a split pane — always created new panel
+- Fix: detect data-split-side via closest('[data-split-side]'), call
+  _handleSecondarySelect for secondary, _selectCommandForPanel for primary
+- Non-split drops still create new pane (existing behavior preserved)
+- 18 new tests (46 total in test_windows.js), 1313 total pass
+- Pushed as 1a04ab6 to main (no force push)
+
+Stage Summary:
+- Bug 1 root cause: disconnectPanelWs didn't clear diff baselines → stale empty diff on reconnect
+- Bug 2 root cause: onPanelDrop unconditionally created new pane, ignoring split state
+- 3 files changed: websocket.js (baseline clearing), panels-dragdrop.js (split-aware drop), test_windows.js
+- 1313 tests pass, 0 failures
+- Commit: 1a04ab6 on main, pushed to origin
+

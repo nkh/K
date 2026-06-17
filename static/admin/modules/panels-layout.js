@@ -90,14 +90,20 @@ function _getVisiblePanels() {
 
 function switchWindow(winId) {
     if (state.activeWindowId === winId) return;
-    for (const p of _getVisiblePanels()) {
-        stopPanelUpdateMode(p.id);
-        if (p.split) _disconnectSecondaryWs(p);
-    }
+    // Don't disconnect WS — panels in other windows keep their shared subscriptions.
+    // The shared WS pool broadcasts to all subscribed panels regardless of visibility.
     state.activeWindowId = winId;
     const visible = _getVisiblePanels();
     if (visible.length > 0) {
         focusPanel(visible[0].id);
+    }
+    // Mark visible panels for content re-fetch: their DOM is about to be rebuilt
+    // and they won't have cached VTTY content since they weren't in the previous render.
+    if (!state._panelsNeedingFetch) state._panelsNeedingFetch = new Set();
+    for (const p of visible) {
+        if (p.selectedCmdId && p.selectedInstUrl) {
+            state._panelsNeedingFetch.add(p.id);
+        }
     }
     renderPanels();
 }
@@ -377,17 +383,20 @@ function applyLayoutPreset(preset) {
 }
 
 function _applyPanelLayoutClass(container) {
+    // Target #panelArea (inside container) for layout direction.
+    // Container itself is always flex-direction: column (window-bar on top).
+    const area = document.getElementById('panelArea') || container;
     if (state._mobileTabbedLayout) {
-        container.classList.remove('grid-2x2', 'grid-1-2', 'grid-2-1');
-        container.style.flexDirection = 'column';
+        area.classList.remove('grid-2x2', 'grid-1-2', 'grid-2-1');
+        area.style.flexDirection = 'column';
         return;
     }
-    container.classList.remove('grid-2x2', 'grid-1-2', 'grid-2-1');
+    area.classList.remove('grid-2x2', 'grid-1-2', 'grid-2-1');
     if (state.panelLayout.startsWith('grid-')) {
-        container.classList.add(state.panelLayout);
-        container.style.flexDirection = '';
+        area.classList.add(state.panelLayout);
+        area.style.flexDirection = '';
     } else {
-        container.style.flexDirection = state.panelLayout;
+        area.style.flexDirection = state.panelLayout;
     }
 }
 

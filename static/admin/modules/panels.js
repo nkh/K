@@ -51,7 +51,7 @@ function renderPanels() {
         const tb = document.getElementById('sharedToolbar');
         if (tb) tb.classList.remove('hidden');
 
-        // Render window tab bar (only if >1 window)
+        // Render window tab bar (only if >1 window) — outside panel-area so it's always on top
         if (typeof _renderWindowBar === 'function') html += _renderWindowBar();
 
         const isMobile = state._mobileTabbedLayout;
@@ -67,6 +67,9 @@ function renderPanels() {
             }
             html += '</div>';
         }
+
+        // Open panel-area wrapper — panels go inside here
+        html += '<div class="panel-area" id="panelArea">';
 
         for (const panel of visible) {
             if (panel.minimized) continue;
@@ -94,6 +97,9 @@ ${panel.split ? _renderSplitContainer(panel) : _renderVttyContainer(panel)}
 </div>
 ${multi ? `<div class="panel-resize-handle" data-panel="${panel.id}"></div>` : ''}`;
         }
+
+        // Close panel-area wrapper
+        html += '</div>';
     }
 
     html += _renderMinimizedPanels();
@@ -115,9 +121,27 @@ ${multi ? `<div class="panel-resize-handle" data-panel="${panel.id}"></div>` : '
     if (!state._showingWelcome) updateSharedToolbar();
 
     if (!state._showingWelcome && state.bufferView === 'current') {
+        const pending = state._panelsNeedingFetch;
+        state._panelsNeedingFetch = null;
         for (const p of visiblePanels) {
-            if (p.selectedCmdId && p.selectedInstUrl && (!p.ws || p.ws.readyState !== WebSocket.OPEN)) {
-                startPanelUpdateMode(p.id);
+            if (p.selectedCmdId && p.selectedInstUrl) {
+                const mustFetch = pending && pending.has(p.id);
+                const needsWs = !p.ws || (p.ws && p.ws.readyState !== WebSocket.OPEN);
+                if (mustFetch) {
+                    // DOM was just rebuilt without cached content — fetch it now
+                    loadVttyHttpForPanel(p.id, p.selectedInstUrl, p.selectedCmdId);
+                }
+                if (needsWs) {
+                    // WS not connected — full reconnect
+                    startPanelUpdateMode(p.id);
+                } else if (mustFetch && state.updateMode === 'push') {
+                    // WS is connected but ensure this panel is subscribed in the shared pool
+                    const key = p.selectedInstUrl + '/' + p.selectedCmdId;
+                    const sub = _sharedSubs ? _sharedSubs[key] : null;
+                    if (!sub || !sub.panels || !sub.panels.has(p.id)) {
+                        connectPanelWs(p.id);
+                    }
+                }
             }
         }
     }
