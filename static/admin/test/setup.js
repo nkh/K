@@ -727,6 +727,7 @@ const _crossDeps = (() => {
     'unsplitLeaf', '_connectLeafWs', '_findLeafState', '_getAllLeaves',
     '_findParentSplit', '_getLeafCmdState', '_disconnectLeafTree', '_disconnectSingleLeaf',
     '_newLeafState', '_nextLeafId', 'loadVttyHttpForPanel',
+    '_renderLeafHeader', '_renderLeafPane', '_setActiveSideForLeaf', '_getLeafFromVtty',
     // Common mocks used by individual test files (consolidated here)
     'startRefresh',
     ]);
@@ -853,3 +854,4 @@ console.log('[setup] Browser environment mocks loaded, all modules evaluated.');
 
 // Expose shared sub pool for test access
 globalThis._getSharedSubs = function() { return globalThis._sharedSubs || {}; };
+globalThis.emitEvent = emitEvent;

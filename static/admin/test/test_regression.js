@@ -42,8 +42,7 @@ console.log('[REG-02] No duplicate function definitions');
 const criticalFunctions = [
     'addPanelDirect', 'addPanel', 'closePanelModal',
     'togglePanelTheme', 'applyPanelTheme', 'escHtml', 'updateVttyDisplayForPanel',
-    '_disconnectSecondaryWs', '_connectSecondaryWs', 'scheduleSecondaryVttyHttp',
-    'updateSecondaryVttyDisplay', 'applySecondaryVttyDiff',
+    '_connectLeafWs', '_loadLeafVttyHttpDirect', '_fetchLeafDiff', '_applyLeafDiff',
     'showAddServerModal', 'closeAddServerModal',
     'confirmAddServer', '_isTerminalVisible',
     'startPanelUpdateMode', 'stopPanelUpdateMode',

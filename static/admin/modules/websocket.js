@@ -206,9 +206,22 @@ function connectPanelWs(panelId) {
         panelObj.ws = _sharedSubs[key] ? _sharedSubs[key].ws : null;
     }
 
-    // Also connect secondary WS if panel is split
-    if (panelObj.split && panelObj.split.secondaryCmdId && panelObj.split.secondaryInstUrl) {
-        _connectSecondaryWs(panelObj);
+    // Connect WS for all leaves in the split tree
+    if (panelObj.split && typeof _getAllLeaves === 'function') {
+        const leaves = _getAllLeaves(panelObj);
+        for (const { leaf, side } of leaves) {
+            if (!side) continue; // skip primary (panel itself, handled above)
+            if (leaf.cmdId && leaf.instUrl) {
+                if (state.updateMode === 'push') {
+                    _connectLeafWs(leaf);
+                } else {
+                    leaf.pollTimer = setInterval(() => {
+                        if (leaf.cmdId) _loadLeafVttyHttpDirect(leaf);
+                    }, state.pollInterval);
+                    _loadLeafVttyHttpDirect(leaf);
+                }
+            }
+        }
     }
 }
 
@@ -226,15 +239,13 @@ function disconnectPanelWs(panelId) {
     panelObj.wsReconnectCount = 0;
     panelObj.wsPingSendTime = 0;
     panelObj.wsLatency = 0;
-    if (panelObj.split) {
-        // Clear secondary diff baseline too
-        if (panelObj.split.secondaryCmdId) {
-            delete state._diffBaselines[panelId + '/' + panelObj.split.secondaryCmdId];
-        }
-        _disconnectSecondaryWs(panelObj);
-        if (panelObj.split.secondaryPollTimer) {
-            clearInterval(panelObj.split.secondaryPollTimer);
-            panelObj.split.secondaryPollTimer = null;
+    // Disconnect all leaves in the split tree
+    if (panelObj.split && typeof _getAllLeaves === 'function') {
+        const leaves = _getAllLeaves(panelObj);
+        for (const { leaf, side } of leaves) {
+            if (!side) continue;
+            _disconnectSingleLeaf(leaf);
+            if (leaf.cmdId) delete state._diffBaselines[leaf.id + '/' + leaf.cmdId];
         }
     }
 }
@@ -302,111 +313,34 @@ async function pollOncePanel(panelId) {
     } catch (e) { /* next poll will retry */ }
 }
 
-// ─── Secondary WebSocket for Split Panels ───
-// Secondary panes are always unique (different command), so keep per-object WS.
-
-function _cleanupWs(obj, prefix) {
-    const t = obj[prefix + 'ReconnectTimer'];
-    if (t) { clearTimeout(t); obj[prefix + 'ReconnectTimer'] = null; }
-    clearInterval(obj[prefix + 'PingInterval']);
-    obj[prefix + 'PingInterval'] = null;
-    obj[prefix + 'PingSendTime'] = 0;
-    obj[prefix + 'Latency'] = 0;
-    obj[prefix + 'ReconnectCount'] = 0;
-    const ws = obj[prefix];
-    if (ws) {
-        ws.onclose = null;
-        ws.close();
-        obj[prefix] = null;
-        obj[prefix + 'InstUrl'] = null;
-        obj[prefix + 'CmdId'] = null;
-    }
-}
-
-function _disconnectSecondaryWs(panelObj) {
-    if (!panelObj || !panelObj.split) return;
-    const s = panelObj.split;
-    // New tree format: secondary is a leaf object with ws property
-    if (s.secondary && typeof s.secondary.ws !== 'undefined') {
-        _cleanupWs(s.secondary, 'ws');
-    } else if (typeof s.secondaryWs !== 'undefined') {
-        // Old flat format compat: secondaryWs is directly on the split object
-        _cleanupWs(s, 'secondaryWs');
-    }
-}
-
-function _connectSecondaryWs(panelObj) {
-    if (!panelObj || !panelObj.split) return;
-    const s = panelObj.split;
-    if (!s.secondaryCmdId || !s.secondaryInstUrl) return;
-    _disconnectSecondaryWs(panelObj);
-
-    const url = _buildWsUrl(s.secondaryInstUrl, s.secondaryCmdId);
+// ─── Leaf-level VTTY HTTP load (for split tree leaves) ───
+// Unlike loadVttyHttpForPanel (which requires a panel ID), this works
+// with a leaf object directly and updates the correct DOM element.
+async function _loadLeafVttyHttpDirect(leaf) {
+    if (!leaf || !leaf.cmdId || !leaf.instUrl) return;
+    const vttyEl = document.getElementById('vtty-' + leaf.id);
+    if (!vttyEl) return;
+    const pre = vttyEl.querySelector('pre');
+    if (!pre) return;
     try {
-        const ws = new WebSocket(url);
-        s.secondaryWs = ws;
-        s.secondaryWsInstUrl = s.secondaryInstUrl;
-        s.secondaryWsCmdId = s.secondaryCmdId;
-
-        ws.onopen = () => {
-            clearInterval(s.secondaryWsPingInterval);
-            s.secondaryWsPingInterval = setInterval(() => {
-                if (s.secondaryWs && s.secondaryWs.readyState === WebSocket.OPEN) {
-                    s.secondaryWsPingSendTime = Date.now();
-                    s.secondaryWs.send(JSON.stringify({ type: 'ping' }));
-                }
-            }, 10000);
-        };
-
-        ws.onmessage = (event) => {
-            try {
-                const msg = JSON.parse(event.data);
-                if (msg.type === 'vtty_dirty') {
-                    fetchSecondaryVttyDiff(panelObj);
-                } else if (msg.type === 'vtty_close') {
-                    delete state._diffBaselines[panelObj.id + '/' + s.secondaryCmdId];
-                } else if (msg.type === 'command_ended') {
-                    delete state._diffBaselines[panelObj.id + '/' + s.secondaryCmdId];
-                    notifyCommandEnded(s.secondaryCmdId);
-                    _disconnectSecondaryWs(panelObj);
-                } else if (msg.type === 'peer_registered' || msg.type === 'peer_unregistered') {
-                    handlePeerEvent(msg);
-                }
-            } catch (e) {
-                console.error('Secondary WS message parse error:', e);
+        const json = await api.getVttyHtml(leaf.instUrl, leaf.cmdId);
+        if (json.status === 'ok' && json.data) {
+            const genKey = leaf.id + '/' + leaf.cmdId;
+            if (leaf.cmdId && json.data.generation !== undefined) {
+                state._lastGeneration[genKey] = json.data.generation;
             }
-        };
-
-        ws.onclose = () => {
-            if (s.secondaryWs !== ws) return;
-            s.secondaryWs = null;
-            clearInterval(s.secondaryWsPingInterval);
-            s.secondaryWsPingInterval = null;
-            s.secondaryWsPingSendTime = 0;
-            s.secondaryWsLatency = 0;
-            if (s.secondaryInstUrl && s.secondaryCmdId) fetchSecondaryVttyDiff(panelObj, 0);
-            // Reconnect
-            if (s.secondaryInstUrl && s.secondaryCmdId && !s.secondaryWsReconnectTimer && state.updateMode === 'push') {
-                s.secondaryWsReconnectCount = (s.secondaryWsReconnectCount || 0) + 1;
-                if (s.secondaryWsReconnectCount <= 5) {
-                    s.secondaryWsReconnectTimer = setTimeout(() => {
-                        s.secondaryWsReconnectTimer = null;
-                        const inst = state.connections.find(i => i.url === s.secondaryInstUrl);
-                        if (inst && inst.reachable !== false) _connectSecondaryWs(panelObj);
-                    }, 2000);
+            if (json.data.html !== undefined && json.data.html !== null) {
+                const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
+                const oldScrollHeight = vttyEl.scrollHeight;
+                pre.innerHTML = json.data.html;
+                if (state._level3Enabled && json.data.dimensions) {
+                    buildCellGrid(genKey, pre, json.data.dimensions.rows, json.data.dimensions.cols);
                 }
+                if (wasAtBottom) vttyEl.scrollTop = vttyEl.scrollHeight;
+                else vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
             }
-        };
-
-        ws.onerror = (err) => {
-            console.error('Secondary WebSocket error:', err);
-        };
-    } catch (e) {
-        console.error('Secondary WebSocket connect failed (panel ' + panelObj.id + '):', e);
-    }
-
-    // Fetch initial terminal content for secondary
-    fetchSecondaryVttyDiff(panelObj, 0);
+        }
+    } catch (e) { /* ignore */ }
 }
 
 // ─── Diff fetch for push mode ───
@@ -418,15 +352,34 @@ function fetchVttyDiffForPanel(panelId, instUrl, cmdId, delayMs) {
     if (_diffTimers[timerKey]) clearTimeout(_diffTimers[timerKey]);
     _diffTimers[timerKey] = setTimeout(() => {
         _diffTimers[timerKey] = null;
+        // Attach instUrl and cmdId to data so _doFetchVttyDiff can use them for fallback
+        const data = { _instUrl: instUrl, _cmdId: cmdId };
+        // Override genKey in _doFetchVttyDiff by storing these on state temporarily
         _doFetchVttyDiff(panelId, instUrl, cmdId, false);
     }, delayMs);
 }
 
 async function _doFetchVttyDiff(panelId, instUrl, cmdId, isSecondary) {
-    const panelObj = state.panels.find(p => p.id === panelId);
+    // panelId may be a leaf ID (for split tree leaves) or a panel ID.
+    // Find the actual panel and the target DOM element.
+    let panelObj = state.panels.find(p => p.id === panelId);
+    let targetEl = document.getElementById('vtty-' + panelId);
+    let leaf = null;
+
+    // If not found as panel, search for it as a leaf in the split tree
+    if (!panelObj && targetEl) {
+        const panelEl = targetEl.closest('.panel');
+        if (panelEl) {
+            panelObj = state.panels.find(p => p.id === panelEl.id);
+        }
+        if (panelObj && panelObj.split && typeof _findLeafState === 'function') {
+            const found = _findLeafState(panelObj, panelId);
+            if (found) leaf = found.leaf;
+        }
+    }
+
     if (!panelObj) return;
-    const panelEl = document.getElementById(panelId);
-    if (!panelEl) return;
+    if (!targetEl) return;
 
     const blKey = panelId + '/' + cmdId;
     const baseline = state._diffBaselines[blKey] || null;
@@ -446,19 +399,24 @@ async function _doFetchVttyDiff(panelId, instUrl, cmdId, isSecondary) {
                     if (htmlResp.status === 'ok' && htmlResp.data) {
                         state._diffBaselines[blKey] = htmlResp.data.baseline;
                         htmlResp.data.html = htmlJson.data.html;
-                        if (isSecondary) {
-                            const vttyEl = document.getElementById('vtty-' + panelId + '-secondary');
-                            if (vttyEl) updateSecondaryVttyDisplay(panelObj, vttyEl, htmlResp.data);
-                        } else {
-                            updateVttyDisplayForPanel(panelObj, panelEl, htmlResp.data);
+                        const pre = targetEl.querySelector('pre');
+                        if (pre && htmlResp.data.html !== undefined) {
+                            const wasAtBottom = targetEl.scrollHeight - targetEl.scrollTop - targetEl.clientHeight < 50;
+                            const oldScrollHeight = targetEl.scrollHeight;
+                            pre.innerHTML = htmlResp.data.html;
+                            if (state._level3Enabled && htmlResp.data.dimensions) {
+                                buildCellGrid(blKey, pre, htmlResp.data.dimensions.rows, htmlResp.data.dimensions.cols);
+                            }
+                            if (wasAtBottom) targetEl.scrollTop = targetEl.scrollHeight;
+                            else targetEl.scrollTop += targetEl.scrollHeight - oldScrollHeight;
+                            const genKey = panelId + '/' + cmdId;
+                            if (htmlResp.data.generation !== undefined) state._lastGeneration[genKey] = htmlResp.data.generation;
                         }
                     }
                 }
-            } else if (isSecondary) {
-                const vttyEl = document.getElementById('vtty-' + panelId + '-secondary');
-                if (vttyEl) applySecondaryVttyDiff(panelObj, vttyEl, json.data);
             } else {
-                applyVttyDiffForPanel(panelObj, panelEl, json.data);
+                // Incremental diff — apply cell-level patches directly to the target element
+                _applyLeafDiff(targetEl, panelId, json.data);
             }
         }
     } catch (e) {
@@ -466,16 +424,93 @@ async function _doFetchVttyDiff(panelId, instUrl, cmdId, isSecondary) {
     }
 }
 
-function fetchSecondaryVttyDiff(panelObj, delayMs) {
-    if (!panelObj || !panelObj.split) return;
-    const s = panelObj.split;
-    if (!s.secondaryCmdId || !s.secondaryInstUrl) return;
-    const timerKey = '_secondaryDiffTimer_' + panelObj.id;
-    if (_diffTimers[timerKey]) clearTimeout(_diffTimers[timerKey]);
-    _diffTimers[timerKey] = setTimeout(() => {
-        _diffTimers[timerKey] = null;
-        _doFetchVttyDiff(panelObj.id, s.secondaryInstUrl, s.secondaryCmdId, true);
-    }, delayMs || 0);
+// Apply incremental cell-level diff to a vtty-container element (works for ANY leaf)
+function _applyLeafDiff(vttyEl, leafId, data) {
+    const pre = vttyEl ? vttyEl.querySelector('pre') : null;
+    if (!pre) return;
+    const genKey = leafId + '/' + (data._cmdId || '');
+    if (data.generation !== undefined && state._lastGeneration[genKey] === data.generation) {
+        if (data.cursor || data.dimensions) _updateLeafMetadata(vttyEl, data);
+        return;
+    }
+    if (data.generation !== undefined) state._lastGeneration[genKey] = data.generation;
+
+    if (data.html !== undefined) {
+        const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
+        const oldScrollHeight = vttyEl.scrollHeight;
+        pre.innerHTML = data.html;
+        if (state._level3Enabled && data.dimensions) {
+            buildCellGrid(genKey, pre, data.dimensions.rows, data.dimensions.cols);
+        }
+        if (wasAtBottom) vttyEl.scrollTop = vttyEl.scrollHeight;
+        else vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
+        _updateLeafMetadata(vttyEl, data);
+        return;
+    }
+
+    if (!state._level3Enabled || !data.cells || !data.cells.length) {
+        // No cell grid or no cells — fall back to full HTTP fetch
+        _loadLeafVttyHttpDirect({ id: leafId, instUrl: data._instUrl, cmdId: data._cmdId });
+        return;
+    }
+
+    const cg = state._cellGrids[genKey];
+    if (!cg) {
+        _loadLeafVttyHttpDirect({ id: leafId, instUrl: data._instUrl, cmdId: data._cmdId });
+        return;
+    }
+
+    const dims = data.dimensions || {};
+    if (dims.rows !== cg.rows || dims.cols !== cg.cols) {
+        delete state._cellGrids[genKey];
+        _loadLeafVttyHttpDirect({ id: leafId, instUrl: data._instUrl, cmdId: data._cmdId });
+        return;
+    }
+
+    const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
+    const oldScrollHeight = vttyEl.scrollHeight;
+
+    for (let i = 0; i < data.cells.length; i++) {
+        const c = data.cells[i];
+        if (c.row < cg.grid.length && c.col < cg.grid[c.row].length) {
+            const entry = cg.grid[c.row][c.col];
+            if (entry) {
+                if (entry.len === 1) {
+                    const cell = c.cell;
+                    const ch = cell.width === 0 ? '\u200b' : (cell.ch === '\u0000' ? ' ' : cell.ch);
+                    entry.span.textContent = _htmlEscapeChar(ch);
+                    entry.span.setAttribute('style', _cellStyle(c));
+                    const wCls = cell.width === 0 ? 'c w0' : cell.width === 2 ? 'c w2' : 'c w1';
+                    entry.span.className = wCls;
+                } else {
+                    _splitAndUpdateCell(cg, c.row, c.col, c);
+                }
+            }
+        }
+    }
+
+    if (wasAtBottom) vttyEl.scrollTop = vttyEl.scrollHeight;
+    else vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
+
+    _updateLeafMetadata(vttyEl, data);
+}
+
+// Update cursor/dimensions metadata for a vtty-container (works for ANY leaf)
+function _updateLeafMetadata(vttyEl, data) {
+    const cursor = data.cursor || {};
+    const cursorEl = vttyEl ? vttyEl.querySelector('.cursor-indicator') : null;
+    const cursorHidden = data.cursor_visible === false;
+    if (cursorEl && cursor.row !== undefined && !cursorHidden) {
+        const charW = 10 * 0.6;
+        const charH = 10 * 1.2;
+        cursorEl.style.top = (cursor.row * charH) + 'px';
+        cursorEl.style.left = (cursor.col * charW) + 'px';
+        cursorEl.style.width = charW + 'px';
+        cursorEl.style.height = charH + 'px';
+        cursorEl.classList.remove('hidden');
+    } else if (cursorEl) {
+        cursorEl.classList.add('hidden');
+    }
 }
 
 // ─── VTTY Update Mode Start/Stop ───
@@ -515,7 +550,8 @@ function _connectLeafWs(leaf) {
             try {
                 const msg = JSON.parse(event.data);
                 if (msg.type === 'vtty_dirty') {
-                    fetchVttyDiffForPanel(leaf.id, leaf.instUrl, leaf.cmdId, 0);
+                    // Fetch diff for this leaf using its own ID
+                    _fetchLeafDiff(leaf.id, leaf.instUrl, leaf.cmdId, 0);
                 } else if (msg.type === 'vtty_close' || msg.type === 'command_ended') {
                     delete state._diffBaselines[leaf.id + '/' + leaf.cmdId];
                     if (msg.type === 'command_ended') { notifyCommandEnded(leaf.cmdId); }
@@ -530,7 +566,7 @@ function _connectLeafWs(leaf) {
             leaf.ws = null;
             clearInterval(leaf.wsPingInterval); leaf.wsPingInterval = null;
             leaf.wsPingSendTime = 0; leaf.wsLatency = 0;
-            if (leaf.instUrl && leaf.cmdId) fetchVttyDiffForPanel(leaf.id, leaf.instUrl, leaf.cmdId, 0);
+            if (leaf.instUrl && leaf.cmdId) _fetchLeafDiff(leaf.id, leaf.instUrl, leaf.cmdId, 0);
             if (leaf.instUrl && leaf.cmdId && !leaf.wsReconnectTimer && state.updateMode === 'push') {
                 leaf.wsReconnectCount = (leaf.wsReconnectCount || 0) + 1;
                 if (leaf.wsReconnectCount <= 5) {
@@ -544,7 +580,19 @@ function _connectLeafWs(leaf) {
         };
         ws.onerror = () => {};
     } catch (e) {}
-    fetchVttyDiffForPanel(leaf.id, leaf.instUrl, leaf.cmdId, 0);
+    // Fetch initial terminal content for this leaf
+    _loadLeafVttyHttpDirect(leaf);
+}
+
+// Fetch VTTY diff for a leaf (by leaf ID, not panel ID).
+// This uses _doFetchVttyDiff which now handles leaf IDs.
+function _fetchLeafDiff(leafId, instUrl, cmdId, delayMs) {
+    const timerKey = '_diffTimer_' + leafId;
+    if (_diffTimers[timerKey]) clearTimeout(_diffTimers[timerKey]);
+    _diffTimers[timerKey] = setTimeout(() => {
+        _diffTimers[timerKey] = null;
+        _doFetchVttyDiff(leafId, instUrl, cmdId, false);
+    }, delayMs);
 }
 
     // ─── Exports ───
@@ -552,9 +600,11 @@ function _connectLeafWs(leaf) {
         connectPanelWs, disconnectPanelWs, updateWsQualityIndicator,
         startPanelPoll, stopPanelPoll, pollOncePanel,
         startPanelUpdateMode, stopPanelUpdateMode,
-        _connectSecondaryWs, _disconnectSecondaryWs,
-        fetchVttyDiffForPanel, fetchSecondaryVttyDiff,
+        fetchVttyDiffForPanel,
         _sharedSubs,
         _connectLeafWs,
+        _loadLeafVttyHttpDirect,
+        _fetchLeafDiff,
+        _applyLeafDiff,
     });
 })();

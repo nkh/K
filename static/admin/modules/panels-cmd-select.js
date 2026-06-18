@@ -100,19 +100,18 @@ function _selectCommandForPanel(panelObj, instUrl, cmdId, { cache = false, reset
 
 function _selectLeafCommand(panelObj, leaf, instUrl, cmdId) {
     // Select a command into a specific leaf (secondary or deeper in the tree)
-    if (leaf.ws) { try { leaf.ws.close(); } catch {} leaf.ws = null; }
-    if (leaf.wsPingInterval) clearInterval(leaf.wsPingInterval);
-    if (leaf.wsReconnectTimer) clearTimeout(leaf.wsReconnectTimer);
-    if (leaf.pollTimer) clearInterval(leaf.pollTimer);
+    _disconnectSingleLeaf(leaf);
     leaf.instUrl = instUrl;
     leaf.cmdId = cmdId;
     leaf.scrollbackOffset = 0;
     state.selectedInstUrl = instUrl; state.selectedCmdId = cmdId; state.bufferView = 'current';
-    // Load VTTY content for this leaf
-    loadVttyHttpForPanel(leaf.id, instUrl, cmdId);
+    // Load VTTY content for this leaf using the leaf-aware function
+    if (typeof _loadLeafVttyHttpDirect === 'function') {
+        _loadLeafVttyHttpDirect(leaf);
+    }
     // Connect WS or start polling for this leaf
     if (state.updateMode === 'push') _connectLeafWs(leaf);
-    else leaf.pollTimer = setInterval(() => { if (leaf.cmdId) loadVttyHttpForPanel(leaf.id, leaf.instUrl, leaf.cmdId); }, state.pollInterval);
+    else leaf.pollTimer = setInterval(() => { if (leaf.cmdId && typeof _loadLeafVttyHttpDirect === 'function') _loadLeafVttyHttpDirect(leaf); }, state.pollInterval);
     if (panelObj.split) _updateSplitHeaders(panelObj);
     updateSidebarSelection();
 }

@@ -401,9 +401,14 @@ function _disconnectLeafTree(splitNode) {
 function _disconnectSingleLeaf(leaf) {
     if (!leaf) return;
     if (leaf.ws) { try { leaf.ws.close(); } catch {} leaf.ws = null; }
-    if (leaf.wsPingInterval) clearInterval(leaf.wsPingInterval);
-    if (leaf.wsReconnectTimer) clearTimeout(leaf.wsReconnectTimer);
-    if (leaf.pollTimer) clearInterval(leaf.pollTimer);
+    if (leaf.wsPingInterval) { clearInterval(leaf.wsPingInterval); leaf.wsPingInterval = null; }
+    if (leaf.wsReconnectTimer) { clearTimeout(leaf.wsReconnectTimer); leaf.wsReconnectTimer = null; }
+    if (leaf.pollTimer) { clearInterval(leaf.pollTimer); leaf.pollTimer = null; }
+    leaf.wsPingSendTime = 0;
+    leaf.wsLatency = 0;
+    leaf.wsReconnectCount = 0;
+    leaf.wsInstUrl = null;
+    leaf.wsCmdId = null;
 }
 
 function _renderVttyContainer(panel) {
@@ -750,7 +755,13 @@ function startRenameWindow(winId) {
             const t = label.textContent.trim();
             win.name = t || win.name;
         }
-        renderPanels();
+        // Update only this tab's label text — do NOT re-render the whole window bar
+        // (which would destroy any other in-progress operations).
+        const allTabs = document.querySelectorAll('.window-tab[data-window="' + winId + '"]');
+        for (const tab of allTabs) {
+            const lbl = tab.querySelector('.window-tab-label');
+            if (lbl) lbl.textContent = win.name;
+        }
     };
     const onKey = (e) => {
         if (e.key === 'Enter') { e.preventDefault(); finish(true); }
@@ -772,7 +783,7 @@ function startRenameWindow(winId) {
         _getPanelCmdLabel, _updateSplitHeaders, _renderSplitContainer,
         _renderMinimizedPanels, _applyPanelLayoutClass,
         _updatePanelMultiUI, _getPanelLabel, _renderSplitPane,
-        _findCmd, _findPanelVtty, _cacheVtty,
+        _renderLeafHeader, _renderLeafPane, _findCmd, _findPanelVtty, _cacheVtty,
         switchWindow, createWindow, closeWindow, _renderWindowBar, startRenameWindow,
         _getActiveWindow, _getVisiblePanels,
         // Recursive split tree

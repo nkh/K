@@ -287,7 +287,7 @@ console.log('WIN-008: disconnectPanelWs clears diff baselines');
 // ──────────────────────────────────────────────────────────────
 // WIN-009: disconnectPanelWs clears baselines for secondary split too
 // ──────────────────────────────────────────────────────────────
-console.log('WIN-009: disconnectPanelWs clears secondary diff baselines');
+console.log('WIN-009: disconnectPanelWs clears baselines for secondary split too');
 {
     state.windows = [];
     state.activeWindowId = null;
@@ -299,20 +299,21 @@ console.log('WIN-009: disconnectPanelWs clears secondary diff baselines');
     p.selectedCmdId = 'cmd-pri';
     p.wsInstUrl = 'http://localhost:9090';
     p.wsCmdId = 'cmd-pri';
-    // Set up a split
+    // Set up a split using the tree structure
     splitPanel(p.id, 'horizontal');
-    p.split.secondaryInstUrl = 'http://localhost:9090';
-    p.split.secondaryCmdId = 'cmd-sec';
+    const secLeaf = p.split.secondary;
+    secLeaf.cmdId = 'cmd-sec';
+    secLeaf.instUrl = 'http://localhost:9090';
 
     state._focusedPanelId = p.id;
     state._diffBaselines[p.id + '/cmd-pri'] = 'uuid-pri';
-    state._diffBaselines[p.id + '/cmd-sec'] = 'uuid-sec';
+    state._diffBaselines[secLeaf.id + '/cmd-sec'] = 'uuid-sec';
 
     disconnectPanelWs(p.id);
 
     assertEq(state._diffBaselines[p.id + '/cmd-pri'], undefined,
         'WIN-009a: primary diff baseline cleared');
-    assertEq(state._diffBaselines[p.id + '/cmd-sec'], undefined,
+    assertEq(state._diffBaselines[secLeaf.id + '/cmd-sec'], undefined,
         'WIN-009b: secondary diff baseline cleared');
 }
 

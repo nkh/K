@@ -221,78 +221,55 @@ if (typeof startPanelUpdateMode === 'function') {
     assert(() => { startPanelUpdateMode(noSelUpdP.id); }, 'startPanelUpdateMode no-selection no crash');
 }
 
-// ── _disconnectSecondaryWs ──
-console.log('_disconnectSecondaryWs tests');
-if (typeof _disconnectSecondaryWs === 'function') {
-    // No split → no-op
-    const noSplitP = addPanelDirect();
-    assert(() => { _disconnectSecondaryWs(noSplitP); }, '_disconnectSecondaryWs no-split no crash');
+// ── _disconnectSingleLeaf (replaces old _disconnectSecondaryWs) ──
+console.log('_disconnectSingleLeaf tests');
+if (typeof _disconnectSingleLeaf === 'function') {
+    // null leaf → no-op
+    assert(() => { _disconnectSingleLeaf(null); }, '_disconnectSingleLeaf null no crash');
 
-    // With split
-    const splitP2 = addPanelDirect();
-    splitP2.split = {
-        direction: 'horizontal', splitRatio: 0.5, activeSide: 'primary',
-        secondary: {
-            id: splitP2.id + '-s1', cmdId: 's1', instUrl: 'http://localhost:9090',
-            ws: new MockWebSocket('ws://test'),
-            wsReconnectTimer: setTimeout(() => {}, 10000),
-            wsPingInterval: setInterval(() => {}, 10000),
-            wsPingSendTime: 42,
-            wsLatency: 100,
-            wsReconnectCount: 2,
-        },
+    // With a leaf that has WS state
+    const leaf = {
+        id: 'test-leaf', cmdId: 's1', instUrl: 'http://localhost:9090',
+        ws: new MockWebSocket('ws://test'),
+        wsReconnectTimer: setTimeout(() => {}, 10000),
+        wsPingInterval: setInterval(() => {}, 10000),
+        wsPingSendTime: 42,
+        wsLatency: 100,
+        wsReconnectCount: 2,
     };
-    _disconnectSecondaryWs(splitP2);
-    assertEq(splitP2.split.secondary.ws, null, 'secondary WS cleared');
-    assertEq(splitP2.split.secondary.wsCmdId, null, 'secondary wsCmdId cleared');
-    assertEq(splitP2.split.secondary.wsInstUrl, null, 'secondary wsInstUrl cleared');
-    assertEq(splitP2.split.secondary.wsPingSendTime, 0, 'secondary ping send time reset');
-    assertEq(splitP2.split.secondary.wsLatency, 0, 'secondary latency reset');
-    assertEq(splitP2.split.secondary.wsReconnectCount, 0, 'secondary reconnect count reset');
+    _disconnectSingleLeaf(leaf);
+    assertEq(leaf.ws, null, 'leaf WS cleared');
+    assertEq(leaf.wsPingSendTime, 0, 'leaf ping send time reset');
+    assertEq(leaf.wsLatency, 0, 'leaf latency reset');
 }
 
-// ── scheduleSecondaryVttyHttp (now in vtty.js) ──
-console.log('scheduleSecondaryVttyHttp tests');
-if (typeof scheduleSecondaryVttyHttp === 'function') {
-    const schedP = addPanelDirect();
-    schedP.split = { direction: 'horizontal', splitRatio: 0.5, activeSide: 'primary', secondary: { id: schedP.id + '-s1', cmdId: 's1', instUrl: 'http://localhost:9090' } };
-    assert(() => { scheduleSecondaryVttyHttp(schedP, 50); }, 'scheduleSecondaryVttyHttp does not throw');
+// ── _loadLeafVttyHttpDirect (replaces old scheduleSecondaryVttyHttp) ──
+console.log('_loadLeafVttyHttpDirect tests');
+if (typeof _loadLeafVttyHttpDirect === 'function') {
+    // No DOM element → no crash (just returns)
+    const leaf = { id: 'no-dom-leaf', cmdId: 'c1', instUrl: 'http://localhost:9090' };
+    assert(() => { _loadLeafVttyHttpDirect(leaf); }, '_loadLeafVttyHttpDirect no-dom no crash');
 
-    const noSplitSchedP = addPanelDirect();
-    assert(() => { scheduleSecondaryVttyHttp(noSplitSchedP, 50); }, 'scheduleSecondaryVttyHttp no-split no crash');
-
-    const noCmdSplitP = addPanelDirect();
-    noCmdSplitP.split = { direction: 'horizontal', splitRatio: 0.5, activeSide: 'primary', secondary: { id: noCmdSplitP.id + '-s1', cmdId: null, instUrl: null, ws: null, pollTimer: null, scrollbackOffset: 0, mouseTracking: false, mouseSgr: false } };
-    assert(() => { scheduleSecondaryVttyHttp(noCmdSplitP, 50); }, 'scheduleSecondaryVttyHttp no-cmd no crash');
+    // No cmd → no crash
+    const noCmdLeaf = { id: 'no-cmd-leaf', cmdId: null, instUrl: null };
+    assert(() => { _loadLeafVttyHttpDirect(noCmdLeaf); }, '_loadLeafVttyHttpDirect no-cmd no crash');
 }
 
-// ── updateSecondaryVttyDisplay (now in vtty.js) ──
-console.log('updateSecondaryVttyDisplay tests');
-if (typeof updateSecondaryVttyDisplay === 'function') {
-    const dispP = addPanelDirect();
-    dispP.split = { direction: 'horizontal', splitRatio: 0.5, activeSide: 'primary', secondary: { id: dispP.id + '-s1', cmdId: 's1', instUrl: 'http://localhost:9090' } };
-    const dispVtty = document.createElement('div');
-    const dispPre = document.createElement('pre');
-    dispVtty.appendChild(dispPre);
-    assert(() => { updateSecondaryVttyDisplay(dispP, dispVtty, { html: '<span>hi</span>', generation: 1 }); }, 'updateSecondaryVttyDisplay does not throw');
-}
+// ── _applyLeafDiff (replaces old applySecondaryVttyDiff) ──
+console.log('_applyLeafDiff tests');
+if (typeof _applyLeafDiff === 'function') {
+    const vttyEl = document.createElement('div');
+    vttyEl.className = 'vtty-container';
+    const pre = document.createElement('pre');
+    vttyEl.appendChild(pre);
 
-// ── applySecondaryVttyDiff (now in vtty.js) ──
-console.log('applySecondaryVttyDiff tests');
-if (typeof applySecondaryVttyDiff === 'function') {
-    const diffP = addPanelDirect();
-    diffP.split = { direction: 'horizontal', splitRatio: 0.5, activeSide: 'primary', secondary: { id: diffP.id + '-s1', cmdId: 's1', instUrl: null } };
-    const diffVtty = document.createElement('div');
-    diffVtty.className = 'vtty-container';
-    const diffPre = document.createElement('pre');
-    diffVtty.appendChild(diffPre);
+    // No pre → no crash
+    const emptyVtty = document.createElement('div');
+    assert(() => { _applyLeafDiff(emptyVtty, 'test-leaf', {}); }, '_applyLeafDiff no-pre no crash');
 
-    const noCmdDiffP = addPanelDirect();
-    noCmdDiffP.split = { direction: 'horizontal', splitRatio: 0.5, activeSide: 'primary', secondary: { id: noCmdDiffP.id + '-s1', cmdId: null, instUrl: null } };
-    assert(() => { applySecondaryVttyDiff(noCmdDiffP, diffVtty, {}); }, 'applySecondaryVttyDiff no-cmd no crash');
-
-    const htmlData = { html: '<span>test</span>', generation: 1 };
-    assert(() => { applySecondaryVttyDiff(diffP, diffVtty, htmlData); }, 'applySecondaryVttyDiff with html does not throw');
+    // With html data
+    const htmlData = { html: '<span>test</span>', generation: 1, _cmdId: 'c1' };
+    assert(() => { _applyLeafDiff(vttyEl, 'test-leaf', htmlData); }, '_applyLeafDiff with html does not throw');
 }
 
 console.log('\n[websocket.js] Tests complete');
