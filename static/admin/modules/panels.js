@@ -142,22 +142,35 @@ ${multi ? `<div class="panel-resize-handle" data-panel="${panel.id}"></div>` : '
         const pending = state._panelsNeedingFetch;
         state._panelsNeedingFetch = null;
         for (const p of visiblePanels) {
+            // Fetch for primary leaf
             if (p.selectedCmdId && p.selectedInstUrl) {
                 const mustFetch = pending && pending.has(p.id);
                 const needsWs = !p.ws || (p.ws && p.ws.readyState !== WebSocket.OPEN);
                 if (mustFetch) {
-                    // DOM was just rebuilt without cached content — fetch it now
                     loadVttyHttpForPanel(p.id, p.selectedInstUrl, p.selectedCmdId);
                 }
                 if (needsWs) {
-                    // WS not connected — full reconnect
                     startPanelUpdateMode(p.id);
                 } else if (mustFetch && state.updateMode === 'push') {
-                    // WS is connected but ensure this panel is subscribed in the shared pool
                     const key = p.selectedInstUrl + '/' + p.selectedCmdId;
                     const sub = _sharedSubs ? _sharedSubs[key] : null;
                     if (!sub || !sub.panels || !sub.panels.has(p.id)) {
                         connectPanelWs(p.id);
+                    }
+                }
+            }
+            // Fetch for all secondary/deeper leaves in the split tree
+            if (p.split && typeof _getAllLeaves === 'function') {
+                const leaves = _getAllLeaves(p);
+                for (const { leaf, side } of leaves) {
+                    if (!side || !leaf.cmdId || !leaf.instUrl) continue;
+                    if (typeof _loadLeafVttyHttpDirect === 'function') {
+                        _loadLeafVttyHttpDirect(leaf);
+                    }
+                    if (state.updateMode === 'push' && typeof _connectLeafWs === 'function') {
+                        _connectLeafWs(leaf);
+                    } else if (leaf.cmdId && typeof _loadLeafVttyHttpDirect === 'function') {
+                        leaf.pollTimer = setInterval(() => { _loadLeafVttyHttpDirect(leaf); }, state.pollInterval);
                     }
                 }
             }

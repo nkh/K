@@ -82,11 +82,23 @@ function showCmdContextMenu(e, instUrl, cmdId, cmdName, isAlive, isRetained) {
     _setupCtxMenuListeners(menu);
 }
 
-function showPanelContextMenu(e, panelId) {
+function showPanelContextMenu(e, panelId, leafId) {
     e.preventDefault(); closeContextMenu();
     const panel = state.panels.find(p => p.id === panelId);
     if (!panel) return;
-    const instUrl = panel.selectedInstUrl, cmdId = panel.selectedCmdId;
+    // Determine which leaf's command to show in the menu
+    let instUrl, cmdId;
+    if (leafId && leafId !== panelId && panel.split) {
+        const found = (typeof _findLeafState === 'function') ? _findLeafState(panel, leafId) : null;
+        if (found && found.leaf) {
+            instUrl = found.leaf.instUrl;
+            cmdId = found.leaf.cmdId;
+        }
+    }
+    if (!cmdId) {
+        instUrl = panel.selectedInstUrl;
+        cmdId = panel.selectedCmdId;
+    }
     const menu = document.createElement('div');
     menu.id = 'ctxMenu'; menu.className = 'ctx-menu'; menu.setAttribute('role', 'menu');
     menu.appendChild(_createCtxMenuItem('Copy URL', () => {

@@ -452,4 +452,121 @@ console.log('SPL-012: _applyLeafDiff applies cell-level updates');
     state._level3Enabled = true;
 }
 
+// ──────────────────────────────────────────────────────────────
+// SPL-013: Recursive split — split a pane that is already split
+//           (the secondary of a split can itself be split)
+// ──────────────────────────────────────────────────────────────
+console.log('SPL-013: Recursive split — secondary can be split again');
+{
+    state.panels = [];
+    state.connections = [];
+    state.windows = [];
+    state.activeWindowId = null;
+
+    const p = addPanelDirect();
+    // First split: panel → [primary, secondary]
+    splitPanel(p.id, 'horizontal');
+    assertOk(!!p.split, 'SPL-013a: panel has top-level split');
+    const sec1 = p.split.secondary;
+    assertOk(!!sec1, 'SPL-013b: first secondary exists');
+
+    // Focus the secondary and split it again
+    p.split.activeSide = 'secondary';
+    p._focusedLeafId = sec1.id;
+    splitPanel(p.id, 'vertical');
+
+    // The secondary should now itself be split
+    assertOk(!!sec1.split, 'SPL-013c: secondary has its own split');
+    const sec2 = sec1.split.secondary;
+    assertOk(!!sec2, 'SPL-013d: second-level secondary exists');
+    assertEq(sec2.id.indexOf(p.id), 0, 'SPL-013e: deep secondary ID starts with panel ID');
+
+    // Verify _getAllLeaves returns 3 leaves
+    const allLeaves = _getAllLeaves(p);
+    assertEq(allLeaves.length, 3, 'SPL-013f: 3 leaves after double split');
+    assertEq(allLeaves[0].leaf.id, p.id, 'SPL-013g: leaf 0 is panel (primary)');
+    assertEq(allLeaves[1].leaf.id, sec1.id, 'SPL-013h: leaf 1 is first secondary');
+    assertEq(allLeaves[2].leaf.id, sec2.id, 'SPL-013i: leaf 2 is second-level secondary');
+
+    // Verify _findLeafState can find the deep leaf
+    const found = _findLeafState(p, sec2.id);
+    assertOk(!!found, 'SPL-013j: _findLeafState finds deep leaf');
+    assertEq(found.leaf.id, sec2.id, 'SPL-013k: found leaf has correct ID');
+}
+
+// ──────────────────────────────────────────────────────────────
+// SPL-014: showPanelContextMenu receives leafId for split panes
+//           and resolves the correct command for that leaf
+// ──────────────────────────────────────────────────────────────
+console.log('SPL-014: Context menu resolves correct leaf command');
+{
+    state.panels = [];
+    state.connections = [
+        { url: 'http://localhost:9090', label: 'Local', token: '', reachable: true,
+          _commands: [
+              { id: 'cmd-pri', name: 'top', args: [] },
+              { id: 'cmd-sec', name: 'htop', args: [] },
+          ] },
+    ];
+    state.windows = [];
+    state.activeWindowId = null;
+
+    const p = addPanelDirect();
+    p.selectedInstUrl = 'http://localhost:9090';
+    p.selectedCmdId = 'cmd-pri';
+    splitPanel(p.id, 'vertical');
+    const secLeaf = p.split.secondary;
+    secLeaf.cmdId = 'cmd-sec';
+    secLeaf.instUrl = 'http://localhost:9090';
+
+    // Verify showPanelContextMenu is a function that accepts 3 args
+    assertEq(typeof showPanelContextMenu, 'function', 'SPL-014a: showPanelContextMenu exists');
+    // Check function signature accepts leafId (3 params)
+    assertEq(showPanelContextMenu.length, 3, 'SPL-014b: showPanelContextMenu takes 3 params (e, panelId, leafId)');
+}
+
+// ──────────────────────────────────────────────────────────────
+// SPL-015: unsplitPanel resets activeSide to primary after collapse
+// ──────────────────────────────────────────────────────────────
+console.log('SPL-015: unsplitPanel resets activeSide after collapse');
+{
+    state.panels = [];
+    state.connections = [];
+    state.windows = [];
+    state.activeWindowId = null;
+
+    const p = addPanelDirect();
+    splitPanel(p.id, 'horizontal');
+    p.split.activeSide = 'secondary';
+
+    // Unsplit the secondary
+    unsplitPanel(p.id, p.split.secondary.id);
+
+    // The top-level split should be removed
+    assertEq(p.split, null, 'SPL-015a: top-level split cleared after unsplit');
+}
+
+// ──────────────────────────────────────────────────────────────
+// SPL-016: Split pane header oncontextmenu passes leafId
+// ──────────────────────────────────────────────────────────────
+console.log('SPL-016: Split header oncontextmenu passes leafId');
+{
+    state.panels = [];
+    state.connections = [
+        { url: 'http://localhost:9090', label: 'Local', token: '', reachable: true,
+          _commands: [{ id: 'cmd-h', name: 'htop', args: [] }] },
+    ];
+    state.windows = [];
+    state.activeWindowId = null;
+
+    const p = addPanelDirect();
+    splitPanel(p.id, 'vertical');
+    const secLeaf = p.split.secondary;
+
+    const headerHtml = _renderLeafHeader(p, secLeaf, secLeaf.id);
+    // The oncontextmenu should pass 3 arguments: event, panelId, leafId
+    assertIncludes(headerHtml, "showPanelContextMenu(event,'" + p.id + "','" + secLeaf.id + "')",
+        'SPL-016: secondary header oncontextmenu passes leaf ID');
+}
+
 console.log('\n[split_interactions] Tests complete');

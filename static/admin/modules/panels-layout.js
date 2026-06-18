@@ -304,9 +304,7 @@ function splitPanel(panelId, direction, leafId) {
             leafId = p.id; // split the primary
         } else {
             // Default: split the currently active side
-            const active = p.split.activeSide === 'secondary' ? p.split.secondary : p;
-            if (active.split) return; // already split, can't split again without targeting
-            leafId = active.id;
+            leafId = _getFocusedLeafId(p);
         }
     }
 
@@ -358,12 +356,9 @@ function unsplitPanel(panelId, leafId) {
 
     // Promote the primary child (the other side) — but we're closing secondary,
     // so just remove the split. The primary is always the panel or an ancestor.
-    // Actually, if we're closing a deep leaf, we need to collapse that level.
-    // For simplicity: remove the split at this level, which collapses the two sides.
-    // The primary side stays. Since this is a secondary leaf being closed,
-    // the parent split is removed and the primary (already rendered) continues.
     parentSplit.secondary = null;
     parentSplit.direction = null;
+    parentSplit.activeSide = 'primary';
 
     // If this was the top-level split, clear it
     if (p.split === parentSplit && !p.split.secondary) {
@@ -451,7 +446,7 @@ function _renderLeafHeader(panel, leaf, leafId) {
     const closeData = isTopLevel
         ? `data-panel="${panel.id}"`
         : `data-panel="${panel.id}" data-leaf="${leafId}"`;
-    return `<div class="panel-header" data-panel-id="${panel.id}" data-leaf-id="${leafId}" oncontextmenu="showPanelContextMenu(event,'${panel.id}')" tabindex="0" role="button" style="--ph-bg:${color};--ph-fg:${textColor};background:var(--ph-bg);color:var(--ph-fg);">
+    return `<div class="panel-header" data-panel-id="${panel.id}" data-leaf-id="${leafId}" oncontextmenu="showPanelContextMenu(event,'${panel.id}','${leafId}')" tabindex="0" role="button" style="--ph-bg:${color};--ph-fg:${textColor};background:var(--ph-bg);color:var(--ph-fg);">
     <button class="btn btn-xs cmd-history-btn hidden" data-action="PanelHistoryBack" data-panel="${panel.id}" data-leaf="${leafId}" title="Back">&#x25C0;</button>
     <button class="btn btn-xs cmd-history-btn hidden" data-action="PanelHistoryForward" data-panel="${panel.id}" data-leaf="${leafId}" title="Forward">&#x25B6;</button>
     <div class="cmd-info">
