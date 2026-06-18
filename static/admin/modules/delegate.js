@@ -73,6 +73,11 @@ const _sigs = {
         return [el.dataset.value];
     },
 
+    // Pass (value) from data-window attribute (window management)
+    'data-window':    function(el) {
+        return [el.dataset.window];
+    },
+
     // Pass (panelId) from data-panel-id attribute (for dynamically generated panel buttons)
     'el-panelId':    function(el) {
         return [el.dataset.panelId];
@@ -239,9 +244,9 @@ const _actions = {
     'ConfirmAddServer':         { handler: 'confirmAddServer' },
 
     // ── Windows ──
-    'SwitchWindow':             { handler: 'switchWindow', sig: 'data-value' },
+    'SwitchWindow':             { handler: 'switchWindow', sig: 'data-window' },
     'CreateWindow':             { handler: 'createWindow' },
-    'CloseWindow':              { handler: 'closeWindow', sig: 'data-value', stop: true },
+    'CloseWindow':              { handler: 'closeWindow', sig: 'data-window', stop: true },
 
     // ── Command manager modal ──
     'CloseCmdManager':          { handler: 'closeCmdManager' },

@@ -49,7 +49,14 @@ function _getPanelObj(e) {
     if (!vc || state.currentView !== 'vtty') return null;
     const pe = vc.closest('.panel');
     if (!pe) return null;
-    return state.panels.find(p => p.id === pe.id) || null;
+    const panelObj = state.panels.find(p => p.id === pe.id) || null;
+    if (panelObj?.split) {
+        const side = vc.getAttribute('data-split-side');
+        if (side && panelObj.split.activeSide !== side) {
+            panelObj.split.activeSide = side;
+        }
+    }
+    return panelObj;
 }
 
 function _saveScrollback(offset) {
@@ -257,7 +264,14 @@ document.addEventListener('keydown', (e) => {
 
 // ─── Direct key sending (when terminal is focused) ───
 async function sendDirectKey(e, panelObj) {
-    if (!panelObj.selectedCmdId || !panelObj.selectedInstUrl) return;
+    // For split panes, determine which side's command to send to
+    let cmdId = panelObj.selectedCmdId;
+    let instUrl = panelObj.selectedInstUrl;
+    if (panelObj.split && panelObj.split.activeSide === 'secondary') {
+        cmdId = panelObj.split.secondaryCmdId;
+        instUrl = panelObj.split.secondaryInstUrl;
+    }
+    if (!cmdId || !instUrl) return;
 
     let seq = '';
     if (e.ctrlKey && !e.altKey && !e.metaKey) {
@@ -274,9 +288,9 @@ async function sendDirectKey(e, panelObj) {
     if (!seq) return;
 
     try {
-        const json = await api.sendKeys(panelObj.selectedInstUrl, panelObj.selectedCmdId, { keys: seq });
+        const json = await api.sendKeys(instUrl, cmdId, { keys: seq });
         if (json.status === 'ok')
-            scheduleVttyHttpForPanel(panelObj.id, panelObj.selectedInstUrl, panelObj.selectedCmdId, 50);
+            scheduleVttyHttpForPanel(panelObj.id, instUrl, cmdId, 50);
     } catch (err) { console.error('Direct key send error:', err); }
 }
 
@@ -416,7 +430,14 @@ document.addEventListener('mousemove', (e) => {
 });
 
 async function sendMouseEvent(panelObj, eventType, button, e) {
-    if (!panelObj.selectedCmdId || !panelObj.selectedInstUrl) return;
+    // For split panes, determine which side's command to send to
+    let cmdId = panelObj.selectedCmdId;
+    let instUrl = panelObj.selectedInstUrl;
+    if (panelObj.split && panelObj.split.activeSide === 'secondary') {
+        cmdId = panelObj.split.secondaryCmdId;
+        instUrl = panelObj.split.secondaryInstUrl;
+    }
+    if (!cmdId || !instUrl) return;
     const vttyEl = document.getElementById(panelObj.id)?.querySelector('.vtty-container');
     if (!vttyEl) return;
 
@@ -426,8 +447,8 @@ async function sendMouseEvent(panelObj, eventType, button, e) {
     const y = Math.max(1, Math.floor((e.clientY - rect.top) / charH) + 1);
 
     try {
-        await api.sendMouse(panelObj.selectedInstUrl, panelObj.selectedCmdId, { event: eventType, button, x, y });
-        scheduleVttyHttpForPanel(panelObj.id, panelObj.selectedInstUrl, panelObj.selectedCmdId, 30);
+        await api.sendMouse(instUrl, cmdId, { event: eventType, button, x, y });
+        scheduleVttyHttpForPanel(panelObj.id, instUrl, cmdId, 30);
     } catch (err) { /* best-effort */ }
 }
 

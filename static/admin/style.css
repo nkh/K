@@ -105,47 +105,47 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .shared-toolbar-sep { width: 1px; height: 1rem; background: var(--border); margin: 0 0.1rem; flex-shrink: 0; }
 
 /* Panels */
-.window-bar { display: flex; align-items: center; gap: 0; background: var(--bg-secondary); border-bottom: 1px solid var(--border); padding: 0; flex-shrink: 0; min-height: 1.6rem; }
-.window-tab { display: flex; align-items: center; gap: 0.15rem; padding: 0.15rem 0.5rem; font-size: 0.7rem; color: var(--text-muted); cursor: pointer; border-right: 1px solid var(--border); user-select: none; white-space: nowrap; }
+.window-bar { display: flex; align-items: center; gap: 0; background: var(--bg-secondary); border-bottom: 1px solid var(--border); padding: 0; flex-shrink: 0; min-height: var(--ui-btn-h); font-family: var(--font-sans); }
+.window-tab { display: flex; align-items: center; gap: 0.2rem; padding: 0 0.5rem; font-size: var(--ui-fs); font-family: var(--font-sans); color: var(--text-muted); cursor: pointer; border-right: 1px solid var(--border); user-select: none; white-space: nowrap; min-height: var(--ui-btn-h); }
 .window-tab:hover { background: var(--bg-tertiary); color: var(--text-primary); }
-.window-tab.active { background: var(--bg-primary); color: var(--text-primary); }
-.window-tab-close { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 0.6rem; padding: 0 0.15rem; line-height: 1; }
-.window-tab-close:hover { color: var(--red); }
-.window-tab-add { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 0.75rem; padding: 0.15rem 0.4rem; line-height: 1; }
-.window-tab-add:hover { color: var(--green); }
-.window-tab-label { max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+.window-tab.active { background: var(--bg-primary); color: var(--text-primary); font-weight: 600; }
+.window-tab-close { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: var(--ui-icon-fs); padding: 0 0.15rem; line-height: 1; border-radius: 2px; }
+.window-tab-close:hover { color: var(--red); background: var(--bg-tertiary); }
+.window-tab-add { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: var(--ui-fs); padding: 0 0.4rem; line-height: 1; border-radius: 2px; min-height: var(--ui-btn-h); }
+.window-tab-add:hover { color: var(--green); background: var(--bg-tertiary); }
+.window-tab-label { max-width: 10rem; overflow: hidden; text-overflow: ellipsis; }
+.window-tab-label.editing { outline: 1px solid var(--accent); outline-offset: -1px; background: var(--bg-primary); padding: 0 0.15rem; border-radius: 2px; cursor: text; overflow: visible; text-overflow: unset; white-space: pre; min-width: 2ch; max-width: 20rem; }
 /* .panel-container wraps the window bar + .panel-area; always column flex */
 .panel-container { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 /* .panel-area holds the actual panel layout (row/column/grid) */
 .panel-area { flex: 1; display: flex; overflow: hidden; }
-.panel { flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--border); min-width: 200px; min-height: 100px; }
-.panel:last-child { border-right: none; }
-.panel.focused > .panel-header { background: color-mix(in srgb, var(--ph-bg, var(--bg-tertiary)) 40%, var(--bg-primary)) !important; }
-.panel.focused { box-shadow: inset 0 1px 0 0 var(--accent); }
+.panel { flex: 1 1 0; display: flex; flex-direction: column; min-width: 100px; position: relative; }
+.panel + .panel { border-left: 1px solid var(--border); }
+.panel.focused { box-shadow: inset 0 0 0 2px var(--focused-pane-border, var(--accent)); z-index: 1; }
+.panel.focused > .panel-header { background: color-mix(in srgb, var(--ph-bg, var(--bg-tertiary)) 25%, var(--focused-pane-border, var(--accent))) !important; }
 /* Vertical (stacked) panel layout — swap border direction */
-.panel-area[style*="column"] .panel { border-right: none; border-bottom: 1px solid var(--border); }
-.panel-area[style*="column"] .panel:last-child { border-bottom: none; }
-.panel-area[style*="column"] .panel.focused { box-shadow: inset 2px 0 0 0 var(--accent); }
+.panel-area[style*="column"] .panel + .panel { border-left: none; border-top: 1px solid var(--border); }
+.panel-area[style*="column"] .panel.focused { box-shadow: inset 3px 0 0 0 var(--focused-pane-border, var(--accent)); }
 
 /* Grid layout presets — CSS grid replaces flexbox */
 .panel-area.grid-2x2 { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
-.panel-area.grid-2x2 .panel { border-right: none; border-bottom: none; min-width: 0; min-height: 0; }
-.panel-area.grid-2x2 .panel:nth-child(odd) { border-right: 1px solid var(--border); }
-.panel-area.grid-2x2 .panel:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
-.panel-area.grid-2x2 .panel.focused { box-shadow: inset 0 1px 0 0 var(--accent); }
+.panel-area.grid-2x2 .panel { border-left: none; border-top: none; min-width: 0; min-height: 0; }
+.panel-area.grid-2x2 .panel:nth-child(-n+2) { border-top: 1px solid var(--border); }
+.panel-area.grid-2x2 .panel:nth-child(odd) { border-left: 1px solid var(--border); }
+.panel-area.grid-2x2 .panel.focused { box-shadow: inset 0 0 0 2px var(--focused-pane-border, var(--accent)); }
 
 .panel-area.grid-1-2 { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
-.panel-area.grid-1-2 .panel { border-right: none; border-bottom: none; min-width: 0; min-height: 0; }
-.panel-area.grid-1-2 .panel:first-child { grid-column: 1 / -1; border-bottom: 1px solid var(--border); }
-.panel-area.grid-1-2 .panel:nth-child(3) { border-right: 1px solid var(--border); }
-.panel-area.grid-1-2 .panel.focused { box-shadow: inset 0 1px 0 0 var(--accent); }
+.panel-area.grid-1-2 .panel { border-left: none; border-top: none; min-width: 0; min-height: 0; }
+.panel-area.grid-1-2 .panel:first-child { grid-column: 1 / -1; border-top: 1px solid var(--border); }
+.panel-area.grid-1-2 .panel:nth-child(3) { border-left: 1px solid var(--border); }
+.panel-area.grid-1-2 .panel.focused { box-shadow: inset 0 0 0 2px var(--focused-pane-border, var(--accent)); }
 
 .panel-area.grid-2-1 { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
-.panel-area.grid-2-1 .panel { border-right: none; border-bottom: none; min-width: 0; min-height: 0; }
-.panel-area.grid-2-1 .panel:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
-.panel-area.grid-2-1 .panel:nth-child(odd) { border-right: 1px solid var(--border); }
+.panel-area.grid-2-1 .panel { border-left: none; border-top: none; min-width: 0; min-height: 0; }
+.panel-area.grid-2-1 .panel:nth-child(-n+2) { border-top: 1px solid var(--border); }
+.panel-area.grid-2-1 .panel:nth-child(odd) { border-left: 1px solid var(--border); }
 .panel-area.grid-2-1 .panel:last-child { grid-column: 1 / -1; }
-.panel-area.grid-2-1 .panel.focused { box-shadow: inset 0 1px 0 0 var(--accent); }
+.panel-area.grid-2-1 .panel.focused { box-shadow: inset 0 0 0 2px var(--focused-pane-border, var(--accent)); }
 
 /* In grid mode, hide resize handles (grid cells manage their own sizing) */
 .panel-area.grid-2x2 .panel-resize-handle,

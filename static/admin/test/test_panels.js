@@ -324,33 +324,45 @@ if (typeof applyLayoutPreset === 'function') {
 // ── _applyPanelLayoutClass ──
 console.log('_applyPanelLayoutClass tests');
 if (typeof _applyPanelLayoutClass === 'function') {
+    // _applyPanelLayoutClass targets #panelArea, not the container.
+    // Create a mock DOM with panelArea inside container.
     const container = document.createElement('div');
+    const panelArea = document.createElement('div');
+    panelArea.id = 'panelArea';
+    container.appendChild(panelArea);
+    document.body.appendChild(container);
     state._mobileTabbedLayout = false;
 
     // Grid layout
     state.panelLayout = 'grid-2x2';
     _applyPanelLayoutClass(container);
-    assert(container.classList.contains('grid-2x2'), 'grid class applied');
-    assert(!container.classList.contains('grid-1-2'), 'other grid classes removed');
+    assert(panelArea.classList.contains('grid-2x2'), 'grid class applied');
+    assert(!panelArea.classList.contains('grid-1-2'), 'other grid classes removed');
 
     // Row layout
     state.panelLayout = 'row';
     _applyPanelLayoutClass(container);
-    assert(!container.classList.contains('grid-2x2'), 'grid class removed');
-    assertEq(container.style.flexDirection, 'row', 'flexbox row direction set');
+    assert(!panelArea.classList.contains('grid-2x2'), 'grid class removed');
+    assertEq(panelArea.style.flexDirection, 'row', 'flexbox row direction set');
 
     // Column layout
     state.panelLayout = 'column';
     _applyPanelLayoutClass(container);
-    assertEq(container.style.flexDirection, 'column', 'flexbox column direction set');
+    assertEq(panelArea.style.flexDirection, 'column', 'flexbox column direction set');
 
     // Mobile tabbed layout forces column
     state._mobileTabbedLayout = true;
     state.panelLayout = 'grid-2x2';
     _applyPanelLayoutClass(container);
-    assert(!container.classList.contains('grid-2x2'), 'grid class removed in mobile');
-    assertEq(container.style.flexDirection, 'column', 'mobile forces column');
+    assert(!panelArea.classList.contains('grid-2x2'), 'grid class removed in mobile');
+    assertEq(panelArea.style.flexDirection, 'column', 'mobile forces column');
     state._mobileTabbedLayout = false;
+
+    // Container (view-vtty) is NEVER modified
+    assert(!container.classList.contains('grid-2x2'), 'container never gets grid class');
+    assertEq(container.style.flexDirection, '', 'container flex-direction never set');
+
+    document.body.removeChild(container);
 }
 
 // ── closePanelModal (removed — dead modal) ──

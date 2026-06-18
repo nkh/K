@@ -93,7 +93,7 @@ function renderPanels() {
             const focused = panel.id === state._focusedPanelId;
             const mHide = isMobile && multi && !focused ? ' hidden' : '';
             html += `<div class="panel${focused ? ' focused' : ''}" id="${panel.id}" ondragover="onPanelDragOver(event)" ondrop="onPanelDrop(event,'${panel.id}')" ondragleave="onPanelDragLeave(event)"${mHide}>
-<div class="panel-header" data-panel-id="${panel.id}" oncontextmenu="showPanelContextMenu(event,'${panel.id}')" tabindex="0" role="button" aria-label="Panel: ${escHtml(panel.selectedInstUrl || 'empty')}" style="--ph-bg:${color};--ph-fg:${textColor};background:var(--ph-bg);color:var(--ph-fg);">
+${panel.split ? _renderSplitContainer(panel) : `<div class="panel-header" data-panel-id="${panel.id}" oncontextmenu="showPanelContextMenu(event,'${panel.id}')" tabindex="0" role="button" aria-label="Panel: ${escHtml(panel.selectedInstUrl || 'empty')}" style="--ph-bg:${color};--ph-fg:${textColor};background:var(--ph-bg);color:var(--ph-fg);">
     <button class="btn btn-xs cmd-history-btn hidden" id="histBack-${panel.id}" data-action="PanelHistoryBack" data-panel="${panel.id}" title="Back">&#x25C0;</button>
     <button class="btn btn-xs cmd-history-btn hidden" id="histFwd-${panel.id}" data-action="PanelHistoryForward" data-panel="${panel.id}" title="Forward">&#x25B6;</button>
     <div class="cmd-info" id="cmdInfo-${panel.id}">
@@ -105,8 +105,7 @@ function renderPanels() {
     <span class="panel-header-meta" id="panelMeta-${panel.id}"></span>
     <button class="cmd-freeze-btn panel-freeze-btn hidden" id="panelFreezeBtn-${panel.id}" data-action="TogglePauseRunPanel" data-panel="${panel.id}" title="Freeze/Thaw command">&#8545;</button>
     <button class="panel-close-btn" data-action="ClosePanelContent" data-panel="${panel.id}" title="Close panel">&#x2715;</button>
-</div>
-${panel.split ? _renderSplitContainer(panel) : _renderVttyContainer(panel)}
+</div>` + _renderVttyContainer(panel)}
 </div>
 ${multi ? `<div class="panel-resize-handle" data-panel="${panel.id}"></div>` : ''}`;
         }

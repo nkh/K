@@ -22,13 +22,13 @@ state.windows = [];
 state.activeWindowId = null;
 
 // ──────────────────────────────────────────────────────────────
-// WIN-001: _renderWindowBar uses data-window, delegate uses data-value sig
+// WIN-001: _renderWindowBar uses data-window, delegate uses data-window sig
 // ──────────────────────────────────────────────────────────────
-console.log('WIN-001: delegate sig mismatch — SwitchWindow/CloseWindow get undefined');
+console.log('WIN-001: delegate sig matches — data-window used end-to-end');
 
-// The _renderWindowBar HTML uses data-window="..." but the delegate maps
-// SwitchWindow and CloseWindow to sig 'data-value' which reads el.dataset.value.
-// This means clicking window tabs/buttons always passes undefined.
+// The _renderWindowBar HTML uses data-window="..." and the delegate maps
+// SwitchWindow and CloseWindow to sig 'data-window' which reads el.dataset.window.
+// This means clicking window tabs/buttons correctly passes the window ID.
 {
     state.windows = [];
     state.activeWindowId = null;
@@ -47,21 +47,22 @@ console.log('WIN-001: delegate sig mismatch — SwitchWindow/CloseWindow get und
     tab.setAttribute('data-action', 'SwitchWindow');
     tab.setAttribute('data-window', win2);
 
-    const sigFn = _sigs['data-value'];
+    // data-window sig should read the value correctly
+    const sigFn = _sigs['data-window'];
     const args = sigFn(tab, {}, null);
-    assertEq(args[0], undefined,
-        'WIN-001a: data-value sig reads undefined when HTML has data-window (confirms bug)');
+    assertEq(args[0], win2,
+        'WIN-001a: data-window sig reads correct window ID');
 
     assertEq(tab.dataset.window, win2,
         'WIN-001b: data-window attribute IS set correctly on the element');
 
-    let receivedArg = '__sentinel__';
+    let receivedArg = null;
     const savedSwitch = window.switchWindow;
     window.switchWindow = function(id) { receivedArg = id; };
     const ev = createMockEvent({ target: tab });
     _dispatchAction(ev);
-    assertEq(receivedArg, undefined,
-        'WIN-001c: dispatching SwitchWindow action passes undefined (confirms bug)');
+    assertEq(receivedArg, win2,
+        'WIN-001c: dispatching SwitchWindow action passes correct window ID');
     window.switchWindow = savedSwitch;
 }
 
@@ -139,10 +140,10 @@ console.log('WIN-004: _renderWindowBar generates correct data attributes for del
     assert(html.includes('data-action="CreateWindow"'), 'WIN-004b: has CreateWindow action');
     assert(html.includes('data-action="CloseWindow"'), 'WIN-004c: has CloseWindow action');
 
-    assert(html.includes('data-value="win-html-1"'),
-        'WIN-004d: SwitchWindow tab uses data-value for delegation sig');
-    assert(html.includes('data-value="win-html-2"'),
-        'WIN-004e: second window tab uses data-value');
+    assert(html.includes('data-window="win-html-1"'),
+        'WIN-004d: SwitchWindow tab uses data-window for delegation sig');
+    assert(html.includes('data-window="win-html-2"'),
+        'WIN-004e: second window tab uses data-window');
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -202,7 +203,7 @@ console.log('WIN-006: delegate dispatch passes correct ID to switchWindow');
 
     const tab = document.createElement('div');
     tab.setAttribute('data-action', 'SwitchWindow');
-    tab.setAttribute('data-value', 'win-delegate-2');
+    tab.setAttribute('data-window', 'win-delegate-2');
 
     let receivedId = null;
     const savedSwitch = window.switchWindow;
@@ -210,7 +211,7 @@ console.log('WIN-006: delegate dispatch passes correct ID to switchWindow');
     const ev = createMockEvent({ target: tab });
     _dispatchAction(ev);
     assertEq(receivedId, 'win-delegate-2',
-        'WIN-006a: delegate dispatches correct window ID via data-value');
+        'WIN-006a: delegate dispatches correct window ID via data-window');
     window.switchWindow = savedSwitch;
 }
 
@@ -227,7 +228,7 @@ console.log('WIN-007: delegate dispatch passes correct ID to closeWindow');
 
     const btn = document.createElement('button');
     btn.setAttribute('data-action', 'CloseWindow');
-    btn.setAttribute('data-value', 'win-close-2');
+    btn.setAttribute('data-window', 'win-close-2');
 
     let receivedId = null;
     const savedClose = window.closeWindow;

@@ -80,15 +80,15 @@ const fs = require('fs');
 const cssPath = require('path').join(__dirname, '..', 'style.css');
 const cssContent = fs.readFileSync(cssPath, 'utf8');
 
-// Check that .panel.focused uses 1px inset (not 2px)
-const focusedMatch = cssContent.match(/\.panel\.focused\s*\{[^}]*box-shadow:\s*inset\s*0\s*(\d)px/);
+// Check that .panel.focused uses 2px inset border for clear active pane indication
+const focusedMatch = cssContent.match(/\.panel\.focused\s*\{[^}]*box-shadow:\s*inset\s*0\s*0\s*0\s*(\d)px/);
 assertOk(focusedMatch, 'panel.focused box-shadow found in CSS');
-assertEq(focusedMatch[1], '1', 'panel focused indicator is 1px');
+assertEq(focusedMatch[1], '2', 'panel focused indicator is 2px');
 
-// Check grid presets also use 1px
-const gridMatch = cssContent.match(/\.panel-container\.grid-2x2\s+\.panel\.focused\s*\{[^}]*box-shadow:\s*inset\s*0\s*(\d)px/);
+// Check grid presets also use 2px
+const gridMatch = cssContent.match(/\.panel-area\.grid-2x2\s+\.panel\.focused\s*\{[^}]*box-shadow:\s*inset\s*0\s*0\s*0\s*(\d)px/);
 assertOk(gridMatch, 'grid-2x2 focused indicator found');
-assertEq(gridMatch[1], '1', 'grid-2x2 focused indicator is 1px');
+assertEq(gridMatch[1], '2', 'grid-2x2 focused indicator is 2px');
 
 // Check panel-header has minimal padding
 const headerMatch = cssContent.match(/\.panel-header\s*\{[^}]*padding:\s*([0-9.]+)(?:rem)?\s+([0-9.]+)rem/);

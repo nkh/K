@@ -143,9 +143,9 @@ function _renderWindowBar() {
     for (const w of state.windows) {
         const active = w.id === state.activeWindowId;
         const closeBtn = state.windows.length > 1
-            ? `<button class="window-tab-close" data-action="CloseWindow" data-value="${w.id}" title="Close window">&#x2715;</button>`
+            ? `<button class="window-tab-close" data-action="CloseWindow" data-window="${w.id}" title="Close window">&#x2715;</button>`
             : '';
-        html += `<div class="window-tab${active ? ' active' : ''}" data-action="SwitchWindow" data-value="${w.id}" title="Window ${escHtml(w.name)}"><span class="window-tab-label">${escHtml(w.name)}</span>${closeBtn}</div>`;
+        html += `<div class="window-tab${active ? ' active' : ''}" data-action="SwitchWindow" data-window="${w.id}" title="Window ${escHtml(w.name)}"><span class="window-tab-label" ondblclick="event.stopPropagation();startRenameWindow('${w.id}')">${escHtml(w.name)}</span>${closeBtn}</div>`;
     }
     html += `<button class="window-tab-add" data-action="CreateWindow" title="New window">+</button>`;
     html += '</div>';
@@ -412,7 +412,10 @@ function _cacheVtty(id, vttyEl, cmdId, out) {
 }
 
 function _updatePanelMultiUI() {
-    const multi = state.panels.length > 1, isGrid = state.panelLayout.startsWith('grid-');
+    // Use visible panels (current window) instead of all panels across windows
+    const visibleCount = (typeof _getVisiblePanels === 'function') ? _getVisiblePanels() : state.panels;
+    const multi = visibleCount.length > 1;
+    const isGrid = state.panelLayout.startsWith('grid-');
     document.querySelectorAll('.drag-handle').forEach(el => el.classList.toggle('hidden', !multi));
     document.querySelectorAll('.panel-resize-handle').forEach(el => el.classList.toggle('hidden', !(multi && !isGrid)));
     const lb = document.getElementById('stLayoutBtn');
@@ -487,6 +490,41 @@ function finishRenamePanel(panelId, save) {
     });
 })();
 
+function startRenameWindow(winId) {
+    const win = state.windows.find(w => w.id === winId);
+    if (!win) return;
+    const tab = document.querySelector(`.window-tab[data-window="${winId}"]`);
+    if (!tab) return;
+    const label = tab.querySelector('.window-tab-label');
+    if (!label || label.getAttribute('contenteditable') === 'true') return;
+    label.contentEditable = 'true';
+    label.classList.add('editing');
+    label.textContent = win.name;
+    label.focus();
+    const range = document.createRange();
+    range.selectNodeContents(label);
+    const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+    const finish = (save) => {
+        label.removeEventListener('keydown', onKey);
+        label.removeEventListener('blur', onBlur);
+        label.contentEditable = 'false';
+        label.classList.remove('editing');
+        if (save) {
+            const t = label.textContent.trim();
+            win.name = t || win.name;
+        }
+        renderPanels();
+    };
+    const onKey = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+        if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+        e.stopPropagation();
+    };
+    const onBlur = () => setTimeout(() => finish(true), 100);
+    label.addEventListener('keydown', onKey);
+    label.addEventListener('blur', onBlur);
+}
+
     // ── Exports ──
     Object.assign(window, {
         addPanelDirect, addPanel,
@@ -498,7 +536,7 @@ function finishRenamePanel(panelId, save) {
         _updateSplitPanelHeader, _renderMinimizedPanels, _applyPanelLayoutClass,
         _updatePanelMultiUI, _getPanelLabel, _renderSplitPane,
         _findCmd, _findPanelVtty, _cacheVtty,
-        switchWindow, createWindow, closeWindow, _renderWindowBar,
+        switchWindow, createWindow, closeWindow, _renderWindowBar, startRenameWindow,
         _getActiveWindow, _getVisiblePanels,
     });
 })();
