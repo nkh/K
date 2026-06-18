@@ -162,7 +162,7 @@ function addPanelDirect() {
     const savedTheme = localStorage.getItem('vrw_panel_theme_' + id);
     const theme = (savedTheme === 'light' || savedTheme === 'dark') ? savedTheme : '';
     const customTitle = localStorage.getItem('vrw_panel_title_' + id) || '';
-    const panel = { id, scrollbackOffset: 0, mouseTracking: false, mouseSgr: false, focused: false, fontSize, selectionMode, theme, customTitle, minimized: false, selectedCmdId: null, selectedInstUrl: null,
+    const panel = { id, scrollbackOffset: 0, mouseTracking: false, mouseSgr: false, focused: false, fontSize, selectionMode, theme, customTitle, minimized: false, selectedCmdId: null, selectedInstUrl: null, _focusedLeafId: null,
         ws: null, wsCmdId: null, wsInstUrl: null, wsReconnectCount: 0, wsReconnectTimer: null, wsPingInterval: null, wsPingSendTime: 0, wsLatency: 0,
         pollTimer: null,
         cmdHistory: [], cmdHistoryIdx: -1,
@@ -418,32 +418,51 @@ function _renderVttyContainer(panel) {
 }
 
 // ─── Recursive pane tree rendering ───
+// All leaves are equal — no primary/secondary distinction in rendering.
+// The panel object itself acts as the "root leaf" and stores its cmdId/instUrl
+// in selectedCmdId/selectedInstUrl like a non-split panel.
 
-function _getLeafCmdState(leaf, isPanelPrimary) {
-    // For the panel itself (primary), use panel.selectedCmdId/selectedInstUrl
-    // For secondary/deeper leaves, use leaf.cmdId/leaf.instUrl
-    return {
-        cmdId: isPanelPrimary ? leaf.selectedCmdId : leaf.cmdId,
-        instUrl: isPanelPrimary ? leaf.selectedInstUrl : leaf.instUrl,
-    };
+function _getLeafCmdState(leaf, leafId, panel) {
+    // For the panel itself (leafId === panel.id), use panel's own fields.
+    // For any other leaf, use the leaf's cmdId/instUrl.
+    if (leafId === panel.id) {
+        return { cmdId: panel.selectedCmdId, instUrl: panel.selectedInstUrl };
+    }
+    return { cmdId: leaf.cmdId, instUrl: leaf.instUrl };
 }
 
-function _renderLeafHeader(panel, leaf, leafId, isPanelPrimary) {
-    const cs = _getLeafCmdState(leaf, isPanelPrimary);
+// Render a FULL panel header for ANY leaf — same as non-split panels.
+// This includes history buttons, cmd-info, exit banner, reach dot, meta, freeze, close.
+// Context menu is triggered via oncontextmenu.
+function _renderLeafHeader(panel, leaf, leafId) {
+    const cs = _getLeafCmdState(leaf, leafId, panel);
     const inst = cs.instUrl ? state.connections.find(i => i.url === cs.instUrl) : null;
     const color = _getServerColor(inst);
     const textColor = _getServerTextColor(inst);
-    const serverLabel = _getServerLabel(inst, cs.instUrl);
-    const cmdLabel = _getPanelCmdLabel(cs.cmdId, cs.instUrl);
-    return `<div class="split-header panel-header" data-panel-id="${panel.id}" data-leaf-id="${leafId}" style="--ph-bg:${color};--ph-fg:${textColor};background:var(--ph-bg);color:var(--ph-fg);">
-    <span class="split-server-label" style="font-size:var(--ui-fs);opacity:0.8;">${escHtml(serverLabel)}</span>
-    <span class="split-cmd-label" style="font-size:var(--ui-fs);font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">${escHtml(cmdLabel)}</span>
-    <button class="panel-close-btn" data-action="UnsplitLeaf" data-panel="${panel.id}" data-leaf="${leafId}" title="Close pane">&#x2715;</button>
+    const isTopLevel = (leafId === panel.id);
+    // For the root leaf in a split, close removes the split.
+    // For deeper leaves, close removes just that leaf.
+    const closeAction = isTopLevel ? 'UnsplitPanel' : 'UnsplitLeaf';
+    const closeData = isTopLevel
+        ? `data-panel="${panel.id}"`
+        : `data-panel="${panel.id}" data-leaf="${leafId}"`;
+    return `<div class="panel-header" data-panel-id="${panel.id}" data-leaf-id="${leafId}" oncontextmenu="showPanelContextMenu(event,'${panel.id}')" tabindex="0" role="button" style="--ph-bg:${color};--ph-fg:${textColor};background:var(--ph-bg);color:var(--ph-fg);">
+    <button class="btn btn-xs cmd-history-btn hidden" data-action="PanelHistoryBack" data-panel="${panel.id}" data-leaf="${leafId}" title="Back">&#x25C0;</button>
+    <button class="btn btn-xs cmd-history-btn hidden" data-action="PanelHistoryForward" data-panel="${panel.id}" data-leaf="${leafId}" title="Forward">&#x25B6;</button>
+    <div class="cmd-info">
+        <span class="cmd-fullname" data-leaf-id="${leafId}" ondblclick="event.stopPropagation();startRenamePanel('${panel.id}')" title="Double-click to rename"></span>
+        <span class="cmd-args"></span>
+    </div>
+    <span class="panel-exit-banner hidden"></span>
+    <span class="panel-reach-dot unknown" title="Server state"></span>
+    <span class="panel-header-meta"></span>
+    <button class="cmd-freeze-btn panel-freeze-btn hidden" data-action="TogglePauseRunPanel" data-panel="${panel.id}" data-leaf="${leafId}" title="Freeze/Thaw command">&#8545;</button>
+    <button class="panel-close-btn" data-action="${closeAction}" ${closeData} title="Close pane">&#x2715;</button>
 </div>`;
 }
 
-function _renderLeafVtty(panel, leaf, leafId, isPanelPrimary) {
-    const cs = _getLeafCmdState(leaf, isPanelPrimary);
+function _renderLeafVtty(panel, leaf, leafId) {
+    const cs = _getLeafCmdState(leaf, leafId, panel);
     const selMode = panel.selectionMode ? ' selection-mode' : '';
     const themeAttr = panel.theme ? 'data-panel-theme="' + panel.theme + '"' : '';
     const noCmdText = !cs.cmdId ? '<span style="color:var(--text-muted);">No command selected — select a command from the sidebar</span>' : '';
@@ -473,17 +492,10 @@ function _renderSplitNode(panel, splitNode, primaryLeafId, isTopLevel) {
     if (primaryIsPanel && panel.split === splitNode) {
         // Top-level: primary is the panel, check if it has a deeper split
         // (panel itself can't have a split at top level since we just entered from panel.split)
-        primaryHtml = _renderLeafPane(panel, panel, panel.id, true);
+        primaryHtml = _renderLeafPane(panel, panel, panel.id);
     } else {
-        // Primary is a secondary leaf at a deeper level — but actually in our model,
-        // the "primary" of any split is always the node that was there before splitting.
-        // At the top level, it's the panel. At deeper levels, it's the secondary leaf of the parent.
-        // We need to find the actual leaf object for the primary.
-        // Since we're rendering splitNode, the primary is whatever was the leaf that got split.
-        // In our model: the primary of a split is implicit — it's the node that contains this splitNode.
-        // For top-level: it's panel. For deeper: it's the secondary leaf of the parent that has .split set.
-        // This is handled by the caller passing the correct primaryLeafId and primaryLeafObj.
-        primaryHtml = _renderLeafPane(panel, panel, primaryLeafId, primaryIsPanel);
+        // At deeper levels, the "primary" of a split is the node that contains the split.
+        primaryHtml = _renderLeafPane(panel, panel, primaryLeafId);
     }
 
     // Render secondary side
@@ -493,7 +505,7 @@ function _renderSplitNode(panel, splitNode, primaryLeafId, isTopLevel) {
         // Secondary is itself split — recurse
         secondaryHtml = _renderSplitNode(panel, sec.split, sec.id, false);
     } else {
-        secondaryHtml = _renderLeafPane(panel, sec, sec.id, false);
+        secondaryHtml = _renderLeafPane(panel, sec, sec.id);
     }
 
     const containerId = isTopLevel ? 'split-' + panel.id : '';
@@ -501,10 +513,11 @@ function _renderSplitNode(panel, splitNode, primaryLeafId, isTopLevel) {
     return `<div class="split-container ${dir}"${containerIdAttr} data-panel="${panel.id}" style="display:flex;flex:1;min-width:0;min-height:0;${dir === 'vertical' ? 'flex-direction:column;' : ''}">${primaryHtml}<div class="split-divider" data-panel="${panel.id}"></div>${secondaryHtml}</div>`;
 }
 
-function _renderLeafPane(panel, leaf, leafId, isPanelPrimary) {
-    return `<div class="split-pane" data-leaf-id="${leafId}" data-panel="${panel.id}" style="flex: 0 0 50%; display:flex; flex-direction:column; min-width:0; min-height:0;">
-${_renderLeafHeader(panel, leaf, leafId, isPanelPrimary)}
-${_renderLeafVtty(panel, leaf, leafId, isPanelPrimary)}
+function _renderLeafPane(panel, leaf, leafId) {
+    const isFocused = panel._focusedLeafId === leafId;
+    return `<div class="split-pane${isFocused ? ' focused' : ''}" data-leaf-id="${leafId}" data-panel="${panel.id}" style="flex: 0 0 50%; display:flex; flex-direction:column; min-width:0; min-height:0;">
+${_renderLeafHeader(panel, leaf, leafId)}
+${_renderLeafVtty(panel, leaf, leafId)}
 </div>`;
 }
 
@@ -527,15 +540,26 @@ function _updateTreeHeaders(container, splitNode) {
 }
 
 function _updateOneSplitHeader(container, leafId, instUrl, cmdId) {
-    const h = container.querySelector(`.split-header[data-leaf-id="${leafId}"]`);
+    const h = container.querySelector(`.panel-header[data-leaf-id="${leafId}"]`);
     if (!h) return;
     const inst = instUrl ? state.connections.find(i => i.url === instUrl) : null;
     h.style.background = _getServerColor(inst);
     h.style.color = _getServerTextColor(inst);
-    const sl = h.querySelector('.split-server-label');
-    if (sl) sl.textContent = _getServerLabel(inst, instUrl);
-    const cl = h.querySelector('.split-cmd-label');
-    if (cl) cl.textContent = _getPanelCmdLabel(cmdId, instUrl);
+    // Update the command name (same as non-split panels)
+    const nameEl = h.querySelector('.cmd-fullname');
+    if (nameEl) {
+        const cmd = _findCmd(instUrl, cmdId);
+        const fullName = cmd ? (cmd.name || cmd.id) : (cmdId || 'Panel');
+        nameEl.textContent = fullName;
+        nameEl.title = fullName;
+    }
+    // Update args
+    const argsEl = h.querySelector('.cmd-args');
+    if (argsEl) {
+        const cmd = _findCmd(instUrl, cmdId);
+        const a = cmd && cmd.args ? (cmd.args || []).join(' ') : '';
+        argsEl.textContent = a ? ' ' + a : '';
+    }
 }
 
 function _renderMinimizedPanels() {

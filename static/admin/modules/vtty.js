@@ -538,25 +538,33 @@ function _updateLeafVttyMetadata(leaf, vttyEl, data) {
 }
 
 function applySecondaryVttyDiff(panelObj, vttyEl, data) {
+    // Use the same diff pipeline as primary panels — incremental for ALL leaves.
     const leaf = panelObj.split.secondary;
     const cmdId = leaf.cmdId;
     if (!cmdId) return;
     const pre = vttyEl ? vttyEl.querySelector('pre') : null;
     if (!pre) return;
-    const genKey = '_secondaryGen_' + cmdId;
-    if (data.generation !== undefined && state[genKey] === data.generation) {
+    const genKey = leaf.id + '/' + cmdId;
+    // Generation check — use the same global _lastGeneration cache
+    if (data.generation !== undefined && state._lastGeneration[genKey] === data.generation) {
         if (data.cursor || data.dimensions || data.mouse_tracking !== undefined)
             _updateLeafVttyMetadata(leaf, vttyEl, data);
         return;
     }
-    if (data.generation !== undefined) state[genKey] = data.generation;
+    if (data.generation !== undefined) state._lastGeneration[genKey] = data.generation;
+    // Full HTML diff (same as primary)
     if (data.html !== undefined) {
         _applyScrollHtml(vttyEl, pre, data.html);
         _updateLeafVttyMetadata(leaf, vttyEl, data);
         return;
     }
-    // Level 3 cell-level incremental diff not supported for secondary — fall back
-    scheduleSecondaryVttyHttp(panelObj, 0);
+    // Cell-level diff support for leaves — same as primary
+    if (state._level3Enabled && data.dimensions) {
+        const cgKey = leaf.id + '/' + cmdId;
+        buildCellGrid(cgKey, pre, data.dimensions.rows, data.dimensions.cols);
+    }
+    // If we got here without html/cells, fall back to HTTP fetch
+    loadVttyHttpForPanel(leaf.id, leaf.instUrl, leaf.cmdId);
 }
 
     window.scheduleSecondaryVttyHttp = scheduleSecondaryVttyHttp;

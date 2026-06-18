@@ -97,6 +97,8 @@ function _getPanelObj(e) {
 
 // Set the activeSide at each level of the split tree to reflect which leaf is focused
 function _setActiveSideForLeaf(panel, leafId) {
+    // Track focused leaf per panel for visual highlighting
+    panel._focusedLeafId = leafId;
     if (leafId === panel.id) {
         if (panel.split) panel.split.activeSide = 'primary';
         return;

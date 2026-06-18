@@ -171,8 +171,6 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .panel-header { display: flex; align-items: center; gap: 0.1rem; padding: 0 0.1rem; background: var(--bg-tertiary); flex-shrink: 0; overflow: hidden; white-space: nowrap; cursor: grab; border: none; -webkit-user-drag: none; user-select: none; }
 .panel-header:active { cursor: grabbing; }
 .panel-header .panel-server-badge { font-family: var(--font-mono); color: var(--text-secondary); font-size: var(--ui-fs); }
-.panel-header .split-server-label { color: var(--text-secondary); }
-.panel-header .split-cmd-label { color: var(--text-primary); }
 .panel-header .title { font-size: var(--ui-fs); color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; }
 .panel-header .cmd-info { display: flex; flex-direction: column; min-width: 0; flex-shrink: 1; gap: 0; overflow: hidden; margin-right: 0.5rem; }
 .panel-header .cmd-fullname { font-family: var(--font-mono); font-size: var(--ui-fs); color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -235,7 +233,10 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .split-container.horizontal { flex-direction: row; }
 .split-container.vertical { flex-direction: column; }
 .split-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-.split-header { display: flex; align-items: center; gap: 0.2rem; padding: 0.15rem 0.3rem; flex-shrink: 0; overflow: hidden; white-space: nowrap; cursor: pointer; border-bottom: 1px solid var(--border); min-height: 1.4rem; }
+.split-pane + .split-pane { border-left: 1px solid var(--border); }
+.split-container.vertical .split-pane + .split-pane { border-left: none; border-top: 1px solid var(--border); }
+.split-pane.focused { box-shadow: inset 0 0 0 2px var(--focused-pane-border, var(--accent)); z-index: 1; }
+.split-pane.focused > .panel-header { background: color-mix(in srgb, var(--ph-bg, var(--bg-tertiary)) 25%, var(--focused-pane-border, var(--accent))) !important; }
 .split-container .vtty-container { flex: 1 1 0; min-width: 0; min-height: 0; }
 .split-divider { flex-shrink: 0; background: var(--border); z-index: 5; transition: background 0.15s; }
 .split-divider:hover, .split-divider.active { background: var(--accent); }
