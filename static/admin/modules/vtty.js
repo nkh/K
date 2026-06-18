@@ -570,4 +570,6 @@ function applySecondaryVttyDiff(panelObj, vttyEl, data) {
     window.scheduleSecondaryVttyHttp = scheduleSecondaryVttyHttp;
     window.updateSecondaryVttyDisplay = updateSecondaryVttyDisplay;
     window.applySecondaryVttyDiff = applySecondaryVttyDiff;
+    window._cellStyle = _cellStyle;
+    window._splitAndUpdateCell = _splitAndUpdateCell;
 })();

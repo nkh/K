@@ -33,15 +33,15 @@ if (typeof buildCellGrid === 'function') {
 // ── _cellStyle ──
 console.log('_cellStyle tests');
 if (typeof _cellStyle === 'function') {
-    const style = _cellStyle({ fg: 7, bg: 0, bold: false, italic: false, underline: false });
+    const style = _cellStyle({ cell: { fg: [7,7,7], bg: [0,0,0], bold: false, italic: false, underline: false, width: 1 } });
     assert(typeof style === 'string', '_cellStyle returns string');
     // Default colors should produce some style
     assert(style.length > 0, '_cellStyle not empty for default colors');
 
-    const boldStyle = _cellStyle({ fg: 1, bg: 0, bold: true, italic: false, underline: false });
+    const boldStyle = _cellStyle({ cell: { fg: [255,0,0], bg: [0,0,0], bold: true, italic: false, underline: false, width: 1 } });
     assert(boldStyle.includes('bold') || boldStyle.includes('700') || boldStyle.includes('font-weight'), 'bold style includes weight');
 
-    const italicStyle = _cellStyle({ fg: 2, bg: 0, bold: false, italic: true, underline: false });
+    const italicStyle = _cellStyle({ cell: { fg: [0,255,0], bg: [0,0,0], bold: false, italic: true, underline: false, width: 1 } });
     assert(italicStyle.includes('italic') || italicStyle.includes('font-style'), 'italic style includes font-style');
 }
 

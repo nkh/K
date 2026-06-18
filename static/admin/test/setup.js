@@ -834,6 +834,7 @@ globalThis.resetTestState = function() {
         state._wsReconnectCount = 0;
         state.bufferView = 'current';
         state._userAtBottom = true;
+        state._level3Enabled = true;
         state.logWs = null;
         state.logWsReconnectTimer = null;
     }

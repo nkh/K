@@ -404,15 +404,24 @@ console.log('SPL-012: _applyLeafDiff applies cell-level updates');
     const vttyEl = document.createElement('div');
     vttyEl.className = 'vtty-container';
     const pre = document.createElement('pre');
-    // Create initial HTML with one cell: "A" at row 0, col 0
-    pre.innerHTML = '<span class="c w1" style="width:1ch;color:#000;background:#fff">A</span>\n';
+    // Create span manually — mock DOM doesn't parse innerHTML into childNodes
+    const span = document.createElement('span');
+    span.textContent = 'A';
+    span.className = 'c w1';
+    span.setAttribute('style', 'width:1ch;color:#000;background:#fff');
+    pre.appendChild(span);
     vttyEl.appendChild(pre);
 
     const leafId = 'test-diff-leaf';
     const cmdId = 'cmd-diff';
 
-    // Build the cell grid
-    buildCellGrid(leafId + '/' + cmdId, pre, 1, 1);
+    // Manually set up the cell grid (buildCellGrid can't work in mock DOM)
+    state._cellGrids[leafId + '/' + cmdId] = {
+        grid: [[ { span: span, idx: 0, len: 1 } ]],
+        rows: 1,
+        cols: 1,
+    };
+    state._lastGeneration[leafId + '/' + cmdId] = 1;
 
     // Apply a diff that changes cell (0,0) from "A" to "B"
     const diffData = {
@@ -428,17 +437,19 @@ console.log('SPL-012: _applyLeafDiff applies cell-level updates');
     _applyLeafDiff(vttyEl, leafId, diffData);
 
     // The span should now contain "B"
-    assertIncludes(pre.innerHTML, '>B<', 'SPL-012a: cell updated from A to B');
+    assertEq(span.textContent, 'B', 'SPL-012a: cell updated from A to B');
     assertEq(state._lastGeneration[leafId + '/' + cmdId], 2,
         'SPL-012b: generation cached');
 
     // Second diff with same generation → no-op (metadata only)
     const sameGenData = { generation: 2, _cmdId: cmdId };
-    const beforeHtml = pre.innerHTML;
+    const beforeHtml = span.textContent;
     _applyLeafDiff(vttyEl, leafId, sameGenData);
-    assertEq(pre.innerHTML, beforeHtml, 'SPL-012c: same generation skipped update');
+    assertEq(span.textContent, beforeHtml, 'SPL-012c: same generation skipped update');
 
-    state._level3Enabled = false;
+    delete state._cellGrids[leafId + '/' + cmdId];
+    delete state._lastGeneration[leafId + '/' + cmdId];
+    state._level3Enabled = true;
 }
 
 console.log('\n[split_interactions] Tests complete');
