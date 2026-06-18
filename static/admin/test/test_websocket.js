@@ -55,10 +55,12 @@ splitP.selectedInstUrl = 'http://localhost:9090';
 splitP.selectedCmdId = 'cmd-split';
 splitP.split = {
     direction: 'horizontal', splitRatio: 0.5, activeSide: 'primary',
-    secondaryCmdId: 'cmd-sec', secondaryInstUrl: 'http://localhost:9090',
-    secondaryWs: null, secondaryPollTimer: null,
-    secondaryWsReconnectCount: 0, secondaryWsPingInterval: null,
-    secondaryWsPingSendTime: 0, secondaryWsLatency: 0,
+    secondary: {
+        id: splitP.id + '-s1', cmdId: 'cmd-sec', instUrl: 'http://localhost:9090',
+        ws: null, pollTimer: null,
+        wsReconnectCount: 0, wsPingInterval: null,
+        wsPingSendTime: 0, wsLatency: 0,
+    },
 };
 connectPanelWs(splitP.id);
 disconnectPanelWs(splitP.id);
@@ -230,36 +232,37 @@ if (typeof _disconnectSecondaryWs === 'function') {
     const splitP2 = addPanelDirect();
     splitP2.split = {
         direction: 'horizontal', splitRatio: 0.5, activeSide: 'primary',
-        secondaryCmdId: 's1', secondaryInstUrl: 'http://localhost:9090',
-        secondaryWs: new MockWebSocket('ws://test'),
-        secondaryWsReconnectTimer: setTimeout(() => {}, 10000),
-        secondaryWsPingInterval: setInterval(() => {}, 10000),
-        secondaryWsPingSendTime: 42,
-        secondaryWsLatency: 100,
-        secondaryWsReconnectCount: 2,
-        secondaryWsCmdId: 's1', secondaryWsInstUrl: 'http://localhost:9090',
+        secondary: {
+            id: splitP2.id + '-s1', cmdId: 's1', instUrl: 'http://localhost:9090',
+            ws: new MockWebSocket('ws://test'),
+            wsReconnectTimer: setTimeout(() => {}, 10000),
+            wsPingInterval: setInterval(() => {}, 10000),
+            wsPingSendTime: 42,
+            wsLatency: 100,
+            wsReconnectCount: 2,
+        },
     };
     _disconnectSecondaryWs(splitP2);
-    assertEq(splitP2.split.secondaryWs, null, 'secondary WS cleared');
-    assertEq(splitP2.split.secondaryWsCmdId, null, 'secondary wsCmdId cleared');
-    assertEq(splitP2.split.secondaryWsInstUrl, null, 'secondary wsInstUrl cleared');
-    assertEq(splitP2.split.secondaryWsPingSendTime, 0, 'secondary ping send time reset');
-    assertEq(splitP2.split.secondaryWsLatency, 0, 'secondary latency reset');
-    assertEq(splitP2.split.secondaryWsReconnectCount, 0, 'secondary reconnect count reset');
+    assertEq(splitP2.split.secondary.ws, null, 'secondary WS cleared');
+    assertEq(splitP2.split.secondary.wsCmdId, null, 'secondary wsCmdId cleared');
+    assertEq(splitP2.split.secondary.wsInstUrl, null, 'secondary wsInstUrl cleared');
+    assertEq(splitP2.split.secondary.wsPingSendTime, 0, 'secondary ping send time reset');
+    assertEq(splitP2.split.secondary.wsLatency, 0, 'secondary latency reset');
+    assertEq(splitP2.split.secondary.wsReconnectCount, 0, 'secondary reconnect count reset');
 }
 
 // ── scheduleSecondaryVttyHttp (now in vtty.js) ──
 console.log('scheduleSecondaryVttyHttp tests');
 if (typeof scheduleSecondaryVttyHttp === 'function') {
     const schedP = addPanelDirect();
-    schedP.split = { secondaryCmdId: 's1', secondaryInstUrl: 'http://localhost:9090' };
+    schedP.split = { direction: 'horizontal', splitRatio: 0.5, activeSide: 'primary', secondary: { id: schedP.id + '-s1', cmdId: 's1', instUrl: 'http://localhost:9090' } };
     assert(() => { scheduleSecondaryVttyHttp(schedP, 50); }, 'scheduleSecondaryVttyHttp does not throw');
 
     const noSplitSchedP = addPanelDirect();
     assert(() => { scheduleSecondaryVttyHttp(noSplitSchedP, 50); }, 'scheduleSecondaryVttyHttp no-split no crash');
 
     const noCmdSplitP = addPanelDirect();
-    noCmdSplitP.split = { secondaryCmdId: null, secondaryInstUrl: null };
+    noCmdSplitP.split = { direction: 'horizontal', splitRatio: 0.5, activeSide: 'primary', secondary: { id: noCmdSplitP.id + '-s1', cmdId: null, instUrl: null, ws: null, pollTimer: null, scrollbackOffset: 0, mouseTracking: false, mouseSgr: false } };
     assert(() => { scheduleSecondaryVttyHttp(noCmdSplitP, 50); }, 'scheduleSecondaryVttyHttp no-cmd no crash');
 }
 
@@ -267,7 +270,7 @@ if (typeof scheduleSecondaryVttyHttp === 'function') {
 console.log('updateSecondaryVttyDisplay tests');
 if (typeof updateSecondaryVttyDisplay === 'function') {
     const dispP = addPanelDirect();
-    dispP.split = { secondaryCmdId: 's1', secondaryInstUrl: 'http://localhost:9090' };
+    dispP.split = { direction: 'horizontal', splitRatio: 0.5, activeSide: 'primary', secondary: { id: dispP.id + '-s1', cmdId: 's1', instUrl: 'http://localhost:9090' } };
     const dispVtty = document.createElement('div');
     const dispPre = document.createElement('pre');
     dispVtty.appendChild(dispPre);
@@ -278,14 +281,14 @@ if (typeof updateSecondaryVttyDisplay === 'function') {
 console.log('applySecondaryVttyDiff tests');
 if (typeof applySecondaryVttyDiff === 'function') {
     const diffP = addPanelDirect();
-    diffP.split = { secondaryCmdId: 's1' };
+    diffP.split = { direction: 'horizontal', splitRatio: 0.5, activeSide: 'primary', secondary: { id: diffP.id + '-s1', cmdId: 's1', instUrl: null } };
     const diffVtty = document.createElement('div');
     diffVtty.className = 'vtty-container';
     const diffPre = document.createElement('pre');
     diffVtty.appendChild(diffPre);
 
     const noCmdDiffP = addPanelDirect();
-    noCmdDiffP.split = { secondaryCmdId: null };
+    noCmdDiffP.split = { direction: 'horizontal', splitRatio: 0.5, activeSide: 'primary', secondary: { id: noCmdDiffP.id + '-s1', cmdId: null, instUrl: null } };
     assert(() => { applySecondaryVttyDiff(noCmdDiffP, diffVtty, {}); }, 'applySecondaryVttyDiff no-cmd no crash');
 
     const htmlData = { html: '<span>test</span>', generation: 1 };

@@ -219,30 +219,191 @@ function toggleMinimizePanel(panelId) {
     renderPanels();
 }
 
-function splitPanel(panelId, direction) {
-    const p = state.panels.find(pp => pp.id === panelId);
-    if (!p || p.split) return;
-    p.split = {
-        direction, splitRatio: 0.5, activeSide: 'primary',
-        // Independent pane — no command inherited; user selects one via drag-drop or sidebar
-        secondaryCmdId: null,
-        secondaryInstUrl: null,
-        secondaryWs: null, secondaryWsCmdId: null, secondaryWsInstUrl: null,
-        secondaryWsReconnectCount: 0, secondaryWsReconnectTimer: null,
-        secondaryWsPingInterval: null, secondaryWsPingSendTime: 0, secondaryWsLatency: 0,
-        secondaryPollTimer: null, secondaryScrollbackOffset: 0,
-        secondaryMouseTracking: false, secondaryMouseSgr: false,
+// ─── Pane Tree (recursive splitting) ───
+// Each panel can have a .split tree. The panel itself is always the primary leaf.
+// panel.split.secondary is a self-contained leaf object that can itself be split.
+// This allows unlimited recursive splitting like tmux.
+
+function _newLeafState(id) {
+    return {
+        id: id,
+        cmdId: null, instUrl: null,
+        ws: null, wsCmdId: null, wsInstUrl: null,
+        wsReconnectCount: 0, wsReconnectTimer: null,
+        wsPingInterval: null, wsPingSendTime: 0, wsLatency: 0,
+        pollTimer: null, scrollbackOffset: 0,
+        mouseTracking: false, mouseSgr: false,
+        split: null,  // recursive!
     };
+}
+
+let _leafCounter = 0;
+function _nextLeafId(panelId) {
+    return panelId + '-L' + (++_leafCounter);
+}
+
+// Find a leaf state object by its ID, walking the split tree.
+// Returns { leaf, parentSplit, side } where side is 'secondary' or null (panel itself).
+function _findLeafState(panel, leafId) {
+    if (!leafId || panel.id === leafId) return { leaf: panel, parentSplit: null, side: null };
+    if (!panel.split) return null;
+    return _findLeafInNode(panel.split, leafId);
+}
+
+function _findLeafInNode(splitNode, leafId) {
+    // Check secondary leaf
+    if (splitNode.secondary) {
+        if (splitNode.secondary.id === leafId) return { leaf: splitNode.secondary, parentSplit: splitNode, side: 'secondary' };
+        // Recurse into secondary's own split tree
+        if (splitNode.secondary.split) {
+            const found = _findLeafInNode(splitNode.secondary.split, leafId);
+            if (found) return found;
+        }
+    }
+    return null;
+}
+
+// Get all leaf nodes in the split tree (for caching, WS management, etc.)
+function _getAllLeaves(panel) {
+    const leaves = [{ leaf: panel, side: null }];
+    if (panel.split) _collectLeaves(panel.split, leaves);
+    return leaves;
+}
+
+function _collectLeaves(splitNode, leaves) {
+    if (splitNode.secondary) {
+        leaves.push({ leaf: splitNode.secondary, side: 'secondary' });
+        if (splitNode.secondary.split) _collectLeaves(splitNode.secondary.split, leaves);
+    }
+}
+
+// Find the parent split node that contains a leaf with the given ID
+function _findParentSplit(panel, leafId) {
+    if (!panel.split) return null;
+    return _findParentSplitInNode(panel.split, leafId);
+}
+
+function _findParentSplitInNode(splitNode, leafId) {
+    // The secondary of THIS node?
+    if (splitNode.secondary && splitNode.secondary.id === leafId) return splitNode;
+    // Recurse into secondary's split tree
+    if (splitNode.secondary && splitNode.secondary.split) {
+        return _findParentSplitInNode(splitNode.secondary.split, leafId);
+    }
+    return null;
+}
+
+function splitPanel(panelId, direction, leafId) {
+    const p = state.panels.find(pp => pp.id === panelId);
+    if (!p) return;
+
+    // If no leafId specified, split the panel itself (primary) if not already split
+    // or split the active side if already split
+    if (!leafId) {
+        if (!p.split) {
+            leafId = p.id; // split the primary
+        } else {
+            // Default: split the currently active side
+            const active = p.split.activeSide === 'secondary' ? p.split.secondary : p;
+            if (active.split) return; // already split, can't split again without targeting
+            leafId = active.id;
+        }
+    }
+
+    // Find the leaf to split
+    if (leafId === p.id) {
+        // Splitting the panel itself (primary)
+        if (p.split) return; // already has top-level split
+        const sid = _nextLeafId(p.id);
+        p.split = {
+            direction, splitRatio: 0.5, activeSide: 'primary',
+            secondary: _newLeafState(sid),
+        };
+    } else {
+        // Splitting a secondary (or deeper) leaf
+        const found = _findLeafState(p, leafId);
+        if (!found || !found.leaf || found.leaf.split) return; // already split
+        const sid = _nextLeafId(p.id);
+        found.leaf.split = {
+            direction, splitRatio: 0.5, activeSide: 'primary',
+            secondary: _newLeafState(sid),
+        };
+    }
     renderPanels();
 }
 
-function unsplitPanel(panelId) {
+function unsplitPanel(panelId, leafId) {
     const p = state.panels.find(pp => pp.id === panelId);
     if (!p || !p.split) return;
-    _disconnectSecondaryWs(p);
-    if (p.split.secondaryPollTimer) clearInterval(p.split.secondaryPollTimer);
-    p.split = null;
+
+    if (!leafId || leafId === p.id) {
+        // Close the primary — remove the entire top-level split
+        // First disconnect all secondary WS in the tree
+        _disconnectLeafTree(p.split);
+        p.split = null;
+        renderPanels();
+        return;
+    }
+
+    // Find the leaf and its parent split
+    const parentSplit = _findParentSplit(p, leafId);
+    if (!parentSplit) return;
+
+    // Disconnect the leaf being closed
+    const closingLeaf = parentSplit.secondary;
+    if (closingLeaf) _disconnectSingleLeaf(closingLeaf);
+
+    // If the closing leaf itself was split, disconnect its whole subtree
+    if (closingLeaf && closingLeaf.split) _disconnectLeafTree(closingLeaf.split);
+
+    // Promote the primary child (the other side) — but we're closing secondary,
+    // so just remove the split. The primary is always the panel or an ancestor.
+    // Actually, if we're closing a deep leaf, we need to collapse that level.
+    // For simplicity: remove the split at this level, which collapses the two sides.
+    // The primary side stays. Since this is a secondary leaf being closed,
+    // the parent split is removed and the primary (already rendered) continues.
+    parentSplit.secondary = null;
+    parentSplit.direction = null;
+
+    // If this was the top-level split, clear it
+    if (p.split === parentSplit && !p.split.secondary) {
+        p.split = null;
+    }
+    // Walk up and clean any split nodes that lost their secondary
+    _cleanEmptySplits(p);
+
     renderPanels();
+}
+
+function _cleanEmptySplits(panel) {
+    if (!panel.split) return;
+    if (!panel.split.secondary) { panel.split = null; return; }
+    _cleanEmptySplitsInNode(panel.split);
+}
+
+function _cleanEmptySplitsInNode(splitNode) {
+    if (!splitNode.secondary) return;
+    if (splitNode.secondary.split && !splitNode.secondary.split.secondary) {
+        splitNode.secondary.split = null;
+    }
+    if (splitNode.secondary.split) _cleanEmptySplitsInNode(splitNode.secondary.split);
+}
+
+// Disconnect all WS in a split tree
+function _disconnectLeafTree(splitNode) {
+    if (!splitNode) return;
+    if (splitNode.secondary) {
+        _disconnectSingleLeaf(splitNode.secondary);
+        if (splitNode.secondary.split) _disconnectLeafTree(splitNode.secondary.split);
+    }
+}
+
+function _disconnectSingleLeaf(leaf) {
+    if (!leaf) return;
+    if (leaf.ws) { try { leaf.ws.close(); } catch {} leaf.ws = null; }
+    if (leaf.wsPingInterval) clearInterval(leaf.wsPingInterval);
+    if (leaf.wsReconnectTimer) clearTimeout(leaf.wsReconnectTimer);
+    if (leaf.pollTimer) clearInterval(leaf.pollTimer);
 }
 
 function _renderVttyContainer(panel) {
@@ -256,77 +417,125 @@ function _renderVttyContainer(panel) {
 </div>`;
 }
 
+// ─── Recursive pane tree rendering ───
+
+function _getLeafCmdState(leaf, isPanelPrimary) {
+    // For the panel itself (primary), use panel.selectedCmdId/selectedInstUrl
+    // For secondary/deeper leaves, use leaf.cmdId/leaf.instUrl
+    return {
+        cmdId: isPanelPrimary ? leaf.selectedCmdId : leaf.cmdId,
+        instUrl: isPanelPrimary ? leaf.selectedInstUrl : leaf.instUrl,
+    };
+}
+
+function _renderLeafHeader(panel, leaf, leafId, isPanelPrimary) {
+    const cs = _getLeafCmdState(leaf, isPanelPrimary);
+    const inst = cs.instUrl ? state.connections.find(i => i.url === cs.instUrl) : null;
+    const color = _getServerColor(inst);
+    const textColor = _getServerTextColor(inst);
+    const serverLabel = _getServerLabel(inst, cs.instUrl);
+    const cmdLabel = _getPanelCmdLabel(cs.cmdId, cs.instUrl);
+    return `<div class="split-header panel-header" data-panel-id="${panel.id}" data-leaf-id="${leafId}" style="--ph-bg:${color};--ph-fg:${textColor};background:var(--ph-bg);color:var(--ph-fg);">
+    <span class="split-server-label" style="font-size:var(--ui-fs);opacity:0.8;">${escHtml(serverLabel)}</span>
+    <span class="split-cmd-label" style="font-size:var(--ui-fs);font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">${escHtml(cmdLabel)}</span>
+    <button class="panel-close-btn" data-action="UnsplitLeaf" data-panel="${panel.id}" data-leaf="${leafId}" title="Close pane">&#x2715;</button>
+</div>`;
+}
+
+function _renderLeafVtty(panel, leaf, leafId, isPanelPrimary) {
+    const cs = _getLeafCmdState(leaf, isPanelPrimary);
+    const selMode = panel.selectionMode ? ' selection-mode' : '';
+    const themeAttr = panel.theme ? 'data-panel-theme="' + panel.theme + '"' : '';
+    const noCmdText = !cs.cmdId ? '<span style="color:var(--text-muted);">No command selected — select a command from the sidebar</span>' : '';
+    return `<div class="vtty-container${selMode}" id="vtty-${leafId}" data-leaf-id="${leafId}" data-panel="${panel.id}" ${themeAttr} style="font-size: ${panel.fontSize}px; flex:1; min-height:0;">
+    ${_renderSearchBar(leafId)}
+    <pre>${noCmdText}</pre>
+    <div class="cursor-indicator hidden"></div>
+    <div class="copy-feedback" id="copyFeedback-${leafId}">Copied!</div>
+    <button class="scroll-bottom-btn" id="scrollBtn-${leafId}" data-action="ScrollTerminalBottom" data-panel="${leafId}" title="Scroll to bottom">&#x25BC;</button>
+</div>`;
+}
+
+function _renderSplitContainer(panel) {
+    if (!panel.split) return '';
+    return _renderSplitNode(panel, panel.split, panel.id, true);
+}
+
+// Recursively render a split node. primaryNode is either the panel (for top-level) or a leaf object.
+function _renderSplitNode(panel, splitNode, primaryLeafId, isTopLevel) {
+    const dir = splitNode.direction || 'horizontal';
+    const pw = splitNode.splitRatio ? (splitNode.splitRatio * 100).toFixed(1) : '50';
+    const sw = (100 - parseFloat(pw)).toFixed(1);
+
+    // Render primary side
+    const primaryIsPanel = (primaryLeafId === panel.id);
+    let primaryHtml;
+    if (primaryIsPanel && panel.split === splitNode) {
+        // Top-level: primary is the panel, check if it has a deeper split
+        // (panel itself can't have a split at top level since we just entered from panel.split)
+        primaryHtml = _renderLeafPane(panel, panel, panel.id, true);
+    } else {
+        // Primary is a secondary leaf at a deeper level — but actually in our model,
+        // the "primary" of any split is always the node that was there before splitting.
+        // At the top level, it's the panel. At deeper levels, it's the secondary leaf of the parent.
+        // We need to find the actual leaf object for the primary.
+        // Since we're rendering splitNode, the primary is whatever was the leaf that got split.
+        // In our model: the primary of a split is implicit — it's the node that contains this splitNode.
+        // For top-level: it's panel. For deeper: it's the secondary leaf of the parent that has .split set.
+        // This is handled by the caller passing the correct primaryLeafId and primaryLeafObj.
+        primaryHtml = _renderLeafPane(panel, panel, primaryLeafId, primaryIsPanel);
+    }
+
+    // Render secondary side
+    const sec = splitNode.secondary;
+    let secondaryHtml;
+    if (sec.split) {
+        // Secondary is itself split — recurse
+        secondaryHtml = _renderSplitNode(panel, sec.split, sec.id, false);
+    } else {
+        secondaryHtml = _renderLeafPane(panel, sec, sec.id, false);
+    }
+
+    const containerId = isTopLevel ? 'split-' + panel.id : '';
+    const containerIdAttr = containerId ? ' id="' + containerId + '"' : '';
+    return `<div class="split-container ${dir}"${containerIdAttr} data-panel="${panel.id}" style="display:flex;flex:1;min-width:0;min-height:0;${dir === 'vertical' ? 'flex-direction:column;' : ''}">${primaryHtml}<div class="split-divider" data-panel="${panel.id}"></div>${secondaryHtml}</div>`;
+}
+
+function _renderLeafPane(panel, leaf, leafId, isPanelPrimary) {
+    return `<div class="split-pane" data-leaf-id="${leafId}" data-panel="${panel.id}" style="flex: 0 0 50%; display:flex; flex-direction:column; min-width:0; min-height:0;">
+${_renderLeafHeader(panel, leaf, leafId, isPanelPrimary)}
+${_renderLeafVtty(panel, leaf, leafId, isPanelPrimary)}
+</div>`;
+}
+
+// ─── Header updates ───
+
 function _updateSplitHeaders(panelObj) {
     if (!panelObj?.split) return;
     const el = document.getElementById(panelObj.id);
     if (!el) return;
-    const sides = [
-        { key: 'primary', instUrl: panelObj.selectedInstUrl, cmdId: panelObj.selectedCmdId },
-        { key: 'secondary', instUrl: panelObj.split.secondaryInstUrl, cmdId: panelObj.split.secondaryCmdId },
-    ];
-    for (const { key, instUrl, cmdId } of sides) {
-        const h = el.querySelector(`.split-header[data-split-side="${key}"]`);
-        if (!h) continue;
-        const inst = instUrl ? state.connections.find(i => i.url === instUrl) : null;
-        h.style.background = _getServerColor(inst);
-        h.style.color = _getServerTextColor(inst);
-        const sl = h.querySelector('.split-server-label');
-        if (sl) sl.textContent = _getServerLabel(inst, instUrl);
-        const cl = h.querySelector('.split-cmd-label');
-        if (cl) cl.textContent = _getPanelCmdLabel(cmdId, instUrl);
-    }
+    // Update primary (panel itself)
+    _updateOneSplitHeader(el, panelObj.id, panelObj.selectedInstUrl, panelObj.selectedCmdId);
+    // Walk tree for all secondary leaves
+    _updateTreeHeaders(el, panelObj.split);
 }
 
-function _renderSplitPane(panel, side, paneId, widthPct, serverLabel, color, textColor, cmdLabel, showSearch) {
-    const selMode = panel.selectionMode ? ' selection-mode' : '';
-    const themeAttr = panel.theme ? 'data-panel-theme="' + panel.theme + '"' : '';
-    const searchHtml = showSearch ? _renderSearchBar(paneId) : '';
-    const noCmdText = cmdLabel === 'No command' ? '<span style="color:var(--text-muted);">No command selected — select a command from the sidebar</span>' : '';
-    return `<div class="split-pane" data-split-side="${side}" data-panel="${panel.id}" style="flex: 0 0 ${widthPct}%; display:flex; flex-direction:column; min-width:0; min-height:0;">
-<div class="split-header panel-header" data-panel-id="${panel.id}" data-split-side="${side}" style="--ph-bg:${color};--ph-fg:${textColor};background:var(--ph-bg);color:var(--ph-fg);">
-    <span class="split-server-label" style="font-size:var(--ui-fs);opacity:0.8;">${escHtml(serverLabel)}</span>
-    <span class="split-cmd-label" style="font-size:var(--ui-fs);font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">${escHtml(cmdLabel)}</span>
-    <button class="panel-close-btn" data-action="UnsplitPanel" data-panel="${panel.id}" title="Close split">&#x2715;</button>
-</div>
-<div class="vtty-container${selMode}" id="vtty-${paneId}" data-split-side="${side}" data-panel="${panel.id}" ${themeAttr} style="font-size: ${panel.fontSize}px; flex:1; min-height:0;">
-    ${searchHtml}
-    <pre>${noCmdText}</pre>
-    <div class="cursor-indicator hidden"></div>
-    ${showSearch ? `<div class="copy-feedback" id="copyFeedback-${paneId}">Copied!</div>` : ''}
-    <button class="scroll-bottom-btn" id="scrollBtn-${paneId}" data-action="ScrollTerminalBottom" data-panel="${paneId}" title="Scroll to bottom">&#x25BC;</button>
-</div></div>`;
+function _updateTreeHeaders(container, splitNode) {
+    if (!splitNode || !splitNode.secondary) return;
+    _updateOneSplitHeader(container, splitNode.secondary.id, splitNode.secondary.instUrl, splitNode.secondary.cmdId);
+    if (splitNode.secondary.split) _updateTreeHeaders(container, splitNode.secondary.split);
 }
 
-function _renderSplitContainer(panel) {
-    const s = panel.split, dir = s.direction;
-    const secondaryId = panel.id + '-secondary';
-    const pw = s.splitRatio ? (s.splitRatio * 100).toFixed(1) : '50';
-    const sw = (100 - parseFloat(pw)).toFixed(1);
-    const pi = panel.selectedInstUrl ? state.connections.find(i => i.url === panel.selectedInstUrl) : null;
-    const si = s.secondaryInstUrl ? state.connections.find(i => i.url === s.secondaryInstUrl) : null;
-    const ph = _renderSplitPane(panel, 'primary', panel.id, pw, _getServerLabel(pi, panel.selectedInstUrl), _getServerColor(pi), _getServerTextColor(pi), _getPanelCmdLabel(panel.selectedCmdId, panel.selectedInstUrl), true);
-    const sh = _renderSplitPane(panel, 'secondary', secondaryId, sw, _getServerLabel(si, s.secondaryInstUrl), _getServerColor(si), _getServerTextColor(si), _getPanelCmdLabel(s.secondaryCmdId, s.secondaryInstUrl), false);
-    return `<div class="split-container ${dir}" id="split-${panel.id}" data-panel="${panel.id}">${ph}<div class="split-divider" data-panel="${panel.id}"></div>${sh}</div>`;
-}
-
-function _updateSplitPanelHeader(panelObj) {
-    if (!panelObj?.split) return;
-    _updateSplitHeaders(panelObj);
-    const el = document.getElementById(panelObj.id);
-    const nameEl = el?.querySelector(':scope > .panel-header .cmd-fullname');
-    if (!nameEl) return;
-    const s = panelObj.split;
-    const { cmdId, instUrl } = s.activeSide === 'secondary'
-        ? { cmdId: s.secondaryCmdId, instUrl: s.secondaryInstUrl }
-        : { cmdId: panelObj.selectedCmdId, instUrl: panelObj.selectedInstUrl };
-    if (cmdId && instUrl) {
-        const cmd = _findCmd(instUrl, cmdId);
-        const fullName = cmd ? (cmd.name || cmd.id) : cmdId;
-        nameEl.textContent = panelObj.customTitle || fullName;
-        nameEl.title = fullName;
-        const argsEl = el.querySelector(':scope > .panel-header .cmd-args');
-        if (argsEl && cmd) { const a = (cmd.args || []).join(' '); argsEl.textContent = a ? ' ' + a : ''; }
-    }
+function _updateOneSplitHeader(container, leafId, instUrl, cmdId) {
+    const h = container.querySelector(`.split-header[data-leaf-id="${leafId}"]`);
+    if (!h) return;
+    const inst = instUrl ? state.connections.find(i => i.url === instUrl) : null;
+    h.style.background = _getServerColor(inst);
+    h.style.color = _getServerTextColor(inst);
+    const sl = h.querySelector('.split-server-label');
+    if (sl) sl.textContent = _getServerLabel(inst, instUrl);
+    const cl = h.querySelector('.split-cmd-label');
+    if (cl) cl.textContent = _getPanelCmdLabel(cmdId, instUrl);
 }
 
 function _renderMinimizedPanels() {
@@ -340,6 +549,10 @@ function _renderMinimizedPanels() {
     }
     return html + '</div>';
 }
+
+// Compat stub — _renderSplitPane was replaced by recursive rendering
+function _renderSplitPane() { return ''; }
+function _updateSplitPanelHeader() {}
 
 function togglePanelLayout() {
     state.panelLayout = state.panelLayout === 'row' ? 'column' : 'row';
@@ -533,10 +746,17 @@ function startRenameWindow(winId) {
         startRenamePanel, finishRenamePanel,
         _renderVttyContainer, _getServerLabel, _getServerColor, _getServerTextColor,
         _getPanelCmdLabel, _updateSplitHeaders, _renderSplitContainer,
-        _updateSplitPanelHeader, _renderMinimizedPanels, _applyPanelLayoutClass,
+        _renderMinimizedPanels, _applyPanelLayoutClass,
         _updatePanelMultiUI, _getPanelLabel, _renderSplitPane,
         _findCmd, _findPanelVtty, _cacheVtty,
         switchWindow, createWindow, closeWindow, _renderWindowBar, startRenameWindow,
         _getActiveWindow, _getVisiblePanels,
+        // Recursive split tree
+        _findLeafState, _getAllLeaves, _findParentSplit,
+        _getLeafCmdState, _disconnectLeafTree, _disconnectSingleLeaf,
+        _newLeafState, _nextLeafId,
     });
+
+    // UnsplitLeaf action — close a specific leaf (from close button in split header)
+    window.unsplitLeaf = function(panelId, leafId) { unsplitPanel(panelId, leafId); };
 })();

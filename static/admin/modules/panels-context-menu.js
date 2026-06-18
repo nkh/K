@@ -107,7 +107,18 @@ function showPanelContextMenu(e, panelId) {
         menu.appendChild(_createCtxMenuItem('Split Horizontal (Alt+-)', () => splitPanel(panelId, 'horizontal')));
         menu.appendChild(_createCtxMenuItem('Split Vertical (Alt+|)', () => splitPanel(panelId, 'vertical')));
     } else {
-        menu.appendChild(_createCtxMenuItem('Remove Split (Alt+u)', () => unsplitPanel(panelId)));
+        menu.appendChild(_createCtxMenuItem('Split Horizontal (Alt+-)', () => {
+            const leafId = (typeof _getFocusedLeafId === 'function') ? _getFocusedLeafId(panel) : panelId;
+            splitPanel(panelId, 'horizontal', leafId);
+        }));
+        menu.appendChild(_createCtxMenuItem('Split Vertical (Alt+|)', () => {
+            const leafId = (typeof _getFocusedLeafId === 'function') ? _getFocusedLeafId(panel) : panelId;
+            splitPanel(panelId, 'vertical', leafId);
+        }));
+        menu.appendChild(_createCtxMenuItem('Remove Split (Alt+u)', () => {
+            const leafId = (typeof _getFocusedLeafId === 'function') ? _getFocusedLeafId(panel) : panelId;
+            unsplitPanel(panelId, leafId);
+        }));
     }
     _addCtxSep(menu);
     menu.appendChild(_createCtxMenuItem('New Window (Alt+w)', () => createWindow()));

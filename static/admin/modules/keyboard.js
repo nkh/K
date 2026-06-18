@@ -30,6 +30,41 @@ function _handleEscape() {
     return true;
 }
 
+// Find which leaf ID is focused within a panel (from the last click on a vtty-container)
+function _getFocusedLeafId(panel) {
+    // Check if the panel has a split tree, and which leaf was last interacted with
+    if (!panel.split) return panel.id;
+    // Walk the tree using the activeSide at each level
+    let current = panel.split;
+    let leafId = panel.id; // default to primary
+    while (current) {
+        if (current.activeSide === 'secondary' && current.secondary) {
+            leafId = current.secondary.id;
+            current = current.secondary.split;
+        } else {
+            // Primary side — at the top level this is the panel, deeper it would be
+            // the leaf that has the split. But our tree model always has secondary
+            // as the splitable node. So if activeSide is 'primary', stop here.
+            break;
+        }
+    }
+    return leafId;
+}
+
+// Given a vtty-container element, find the leaf state it belongs to
+function _getLeafFromVtty(vc, panelObj) {
+    if (!panelObj) return null;
+    // Check if this vtty belongs to a leaf in the split tree
+    const leafId = vc.getAttribute('data-leaf-id');
+    if (!leafId) return { leaf: panelObj, isPanelPrimary: true };
+    if (leafId === panelObj.id) return { leaf: panelObj, isPanelPrimary: true };
+    if (panelObj.split) {
+        const found = _findLeafState(panelObj, leafId);
+        if (found) return { leaf: found.leaf, isPanelPrimary: false };
+    }
+    return { leaf: panelObj, isPanelPrimary: true };
+}
+
 function _openSearch(panelId) {
     const sb = document.getElementById('searchBar-' + panelId);
     if (!sb) return;
@@ -50,13 +85,38 @@ function _getPanelObj(e) {
     const pe = vc.closest('.panel');
     if (!pe) return null;
     const panelObj = state.panels.find(p => p.id === pe.id) || null;
-    if (panelObj?.split) {
-        const side = vc.getAttribute('data-split-side');
-        if (side && panelObj.split.activeSide !== side) {
-            panelObj.split.activeSide = side;
-        }
+    if (!panelObj) return null;
+    // Track which leaf is active in the split tree
+    const leafId = vc.getAttribute('data-leaf-id');
+    if (panelObj.split && leafId) {
+        // Update activeSide for the appropriate split level
+        _setActiveSideForLeaf(panelObj, leafId);
     }
     return panelObj;
+}
+
+// Set the activeSide at each level of the split tree to reflect which leaf is focused
+function _setActiveSideForLeaf(panel, leafId) {
+    if (leafId === panel.id) {
+        if (panel.split) panel.split.activeSide = 'primary';
+        return;
+    }
+    if (!panel.split) return;
+    _setActiveSideInNode(panel.split, leafId);
+}
+
+function _setActiveSideInNode(splitNode, leafId) {
+    if (!splitNode || !splitNode.secondary) return;
+    if (splitNode.secondary.id === leafId) {
+        splitNode.activeSide = 'secondary';
+        return;
+    }
+    // The leaf might be deeper in the secondary's tree
+    if (splitNode.secondary.split) {
+        _setActiveSideInNode(splitNode.secondary.split, leafId);
+        // If found deeper, this level's activeSide should be 'secondary'
+        splitNode.activeSide = 'secondary';
+    }
 }
 
 function _saveScrollback(offset) {
@@ -115,17 +175,26 @@ const _defaultShortcuts = [
     { id: 'split-vertical', key: '|', alt: true, noInput: true, action(e) {
         e.preventDefault();
         const id = getActivePanelId();
-        if (id) { const p = state.panels.find(x => x.id === id); if (p && !p.split) splitPanel(id, 'vertical'); }
+        if (id) { const p = state.panels.find(x => x.id === id); if (p) {
+            const leafId = _getFocusedLeafId(p);
+            splitPanel(id, 'vertical', leafId);
+        }}
     }, label: 'Split pane vertically' },
     { id: 'split-horizontal', key: '-', alt: true, noInput: true, action(e) {
         e.preventDefault();
         const id = getActivePanelId();
-        if (id) { const p = state.panels.find(x => x.id === id); if (p && !p.split) splitPanel(id, 'horizontal'); }
+        if (id) { const p = state.panels.find(x => x.id === id); if (p) {
+            const leafId = _getFocusedLeafId(p);
+            splitPanel(id, 'horizontal', leafId);
+        }}
     }, label: 'Split pane horizontally' },
     { id: 'unsplit', key: 'u', alt: true, noInput: true, action(e) {
         e.preventDefault();
         const id = getActivePanelId();
-        if (id) { const p = state.panels.find(x => x.id === id); if (p && p.split) unsplitPanel(id); }
+        if (id) { const p = state.panels.find(x => x.id === id); if (p && p.split) {
+            const leafId = _getFocusedLeafId(p);
+            unsplitPanel(id, leafId);
+        }}
     }, label: 'Remove split' },
     { id: 'new-window', key: 'w', alt: true, noInput: true, action(e) { e.preventDefault(); createWindow(); }, label: 'New window' },
     { id: 'close-window', key: 'W', alt: true, noInput: true, action(e) {
@@ -264,13 +333,13 @@ document.addEventListener('keydown', (e) => {
 
 // ─── Direct key sending (when terminal is focused) ───
 async function sendDirectKey(e, panelObj) {
-    // For split panes, determine which side's command to send to
-    let cmdId = panelObj.selectedCmdId;
-    let instUrl = panelObj.selectedInstUrl;
-    if (panelObj.split && panelObj.split.activeSide === 'secondary') {
-        cmdId = panelObj.split.secondaryCmdId;
-        instUrl = panelObj.split.secondaryInstUrl;
-    }
+    // Find which vtty container is focused to determine the target leaf
+    const focusedVtty = document.activeElement?.closest?.('.vtty-container')
+        || panelObj.focused && document.querySelector(`#vtty-${panelObj.id}`)?.closest('.panel')?.querySelector('.vtty-container[tabindex="0"]');
+    const leafInfo = focusedVtty ? _getLeafFromVtty(focusedVtty, panelObj) : { leaf: panelObj, isPanelPrimary: true };
+    const leaf = leafInfo.leaf;
+    const cmdId = leafInfo.isPanelPrimary ? panelObj.selectedCmdId : leaf.cmdId;
+    const instUrl = leafInfo.isPanelPrimary ? panelObj.selectedInstUrl : leaf.instUrl;
     if (!cmdId || !instUrl) return;
 
     let seq = '';
@@ -430,15 +499,14 @@ document.addEventListener('mousemove', (e) => {
 });
 
 async function sendMouseEvent(panelObj, eventType, button, e) {
-    // For split panes, determine which side's command to send to
-    let cmdId = panelObj.selectedCmdId;
-    let instUrl = panelObj.selectedInstUrl;
-    if (panelObj.split && panelObj.split.activeSide === 'secondary') {
-        cmdId = panelObj.split.secondaryCmdId;
-        instUrl = panelObj.split.secondaryInstUrl;
-    }
+    // Find the target leaf from the event
+    const vc = e.target.closest('.vtty-container');
+    const leafInfo = vc ? _getLeafFromVtty(vc, panelObj) : { leaf: panelObj, isPanelPrimary: true };
+    const leaf = leafInfo.leaf;
+    const cmdId = leafInfo.isPanelPrimary ? panelObj.selectedCmdId : leaf.cmdId;
+    const instUrl = leafInfo.isPanelPrimary ? panelObj.selectedInstUrl : leaf.instUrl;
     if (!cmdId || !instUrl) return;
-    const vttyEl = document.getElementById(panelObj.id)?.querySelector('.vtty-container');
+    const vttyEl = document.getElementById(leafInfo.isPanelPrimary ? panelObj.id : leaf.id)?.querySelector('.vtty-container') || vc;
     if (!vttyEl) return;
 
     const rect = vttyEl.getBoundingClientRect();

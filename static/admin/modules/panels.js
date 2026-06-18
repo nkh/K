@@ -25,27 +25,30 @@ function renderPanels() {
 
     const cached = {};
     // Cache VTTY content from ALL panels whose DOM still exists (not just visible).
-    // Panels from other windows may still be in the DOM from a previous render.
-    // For panels whose DOM was already destroyed, clear their generation cache
-    // so the next HTTP fetch will apply fresh content instead of being skipped.
+    // Walk the split tree for each panel to find all leaves.
+    if (!state._lastGeneration) state._lastGeneration = {};
     for (const panel of state.panels) {
         const el = document.getElementById(panel.id);
         if (!el) {
-            // DOM was destroyed — clear generation cache so re-fetch applies content
-            if (panel.selectedCmdId) {
-                const gk = panel.id + '/' + panel.selectedCmdId;
-                delete state._lastGeneration[gk];
-            }
-            if (panel.split?.secondaryCmdId) {
-                const sgk = panel.id + '-secondary/' + panel.split.secondaryCmdId;
-                delete state._lastGeneration[sgk];
+            // DOM was destroyed — clear generation cache for all leaves
+            const allLeaves = (typeof _getAllLeaves === 'function') ? _getAllLeaves(panel) : [{ leaf: panel }];
+            for (const { leaf, side } of allLeaves) {
+                const isPrimary = !side;
+                const cmdId = isPrimary ? panel.selectedCmdId : leaf.cmdId;
+                if (cmdId) {
+                    const gk = (isPrimary ? panel.id : leaf.id) + '/' + cmdId;
+                    delete state._lastGeneration[gk];
+                }
             }
             continue;
         }
         _cacheVtty(panel.id, document.getElementById('vtty-' + panel.id), panel.selectedCmdId, cached);
-        if (panel.split?.secondaryCmdId) {
-            const sid = panel.id + '-secondary';
-            _cacheVtty(sid, document.getElementById('vtty-' + sid), panel.split.secondaryCmdId, cached);
+        if (panel.split && typeof _getAllLeaves === 'function') {
+            const allLeaves = _getAllLeaves(panel);
+            for (const { leaf, side } of allLeaves) {
+                if (!side) continue;
+                _cacheVtty(leaf.id, document.getElementById('vtty-' + leaf.id), leaf.cmdId, cached);
+            }
         }
     }
     let html = '';

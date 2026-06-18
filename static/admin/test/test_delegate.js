@@ -26,7 +26,7 @@ const expectedActions = [
     'DisconnectServer', 'SortSidebarBy', 'ToggleKeepCmd', 'TogglePauseRunByIdx',
     'TogglePinCmd', 'SelectCommand', 'ShowCmdContextMenu',
     'ClosePanelContent', 'PanelHistoryBack', 'PanelHistoryForward',
-    'StartRenamePanel', 'UnsplitPanel', 'ToggleMinimizePanel', 'FocusPanel',
+    'StartRenamePanel', 'UnsplitPanel', 'UnsplitLeaf', 'ToggleMinimizePanel', 'FocusPanel',
     'ScrollTerminalBottom', 'VttySearchNext', 'VttySearchPrev', 'VttySearchClose',
     'ShowPanelContextMenu', 'CloseSpecialKeysModal',
     'RestartCommandById', 'KillCommand', 'SelectAndViewCmd', 'OnSearchResultClick',

@@ -723,6 +723,10 @@ const _crossDeps = (() => {
     '_resizePanelTo', '_hex',
     '_cacheVtty', '_setupPanelDelegation', '_setToggleBtn',
     '_doFreezeThaw', '_handleSecondarySelect',
+    '_selectLeafCommand', '_selectActiveLeafCommand', '_getFocusedLeafId',
+    'unsplitLeaf', '_connectLeafWs', '_findLeafState', '_getAllLeaves',
+    '_findParentSplit', '_getLeafCmdState', '_disconnectLeafTree', '_disconnectSingleLeaf',
+    '_newLeafState', '_nextLeafId', 'loadVttyHttpForPanel',
     // Common mocks used by individual test files (consolidated here)
     'startRefresh',
     ]);

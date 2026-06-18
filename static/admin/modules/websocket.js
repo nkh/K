@@ -325,7 +325,14 @@ function _cleanupWs(obj, prefix) {
 
 function _disconnectSecondaryWs(panelObj) {
     if (!panelObj || !panelObj.split) return;
-    _cleanupWs(panelObj.split, 'secondaryWs');
+    const s = panelObj.split;
+    // New tree format: secondary is a leaf object with ws property
+    if (s.secondary && typeof s.secondary.ws !== 'undefined') {
+        _cleanupWs(s.secondary, 'ws');
+    } else if (typeof s.secondaryWs !== 'undefined') {
+        // Old flat format compat: secondaryWs is directly on the split object
+        _cleanupWs(s, 'secondaryWs');
+    }
 }
 
 function _connectSecondaryWs(panelObj) {
@@ -485,6 +492,61 @@ function stopPanelUpdateMode(panelId) {
     stopPanelPoll(panelId);
 }
 
+    // ─── Generic leaf WS connect (for recursive split tree) ───
+function _connectLeafWs(leaf) {
+    if (!leaf || !leaf.cmdId || !leaf.instUrl) return;
+    if (leaf.ws) { try { leaf.ws.close(); } catch {} leaf.ws = null; }
+    const url = _buildWsUrl(leaf.instUrl, leaf.cmdId);
+    try {
+        const ws = new WebSocket(url);
+        leaf.ws = ws;
+        leaf.wsInstUrl = leaf.instUrl;
+        leaf.wsCmdId = leaf.cmdId;
+        ws.onopen = () => {
+            clearInterval(leaf.wsPingInterval);
+            leaf.wsPingInterval = setInterval(() => {
+                if (leaf.ws && leaf.ws.readyState === WebSocket.OPEN) {
+                    leaf.wsPingSendTime = Date.now();
+                    leaf.ws.send(JSON.stringify({ type: 'ping' }));
+                }
+            }, 10000);
+        };
+        ws.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'vtty_dirty') {
+                    fetchVttyDiffForPanel(leaf.id, leaf.instUrl, leaf.cmdId, 0);
+                } else if (msg.type === 'vtty_close' || msg.type === 'command_ended') {
+                    delete state._diffBaselines[leaf.id + '/' + leaf.cmdId];
+                    if (msg.type === 'command_ended') { notifyCommandEnded(leaf.cmdId); }
+                    if (leaf.ws === ws) { leaf.ws = null; clearInterval(leaf.wsPingInterval); }
+                } else if (msg.type === 'peer_registered' || msg.type === 'peer_unregistered') {
+                    handlePeerEvent(msg);
+                }
+            } catch (e) {}
+        };
+        ws.onclose = () => {
+            if (leaf.ws !== ws) return;
+            leaf.ws = null;
+            clearInterval(leaf.wsPingInterval); leaf.wsPingInterval = null;
+            leaf.wsPingSendTime = 0; leaf.wsLatency = 0;
+            if (leaf.instUrl && leaf.cmdId) fetchVttyDiffForPanel(leaf.id, leaf.instUrl, leaf.cmdId, 0);
+            if (leaf.instUrl && leaf.cmdId && !leaf.wsReconnectTimer && state.updateMode === 'push') {
+                leaf.wsReconnectCount = (leaf.wsReconnectCount || 0) + 1;
+                if (leaf.wsReconnectCount <= 5) {
+                    leaf.wsReconnectTimer = setTimeout(() => {
+                        leaf.wsReconnectTimer = null;
+                        const inst = state.connections.find(i => i.url === leaf.instUrl);
+                        if (inst && inst.reachable !== false) _connectLeafWs(leaf);
+                    }, 2000);
+                }
+            }
+        };
+        ws.onerror = () => {};
+    } catch (e) {}
+    fetchVttyDiffForPanel(leaf.id, leaf.instUrl, leaf.cmdId, 0);
+}
+
     // ─── Exports ───
     Object.assign(window, {
         connectPanelWs, disconnectPanelWs, updateWsQualityIndicator,
@@ -493,5 +555,6 @@ function stopPanelUpdateMode(panelId) {
         _connectSecondaryWs, _disconnectSecondaryWs,
         fetchVttyDiffForPanel, fetchSecondaryVttyDiff,
         _sharedSubs,
+        _connectLeafWs,
     });
 })();

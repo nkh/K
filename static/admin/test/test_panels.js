@@ -118,12 +118,13 @@ assert(sp.split !== null, 'split created');
 assertEq(sp.split.direction, 'horizontal', 'split direction is horizontal');
 assertEq(sp.split.splitRatio, 0.5, 'split ratio is 0.5');
 assertEq(sp.split.activeSide, 'primary', 'active side is primary');
-assertEq(sp.split.secondaryCmdId, null, 'secondary cmd id is null initially');
-assertEq(sp.split.secondaryInstUrl, null, 'secondary inst url is null initially');
-assertEq(sp.split.secondaryScrollbackOffset, 0, 'secondary scrollback offset starts 0');
-assertEq(sp.split.secondaryMouseTracking, false, 'secondary mouse tracking starts false');
-assertEq(sp.split.secondaryMouseSgr, false, 'secondary mouse sgr starts false');
-assert(sp.split.secondaryWs === null, 'secondary ws starts null');
+assert(sp.split.secondary !== null, 'secondary leaf object created');
+assertEq(sp.split.secondary.cmdId, null, 'secondary cmd id is null initially');
+assertEq(sp.split.secondary.instUrl, null, 'secondary inst url is null initially');
+assertEq(sp.split.secondary.scrollbackOffset, 0, 'secondary scrollback offset starts 0');
+assertEq(sp.split.secondary.mouseTracking, false, 'secondary mouse tracking starts false');
+assertEq(sp.split.secondary.mouseSgr, false, 'secondary mouse sgr starts false');
+assert(sp.split.secondary.ws === null, 'secondary ws starts null');
 
 splitPanel(sp.id, 'vertical'); // Should not overwrite existing split
 assertEq(sp.split.direction, 'horizontal', 'split direction unchanged on second call');

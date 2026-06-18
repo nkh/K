@@ -116,6 +116,9 @@ const _sigs = {
 
     // Pass (panelId) from data-panel attribute (for dynamically rendered panel elements)
     'data-panel':    function(el) { return [el.dataset.panel]; },
+
+    // Pass (panelId, leafId) from data-panel and data-leaf attributes
+    'data-panel+leaf': function(el) { return [el.dataset.panel, el.dataset.leaf]; },
 };
 
 // ── Action registry ──
@@ -169,6 +172,7 @@ const _actions = {
     'PanelHistoryForward':      { handler: 'panelHistoryForward', sig: 'data-panel', stop: true },
     'StartRenamePanel':         { handler: 'startRenamePanel', sig: 'data-panel', stop: true },
     'UnsplitPanel':             { handler: 'unsplitPanel', sig: 'data-panel', stop: true },
+    'UnsplitLeaf':              { handler: 'unsplitLeaf', sig: 'data-panel+leaf', stop: true },
     'ToggleMinimizePanel':      { handler: 'toggleMinimizePanel', sig: 'data-panel' },
     'FocusPanel':               { handler: 'focusPanel', sig: 'data-panel' },
     'ScrollTerminalBottom':     { handler: 'scrollTerminalBottom', sig: 'data-panel' },

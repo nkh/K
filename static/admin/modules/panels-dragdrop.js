@@ -139,16 +139,21 @@ function onPanelDrop(e, targetPanelId) {
         if (cmdData?.cmdId) {
             const panelObj = state.panels.find(p => p.id === targetPanelId);
             if (!panelObj) return;
-            // Check if the drop landed on a specific side of a split panel
-            const splitEl = e.target && e.target.closest ? e.target.closest('[data-split-side]') : null;
+            // Check if the drop landed on a specific leaf in a split panel
+            const leafEl = e.target && e.target.closest ? e.target.closest('[data-leaf-id]') : null;
             if (panelObj.split) {
-                // Determine which side: from the DOM element, or fall back to activeSide
-                const side = splitEl ? splitEl.dataset.splitSide : (panelObj.split.activeSide || 'primary');
-                if (side === 'secondary') {
-                    _handleSecondarySelect(panelObj, cmdData.instUrl, cmdData.cmdId);
-                } else {
+                const leafId = leafEl ? leafEl.getAttribute('data-leaf-id') : null;
+                if (leafId && leafId !== panelObj.id) {
+                    // Dropped on a specific secondary leaf
+                    const found = (typeof _findLeafState === 'function') ? _findLeafState(panelObj, leafId) : null;
+                    if (found && found.leaf) {
+                        _selectLeafCommand(panelObj, found.leaf, cmdData.instUrl, cmdData.cmdId);
+                    }
+                } else if (!panelObj.selectedCmdId) {
                     _pushPanelHistory(panelObj);
                     _selectCommandForPanel(panelObj, cmdData.instUrl, cmdData.cmdId);
+                } else {
+                    _openCommandInNewPane(cmdData.instUrl, cmdData.cmdId, cmdData.cmdName);
                 }
             } else if (!panelObj.selectedCmdId) {
                 // Non-split panel with no command — assign to this panel
@@ -274,9 +279,14 @@ function _cmdReorderMouseUp() {
         const targetPanelObj = _targetPanelId ? state.panels.find(p => p.id === _targetPanelId) : null;
         if (targetPanelObj) {
             if (targetPanelObj.split) {
-                const side = _targetSplitSide || (targetPanelObj.split.activeSide || 'primary');
-                if (side === 'secondary') {
-                    _handleSecondarySelect(targetPanelObj, instUrl, cmdId);
+                const leafId = _targetPanelId ? null : (_targetSplitSide ? _targetSplitSide : null);
+                // Determine the target leaf from the drop position
+                const dropLeafId = leafId || (typeof _getFocusedLeafId === 'function' ? _getFocusedLeafId(targetPanelObj) : targetPanelObj.id);
+                if (dropLeafId && dropLeafId !== targetPanelObj.id) {
+                    const found = (typeof _findLeafState === 'function') ? _findLeafState(targetPanelObj, dropLeafId) : null;
+                    if (found && found.leaf) {
+                        _selectLeafCommand(targetPanelObj, found.leaf, instUrl, cmdId);
+                    }
                 } else {
                     _pushPanelHistory(targetPanelObj);
                     _selectCommandForPanel(targetPanelObj, instUrl, cmdId);

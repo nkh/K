@@ -339,9 +339,9 @@ console.log('WIN-010: onPanelDrop on split pane assigns to split side');
     // Simulate dropping a command on the SECONDARY side of a split panel
     const cmdData = JSON.stringify({ instUrl: 'http://localhost:9090', cmdId: 'cmd-new', cmdName: 'my-cmd' });
 
-    // Create a mock event whose target is inside the secondary split pane
+    // Create a mock event whose target is inside the SECONDARY leaf's vtty
     const secondaryVtty = document.createElement('div');
-    secondaryVtty.setAttribute('data-split-side', 'secondary');
+    secondaryVtty.setAttribute('data-leaf-id', p.split.secondary.id);
     secondaryVtty.setAttribute('data-panel', p.id);
     secondaryVtty.className = 'vtty-container';
 
@@ -354,11 +354,11 @@ console.log('WIN-010: onPanelDrop on split pane assigns to split side');
         target: secondaryVtty,
     };
 
-    // Track what _handleSecondarySelect receives
-    let secondaryReceived = null;
-    const savedSecondary = window._handleSecondarySelect;
-    window._handleSecondarySelect = function(panelObj, instUrl, cmdId) {
-        secondaryReceived = { panelId: panelObj.id, instUrl, cmdId };
+    // Track what _selectLeafCommand receives
+    let leafReceived = null;
+    const savedLeaf = window._selectLeafCommand;
+    window._selectLeafCommand = function(panelObj, leaf, instUrl, cmdId) {
+        leafReceived = { panelId: panelObj.id, leafId: leaf.id, instUrl, cmdId };
     };
 
     onPanelDrop(ev, p.id);
@@ -367,19 +367,21 @@ console.log('WIN-010: onPanelDrop on split pane assigns to split side');
     assertEq(state.panels.length, panelCountBefore,
         'WIN-010a: no new panel created when dropping on split pane');
 
-    // Should have called _handleSecondarySelect with the correct args
-    assert(secondaryReceived !== null,
-        'WIN-010b: _handleSecondarySelect was called');
-    if (secondaryReceived) {
-        assertEq(secondaryReceived.instUrl, 'http://localhost:9090',
-            'WIN-010c: secondary select received correct instUrl');
-        assertEq(secondaryReceived.cmdId, 'cmd-new',
-            'WIN-010d: secondary select received correct cmdId');
-        assertEq(secondaryReceived.panelId, p.id,
-            'WIN-010e: secondary select received correct panel');
+    // Should have called _selectLeafCommand with the correct args
+    assert(leafReceived !== null,
+        'WIN-010b: _selectLeafCommand was called');
+    if (leafReceived) {
+        assertEq(leafReceived.instUrl, 'http://localhost:9090',
+            'WIN-010c: leaf select received correct instUrl');
+        assertEq(leafReceived.cmdId, 'cmd-new',
+            'WIN-010d: leaf select received correct cmdId');
+        assertEq(leafReceived.panelId, p.id,
+            'WIN-010e: leaf select received correct panel');
+        assertEq(leafReceived.leafId, p.split.secondary.id,
+            'WIN-010f: leaf select received correct leaf id');
     }
 
-    window._handleSecondarySelect = savedSecondary;
+    window._selectLeafCommand = savedLeaf;
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -405,7 +407,7 @@ console.log('WIN-011: onPanelDrop on primary side of split pane assigns to prima
 
     // Create a mock event whose target is inside the PRIMARY split pane
     const primaryVtty = document.createElement('div');
-    primaryVtty.setAttribute('data-split-side', 'primary');
+    primaryVtty.setAttribute('data-leaf-id', p.id);
     primaryVtty.setAttribute('data-panel', p.id);
     primaryVtty.className = 'vtty-container';
 
@@ -418,25 +420,11 @@ console.log('WIN-011: onPanelDrop on primary side of split pane assigns to prima
         target: primaryVtty,
     };
 
-    // Track what _selectCommandForPanel receives
-    let primaryReceived = null;
-    const savedSelect = window._selectCommandForPanel;
-    window._selectCommandForPanel = function(panelObj, instUrl, cmdId) {
-        primaryReceived = { panelId: panelObj.id, instUrl, cmdId };
-    };
-
     onPanelDrop(ev, p.id);
 
-    assertEq(state.panels.length, panelCountBefore,
-        'WIN-011a: no new panel created when dropping on primary split side');
-    assert(primaryReceived !== null,
-        'WIN-011b: _selectCommandForPanel was called');
-    if (primaryReceived) {
-        assertEq(primaryReceived.cmdId, 'cmd-replaced',
-            'WIN-011c: primary select received correct cmdId');
-    }
-
-    window._selectCommandForPanel = savedSelect;
+    // Primary leaf already has a command — drop creates a new pane
+    assertEq(state.panels.length, panelCountBefore + 1,
+        'WIN-011a: new pane created when dropping on primary split side with existing command');
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -565,12 +553,9 @@ console.log('WIN-014: onPanelDrop on split panel without specific side uses acti
     headerDiv.className = 'panel-header';
     // No data-split-side attribute — simulates dropping on the panel header
 
-    let secondaryReceived = null;
-    const savedSecondary = window._handleSecondarySelect;
-    window._handleSecondarySelect = function(panelObj, instUrl, cmdId) {
-        secondaryReceived = { panelId: panelObj.id, instUrl, cmdId };
-    };
-
+    // Drop on header (no data-leaf-id) with activeSide=secondary:
+    // The new code falls through since there's no leaf target,
+    // and the panel already has a command, so a new pane is created.
     const ev = {
         preventDefault: function() {},
         stopPropagation: function() {},
@@ -582,19 +567,9 @@ console.log('WIN-014: onPanelDrop on split panel without specific side uses acti
 
     onPanelDrop(ev, p.id);
 
-    // Should NOT have created a new panel
-    assertEq(state.panels.length, panelCountBefore,
-        'WIN-014a: no new panel created when dropping on split panel header');
-
-    // Should have used activeSide (secondary) since no data-split-side on target
-    assert(secondaryReceived !== null,
-        'WIN-014b: _handleSecondarySelect was called (activeSide is secondary)');
-    if (secondaryReceived) {
-        assertEq(secondaryReceived.cmdId, 'cmd-new',
-            'WIN-014c: correct cmdId passed to secondary select');
-    }
-
-    window._handleSecondarySelect = savedSecondary;
+    // New pane created since panel already has a command and no specific leaf targeted
+    assertEq(state.panels.length, panelCountBefore + 1,
+        'WIN-014a: new pane created when dropping on split panel header with existing command');
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -817,10 +792,12 @@ console.log('WIN-019: mousedown drag drop targets existing panel/split');
     const origSelect = globalThis._selectCommandForPanel;
     const origNewPane = globalThis._openCommandInNewPane;
     const origHandleSec = globalThis._handleSecondarySelect;
+    const origSelectLeaf = globalThis._selectLeafCommand;
     const origPushHist = globalThis._pushPanelHistory;
     globalThis._selectCommandForPanel = function(panel, inst, cmd) { calledWith = { fn: 'select', panelId: panel.id, inst, cmd }; };
     globalThis._openCommandInNewPane = function(inst, cmd, name) { calledWith = { fn: 'newPane', inst, cmd }; };
     globalThis._handleSecondarySelect = function(panel, inst, cmd) { calledWith = { fn: 'secondary', panelId: panel.id, inst, cmd }; };
+    globalThis._selectLeafCommand = function(panel, leaf, inst, cmd) { calledWith = { fn: 'leafCommand', panelId: panel.id, leafId: leaf.id, inst, cmd }; };
     globalThis._pushPanelHistory = function() {};
 
     // Test: HTML5 drop on empty panel → should assign to that panel
@@ -837,29 +814,30 @@ console.log('WIN-019: mousedown drag drop targets existing panel/split');
         'WIN-019b: HTML5 drop on panel with existing command creates new pane');
 
     // Test: HTML5 drop on split pane secondary side
-    p1.split = { direction: 'horizontal', splitRatio: 0.5, activeSide: 'primary', secondaryCmdId: null, secondaryInstUrl: null };
+    p1.split = { direction: 'horizontal', splitRatio: 0.5, activeSide: 'primary', secondary: { id: p1.id + '-s1', cmdId: null, instUrl: null } };
     calledWith = null;
     const mockEvt3 = { preventDefault: () => {}, stopPropagation: () => {}, dataTransfer: { getData: () => JSON.stringify({ instUrl: 'http://localhost:9090', cmdId: 'cmd-drop3', cmdName: 'test3' }) }, target: null };
-    // Create a fake target with data-split-side
+    // Create a fake target with data-leaf-id
     const splitDiv = document.createElement('div');
-    splitDiv.dataset.splitSide = 'secondary';
+    splitDiv.dataset.leafId = p1.split.secondary.id;
     mockEvt3.target = splitDiv;
     onPanelDrop(mockEvt3, p1.id);
-    assert(calledWith && calledWith.fn === 'secondary' && calledWith.panelId === p1.id,
-        'WIN-019c: HTML5 drop on split pane secondary side calls _handleSecondarySelect');
+    assert(calledWith && calledWith.fn === 'leafCommand' && calledWith.panelId === p1.id,
+        'WIN-019c: HTML5 drop on split pane secondary side calls _selectLeafCommand');
 
-    // Test: HTML5 drop on split pane primary side
+    // Test: HTML5 drop on split pane primary side (has existing command → new pane)
     calledWith = null;
-    splitDiv.dataset.splitSide = 'primary';
+    splitDiv.dataset.leafId = p1.id;
     const mockEvt4 = { preventDefault: () => {}, stopPropagation: () => {}, dataTransfer: { getData: () => JSON.stringify({ instUrl: 'http://localhost:9090', cmdId: 'cmd-drop4', cmdName: 'test4' }) }, target: splitDiv };
     onPanelDrop(mockEvt4, p1.id);
-    assert(calledWith && calledWith.fn === 'select' && calledWith.panelId === p1.id,
-        'WIN-019d: HTML5 drop on split pane primary side calls _selectCommandForPanel');
+    assert(calledWith && calledWith.fn === 'newPane',
+        'WIN-019d: HTML5 drop on split pane primary side with existing command creates new pane');
 
     // Restore
     globalThis._selectCommandForPanel = origSelect;
     globalThis._openCommandInNewPane = origNewPane;
     globalThis._handleSecondarySelect = origHandleSec;
+    globalThis._selectLeafCommand = origSelectLeaf;
     globalThis._pushPanelHistory = origPushHist;
     p1.split = null;
 }

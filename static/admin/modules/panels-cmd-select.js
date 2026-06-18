@@ -98,18 +98,41 @@ function _selectCommandForPanel(panelObj, instUrl, cmdId, { cache = false, reset
     startPanelUpdateMode(panelObj.id);
 }
 
-function _handleSecondarySelect(panelObj, instUrl, cmdId) {
-    _disconnectSecondaryWs(panelObj);
-    if (panelObj.split.secondaryPollTimer) { clearInterval(panelObj.split.secondaryPollTimer); panelObj.split.secondaryPollTimer = null; }
-    panelObj.split.secondaryInstUrl = instUrl;
-    panelObj.split.secondaryCmdId = cmdId;
-    panelObj.split.secondaryScrollbackOffset = 0;
+function _selectLeafCommand(panelObj, leaf, instUrl, cmdId) {
+    // Select a command into a specific leaf (secondary or deeper in the tree)
+    if (leaf.ws) { try { leaf.ws.close(); } catch {} leaf.ws = null; }
+    if (leaf.wsPingInterval) clearInterval(leaf.wsPingInterval);
+    if (leaf.wsReconnectTimer) clearTimeout(leaf.wsReconnectTimer);
+    if (leaf.pollTimer) clearInterval(leaf.pollTimer);
+    leaf.instUrl = instUrl;
+    leaf.cmdId = cmdId;
+    leaf.scrollbackOffset = 0;
     state.selectedInstUrl = instUrl; state.selectedCmdId = cmdId; state.bufferView = 'current';
-    _loadSecondaryVttyHttp(panelObj);
-    if (state.updateMode === 'push') _connectSecondaryWs(panelObj);
-    else panelObj.split.secondaryPollTimer = setInterval(() => { if (panelObj.split?.secondaryCmdId) _loadSecondaryVttyHttp(panelObj); }, state.pollInterval);
-    _updateSplitPanelHeader(panelObj);
+    // Load VTTY content for this leaf
+    loadVttyHttpForPanel(leaf.id, instUrl, cmdId);
+    // Connect WS or start polling for this leaf
+    if (state.updateMode === 'push') _connectLeafWs(leaf);
+    else leaf.pollTimer = setInterval(() => { if (leaf.cmdId) loadVttyHttpForPanel(leaf.id, leaf.instUrl, leaf.cmdId); }, state.pollInterval);
+    if (panelObj.split) _updateSplitHeaders(panelObj);
     updateSidebarSelection();
+}
+
+function _selectActiveLeafCommand(panelObj, instUrl, cmdId) {
+    // Select a command into the currently active leaf of the panel
+    if (!panelObj.split) {
+        _selectCommandForPanel(panelObj, instUrl, cmdId, { cache: true, resetBuffers: true, scrollback: true });
+        return;
+    }
+    const leafId = (typeof _getFocusedLeafId === 'function') ? _getFocusedLeafId(panelObj) : panelObj.id;
+    if (leafId === panelObj.id) {
+        // Primary leaf
+        _selectCommandForPanel(panelObj, instUrl, cmdId, { cache: true, resetBuffers: true, scrollback: true });
+    } else {
+        const found = (typeof _findLeafState === 'function') ? _findLeafState(panelObj, leafId) : null;
+        if (found && found.leaf) {
+            _selectLeafCommand(panelObj, found.leaf, instUrl, cmdId);
+        }
+    }
 }
 
 function selectCommand(instUrl, cmdId, name) {
@@ -117,8 +140,7 @@ function selectCommand(instUrl, cmdId, name) {
     if (!panelObj) return;
     _pushPanelHistory(panelObj);
     focusPanel(panelObj.id);
-    if (panelObj.split?.activeSide === 'secondary') { _handleSecondarySelect(panelObj, instUrl, cmdId); return; }
-    _selectCommandForPanel(panelObj, instUrl, cmdId, { cache: true, resetBuffers: true, scrollback: true });
+    _selectActiveLeafCommand(panelObj, instUrl, cmdId);
     _updatePanelHistoryBtns(panelObj.id);
 }
 
@@ -138,5 +160,6 @@ function _openCommandInNewPane(instUrl, cmdId, cmdName) {
         panelHistoryBack, panelHistoryForward,
         _selectCommandForPanel, selectCommand,
         _openCommandInNewPane,
+        _selectLeafCommand, _selectActiveLeafCommand,
     });
 })();

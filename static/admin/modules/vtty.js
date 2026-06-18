@@ -476,49 +476,50 @@ function _applyScrollHtml(vttyEl, pre, html) {
 
 function scheduleSecondaryVttyHttp(panelObj, delayMs) {
     if (!panelObj || !panelObj.split) return;
-    const s = panelObj.split;
-    if (!s.secondaryCmdId || !s.secondaryInstUrl) return;
+    const leaf = panelObj.split.secondary;
+    if (!leaf.cmdId || !leaf.instUrl) return;
     const timerKey = '_secondaryVttyHttpTimer_' + panelObj.id;
     if (state[timerKey]) clearTimeout(state[timerKey]);
     state[timerKey] = setTimeout(() => {
         state[timerKey] = null;
-        _loadSecondaryVttyHttp(panelObj);
+        _loadLeafVttyHttp(panelObj);
     }, delayMs);
 }
 
-async function _loadSecondaryVttyHttp(panelObj) {
+async function _loadLeafVttyHttp(panelObj) {
     if (!panelObj || !panelObj.split) return;
-    const s = panelObj.split;
-    const vttyEl = document.getElementById('vtty-' + panelObj.id + '-secondary');
+    const leaf = panelObj.split.secondary;
+    const vttyEl = document.getElementById('vtty-' + leaf.id);
     if (!vttyEl) return;
     try {
-        const json = await api.getVttyHtml(s.secondaryInstUrl, s.secondaryCmdId);
-        if (json.status === 'ok' && json.data) updateSecondaryVttyDisplay(panelObj, vttyEl, json.data);
+        const json = await api.getVttyHtml(leaf.instUrl, leaf.cmdId);
+        if (json.status === 'ok' && json.data) updateLeafVttyDisplay(panelObj, vttyEl, json.data);
     } catch (e) { /* ignore */ }
 }
 
 function updateSecondaryVttyDisplay(panelObj, vttyEl, data) {
     const pre = vttyEl ? vttyEl.querySelector('pre') : null;
     if (!pre) return;
-    const cmdId = panelObj.split.secondaryCmdId;
+    const leaf = panelObj.split.secondary;
+    const cmdId = leaf.cmdId;
     const genKey = '_secondaryGen_' + cmdId;
     if (cmdId && data.generation !== undefined) {
-        if (state[genKey] === data.generation) { _updateSecondaryVttyMetadata(panelObj, vttyEl, data); return; }
+        if (state[genKey] === data.generation) { _updateLeafVttyMetadata(leaf, vttyEl, data); return; }
         state[genKey] = data.generation;
     }
     if (data.html !== undefined && data.html !== null) _applyScrollHtml(vttyEl, pre, data.html);
-    _updateSecondaryVttyMetadata(panelObj, vttyEl, data);
+    _updateLeafVttyMetadata(leaf, vttyEl, data);
 }
 
-function _updateSecondaryVttyMetadata(panelObj, vttyEl, data) {
+function _updateLeafVttyMetadata(leaf, vttyEl, data) {
     const cursor = data.cursor || {};
     const dims = data.dimensions || {};
-    const inScrollback = panelObj.split.secondaryScrollbackOffset > 0;
+    const inScrollback = leaf.scrollbackOffset > 0;
     const cursorHidden = data.cursor_visible === false;
     const cursorEl = vttyEl ? vttyEl.querySelector('.cursor-indicator') : null;
     if (cursorEl && cursor.row !== undefined && !inScrollback && !cursorHidden) {
-        const charW = panelObj.fontSize * 0.6;
-        const charH = panelObj.fontSize * 1.2;
+        const charW = 10 * 0.6;  // panelObj.fontSize may not apply here, use 10 as default
+        const charH = 10 * 1.2;
         cursorEl.style.top = (cursor.row * charH) + 'px';
         cursorEl.style.left = (cursor.col * charW) + 'px';
         cursorEl.style.width = charW + 'px';
@@ -527,30 +528,31 @@ function _updateSecondaryVttyMetadata(panelObj, vttyEl, data) {
     } else if (cursorEl) {
         cursorEl.classList.add('hidden');
     }
-    panelObj.split.secondaryMouseTracking = !!data.mouse_tracking;
-    panelObj.split.secondaryMouseSgr = !!data.mouse_sgr;
+    leaf.mouseTracking = !!data.mouse_tracking;
+    leaf.mouseSgr = !!data.mouse_sgr;
     if (vttyEl) {
-        vttyEl.classList.toggle('selectable', !panelObj.split.secondaryMouseTracking);
+        vttyEl.classList.toggle('selectable', !leaf.mouseTracking);
         const pre = vttyEl.querySelector('pre');
         if (pre && dims.rows && dims.cols) { pre._vttyRows = dims.rows; pre._vttyCols = dims.cols; }
     }
 }
 
 function applySecondaryVttyDiff(panelObj, vttyEl, data) {
-    const cmdId = panelObj.split.secondaryCmdId;
+    const leaf = panelObj.split.secondary;
+    const cmdId = leaf.cmdId;
     if (!cmdId) return;
     const pre = vttyEl ? vttyEl.querySelector('pre') : null;
     if (!pre) return;
     const genKey = '_secondaryGen_' + cmdId;
     if (data.generation !== undefined && state[genKey] === data.generation) {
         if (data.cursor || data.dimensions || data.mouse_tracking !== undefined)
-            _updateSecondaryVttyMetadata(panelObj, vttyEl, data);
+            _updateLeafVttyMetadata(leaf, vttyEl, data);
         return;
     }
     if (data.generation !== undefined) state[genKey] = data.generation;
     if (data.html !== undefined) {
         _applyScrollHtml(vttyEl, pre, data.html);
-        _updateSecondaryVttyMetadata(panelObj, vttyEl, data);
+        _updateLeafVttyMetadata(leaf, vttyEl, data);
         return;
     }
     // Level 3 cell-level incremental diff not supported for secondary — fall back
