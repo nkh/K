@@ -144,6 +144,37 @@ const vsp = addPanelDirect();
 splitPanel(vsp.id, 'vertical');
 assertEq(vsp.split.direction, 'vertical', 'vertical split direction set');
 
+// ── Split pane renders empty secondary ──
+console.log('split pane renders empty secondary tests');
+{
+    const ep = addPanelDirect();
+    ep.selectedCmdId = 'cmd-1';
+    ep.selectedInstUrl = 'http://localhost:9090';
+    const origGetServerColor = window._getServerColor;
+    const origGetServerTextColor = window._getServerTextColor;
+    const origGetServerLabel = window._getServerLabel;
+    const origGetPanelCmdLabel = window._getPanelCmdLabel;
+    window._getServerColor = () => '#333';
+    window._getServerTextColor = () => '#fff';
+    window._getServerLabel = (i, u) => u || 'No server';
+    window._getPanelCmdLabel = (c, u) => c || 'No command';
+    const origRender = globalThis.renderPanels;
+    globalThis.renderPanels = function() {};
+    splitPanel(ep.id, 'horizontal');
+    // The secondary leaf should have rendered with "No command selected" text
+    const html = _renderSplitContainer(ep);
+    assert(html.includes('No command selected'), 'split secondary shows no command placeholder');
+    // Verify the secondary vtty container has the empty placeholder, not the primary cmd
+    const secVttyMatch = html.match(/id="vtty-[^"]*L\d"[^>]*>.*?<pre>(.*?)<\/pre>/s);
+    assert(secVttyMatch && secVttyMatch[1].includes('No command selected'),
+        'split secondary vtty container has no-command text');
+    globalThis.renderPanels = origRender;
+    window._getServerColor = origGetServerColor;
+    window._getServerTextColor = origGetServerTextColor;
+    window._getServerLabel = origGetServerLabel;
+    window._getPanelCmdLabel = origGetPanelCmdLabel;
+}
+
 // ── focusPanel ──
 console.log('focusPanel tests');
 assert(typeof focusPanel === 'function', 'focusPanel is a function');
