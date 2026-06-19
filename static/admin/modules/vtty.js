@@ -461,10 +461,10 @@ function updateVttyMetadataFromHttp(data, panelEl, panelObj, sbOffset) {
     window.buildCellGrid = buildCellGrid;
     window.updateVttyMetadataFromHttp = updateVttyMetadataFromHttp;
 
-// ─── Secondary Pane VTTY Display ───
-// These mirror the primary functions above but operate on the secondary
-// split pane. They use a separate generation cache key (_secondaryGen_)
-// and write to split-specific state properties (secondaryMouseTracking, etc.)
+// ─── Secondary Pane VTTY Display (deprecated — single-level only) ───
+// These are the OLD single-level split functions, superseded by the recursive
+// leaf system in websocket.js (_loadLeafVttyHttpDirect, _connectLeafWs, _applyLeafDiff).
+// Kept for backward compatibility with existing tests. Do NOT use in new code.
 
 function _applyScrollHtml(vttyEl, pre, html) {
     const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
@@ -493,7 +493,7 @@ async function _loadLeafVttyHttp(panelObj) {
     if (!vttyEl) return;
     try {
         const json = await api.getVttyHtml(leaf.instUrl, leaf.cmdId);
-        if (json.status === 'ok' && json.data) updateLeafVttyDisplay(panelObj, vttyEl, json.data);
+        if (json.status === 'ok' && json.data) updateSecondaryVttyDisplay(panelObj, vttyEl, json.data);
     } catch (e) { /* ignore */ }
 }
 
