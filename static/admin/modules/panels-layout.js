@@ -246,6 +246,11 @@ function _nextLeafId(panelId) {
 // Returns { leaf, parentSplit, side } where side is 'branch' or null (panel itself).
 function _findLeafState(panel, leafId) {
     if (!leafId || panel.id === leafId) return { leaf: panel, parentSplit: null, side: null };
+    // Check the root pane's own split (_rootSplit) first
+    if (panel._rootSplit) {
+        const found = _findLeafInNode(panel._rootSplit, leafId);
+        if (found) return found;
+    }
     if (!panel.split) return null;
     return _findLeafInNode(panel.split, leafId);
 }
@@ -266,6 +271,7 @@ function _findLeafInNode(splitNode, leafId) {
 // Get all leaf nodes in the split tree (for caching, WS management, etc.)
 function _getAllLeaves(panel) {
     const leaves = [{ leaf: panel, side: null }];
+    if (panel._rootSplit) _collectLeaves(panel._rootSplit, leaves);
     if (panel.split) _collectLeaves(panel.split, leaves);
     return leaves;
 }
@@ -279,6 +285,10 @@ function _collectLeaves(splitNode, leaves) {
 
 // Find the parent split node that contains a leaf with the given ID
 function _findParentSplit(panel, leafId) {
+    if (panel._rootSplit) {
+        const found = _findParentSplitInNode(panel._rootSplit, leafId);
+        if (found) return found;
+    }
     if (!panel.split) return null;
     return _findParentSplitInNode(panel.split, leafId);
 }
@@ -298,39 +308,70 @@ function splitPanel(panelId, direction, leafId) {
     if (!p) return;
 
     // If no leafId specified, split the panel itself if not already split
-    // or split the active side if already split
+    // or split the focused leaf if already split
     if (!leafId) {
         if (!p.split) {
             leafId = p.id; // split the panel itself
         } else {
-            // Default: split the currently active side
+            // Default: split the currently focused leaf
             leafId = _getFocusedLeafId(p);
         }
     }
 
-    // FIX: If resolved to root but already split, redirect to branch leaf (Bug 1a)
-    if (leafId === p.id && p.split) {
-        leafId = (p._focusedLeafId && p._focusedLeafId !== p.id)
-            ? p._focusedLeafId
-            : (p.split.branch ? p.split.branch.id : null);
-        if (!leafId) return;
-    }
-
     // Find the leaf to split
     if (leafId === p.id) {
-        // First split — create top-level split
-        const sid = _nextLeafId(p.id);
-        p.split = {
-            direction, splitRatio: 0.5, activeSide: 'panel',
-            branch: _newLeafState(sid),
-        };
-        // Initialize focused leaf to root after first split
-        if (p._focusedLeafId == null) p._focusedLeafId = p.id;
+        if (!p.split) {
+            // First split — create top-level split
+            const sid = _nextLeafId(p.id);
+            p.split = {
+                direction, splitRatio: 0.5, activeSide: 'panel',
+                branch: _newLeafState(sid),
+            };
+            // Initialize focused leaf to root after first split
+            if (p._focusedLeafId == null) p._focusedLeafId = p.id;
+        } else {
+            // Splitting the root pane when top-level split already exists.
+            // Use _rootSplit — a separate split node for the root pane itself.
+            // This is parallel to branch.split for branch leaves.
+            if (!p._rootSplit) {
+                const sid = _nextLeafId(p.id);
+                p._rootSplit = {
+                    direction, splitRatio: 0.5, activeSide: 'panel',
+                    branch: _newLeafState(sid),
+                };
+            } else {
+                // Root already has its own split — find a non-split target within it
+                let target = p;
+                // Walk into the deepest non-split leaf of the root's split tree
+                if (target._rootSplit && target._rootSplit.branch) {
+                    const subId = p._focusedLeafId && p._focusedLeafId !== p.id
+                        ? p._focusedLeafId : target._rootSplit.branch.id;
+                    const subFound = _findLeafState(p, subId);
+                    if (subFound && subFound.leaf && !subFound.leaf.split && subFound.leaf.id !== p.id) {
+                        target = subFound.leaf;
+                    } else {
+                        target = target._rootSplit.branch;
+                        while (target.split && target.split.branch) {
+                            target = target.split.branch;
+                        }
+                    }
+                }
+                if (target.id === p.id && !p._rootSplit) return;
+                if (target.split) return; // all leaves in root split are already split
+                const sid = _nextLeafId(p.id);
+                target.split = {
+                    direction, splitRatio: 0.5, activeSide: 'panel',
+                    branch: _newLeafState(sid),
+                };
+            }
+            // Keep focus on the root pane (which was selected to be split)
+            p._focusedLeafId = p.id;
+        }
     } else {
         // Splitting a branch (or deeper) leaf
         const found = _findLeafState(p, leafId);
         if (!found || !found.leaf) return;
-        // FIX: If leaf already split, find a non-split target leaf (Bug 1b)
+        // If leaf already split, find a non-split target leaf
         let target = found.leaf;
         while (target.split && target.split.branch) {
             const subId = target._focusedLeafId && target._focusedLeafId !== target.id
@@ -354,19 +395,30 @@ function splitPanel(panelId, direction, leafId) {
 
 function unsplitPanel(panelId, leafId) {
     const p = state.panels.find(pp => pp.id === panelId);
-    if (!p || !p.split) return;
+    if (!p) return;
+    if (!p.split && !p._rootSplit) return;
 
     if (!leafId || leafId === p.id) {
-        // Remove the entire top-level split
-        // First disconnect all branch WS in the tree
+        // Remove the entire top-level split (and root split)
         _disconnectLeafTree(p.split);
+        _disconnectLeafTree(p._rootSplit);
         p.split = null;
+        p._rootSplit = null;
         renderPanels();
         return;
     }
 
-    // Find the leaf and its parent split
-    const parentSplit = _findParentSplit(p, leafId);
+    // Check if the leaf is in _rootSplit
+    let parentSplit = null;
+    let isRootSplit = false;
+    if (p._rootSplit) {
+        parentSplit = _findParentSplitInNode(p._rootSplit, leafId);
+        if (parentSplit) isRootSplit = true;
+    }
+    // If not found in _rootSplit, check the main split tree
+    if (!parentSplit && p.split) {
+        parentSplit = _findParentSplitInNode(p.split, leafId);
+    }
     if (!parentSplit) return;
 
     // Disconnect the leaf being closed
@@ -376,22 +428,27 @@ function unsplitPanel(panelId, leafId) {
     // If the closing leaf itself was split, disconnect its whole subtree
     if (closingLeaf && closingLeaf.split) _disconnectLeafTree(closingLeaf.split);
 
-    // Remove the split — the other side (panel or ancestor) remains unchanged.
+    // Remove the split — the other side remains unchanged.
     parentSplit.branch = null;
     parentSplit.direction = null;
     parentSplit.activeSide = 'panel';
 
-    // If this was the top-level split, clear it
-    if (p.split === parentSplit && !p.split.branch) {
-        p.split = null;
+    // Clean empty splits
+    if (isRootSplit && p._rootSplit) {
+        if (!p._rootSplit.branch) p._rootSplit = null;
+        else _cleanEmptySplitsInNode(p._rootSplit);
     }
-    // Walk up and clean any split nodes that lost their branch
-    _cleanEmptySplits(p);
+    if (p.split && !p.split.branch) p.split = null;
+    else if (p.split) _cleanEmptySplitsInNode(p.split);
 
     renderPanels();
 }
 
 function _cleanEmptySplits(panel) {
+    if (panel._rootSplit) {
+        if (!panel._rootSplit.branch) panel._rootSplit = null;
+        else _cleanEmptySplitsInNode(panel._rootSplit);
+    }
     if (!panel.split) return;
     if (!panel.split.branch) { panel.split = null; return; }
     _cleanEmptySplitsInNode(panel.split);
@@ -511,9 +568,13 @@ function _renderSplitNode(panel, splitNode, panelLeafId, isTopLevel) {
     const panelIsLeaf = (panelLeafId === panel.id);
     let panelSideHtml;
     if (panelIsLeaf && panel.split === splitNode) {
-        // Top-level: panel is the root leaf
-        // (panel itself can't have a deeper split at this level since we just entered from panel.split)
-        panelSideHtml = _renderLeafPane(panel, panel, panel.id);
+        // Top-level: panel is the root leaf.
+        // If the root pane itself is split (_rootSplit), render that split tree.
+        if (panel._rootSplit) {
+            panelSideHtml = _renderSplitNode(panel, panel._rootSplit, panel.id, false);
+        } else {
+            panelSideHtml = _renderLeafPane(panel, panel, panel.id);
+        }
     } else {
         // At deeper levels, find the actual leaf object.
         // panelLeafId is the branch of the parent split that was itself split.

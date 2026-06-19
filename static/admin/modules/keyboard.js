@@ -109,24 +109,38 @@ function _setActiveSideForLeaf(panel, leafId) {
     panel._focusedLeafId = leafId;
     if (leafId === panel.id) {
         if (panel.split) panel.split.activeSide = 'panel';
+        if (panel._rootSplit) panel._rootSplit.activeSide = 'panel';
         return;
+    }
+    // Check if the leaf is in the root's own split tree (_rootSplit)
+    if (panel._rootSplit) {
+        const foundInRoot = _setActiveSideInNode(panel._rootSplit, leafId);
+        if (foundInRoot) {
+            // Leaf found in root split tree — also set top-level split to 'panel' side
+            if (panel.split) panel.split.activeSide = 'panel';
+            return;
+        }
     }
     if (!panel.split) return;
     _setActiveSideInNode(panel.split, leafId);
 }
 
 function _setActiveSideInNode(splitNode, leafId) {
-    if (!splitNode || !splitNode.branch) return;
+    if (!splitNode || !splitNode.branch) return false;
     if (splitNode.branch.id === leafId) {
         splitNode.activeSide = 'branch';
-        return;
+        return true;
     }
     // The leaf might be deeper in the branch's tree
     if (splitNode.branch.split) {
-        _setActiveSideInNode(splitNode.branch.split, leafId);
-        // If found deeper, this level's activeSide should be 'branch'
-        splitNode.activeSide = 'branch';
+        const found = _setActiveSideInNode(splitNode.branch.split, leafId);
+        if (found) {
+            // If found deeper, this level's activeSide should be 'branch'
+            splitNode.activeSide = 'branch';
+            return true;
+        }
     }
+    return false;
 }
 
 function _saveScrollback(offset) {
