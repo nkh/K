@@ -577,10 +577,6 @@ function _renderMinimizedPanels() {
     return html + '</div>';
 }
 
-// Compat stub — _renderSplitPane was replaced by recursive rendering
-function _renderSplitPane() { return ''; }
-function _updateSplitPanelHeader() {}
-
 function togglePanelLayout() {
     state.panelLayout = state.panelLayout === 'row' ? 'column' : 'row';
     localStorage.setItem('vrw_panel_layout', state.panelLayout);
@@ -780,7 +776,7 @@ function startRenameWindow(winId) {
         _renderVttyContainer, _getServerLabel, _getServerColor, _getServerTextColor,
         _getPanelCmdLabel, _updateSplitHeaders, _renderSplitContainer,
         _renderMinimizedPanels, _applyPanelLayoutClass,
-        _updatePanelMultiUI, _getPanelLabel, _renderSplitPane,
+        _updatePanelMultiUI, _getPanelLabel,
         _renderLeafHeader, _renderLeafPane, _findCmd, _findPanelVtty, _cacheVtty,
         switchWindow, createWindow, closeWindow, _renderWindowBar, startRenameWindow,
         _getActiveWindow, _getVisiblePanels,
