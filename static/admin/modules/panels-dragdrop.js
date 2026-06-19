@@ -244,9 +244,9 @@ function _cmdReorderMouseMove(e) {
     const overArea = underEl?.closest('#view-vtty') && !underEl.closest('#sidebar');
     const wasOverPane = s.overPane;
     s.overPane = !!(overPanel || overArea);
-    // Track the specific target panel and split side for proper drop handling
+    // Track the specific target panel and leaf for proper drop handling
     s._targetPanelId = overPanel?.id || null;
-    s._targetSplitSide = underEl?.closest('[data-split-side]')?.dataset.splitSide || null;
+    s._targetLeafId = underEl?.closest('[data-leaf-id]')?.getAttribute('data-leaf-id') || null;
     if (s.overPane !== wasOverPane) {
         document.querySelectorAll('.panel').forEach(p => p.classList.toggle('drag-over-left', s.overPane));
         if (!s.overPane && container) container.querySelectorAll('.cmd-item').forEach(el => el.classList.remove('cmd-drag-over-top', 'cmd-drag-over-bottom'));
@@ -265,7 +265,7 @@ function _cmdReorderMouseUp() {
     document.removeEventListener('mousemove', _cmdReorderMouseMove);
     document.removeEventListener('mouseup', _cmdReorderMouseUp);
     if (!_reorderState) return;
-    const { srcEl, placeholder, instUrl, cmdId, cmdName, overPane, _targetPanelId, _targetSplitSide } = _reorderState;
+    const { srcEl, placeholder, instUrl, cmdId, cmdName, overPane, _targetPanelId, _targetLeafId } = _reorderState;
     if (srcEl) {
         ['position','left','top','width','zIndex','opacity','pointerEvents'].forEach(p => srcEl.style[p] = '');
         srcEl.classList.remove('cmd-dragging');
@@ -279,9 +279,8 @@ function _cmdReorderMouseUp() {
         const targetPanelObj = _targetPanelId ? state.panels.find(p => p.id === _targetPanelId) : null;
         if (targetPanelObj) {
             if (targetPanelObj.split) {
-                const leafId = _targetPanelId ? null : (_targetSplitSide ? _targetSplitSide : null);
-                // Determine the target leaf from the drop position
-                const dropLeafId = leafId || (typeof _getFocusedLeafId === 'function' ? _getFocusedLeafId(targetPanelObj) : targetPanelObj.id);
+                // Use the leaf under the cursor if detected, otherwise fall back to focused leaf
+                const dropLeafId = _targetLeafId || (typeof _getFocusedLeafId === 'function' ? _getFocusedLeafId(targetPanelObj) : targetPanelObj.id);
                 if (dropLeafId && dropLeafId !== targetPanelObj.id) {
                     const found = (typeof _findLeafState === 'function') ? _findLeafState(targetPanelObj, dropLeafId) : null;
                     if (found && found.leaf) {
