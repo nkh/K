@@ -147,6 +147,7 @@ assertEq(vsp.split.direction, 'vertical', 'vertical split direction set');
 // ── Split pane renders empty branch ──
 console.log('split pane renders empty branch tests');
 {
+    state.connections = [{ url: 'http://localhost:9090', label: 'Local', token: '', reachable: true, _commands: [{ id: 'cmd-1', name: 'top' }] }];
     const ep = addPanelDirect();
     ep.selectedCmdId = 'cmd-1';
     ep.selectedInstUrl = 'http://localhost:9090';

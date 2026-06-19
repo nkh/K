@@ -317,6 +317,8 @@ function splitPanel(panelId, direction, leafId) {
             direction, splitRatio: 0.5, activeSide: 'panel',
             branch: _newLeafState(sid),
         };
+        // Initialize focused leaf to root after first split
+        if (p._focusedLeafId == null) p._focusedLeafId = p.id;
     } else {
         // Splitting a branch (or deeper) leaf
         const found = _findLeafState(p, leafId);
@@ -326,6 +328,8 @@ function splitPanel(panelId, direction, leafId) {
             direction, splitRatio: 0.5, activeSide: 'panel',
             branch: _newLeafState(sid),
         };
+        // Keep focus on the leaf that was just split
+        p._focusedLeafId = leafId;
     }
     renderPanels();
 }

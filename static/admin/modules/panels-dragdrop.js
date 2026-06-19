@@ -290,11 +290,10 @@ function _cmdReorderMouseUp() {
                     _pushPanelHistory(targetPanelObj);
                     _selectCommandForPanel(targetPanelObj, instUrl, cmdId);
                 }
-            } else if (!targetPanelObj.selectedCmdId) {
+            } else {
+                // Always assign to the target pane — never split or open a new pane
                 _pushPanelHistory(targetPanelObj);
                 _selectCommandForPanel(targetPanelObj, instUrl, cmdId);
-            } else {
-                _openCommandInNewPane(instUrl, cmdId, cmdName);
             }
         } else {
             // Dropped on the terminal area but not on a specific panel — open new pane
