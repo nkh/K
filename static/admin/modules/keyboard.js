@@ -36,15 +36,14 @@ function _getFocusedLeafId(panel) {
     if (!panel.split) return panel.id;
     // Walk the tree using the activeSide at each level
     let current = panel.split;
-    let leafId = panel.id; // default to primary
+    let leafId = panel.id; // default to panel itself
     while (current) {
-        if (current.activeSide === 'secondary' && current.secondary) {
-            leafId = current.secondary.id;
-            current = current.secondary.split;
+        if (current.activeSide === 'branch' && current.branch) {
+            leafId = current.branch.id;
+            current = current.branch.split;
         } else {
-            // Primary side — at the top level this is the panel, deeper it would be
-            // the leaf that has the split. But our tree model always has secondary
-            // as the splitable node. So if activeSide is 'primary', stop here.
+            // Panel side — at the top level this is the panel, deeper it would be
+            // the leaf that has the split. So if activeSide is 'panel', stop here.
             break;
         }
     }
@@ -56,13 +55,13 @@ function _getLeafFromVtty(vc, panelObj) {
     if (!panelObj) return null;
     // Check if this vtty belongs to a leaf in the split tree
     const leafId = vc.getAttribute('data-leaf-id');
-    if (!leafId) return { leaf: panelObj, isPanelPrimary: true };
-    if (leafId === panelObj.id) return { leaf: panelObj, isPanelPrimary: true };
+    if (!leafId) return { leaf: panelObj, isPanelLeaf: true };
+    if (leafId === panelObj.id) return { leaf: panelObj, isPanelLeaf: true };
     if (panelObj.split) {
         const found = _findLeafState(panelObj, leafId);
-        if (found) return { leaf: found.leaf, isPanelPrimary: false };
+        if (found) return { leaf: found.leaf, isPanelLeaf: false };
     }
-    return { leaf: panelObj, isPanelPrimary: true };
+    return { leaf: panelObj, isPanelLeaf: true };
 }
 
 function _openSearch(panelId) {
@@ -112,7 +111,7 @@ function _setActiveSideForLeaf(panel, leafId) {
     // Track focused leaf per panel for visual highlighting
     panel._focusedLeafId = leafId;
     if (leafId === panel.id) {
-        if (panel.split) panel.split.activeSide = 'primary';
+        if (panel.split) panel.split.activeSide = 'panel';
         return;
     }
     if (!panel.split) return;
@@ -120,16 +119,16 @@ function _setActiveSideForLeaf(panel, leafId) {
 }
 
 function _setActiveSideInNode(splitNode, leafId) {
-    if (!splitNode || !splitNode.secondary) return;
-    if (splitNode.secondary.id === leafId) {
-        splitNode.activeSide = 'secondary';
+    if (!splitNode || !splitNode.branch) return;
+    if (splitNode.branch.id === leafId) {
+        splitNode.activeSide = 'branch';
         return;
     }
-    // The leaf might be deeper in the secondary's tree
-    if (splitNode.secondary.split) {
-        _setActiveSideInNode(splitNode.secondary.split, leafId);
-        // If found deeper, this level's activeSide should be 'secondary'
-        splitNode.activeSide = 'secondary';
+    // The leaf might be deeper in the branch's tree
+    if (splitNode.branch.split) {
+        _setActiveSideInNode(splitNode.branch.split, leafId);
+        // If found deeper, this level's activeSide should be 'branch'
+        splitNode.activeSide = 'branch';
     }
 }
 
@@ -355,10 +354,10 @@ async function sendDirectKey(e, panelObj) {
     // Find which vtty container is focused to determine the target leaf
     const focusedVtty = document.activeElement?.closest?.('.vtty-container')
         || panelObj.focused && document.querySelector(`#vtty-${panelObj.id}`)?.closest('.panel')?.querySelector('.vtty-container[tabindex="0"]');
-    const leafInfo = focusedVtty ? _getLeafFromVtty(focusedVtty, panelObj) : { leaf: panelObj, isPanelPrimary: true };
+    const leafInfo = focusedVtty ? _getLeafFromVtty(focusedVtty, panelObj) : { leaf: panelObj, isPanelLeaf: true };
     const leaf = leafInfo.leaf;
-    const cmdId = leafInfo.isPanelPrimary ? panelObj.selectedCmdId : leaf.cmdId;
-    const instUrl = leafInfo.isPanelPrimary ? panelObj.selectedInstUrl : leaf.instUrl;
+    const cmdId = leafInfo.isPanelLeaf ? panelObj.selectedCmdId : leaf.cmdId;
+    const instUrl = leafInfo.isPanelLeaf ? panelObj.selectedInstUrl : leaf.instUrl;
     if (!cmdId || !instUrl) return;
 
     let seq = '';
@@ -526,12 +525,12 @@ document.addEventListener('mousemove', (e) => {
 async function sendMouseEvent(panelObj, eventType, button, e) {
     // Find the target leaf from the event
     const vc = e.target.closest('.vtty-container');
-    const leafInfo = vc ? _getLeafFromVtty(vc, panelObj) : { leaf: panelObj, isPanelPrimary: true };
+    const leafInfo = vc ? _getLeafFromVtty(vc, panelObj) : { leaf: panelObj, isPanelLeaf: true };
     const leaf = leafInfo.leaf;
-    const cmdId = leafInfo.isPanelPrimary ? panelObj.selectedCmdId : leaf.cmdId;
-    const instUrl = leafInfo.isPanelPrimary ? panelObj.selectedInstUrl : leaf.instUrl;
+    const cmdId = leafInfo.isPanelLeaf ? panelObj.selectedCmdId : leaf.cmdId;
+    const instUrl = leafInfo.isPanelLeaf ? panelObj.selectedInstUrl : leaf.instUrl;
     if (!cmdId || !instUrl) return;
-    const vttyEl = document.getElementById(leafInfo.isPanelPrimary ? panelObj.id : leaf.id)?.querySelector('.vtty-container') || vc;
+    const vttyEl = document.getElementById(leafInfo.isPanelLeaf ? panelObj.id : leaf.id)?.querySelector('.vtty-container') || vc;
     if (!vttyEl) return;
 
     const rect = vttyEl.getBoundingClientRect();

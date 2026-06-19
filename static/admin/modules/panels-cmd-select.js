@@ -99,7 +99,7 @@ function _selectCommandForPanel(panelObj, instUrl, cmdId, { cache = false, reset
 }
 
 function _selectLeafCommand(panelObj, leaf, instUrl, cmdId) {
-    // Select a command into a specific leaf (secondary or deeper in the tree)
+    // Select a command into a specific leaf (branch or deeper in the tree)
     _disconnectSingleLeaf(leaf);
     leaf.instUrl = instUrl;
     leaf.cmdId = cmdId;
@@ -124,7 +124,7 @@ function _selectActiveLeafCommand(panelObj, instUrl, cmdId) {
     }
     const leafId = (typeof _getFocusedLeafId === 'function') ? _getFocusedLeafId(panelObj) : panelObj.id;
     if (leafId === panelObj.id) {
-        // Primary leaf
+        // Panel root leaf
         _selectCommandForPanel(panelObj, instUrl, cmdId, { cache: true, resetBuffers: true, scrollback: true });
     } else {
         const found = (typeof _findLeafState === 'function') ? _findLeafState(panelObj, leafId) : null;

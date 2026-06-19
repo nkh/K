@@ -4,7 +4,7 @@
 
 // ─── VTTY Display & Incremental Updates ───
 // Handles full HTML replacement, cell-level diff patching (Level 3),
-// cursor/metadata updates, scrollback, and secondary split pane VTTY.
+// cursor/metadata updates, scrollback, and split pane VTTY.
 
 function updateVttyDisplayForPanel(panelObj, panelEl, data) {
     const vttyEl = panelEl.querySelector('.vtty-container');
@@ -461,10 +461,6 @@ function updateVttyMetadataFromHttp(data, panelEl, panelObj, sbOffset) {
     window.buildCellGrid = buildCellGrid;
     window.updateVttyMetadataFromHttp = updateVttyMetadataFromHttp;
 
-// ─── Secondary Pane VTTY Display (deprecated — single-level only) ───
-// These are the OLD single-level split functions, superseded by the recursive
-// leaf system in websocket.js (_loadLeafVttyHttpDirect, _connectLeafWs, _applyLeafDiff).
-// Kept for backward compatibility with existing tests. Do NOT use in new code.
 
 function _applyScrollHtml(vttyEl, pre, html) {
     const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
@@ -476,7 +472,7 @@ function _applyScrollHtml(vttyEl, pre, html) {
 
 function scheduleSecondaryVttyHttp(panelObj, delayMs) {
     if (!panelObj || !panelObj.split) return;
-    const leaf = panelObj.split.secondary;
+    const leaf = panelObj.split.branch;
     if (!leaf.cmdId || !leaf.instUrl) return;
     const timerKey = '_secondaryVttyHttpTimer_' + panelObj.id;
     if (state[timerKey]) clearTimeout(state[timerKey]);
@@ -488,7 +484,7 @@ function scheduleSecondaryVttyHttp(panelObj, delayMs) {
 
 async function _loadLeafVttyHttp(panelObj) {
     if (!panelObj || !panelObj.split) return;
-    const leaf = panelObj.split.secondary;
+    const leaf = panelObj.split.branch;
     const vttyEl = document.getElementById('vtty-' + leaf.id);
     if (!vttyEl) return;
     try {
@@ -500,7 +496,7 @@ async function _loadLeafVttyHttp(panelObj) {
 function updateSecondaryVttyDisplay(panelObj, vttyEl, data) {
     const pre = vttyEl ? vttyEl.querySelector('pre') : null;
     if (!pre) return;
-    const leaf = panelObj.split.secondary;
+    const leaf = panelObj.split.branch;
     const cmdId = leaf.cmdId;
     const genKey = '_secondaryGen_' + cmdId;
     if (cmdId && data.generation !== undefined) {
@@ -538,8 +534,8 @@ function _updateLeafVttyMetadata(leaf, vttyEl, data) {
 }
 
 function applySecondaryVttyDiff(panelObj, vttyEl, data) {
-    // Use the same diff pipeline as primary panels — incremental for ALL leaves.
-    const leaf = panelObj.split.secondary;
+    // Incremental diff for ALL leaves.
+    const leaf = panelObj.split.branch;
     const cmdId = leaf.cmdId;
     if (!cmdId) return;
     const pre = vttyEl ? vttyEl.querySelector('pre') : null;
@@ -552,13 +548,13 @@ function applySecondaryVttyDiff(panelObj, vttyEl, data) {
         return;
     }
     if (data.generation !== undefined) state._lastGeneration[genKey] = data.generation;
-    // Full HTML diff (same as primary)
+    // Full HTML diff
     if (data.html !== undefined) {
         _applyScrollHtml(vttyEl, pre, data.html);
         _updateLeafVttyMetadata(leaf, vttyEl, data);
         return;
     }
-    // Cell-level diff support for leaves — same as primary
+    // Cell-level diff support for leaves
     if (state._level3Enabled && data.dimensions) {
         const cgKey = leaf.id + '/' + cmdId;
         buildCellGrid(cgKey, pre, data.dimensions.rows, data.dimensions.cols);

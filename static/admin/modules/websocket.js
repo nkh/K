@@ -210,7 +210,7 @@ function connectPanelWs(panelId) {
     if (panelObj.split && typeof _getAllLeaves === 'function') {
         const leaves = _getAllLeaves(panelObj);
         for (const { leaf, side } of leaves) {
-            if (!side) continue; // skip primary (panel itself, handled above)
+            if (!side) continue; // skip panel root leaf (handled above)
             if (leaf.cmdId && leaf.instUrl) {
                 if (state.updateMode === 'push') {
                     _connectLeafWs(leaf);
@@ -359,7 +359,7 @@ function fetchVttyDiffForPanel(panelId, instUrl, cmdId, delayMs) {
     }, delayMs);
 }
 
-async function _doFetchVttyDiff(panelId, instUrl, cmdId, isSecondary) {
+async function _doFetchVttyDiff(panelId, instUrl, cmdId, isBranch) {
     // panelId may be a leaf ID (for split tree leaves) or a panel ID.
     // Find the actual panel and the target DOM element.
     let panelObj = state.panels.find(p => p.id === panelId);
@@ -527,7 +527,7 @@ function stopPanelUpdateMode(panelId) {
     stopPanelPoll(panelId);
 }
 
-    // ─── Generic leaf WS connect (for recursive split tree) ───
+    // ─── Generic leaf WS connect (for split tree) ───
 function _connectLeafWs(leaf) {
     if (!leaf || !leaf.cmdId || !leaf.instUrl) return;
     if (leaf.ws) { try { leaf.ws.close(); } catch {} leaf.ws = null; }

@@ -126,19 +126,6 @@ function vttySearchClose(panelId) {
 
 // ─── Scroll to Bottom ───
 function scrollTerminalBottom(panelId) {
-    const isSecondary = panelId.endsWith('-secondary');
-    if (isSecondary) {
-        const primaryPanelId = panelId.slice(0, -'-secondary'.length);
-        const vtty = document.getElementById('vtty-' + panelId);
-        if (vtty) vtty.scrollTop = vtty.scrollHeight;
-        const panelObj = state.panels.find(p => p.id === primaryPanelId);
-        if (panelObj && panelObj.split && panelObj.split.secondaryScrollbackOffset > 0) {
-            panelObj.split.secondaryScrollbackOffset = 0;
-            if (panelObj.split.secondaryCmdId) _loadSecondaryVttyHttp(panelObj);
-        }
-        return;
-    }
-
     const panelEl = document.getElementById(panelId);
     if (!panelEl) return;
     const vtty = panelEl.querySelector('.vtty-container');

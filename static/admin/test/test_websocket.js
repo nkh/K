@@ -54,9 +54,9 @@ const splitP = addPanelDirect();
 splitP.selectedInstUrl = 'http://localhost:9090';
 splitP.selectedCmdId = 'cmd-split';
 splitP.split = {
-    direction: 'horizontal', splitRatio: 0.5, activeSide: 'primary',
-    secondary: {
-        id: splitP.id + '-s1', cmdId: 'cmd-sec', instUrl: 'http://localhost:9090',
+    direction: 'horizontal', splitRatio: 0.5, activeSide: 'panel',
+    branch: {
+        id: splitP.id + '-branch1', cmdId: 'cmd-sec', instUrl: 'http://localhost:9090',
         ws: null, pollTimer: null,
         wsReconnectCount: 0, wsPingInterval: null,
         wsPingSendTime: 0, wsLatency: 0,
@@ -70,7 +70,7 @@ assertEq(splitP.wsCmdId, null, 'wsCmdId cleared');
 assertEq(splitP.wsReconnectCount, 0, 'reconnect count reset');
 assertEq(splitP.wsPingSendTime, 0, 'ping send time reset');
 assertEq(splitP.wsLatency, 0, 'latency reset');
-// Note: secondary WS state cleanup depends on _disconnectSecondaryWs internals
+// Note: branch WS state cleanup depends on _disconnectSingleLeaf internals
 // Only verify the primary WS was disconnected
 assert(splitP.ws === null || splitP.ws.readyState === 3, 'primary WS disconnected');
 
@@ -229,7 +229,7 @@ if (typeof _disconnectSingleLeaf === 'function') {
 
     // With a leaf that has WS state
     const leaf = {
-        id: 'test-leaf', cmdId: 's1', instUrl: 'http://localhost:9090',
+        id: 'test-leaf', cmdId: 'branch1', instUrl: 'http://localhost:9090',
         ws: new MockWebSocket('ws://test'),
         wsReconnectTimer: setTimeout(() => {}, 10000),
         wsPingInterval: setInterval(() => {}, 10000),
@@ -243,7 +243,7 @@ if (typeof _disconnectSingleLeaf === 'function') {
     assertEq(leaf.wsLatency, 0, 'leaf latency reset');
 }
 
-// ── _loadLeafVttyHttpDirect (replaces old scheduleSecondaryVttyHttp) ──
+// ── _loadLeafVttyHttpDirect ──
 console.log('_loadLeafVttyHttpDirect tests');
 if (typeof _loadLeafVttyHttpDirect === 'function') {
     // No DOM element → no crash (just returns)
@@ -255,7 +255,7 @@ if (typeof _loadLeafVttyHttpDirect === 'function') {
     assert(() => { _loadLeafVttyHttpDirect(noCmdLeaf); }, '_loadLeafVttyHttpDirect no-cmd no crash');
 }
 
-// ── _applyLeafDiff (replaces old applySecondaryVttyDiff) ──
+// ── _applyLeafDiff ──
 console.log('_applyLeafDiff tests');
 if (typeof _applyLeafDiff === 'function') {
     const vttyEl = document.createElement('div');

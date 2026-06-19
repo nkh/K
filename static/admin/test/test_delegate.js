@@ -28,7 +28,7 @@ const expectedActions = [
     'ClosePanelContent', 'PanelHistoryBack', 'PanelHistoryForward',
     'StartRenamePanel', 'UnsplitPanel', 'UnsplitLeaf', 'ToggleMinimizePanel', 'FocusPanel',
     'ScrollTerminalBottom', 'VttySearchNext', 'VttySearchPrev', 'VttySearchClose',
-    'ShowPanelContextMenu', 'CloseSpecialKeysModal',
+    'CloseSpecialKeysModal',
     'RestartCommandById', 'KillCommand', 'SelectAndViewCmd', 'OnSearchResultClick',
     'SpawnServerTemplate', 'SpawnUserTemplate', 'DeleteUserTemplate',
     'ActivateEnvironment', 'ToggleGroupCollapse', 'RenameCmdGroup', 'DeleteCmdGroup',

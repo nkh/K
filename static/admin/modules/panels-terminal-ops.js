@@ -18,13 +18,13 @@ function _resolveTargetLeaf(targetId) {
     const panelObj = state.panels.find(p => p.id === targetId);
     if (!panelObj) return null;
     if (!panelObj.split || targetId === panelObj.id) {
-        return { panelObj, leaf: panelObj, cmdId: panelObj.selectedCmdId, instUrl: panelObj.selectedInstUrl, isPrimary: true };
+        return { panelObj, leaf: panelObj, cmdId: panelObj.selectedCmdId, instUrl: panelObj.selectedInstUrl, isPanelLeaf: true };
     }
     const found = typeof _findLeafState === 'function' ? _findLeafState(panelObj, targetId) : null;
     if (found && found.leaf) {
-        return { panelObj, leaf: found.leaf, cmdId: found.leaf.cmdId, instUrl: found.leaf.instUrl, isPrimary: false };
+        return { panelObj, leaf: found.leaf, cmdId: found.leaf.cmdId, instUrl: found.leaf.instUrl, isPanelLeaf: false };
     }
-    return { panelObj, leaf: panelObj, cmdId: panelObj.selectedCmdId, instUrl: panelObj.selectedInstUrl, isPrimary: true };
+    return { panelObj, leaf: panelObj, cmdId: panelObj.selectedCmdId, instUrl: panelObj.selectedInstUrl, isPanelLeaf: true };
 }
 
 function copyTerminalSelection(targetId) {

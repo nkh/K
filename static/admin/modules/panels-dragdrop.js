@@ -144,7 +144,7 @@ function onPanelDrop(e, targetPanelId) {
             if (panelObj.split) {
                 const leafId = leafEl ? leafEl.getAttribute('data-leaf-id') : null;
                 if (leafId && leafId !== panelObj.id) {
-                    // Dropped on a specific secondary leaf
+                    // Dropped on a specific branch leaf
                     const found = (typeof _findLeafState === 'function') ? _findLeafState(panelObj, leafId) : null;
                     if (found && found.leaf) {
                         _selectLeafCommand(panelObj, found.leaf, cmdData.instUrl, cmdData.cmdId);

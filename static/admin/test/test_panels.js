@@ -117,14 +117,14 @@ splitPanel(sp.id, 'horizontal');
 assert(sp.split !== null, 'split created');
 assertEq(sp.split.direction, 'horizontal', 'split direction is horizontal');
 assertEq(sp.split.splitRatio, 0.5, 'split ratio is 0.5');
-assertEq(sp.split.activeSide, 'primary', 'active side is primary');
-assert(sp.split.secondary !== null, 'secondary leaf object created');
-assertEq(sp.split.secondary.cmdId, null, 'secondary cmd id is null initially');
-assertEq(sp.split.secondary.instUrl, null, 'secondary inst url is null initially');
-assertEq(sp.split.secondary.scrollbackOffset, 0, 'secondary scrollback offset starts 0');
-assertEq(sp.split.secondary.mouseTracking, false, 'secondary mouse tracking starts false');
-assertEq(sp.split.secondary.mouseSgr, false, 'secondary mouse sgr starts false');
-assert(sp.split.secondary.ws === null, 'secondary ws starts null');
+assertEq(sp.split.activeSide, 'panel', 'active side is panel');
+assert(sp.split.branch !== null, 'branch leaf object created');
+assertEq(sp.split.branch.cmdId, null, 'branch cmd id is null initially');
+assertEq(sp.split.branch.instUrl, null, 'branch inst url is null initially');
+assertEq(sp.split.branch.scrollbackOffset, 0, 'branch scrollback offset starts 0');
+assertEq(sp.split.branch.mouseTracking, false, 'branch mouse tracking starts false');
+assertEq(sp.split.branch.mouseSgr, false, 'branch mouse sgr starts false');
+assert(sp.split.branch.ws === null, 'branch ws starts null');
 
 splitPanel(sp.id, 'vertical'); // Should not overwrite existing split
 assertEq(sp.split.direction, 'horizontal', 'split direction unchanged on second call');
@@ -145,7 +145,7 @@ splitPanel(vsp.id, 'vertical');
 assertEq(vsp.split.direction, 'vertical', 'vertical split direction set');
 
 // ── Split pane renders empty secondary ──
-console.log('split pane renders empty secondary tests');
+console.log('split pane renders empty branch tests');
 {
     const ep = addPanelDirect();
     ep.selectedCmdId = 'cmd-1';
@@ -161,13 +161,13 @@ console.log('split pane renders empty secondary tests');
     const origRender = globalThis.renderPanels;
     globalThis.renderPanels = function() {};
     splitPanel(ep.id, 'horizontal');
-    // The secondary leaf should have rendered with "No command selected" text
+    // The branch leaf should have rendered with "No command selected" text
     const html = _renderSplitContainer(ep);
-    assert(html.includes('No command selected'), 'split secondary shows no command placeholder');
-    // Verify the secondary vtty container has the empty placeholder, not the primary cmd
+    assert(html.includes('No command selected'), 'split branch shows no command placeholder');
+    // Verify the branch vtty container has the empty placeholder, not the panel root cmd
     const secVttyMatch = html.match(/id="vtty-[^"]*L\d"[^>]*>.*?<pre>(.*?)<\/pre>/s);
     assert(secVttyMatch && secVttyMatch[1].includes('No command selected'),
-        'split secondary vtty container has no-command text');
+        'split branch vtty container has no-command text');
     globalThis.renderPanels = origRender;
     window._getServerColor = origGetServerColor;
     window._getServerTextColor = origGetServerTextColor;
@@ -275,7 +275,7 @@ if (typeof _getServerColor === 'function') {
 
     const secondary = state.connections[1];
     const color2 = _getServerColor(secondary);
-    assert(color2 !== 'var(--bg-tertiary)', 'secondary connection gets palette color');
+    assert(color2 !== 'var(--bg-tertiary)', 'second connection gets palette color');
 
     const tertiary = state.connections[2];
     const color3 = _getServerColor(tertiary);
@@ -301,7 +301,7 @@ if (typeof _getServerTextColor === 'function') {
     state.connections = [{ url: 'http://a.com', label: 'A' }, { url: 'http://b.com', label: 'B' }];
     assertEq(_getServerTextColor(state.connections[0]), 'var(--text-primary)', 'primary uses default text color');
     const secText = _getServerTextColor(state.connections[1]);
-    assert(secText !== 'var(--text-primary)', 'secondary gets palette text color');
+    assert(secText !== 'var(--text-primary)', 'second connection gets palette text color');
     assertEq(_getServerTextColor(null), 'var(--text-primary)', 'null inst uses default text color');
 }
 

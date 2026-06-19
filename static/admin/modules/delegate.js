@@ -179,7 +179,6 @@ const _actions = {
     'VttySearchNext':           { handler: 'vttySearchNext', sig: 'data-panel' },
     'VttySearchPrev':           { handler: 'vttySearchPrev', sig: 'data-panel' },
     'VttySearchClose':          { handler: 'vttySearchClose', sig: 'data-panel' },
-    'ShowPanelContextMenu':     { handler: 'showPanelContextMenu', sig: 'data-panel' },
 
     // ── Special keys modal ──
     'CloseSpecialKeysModal':    { handler: 'closeSpecialKeysModal' },

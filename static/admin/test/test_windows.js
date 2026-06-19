@@ -287,7 +287,7 @@ console.log('WIN-008: disconnectPanelWs clears diff baselines');
 // ──────────────────────────────────────────────────────────────
 // WIN-009: disconnectPanelWs clears baselines for secondary split too
 // ──────────────────────────────────────────────────────────────
-console.log('WIN-009: disconnectPanelWs clears baselines for secondary split too');
+console.log('WIN-009: disconnectPanelWs clears baselines for branch split too');
 {
     state.windows = [];
     state.activeWindowId = null;
@@ -301,20 +301,20 @@ console.log('WIN-009: disconnectPanelWs clears baselines for secondary split too
     p.wsCmdId = 'cmd-pri';
     // Set up a split using the tree structure
     splitPanel(p.id, 'horizontal');
-    const secLeaf = p.split.secondary;
-    secLeaf.cmdId = 'cmd-sec';
-    secLeaf.instUrl = 'http://localhost:9090';
+    const branchLeaf = p.split.branch;
+    branchLeaf.cmdId = 'cmd-sec';
+    branchLeaf.instUrl = 'http://localhost:9090';
 
     state._focusedPanelId = p.id;
     state._diffBaselines[p.id + '/cmd-pri'] = 'uuid-pri';
-    state._diffBaselines[secLeaf.id + '/cmd-sec'] = 'uuid-sec';
+    state._diffBaselines[branchLeaf.id + '/cmd-sec'] = 'uuid-sec';
 
     disconnectPanelWs(p.id);
 
     assertEq(state._diffBaselines[p.id + '/cmd-pri'], undefined,
         'WIN-009a: primary diff baseline cleared');
-    assertEq(state._diffBaselines[secLeaf.id + '/cmd-sec'], undefined,
-        'WIN-009b: secondary diff baseline cleared');
+    assertEq(state._diffBaselines[branchLeaf.id + '/cmd-sec'], undefined,
+        'WIN-009b: branch diff baseline cleared');
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -341,10 +341,10 @@ console.log('WIN-010: onPanelDrop on split pane assigns to split side');
     const cmdData = JSON.stringify({ instUrl: 'http://localhost:9090', cmdId: 'cmd-new', cmdName: 'my-cmd' });
 
     // Create a mock event whose target is inside the SECONDARY leaf's vtty
-    const secondaryVtty = document.createElement('div');
-    secondaryVtty.setAttribute('data-leaf-id', p.split.secondary.id);
-    secondaryVtty.setAttribute('data-panel', p.id);
-    secondaryVtty.className = 'vtty-container';
+    const branchVtty = document.createElement('div');
+    branchVtty.setAttribute('data-leaf-id', p.split.branch.id);
+    branchVtty.setAttribute('data-panel', p.id);
+    branchVtty.className = 'vtty-container';
 
     const ev = {
         preventDefault: function() {},
@@ -352,7 +352,7 @@ console.log('WIN-010: onPanelDrop on split pane assigns to split side');
         dataTransfer: {
             getData: function(mime) { return mime === 'application/x-cmd' ? cmdData : ''; },
         },
-        target: secondaryVtty,
+        target: branchVtty,
     };
 
     // Track what _selectLeafCommand receives
@@ -378,7 +378,7 @@ console.log('WIN-010: onPanelDrop on split pane assigns to split side');
             'WIN-010d: leaf select received correct cmdId');
         assertEq(leafReceived.panelId, p.id,
             'WIN-010e: leaf select received correct panel');
-        assertEq(leafReceived.leafId, p.split.secondary.id,
+        assertEq(leafReceived.leafId, p.split.branch.id,
             'WIN-010f: leaf select received correct leaf id');
     }
 
@@ -542,7 +542,7 @@ console.log('WIN-014: onPanelDrop on split panel without specific side uses acti
     p.selectedCmdId = 'cmd-existing';
     state._focusedPanelId = p.id;
     splitPanel(p.id, 'horizontal');
-    p.split.activeSide = 'secondary';
+    p.split.activeSide = 'branch';
     state.connections.push({ url: 'http://localhost:9090', label: 'Local', token: '', reachable: true, _commands: [] });
 
     const panelCountBefore = state.panels.length;
@@ -554,7 +554,7 @@ console.log('WIN-014: onPanelDrop on split panel without specific side uses acti
     headerDiv.className = 'panel-header';
     // No data-split-side attribute — simulates dropping on the panel header
 
-    // Drop on header (no data-leaf-id) with activeSide=secondary:
+    // Drop on header (no data-leaf-id) with activeSide=branch:
     // The new code falls through since there's no leaf target,
     // and the panel already has a command, so a new pane is created.
     const ev = {
@@ -814,17 +814,17 @@ console.log('WIN-019: mousedown drag drop targets existing panel/split');
     assert(calledWith && calledWith.fn === 'newPane',
         'WIN-019b: HTML5 drop on panel with existing command creates new pane');
 
-    // Test: HTML5 drop on split pane secondary side
-    p1.split = { direction: 'horizontal', splitRatio: 0.5, activeSide: 'primary', secondary: { id: p1.id + '-s1', cmdId: null, instUrl: null } };
+    // Test: HTML5 drop on split pane branch side
+    p1.split = { direction: 'horizontal', splitRatio: 0.5, activeSide: 'panel', branch: { id: p1.id + '-branch1', cmdId: null, instUrl: null } };
     calledWith = null;
     const mockEvt3 = { preventDefault: () => {}, stopPropagation: () => {}, dataTransfer: { getData: () => JSON.stringify({ instUrl: 'http://localhost:9090', cmdId: 'cmd-drop3', cmdName: 'test3' }) }, target: null };
     // Create a fake target with data-leaf-id
     const splitDiv = document.createElement('div');
-    splitDiv.dataset.leafId = p1.split.secondary.id;
+    splitDiv.dataset.leafId = p1.split.branch.id;
     mockEvt3.target = splitDiv;
     onPanelDrop(mockEvt3, p1.id);
     assert(calledWith && calledWith.fn === 'leafCommand' && calledWith.panelId === p1.id,
-        'WIN-019c: HTML5 drop on split pane secondary side calls _selectLeafCommand');
+        'WIN-019c: HTML5 drop on split pane branch side calls _selectLeafCommand');
 
     // Test: HTML5 drop on split pane primary side (has existing command → new pane)
     calledWith = null;

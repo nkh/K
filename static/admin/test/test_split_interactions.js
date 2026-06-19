@@ -52,15 +52,15 @@ console.log('SPL-001: selectCommand routes to active leaf in split');
     state._focusedPanelId = p.id;
     // Split the panel
     splitPanel(p.id, 'horizontal');
-    const secLeaf = p.split.secondary;
+    const branchLeaf = p.split.branch;
 
-    // Set active side to secondary so _getFocusedLeafId returns secondary
-    p.split.activeSide = 'secondary';
-    p._focusedLeafId = secLeaf.id;
+    // Set active side to branch so _getFocusedLeafId returns branch
+    p.split.activeSide = 'branch';
+    p._focusedLeafId = branchLeaf.id;
 
-    // Verify _getFocusedLeafId returns the secondary
+    // Verify _getFocusedLeafId returns the branch
     const focusedId = _getFocusedLeafId(p);
-    assertEq(focusedId, secLeaf.id, 'SPL-001-pre: _getFocusedLeafId returns secondary');
+    assertEq(focusedId, branchLeaf.id, 'SPL-001-pre: _getFocusedLeafId returns branch');
 
     // Track which leaf got the command
     let leafIdForVtty = null;
@@ -76,12 +76,12 @@ console.log('SPL-001: selectCommand routes to active leaf in split');
     // Simulate user clicking "htop" in the sidebar → calls selectCommand
     selectCommand('http://localhost:9090', 'cmd-2', 'htop');
 
-    // The secondary leaf should have received the command
-    assertEq(secLeaf.cmdId, 'cmd-2',
-        'SPL-001a: secondary leaf received cmd-2');
-    assertEq(secLeaf.instUrl, 'http://localhost:9090',
-        'SPL-001b: secondary leaf received correct instUrl');
-    assertEq(leafIdForVtty, secLeaf.id,
+    // The branch leaf should have received the command
+    assertEq(branchLeaf.cmdId, 'cmd-2',
+        'SPL-001a: branch leaf received cmd-2');
+    assertEq(branchLeaf.instUrl, 'http://localhost:9090',
+        'SPL-001b: branch leaf received correct instUrl');
+    assertEq(leafIdForVtty, branchLeaf.id,
         'SPL-001c: _loadLeafVttyHttpDirect called with leaf ID');
     assertEq(leafCmdId, 'cmd-2',
         'SPL-001d: _loadLeafVttyHttpDirect called with correct cmdId');
@@ -105,7 +105,7 @@ console.log('SPL-002: _selectLeafCommand loads command into specific leaf');
 
     const p = addPanelDirect();
     splitPanel(p.id, 'vertical');
-    const secLeaf = p.split.secondary;
+    const branchLeaf = p.split.branch;
 
     let loadCalled = false;
     let loadLeafId = null;
@@ -115,20 +115,20 @@ console.log('SPL-002: _selectLeafCommand loads command into specific leaf');
         loadLeafId = leaf.id;
     };
 
-    _selectLeafCommand(p, secLeaf, 'http://localhost:9090', 'cmd-3');
+    _selectLeafCommand(p, branchLeaf, 'http://localhost:9090', 'cmd-3');
 
-    assertEq(secLeaf.cmdId, 'cmd-3', 'SPL-002a: leaf cmdId set');
-    assertEq(secLeaf.instUrl, 'http://localhost:9090', 'SPL-002b: leaf instUrl set');
+    assertEq(branchLeaf.cmdId, 'cmd-3', 'SPL-002a: leaf cmdId set');
+    assertEq(branchLeaf.instUrl, 'http://localhost:9090', 'SPL-002b: leaf instUrl set');
     assertOk(loadCalled, 'SPL-002c: _loadLeafVttyHttpDirect was called');
-    assertEq(loadLeafId, secLeaf.id, 'SPL-002d: called with correct leaf ID');
+    assertEq(loadLeafId, branchLeaf.id, 'SPL-002d: called with correct leaf ID');
 
     globalThis._loadLeafVttyHttpDirect = origLoad;
 }
 
 // ──────────────────────────────────────────────────────────────
-// SPL-003: _selectActiveLeafCommand routes to primary when no split
+// SPL-003: _selectActiveLeafCommand routes to panel when no split
 // ──────────────────────────────────────────────────────────────
-console.log('SPL-003: _selectActiveLeafCommand routes to primary (no split)');
+console.log('SPL-003: _selectActiveLeafCommand routes to panel (no split)');
 {
     state.panels = [];
     state.connections = [
@@ -153,7 +153,7 @@ console.log('SPL-003: _selectActiveLeafCommand routes to primary (no split)');
 
     assertEq(p.selectedCmdId, 'cmd-4', 'SPL-003a: panel cmdId set');
     assertOk(httpCalled, 'SPL-003b: loadVttyHttpForPanel called');
-    assertEq(httpPanelId, p.id, 'SPL-003c: called with panel ID (primary)');
+    assertEq(httpPanelId, p.id, 'SPL-003c: called with panel ID (panel)');
 
     globalThis.loadVttyHttpForPanel = origHttp;
 }
@@ -228,7 +228,7 @@ console.log('SPL-006: Alt+1-9 shortcuts registered');
 // SPL-007: Active pane focus tracked via _setActiveSideForLeaf
 //           (simulates clicking on a vtty-container in a split)
 // ──────────────────────────────────────────────────────────────
-console.log('SPL-007: Click on secondary vtty sets activeSide');
+console.log('SPL-007: Click on branch vtty sets activeSide');
 {
     state.panels = [];
     state.windows = [];
@@ -236,17 +236,17 @@ console.log('SPL-007: Click on secondary vtty sets activeSide');
 
     const p = addPanelDirect();
     splitPanel(p.id, 'horizontal');
-    const secLeaf = p.split.secondary;
+    const branchLeaf = p.split.branch;
 
-    // Initially activeSide should be 'primary'
-    assertEq(p.split.activeSide, 'primary', 'SPL-007a: initial activeSide is primary');
+    // Initially activeSide should be 'panel'
+    assertEq(p.split.activeSide, 'panel', 'SPL-007a: initial activeSide is panel');
 
-    // Simulate clicking the secondary vtty (what _getPanelObj does)
-    p.split.activeSide = 'primary';
-    _setActiveSideForLeaf(p, secLeaf.id);
+    // Simulate clicking the branch vtty (what _getPanelObj does)
+    p.split.activeSide = 'panel';
+    _setActiveSideForLeaf(p, branchLeaf.id);
 
-    assertEq(p.split.activeSide, 'secondary', 'SPL-007b: activeSide changed to secondary');
-    assertEq(p._focusedLeafId, secLeaf.id, 'SPL-007c: _focusedLeafId set to secondary');
+    assertEq(p.split.activeSide, 'branch', 'SPL-007b: activeSide changed to branch');
+    assertEq(p._focusedLeafId, branchLeaf.id, 'SPL-007c: _focusedLeafId set to branch');
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -288,9 +288,9 @@ console.log('SPL-009: _fetchLeafDiff uses leaf-specific timer key');
 
     const p = addPanelDirect();
     splitPanel(p.id, 'horizontal');
-    const secLeaf = p.split.secondary;
-    secLeaf.cmdId = 'cmd-sec';
-    secLeaf.instUrl = 'http://localhost:9090';
+    const branchLeaf = p.split.branch;
+    branchLeaf.cmdId = 'cmd-sec';
+    branchLeaf.instUrl = 'http://localhost:9090';
 
     // Mock the diff fetch to capture the timer key used
     let fetchTimerKey = null;
@@ -301,7 +301,7 @@ console.log('SPL-009: _fetchLeafDiff uses leaf-specific timer key');
         return origSetTimeout(fn, delay);
     };
 
-    assert(() => { _fetchLeafDiff(secLeaf.id, 'http://localhost:9090', 'cmd-sec', 100); },
+    assert(() => { _fetchLeafDiff(branchLeaf.id, 'http://localhost:9090', 'cmd-sec', 100); },
         'SPL-009a: _fetchLeafDiff with leaf ID does not throw');
 
     globalThis.setTimeout = origSetTimeout;
@@ -330,10 +330,10 @@ console.log('SPL-010: Split pane headers match non-split headers');
 
     // Now split and render the secondary header
     splitPanel(p.id, 'vertical');
-    const secLeaf = p.split.secondary;
-    secLeaf.cmdId = 'cmd-h';
-    secLeaf.instUrl = 'http://localhost:9090';
-    const splitHeader = _renderLeafHeader(p, secLeaf, secLeaf.id);
+    const branchLeaf = p.split.branch;
+    branchLeaf.cmdId = 'cmd-h';
+    branchLeaf.instUrl = 'http://localhost:9090';
+    const splitHeader = _renderLeafHeader(p, branchLeaf, branchLeaf.id);
 
     // Both should have panel-header class
     assertIncludes(nonSplitHeader, 'class="panel-header"', 'SPL-010a: non-split has panel-header class');
@@ -345,14 +345,14 @@ console.log('SPL-010: Split pane headers match non-split headers');
 
     // Both should have data-leaf-id
     assertIncludes(nonSplitHeader, 'data-leaf-id="' + p.id + '"', 'SPL-010e: non-split has data-leaf-id');
-    assertIncludes(splitHeader, 'data-leaf-id="' + secLeaf.id + '"', 'SPL-010f: split has data-leaf-id');
+    assertIncludes(splitHeader, 'data-leaf-id="' + branchLeaf.id + '"', 'SPL-010f: split has data-leaf-id');
 
     // Both should have close button
     assertIncludes(nonSplitHeader, 'panel-close-btn', 'SPL-010g: non-split has close button');
     assertIncludes(splitHeader, 'panel-close-btn', 'SPL-010h: split has close button');
 
-    // Split secondary should use UnsplitLeaf action (not UnsplitPanel)
-    assertIncludes(splitHeader, 'data-action="UnsplitLeaf"', 'SPL-010i: split secondary uses UnsplitLeaf');
+    // Split branch should use UnsplitLeaf action (not UnsplitPanel)
+    assertIncludes(splitHeader, 'data-action="UnsplitLeaf"', 'SPL-010i: split branch uses UnsplitLeaf');
     assertIncludes(nonSplitHeader, 'data-action="UnsplitPanel"', 'SPL-010j: top-level uses UnsplitPanel');
 }
 
@@ -373,9 +373,9 @@ console.log('SPL-011: connectPanelWs connects WS for all split leaves');
     p.selectedInstUrl = 'http://localhost:9090';
     p.selectedCmdId = 'cmd-pri';
     splitPanel(p.id, 'horizontal');
-    const secLeaf = p.split.secondary;
-    secLeaf.cmdId = 'cmd-sec';
-    secLeaf.instUrl = 'http://localhost:9090';
+    const branchLeaf = p.split.branch;
+    branchLeaf.cmdId = 'cmd-sec';
+    branchLeaf.instUrl = 'http://localhost:9090';
 
     // connectPanelWs should not throw
     assert(() => { connectPanelWs(p.id); }, 'SPL-011: connectPanelWs with split does not throw');
@@ -387,8 +387,8 @@ console.log('SPL-011: connectPanelWs connects WS for all split leaves');
 
     // Secondary should have its own WS (via _connectLeafWs)
     // In the mock, WebSocket constructor creates a mock — just verify it was called
-    assertOk(secLeaf.ws !== null || secLeaf.wsInstUrl === 'http://localhost:9090',
-        'SPL-011c: secondary leaf WS state initialized');
+    assertOk(branchLeaf.ws !== null || branchLeaf.wsInstUrl === 'http://localhost:9090',
+        'SPL-011c: branch leaf WS state initialized');
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -456,7 +456,7 @@ console.log('SPL-012: _applyLeafDiff applies cell-level updates');
 // SPL-013: Recursive split — split a pane that is already split
 //           (the secondary of a split can itself be split)
 // ──────────────────────────────────────────────────────────────
-console.log('SPL-013: Recursive split — secondary can be split again');
+console.log('SPL-013: Recursive split — branch can be split again');
 {
     state.panels = [];
     state.connections = [];
@@ -464,34 +464,34 @@ console.log('SPL-013: Recursive split — secondary can be split again');
     state.activeWindowId = null;
 
     const p = addPanelDirect();
-    // First split: panel → [primary, secondary]
+    // First split: panel → [panel, branch]
     splitPanel(p.id, 'horizontal');
     assertOk(!!p.split, 'SPL-013a: panel has top-level split');
-    const sec1 = p.split.secondary;
-    assertOk(!!sec1, 'SPL-013b: first secondary exists');
+    const branch1 = p.split.branch;
+    assertOk(!!branch1, 'SPL-013b: first branch exists');
 
-    // Focus the secondary and split it again
-    p.split.activeSide = 'secondary';
-    p._focusedLeafId = sec1.id;
+    // Focus the branch and split it again
+    p.split.activeSide = 'branch';
+    p._focusedLeafId = branch1.id;
     splitPanel(p.id, 'vertical');
 
-    // The secondary should now itself be split
-    assertOk(!!sec1.split, 'SPL-013c: secondary has its own split');
-    const sec2 = sec1.split.secondary;
-    assertOk(!!sec2, 'SPL-013d: second-level secondary exists');
-    assertEq(sec2.id.indexOf(p.id), 0, 'SPL-013e: deep secondary ID starts with panel ID');
+    // The branch should now itself be split
+    assertOk(!!branch1.split, 'SPL-013c: branch has its own split');
+    const branch2 = branch1.split.branch;
+    assertOk(!!branch2, 'SPL-013d: second-level branch exists');
+    assertEq(branch2.id.indexOf(p.id), 0, 'SPL-013e: deep branch ID starts with panel ID');
 
     // Verify _getAllLeaves returns 3 leaves
     const allLeaves = _getAllLeaves(p);
     assertEq(allLeaves.length, 3, 'SPL-013f: 3 leaves after double split');
     assertEq(allLeaves[0].leaf.id, p.id, 'SPL-013g: leaf 0 is panel (primary)');
-    assertEq(allLeaves[1].leaf.id, sec1.id, 'SPL-013h: leaf 1 is first secondary');
-    assertEq(allLeaves[2].leaf.id, sec2.id, 'SPL-013i: leaf 2 is second-level secondary');
+    assertEq(allLeaves[1].leaf.id, branch1.id, 'SPL-013h: leaf 1 is first branch');
+    assertEq(allLeaves[2].leaf.id, branch2.id, 'SPL-013i: leaf 2 is second-level branch');
 
     // Verify _findLeafState can find the deep leaf
-    const found = _findLeafState(p, sec2.id);
+    const found = _findLeafState(p, branch2.id);
     assertOk(!!found, 'SPL-013j: _findLeafState finds deep leaf');
-    assertEq(found.leaf.id, sec2.id, 'SPL-013k: found leaf has correct ID');
+    assertEq(found.leaf.id, branch2.id, 'SPL-013k: found leaf has correct ID');
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -515,9 +515,9 @@ console.log('SPL-014: Context menu resolves correct leaf command');
     p.selectedInstUrl = 'http://localhost:9090';
     p.selectedCmdId = 'cmd-pri';
     splitPanel(p.id, 'vertical');
-    const secLeaf = p.split.secondary;
-    secLeaf.cmdId = 'cmd-sec';
-    secLeaf.instUrl = 'http://localhost:9090';
+    const branchLeaf = p.split.branch;
+    branchLeaf.cmdId = 'cmd-sec';
+    branchLeaf.instUrl = 'http://localhost:9090';
 
     // Verify showPanelContextMenu is a function that accepts 3 args
     assertEq(typeof showPanelContextMenu, 'function', 'SPL-014a: showPanelContextMenu exists');
@@ -537,10 +537,10 @@ console.log('SPL-015: unsplitPanel resets activeSide after collapse');
 
     const p = addPanelDirect();
     splitPanel(p.id, 'horizontal');
-    p.split.activeSide = 'secondary';
+    p.split.activeSide = 'branch';
 
-    // Unsplit the secondary
-    unsplitPanel(p.id, p.split.secondary.id);
+    // Unsplit the branch
+    unsplitPanel(p.id, p.split.branch.id);
 
     // The top-level split should be removed
     assertEq(p.split, null, 'SPL-015a: top-level split cleared after unsplit');
@@ -561,12 +561,12 @@ console.log('SPL-016: Split header oncontextmenu passes leafId');
 
     const p = addPanelDirect();
     splitPanel(p.id, 'vertical');
-    const secLeaf = p.split.secondary;
+    const branchLeaf = p.split.branch;
 
-    const headerHtml = _renderLeafHeader(p, secLeaf, secLeaf.id);
+    const headerHtml = _renderLeafHeader(p, branchLeaf, branchLeaf.id);
     // The oncontextmenu should pass 3 arguments: event, panelId, leafId
-    assertIncludes(headerHtml, "showPanelContextMenu(event,'" + p.id + "','" + secLeaf.id + "')",
-        'SPL-016: secondary header oncontextmenu passes leaf ID');
+    assertIncludes(headerHtml, "showPanelContextMenu(event,'" + p.id + "','" + branchLeaf.id + "')",
+        'SPL-016: branch header oncontextmenu passes leaf ID');
 }
 
 console.log('\n[split_interactions] Tests complete');
@@ -588,7 +588,7 @@ console.log('SPL-017: _setupPanelDelegation reads data-leaf-id');
 //           Simulates: Alt+| split → click on secondary pane → click cmd in sidebar
 //           This is the exact bug that was fixed: secondary panes were unselectable.
 // ──────────────────────────────────────────────────────────────
-console.log('SPL-018: Full user flow — split, click secondary, selectCommand');
+console.log('SPL-018: Full user flow — split, click branch, selectCommand');
 {
     resetTestState();
     state.panels = [];
@@ -607,23 +607,23 @@ console.log('SPL-018: Full user flow — split, click secondary, selectCommand')
 
     // Step 1: Split the panel (Alt+|)
     splitPanel(p.id, 'horizontal');
-    const secLeaf = p.split.secondary;
+    const branchLeaf = p.split.branch;
 
-    // Step 2: Verify initial state — activeSide is primary (default)
-    assertEq(p.split.activeSide, 'primary', 'SPL-018a: initial activeSide is primary');
-    assertEq(_getFocusedLeafId(p), p.id, 'SPL-018b: _getFocusedLeafId returns primary');
+    // Step 2: Verify initial state — activeSide is panel (default)
+    assertEq(p.split.activeSide, 'panel', 'SPL-018a: initial activeSide is panel');
+    assertEq(_getFocusedLeafId(p), p.id, 'SPL-018b: _getFocusedLeafId returns panel root');
 
-    // Step 3: Simulate user clicking on the secondary pane's vtty-container
+    // Step 3: Simulate user clicking on the branch pane's vtty-container
     // This is what the FIXED _setupPanelDelegation mousedown handler does:
     //   const el = e.target.closest('[data-leaf-id]');
     //   const leafId = el.getAttribute('data-leaf-id');
     //   _setActiveSideForLeaf(p, leafId);
-    _setActiveSideForLeaf(p, secLeaf.id);
+    _setActiveSideForLeaf(p, branchLeaf.id);
 
     // Step 4: Verify the click updated the active leaf
-    assertEq(p.split.activeSide, 'secondary', 'SPL-018c: activeSide changed to secondary after click');
-    assertEq(p._focusedLeafId, secLeaf.id, 'SPL-018d: _focusedLeafId set to secondary after click');
-    assertEq(_getFocusedLeafId(p), secLeaf.id, 'SPL-018e: _getFocusedLeafId returns secondary');
+    assertEq(p.split.activeSide, 'branch', 'SPL-018c: activeSide changed to branch after click');
+    assertEq(p._focusedLeafId, branchLeaf.id, 'SPL-018d: _focusedLeafId set to branch after click');
+    assertEq(_getFocusedLeafId(p), branchLeaf.id, 'SPL-018e: _getFocusedLeafId returns branch');
 
     // Step 5: User clicks "htop" in the sidebar → selectCommand
     // Mock the leaf VTTY loader to track which leaf gets the command
@@ -638,13 +638,13 @@ console.log('SPL-018: Full user flow — split, click secondary, selectCommand')
     selectCommand('http://localhost:9090', 'cmd-b', 'htop');
 
     // Step 6: Verify command was routed to the SECONDARY leaf (not primary)
-    assertEq(secLeaf.cmdId, 'cmd-b', 'SPL-018f: secondary leaf received cmd-b');
-    assertEq(secLeaf.instUrl, 'http://localhost:9090', 'SPL-018g: secondary leaf received correct instUrl');
-    assertEq(loadLeafId, secLeaf.id, 'SPL-018h: VTTY loader called for secondary leaf');
+    assertEq(branchLeaf.cmdId, 'cmd-b', 'SPL-018f: branch leaf received cmd-b');
+    assertEq(branchLeaf.instUrl, 'http://localhost:9090', 'SPL-018g: branch leaf received correct instUrl');
+    assertEq(loadLeafId, branchLeaf.id, 'SPL-018h: VTTY loader called for branch leaf');
     assertEq(loadCmdId, 'cmd-b', 'SPL-018i: VTTY loader received correct cmdId');
 
-    // Step 7: Verify the PRIMARY leaf was NOT overwritten
-    assertEq(p.selectedCmdId, null, 'SPL-018j: primary leaf cmdId unchanged (still null)');
+    // Step 7: Verify the panel root leaf was NOT overwritten
+    assertEq(p.selectedCmdId, null, 'SPL-018j: panel root leaf cmdId unchanged (still null)');
 
     globalThis._loadLeafVttyHttpDirect = origLoad;
 }
@@ -682,18 +682,18 @@ console.log('SPL-020: Split pane HTML data-leaf-id matches delegation handler');
 
     const p = addPanelDirect();
     splitPanel(p.id, 'vertical');
-    const secLeaf = p.split.secondary;
+    const branchLeaf = p.split.branch;
 
-    // Render the leaf header for the secondary (exported function)
-    const headerHtml = _renderLeafHeader(p, secLeaf, secLeaf.id);
+    // Render the leaf header for the branch (exported function)
+    const headerHtml = _renderLeafHeader(p, branchLeaf, branchLeaf.id);
 
-    // Header must have data-leaf-id that matches the secondary leaf ID
-    assertIncludes(headerHtml, 'data-leaf-id="' + secLeaf.id + '"',
+    // Header must have data-leaf-id that matches the branch leaf ID
+    assertIncludes(headerHtml, 'data-leaf-id="' + branchLeaf.id + '"',
         'SPL-020a: header has matching data-leaf-id');
 
     // Verify the full leaf pane rendering includes data-leaf-id
-    const paneHtml = _renderLeafPane(p, secLeaf, secLeaf.id);
-    assertIncludes(paneHtml, 'data-leaf-id="' + secLeaf.id + '"',
+    const paneHtml = _renderLeafPane(p, branchLeaf, branchLeaf.id);
+    assertIncludes(paneHtml, 'data-leaf-id="' + branchLeaf.id + '"',
         'SPL-020b: leaf pane has matching data-leaf-id');
     assertIncludes(paneHtml, 'class="split-pane', 'SPL-020c: leaf pane has split-pane class');
 
@@ -717,8 +717,8 @@ console.log('SPL-021: Nested split header shows correct leaf command');
         { url: 'http://localhost:9090', label: 'Local', token: '', reachable: true,
           _commands: [
               { id: 'cmd-p', name: 'top', args: [] },
-              { id: 'cmd-s1', name: 'htop', args: [] },
-              { id: 'cmd-s2', name: 'vim', args: [] },
+              { id: 'cmd-branch1', name: 'htop', args: [] },
+              { id: 'cmd-branch2', name: 'vim', args: [] },
           ] },
     ];
     state.windows = [];
@@ -728,18 +728,18 @@ console.log('SPL-021: Nested split header shows correct leaf command');
     p.selectedInstUrl = 'http://localhost:9090';
     p.selectedCmdId = 'cmd-p';
 
-    // First split: panel → [primary(panel), secondary(s1)]
+    // First split: panel → [primary(panel), secondary(branch1)]
     splitPanel(p.id, 'horizontal');
-    const s1 = p.split.secondary;
-    s1.cmdId = 'cmd-s1';
-    s1.instUrl = 'http://localhost:9090';
+    const branch1 = p.split.branch;
+    branch1.cmdId = 'cmd-branch1';
+    branch1.instUrl = 'http://localhost:9090';
 
-    // Second split: s1 → [primary(s1), secondary(s2)]
-    _setActiveSideForLeaf(p, s1.id);
+    // Second split: branch1 → [primary(branch1), secondary(branch2)]
+    _setActiveSideForLeaf(p, branch1.id);
     splitPanel(p.id, 'vertical');
-    const s2 = s1.split.secondary;
-    s2.cmdId = 'cmd-s2';
-    s2.instUrl = 'http://localhost:9090';
+    const branch2 = branch1.split.branch;
+    branch2.cmdId = 'cmd-branch2';
+    branch2.instUrl = 'http://localhost:9090';
 
     // Render the top-level split container
     const html = _renderSplitContainer(p);
@@ -747,10 +747,10 @@ console.log('SPL-021: Nested split header shows correct leaf command');
     // All three leaf headers should be present with their own commands
     // Primary (panel) header should mention panel.id
     assertIncludes(html, 'data-leaf-id="' + p.id + '"', 'SPL-021a: primary header in rendered output');
-    // S1 header should mention s1.id
-    assertIncludes(html, 'data-leaf-id="' + s1.id + '"', 'SPL-021b: s1 header in rendered output');
-    // S2 header should mention s2.id
-    assertIncludes(html, 'data-leaf-id="' + s2.id + '"', 'SPL-021c: s2 header in rendered output');
+    // S1 header should mention branch1.id
+    assertIncludes(html, 'data-leaf-id="' + branch1.id + '"', 'SPL-021b: branch1 header in rendered output');
+    // S2 header should mention branch2.id
+    assertIncludes(html, 'data-leaf-id="' + branch2.id + '"', 'SPL-021c: branch2 header in rendered output');
 
     // Verify _getAllLeaves returns 3 leaves
     const allLeaves = _getAllLeaves(p);

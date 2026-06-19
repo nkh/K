@@ -220,9 +220,9 @@ function toggleMinimizePanel(panelId) {
 }
 
 // ─── Pane Tree (recursive splitting) ───
-// Each panel can have a .split tree. The panel itself is always the primary leaf.
-// panel.split.secondary is a self-contained leaf object that can itself be split.
-// This allows unlimited recursive splitting like tmux.
+// Each panel can have a .split tree. The panel itself is the root leaf.
+// panel.split.branch is a leaf object that can itself be split.
+// This allows unlimited recursive splitting.
 
 function _newLeafState(id) {
     return {
@@ -243,7 +243,7 @@ function _nextLeafId(panelId) {
 }
 
 // Find a leaf state object by its ID, walking the split tree.
-// Returns { leaf, parentSplit, side } where side is 'secondary' or null (panel itself).
+// Returns { leaf, parentSplit, side } where side is 'branch' or null (panel itself).
 function _findLeafState(panel, leafId) {
     if (!leafId || panel.id === leafId) return { leaf: panel, parentSplit: null, side: null };
     if (!panel.split) return null;
@@ -251,12 +251,12 @@ function _findLeafState(panel, leafId) {
 }
 
 function _findLeafInNode(splitNode, leafId) {
-    // Check secondary leaf
-    if (splitNode.secondary) {
-        if (splitNode.secondary.id === leafId) return { leaf: splitNode.secondary, parentSplit: splitNode, side: 'secondary' };
-        // Recurse into secondary's own split tree
-        if (splitNode.secondary.split) {
-            const found = _findLeafInNode(splitNode.secondary.split, leafId);
+    // Check branch leaf
+    if (splitNode.branch) {
+        if (splitNode.branch.id === leafId) return { leaf: splitNode.branch, parentSplit: splitNode, side: 'branch' };
+        // Recurse into branch's own split tree
+        if (splitNode.branch.split) {
+            const found = _findLeafInNode(splitNode.branch.split, leafId);
             if (found) return found;
         }
     }
@@ -271,9 +271,9 @@ function _getAllLeaves(panel) {
 }
 
 function _collectLeaves(splitNode, leaves) {
-    if (splitNode.secondary) {
-        leaves.push({ leaf: splitNode.secondary, side: 'secondary' });
-        if (splitNode.secondary.split) _collectLeaves(splitNode.secondary.split, leaves);
+    if (splitNode.branch) {
+        leaves.push({ leaf: splitNode.branch, side: 'branch' });
+        if (splitNode.branch.split) _collectLeaves(splitNode.branch.split, leaves);
     }
 }
 
@@ -284,11 +284,11 @@ function _findParentSplit(panel, leafId) {
 }
 
 function _findParentSplitInNode(splitNode, leafId) {
-    // The secondary of THIS node?
-    if (splitNode.secondary && splitNode.secondary.id === leafId) return splitNode;
-    // Recurse into secondary's split tree
-    if (splitNode.secondary && splitNode.secondary.split) {
-        return _findParentSplitInNode(splitNode.secondary.split, leafId);
+    // The branch of THIS node?
+    if (splitNode.branch && splitNode.branch.id === leafId) return splitNode;
+    // Recurse into branch's split tree
+    if (splitNode.branch && splitNode.branch.split) {
+        return _findParentSplitInNode(splitNode.branch.split, leafId);
     }
     return null;
 }
@@ -297,11 +297,11 @@ function splitPanel(panelId, direction, leafId) {
     const p = state.panels.find(pp => pp.id === panelId);
     if (!p) return;
 
-    // If no leafId specified, split the panel itself (primary) if not already split
+    // If no leafId specified, split the panel itself if not already split
     // or split the active side if already split
     if (!leafId) {
         if (!p.split) {
-            leafId = p.id; // split the primary
+            leafId = p.id; // split the panel itself
         } else {
             // Default: split the currently active side
             leafId = _getFocusedLeafId(p);
@@ -310,21 +310,21 @@ function splitPanel(panelId, direction, leafId) {
 
     // Find the leaf to split
     if (leafId === p.id) {
-        // Splitting the panel itself (primary)
+        // Splitting the panel itself
         if (p.split) return; // already has top-level split
         const sid = _nextLeafId(p.id);
         p.split = {
-            direction, splitRatio: 0.5, activeSide: 'primary',
-            secondary: _newLeafState(sid),
+            direction, splitRatio: 0.5, activeSide: 'panel',
+            branch: _newLeafState(sid),
         };
     } else {
-        // Splitting a secondary (or deeper) leaf
+        // Splitting a branch (or deeper) leaf
         const found = _findLeafState(p, leafId);
         if (!found || !found.leaf || found.leaf.split) return; // already split
         const sid = _nextLeafId(p.id);
         found.leaf.split = {
-            direction, splitRatio: 0.5, activeSide: 'primary',
-            secondary: _newLeafState(sid),
+            direction, splitRatio: 0.5, activeSide: 'panel',
+            branch: _newLeafState(sid),
         };
     }
     renderPanels();
@@ -335,8 +335,8 @@ function unsplitPanel(panelId, leafId) {
     if (!p || !p.split) return;
 
     if (!leafId || leafId === p.id) {
-        // Close the primary — remove the entire top-level split
-        // First disconnect all secondary WS in the tree
+        // Remove the entire top-level split
+        // First disconnect all branch WS in the tree
         _disconnectLeafTree(p.split);
         p.split = null;
         renderPanels();
@@ -348,23 +348,22 @@ function unsplitPanel(panelId, leafId) {
     if (!parentSplit) return;
 
     // Disconnect the leaf being closed
-    const closingLeaf = parentSplit.secondary;
+    const closingLeaf = parentSplit.branch;
     if (closingLeaf) _disconnectSingleLeaf(closingLeaf);
 
     // If the closing leaf itself was split, disconnect its whole subtree
     if (closingLeaf && closingLeaf.split) _disconnectLeafTree(closingLeaf.split);
 
-    // Promote the primary child (the other side) — but we're closing secondary,
-    // so just remove the split. The primary is always the panel or an ancestor.
-    parentSplit.secondary = null;
+    // Remove the split — the other side (panel or ancestor) remains unchanged.
+    parentSplit.branch = null;
     parentSplit.direction = null;
-    parentSplit.activeSide = 'primary';
+    parentSplit.activeSide = 'panel';
 
     // If this was the top-level split, clear it
-    if (p.split === parentSplit && !p.split.secondary) {
+    if (p.split === parentSplit && !p.split.branch) {
         p.split = null;
     }
-    // Walk up and clean any split nodes that lost their secondary
+    // Walk up and clean any split nodes that lost their branch
     _cleanEmptySplits(p);
 
     renderPanels();
@@ -372,24 +371,24 @@ function unsplitPanel(panelId, leafId) {
 
 function _cleanEmptySplits(panel) {
     if (!panel.split) return;
-    if (!panel.split.secondary) { panel.split = null; return; }
+    if (!panel.split.branch) { panel.split = null; return; }
     _cleanEmptySplitsInNode(panel.split);
 }
 
 function _cleanEmptySplitsInNode(splitNode) {
-    if (!splitNode.secondary) return;
-    if (splitNode.secondary.split && !splitNode.secondary.split.secondary) {
-        splitNode.secondary.split = null;
+    if (!splitNode.branch) return;
+    if (splitNode.branch.split && !splitNode.branch.split.branch) {
+        splitNode.branch.split = null;
     }
-    if (splitNode.secondary.split) _cleanEmptySplitsInNode(splitNode.secondary.split);
+    if (splitNode.branch.split) _cleanEmptySplitsInNode(splitNode.branch.split);
 }
 
 // Disconnect all WS in a split tree
 function _disconnectLeafTree(splitNode) {
     if (!splitNode) return;
-    if (splitNode.secondary) {
-        _disconnectSingleLeaf(splitNode.secondary);
-        if (splitNode.secondary.split) _disconnectLeafTree(splitNode.secondary.split);
+    if (splitNode.branch) {
+        _disconnectSingleLeaf(splitNode.branch);
+        if (splitNode.branch.split) _disconnectLeafTree(splitNode.branch.split);
     }
 }
 
@@ -418,7 +417,7 @@ function _renderVttyContainer(panel) {
 }
 
 // ─── Recursive pane tree rendering ───
-// All leaves are equal — no primary/secondary distinction in rendering.
+// All leaves are equal.
 // The panel object itself acts as the "root leaf" and stores its cmdId/instUrl
 // in selectedCmdId/selectedInstUrl like a non-split panel.
 
@@ -480,40 +479,40 @@ function _renderSplitContainer(panel) {
     return _renderSplitNode(panel, panel.split, panel.id, true);
 }
 
-// Recursively render a split node. primaryNode is either the panel (for top-level) or a leaf object.
-function _renderSplitNode(panel, splitNode, primaryLeafId, isTopLevel) {
+// Recursively render a split node. panelLeafId is either the panel (for top-level) or a leaf object.
+function _renderSplitNode(panel, splitNode, panelLeafId, isTopLevel) {
     const dir = splitNode.direction || 'horizontal';
     const pw = splitNode.splitRatio ? (splitNode.splitRatio * 100).toFixed(1) : '50';
     const sw = (100 - parseFloat(pw)).toFixed(1);
 
-    // Render primary side
-    const primaryIsPanel = (primaryLeafId === panel.id);
-    let primaryHtml;
-    if (primaryIsPanel && panel.split === splitNode) {
-        // Top-level: primary is the panel, check if it has a deeper split
-        // (panel itself can't have a split at top level since we just entered from panel.split)
-        primaryHtml = _renderLeafPane(panel, panel, panel.id);
+    // Render panel side
+    const panelIsLeaf = (panelLeafId === panel.id);
+    let panelSideHtml;
+    if (panelIsLeaf && panel.split === splitNode) {
+        // Top-level: panel is the root leaf
+        // (panel itself can't have a deeper split at this level since we just entered from panel.split)
+        panelSideHtml = _renderLeafPane(panel, panel, panel.id);
     } else {
-        // At deeper levels, find the actual leaf object for the primary.
-        // primaryLeafId is the secondary of the parent split that was itself split.
-        const found = _findLeafState(panel, primaryLeafId);
-        const primaryLeaf = found ? found.leaf : panel;
-        primaryHtml = _renderLeafPane(panel, primaryLeaf, primaryLeafId);
+        // At deeper levels, find the actual leaf object.
+        // panelLeafId is the branch of the parent split that was itself split.
+        const found = _findLeafState(panel, panelLeafId);
+        const panelLeaf = found ? found.leaf : panel;
+        panelSideHtml = _renderLeafPane(panel, panelLeaf, panelLeafId);
     }
 
-    // Render secondary side
-    const sec = splitNode.secondary;
-    let secondaryHtml;
-    if (sec.split) {
-        // Secondary is itself split — recurse
-        secondaryHtml = _renderSplitNode(panel, sec.split, sec.id, false);
+    // Render branch side
+    const branch = splitNode.branch;
+    let branchHtml;
+    if (branch.split) {
+        // Branch is itself split — recurse
+        branchHtml = _renderSplitNode(panel, branch.split, branch.id, false);
     } else {
-        secondaryHtml = _renderLeafPane(panel, sec, sec.id);
+        branchHtml = _renderLeafPane(panel, branch, branch.id);
     }
 
     const containerId = isTopLevel ? 'split-' + panel.id : '';
     const containerIdAttr = containerId ? ' id="' + containerId + '"' : '';
-    return `<div class="split-container ${dir}"${containerIdAttr} data-panel="${panel.id}" style="display:flex;flex:1;min-width:0;min-height:0;${dir === 'vertical' ? 'flex-direction:column;' : ''}">${primaryHtml}<div class="split-divider" data-panel="${panel.id}"></div>${secondaryHtml}</div>`;
+    return `<div class="split-container ${dir}"${containerIdAttr} data-panel="${panel.id}" style="display:flex;flex:1;min-width:0;min-height:0;${dir === 'vertical' ? 'flex-direction:column;' : ''}">${panelSideHtml}<div class="split-divider" data-panel="${panel.id}"></div>${branchHtml}</div>`;
 }
 
 function _renderLeafPane(panel, leaf, leafId) {
@@ -530,16 +529,16 @@ function _updateSplitHeaders(panelObj) {
     if (!panelObj?.split) return;
     const el = document.getElementById(panelObj.id);
     if (!el) return;
-    // Update primary (panel itself)
+    // Update panel root leaf
     _updateOneSplitHeader(el, panelObj.id, panelObj.selectedInstUrl, panelObj.selectedCmdId);
-    // Walk tree for all secondary leaves
+    // Walk tree for all branch leaves
     _updateTreeHeaders(el, panelObj.split);
 }
 
 function _updateTreeHeaders(container, splitNode) {
-    if (!splitNode || !splitNode.secondary) return;
-    _updateOneSplitHeader(container, splitNode.secondary.id, splitNode.secondary.instUrl, splitNode.secondary.cmdId);
-    if (splitNode.secondary.split) _updateTreeHeaders(container, splitNode.secondary.split);
+    if (!splitNode || !splitNode.branch) return;
+    _updateOneSplitHeader(container, splitNode.branch.id, splitNode.branch.instUrl, splitNode.branch.cmdId);
+    if (splitNode.branch.split) _updateTreeHeaders(container, splitNode.branch.split);
 }
 
 function _updateOneSplitHeader(container, leafId, instUrl, cmdId) {
