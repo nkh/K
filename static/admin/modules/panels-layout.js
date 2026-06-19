@@ -494,8 +494,11 @@ function _renderSplitNode(panel, splitNode, primaryLeafId, isTopLevel) {
         // (panel itself can't have a split at top level since we just entered from panel.split)
         primaryHtml = _renderLeafPane(panel, panel, panel.id);
     } else {
-        // At deeper levels, the "primary" of a split is the node that contains the split.
-        primaryHtml = _renderLeafPane(panel, panel, primaryLeafId);
+        // At deeper levels, find the actual leaf object for the primary.
+        // primaryLeafId is the secondary of the parent split that was itself split.
+        const found = _findLeafState(panel, primaryLeafId);
+        const primaryLeaf = found ? found.leaf : panel;
+        primaryHtml = _renderLeafPane(panel, primaryLeaf, primaryLeafId);
     }
 
     // Render secondary side

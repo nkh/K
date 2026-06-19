@@ -375,6 +375,12 @@ document.addEventListener('click', (e) => {
         if (!panelObj) return;
         if (e.target.closest('button') || e.target.closest('input')) return;
 
+        // Track which leaf is active in split panes
+        const leafId = vttyContainer.getAttribute('data-leaf-id');
+        if (panelObj.split && leafId) {
+            _setActiveSideForLeaf(panelObj, leafId);
+        }
+
         if (panelObj.focused) {
             panelObj.focused = false;
             vttyContainer.style.outline = '';

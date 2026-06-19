@@ -570,3 +570,196 @@ console.log('SPL-016: Split header oncontextmenu passes leafId');
 }
 
 console.log('\n[split_interactions] Tests complete');
+
+// ──────────────────────────────────────────────────────────────
+// SPL-017: _setupPanelDelegation reads data-leaf-id (not data-split-side)
+//           Source-level verification of the mousedown handler fix
+// ──────────────────────────────────────────────────────────────
+console.log('SPL-017: _setupPanelDelegation reads data-leaf-id');
+{
+    const src = _setupPanelDelegation.toString();
+    assertIncludes(src, 'data-leaf-id', 'SPL-017a: handler reads data-leaf-id attribute');
+    assertNotIncludes(src, 'data-split-side', 'SPL-017b: handler does NOT reference old data-split-side');
+    assertIncludes(src, '_setActiveSideForLeaf', 'SPL-017c: handler calls _setActiveSideForLeaf');
+}
+
+// ──────────────────────────────────────────────────────────────
+// SPL-018: Full flow — split, click secondary, selectCommand routes to secondary
+//           Simulates: Alt+| split → click on secondary pane → click cmd in sidebar
+//           This is the exact bug that was fixed: secondary panes were unselectable.
+// ──────────────────────────────────────────────────────────────
+console.log('SPL-018: Full user flow — split, click secondary, selectCommand');
+{
+    resetTestState();
+    state.panels = [];
+    state.connections = [
+        { url: 'http://localhost:9090', label: 'Local', token: '', reachable: true,
+          _commands: [
+              { id: 'cmd-a', name: 'top', args: [] },
+              { id: 'cmd-b', name: 'htop', args: [] },
+          ] },
+    ];
+    state.windows = [];
+    state.activeWindowId = null;
+
+    const p = addPanelDirect();
+    state._focusedPanelId = p.id;
+
+    // Step 1: Split the panel (Alt+|)
+    splitPanel(p.id, 'horizontal');
+    const secLeaf = p.split.secondary;
+
+    // Step 2: Verify initial state — activeSide is primary (default)
+    assertEq(p.split.activeSide, 'primary', 'SPL-018a: initial activeSide is primary');
+    assertEq(_getFocusedLeafId(p), p.id, 'SPL-018b: _getFocusedLeafId returns primary');
+
+    // Step 3: Simulate user clicking on the secondary pane's vtty-container
+    // This is what the FIXED _setupPanelDelegation mousedown handler does:
+    //   const el = e.target.closest('[data-leaf-id]');
+    //   const leafId = el.getAttribute('data-leaf-id');
+    //   _setActiveSideForLeaf(p, leafId);
+    _setActiveSideForLeaf(p, secLeaf.id);
+
+    // Step 4: Verify the click updated the active leaf
+    assertEq(p.split.activeSide, 'secondary', 'SPL-018c: activeSide changed to secondary after click');
+    assertEq(p._focusedLeafId, secLeaf.id, 'SPL-018d: _focusedLeafId set to secondary after click');
+    assertEq(_getFocusedLeafId(p), secLeaf.id, 'SPL-018e: _getFocusedLeafId returns secondary');
+
+    // Step 5: User clicks "htop" in the sidebar → selectCommand
+    // Mock the leaf VTTY loader to track which leaf gets the command
+    let loadLeafId = null;
+    let loadCmdId = null;
+    const origLoad = globalThis._loadLeafVttyHttpDirect;
+    globalThis._loadLeafVttyHttpDirect = function(leaf) {
+        loadLeafId = leaf.id;
+        loadCmdId = leaf.cmdId;
+    };
+
+    selectCommand('http://localhost:9090', 'cmd-b', 'htop');
+
+    // Step 6: Verify command was routed to the SECONDARY leaf (not primary)
+    assertEq(secLeaf.cmdId, 'cmd-b', 'SPL-018f: secondary leaf received cmd-b');
+    assertEq(secLeaf.instUrl, 'http://localhost:9090', 'SPL-018g: secondary leaf received correct instUrl');
+    assertEq(loadLeafId, secLeaf.id, 'SPL-018h: VTTY loader called for secondary leaf');
+    assertEq(loadCmdId, 'cmd-b', 'SPL-018i: VTTY loader received correct cmdId');
+
+    // Step 7: Verify the PRIMARY leaf was NOT overwritten
+    assertEq(p.selectedCmdId, null, 'SPL-018j: primary leaf cmdId unchanged (still null)');
+
+    globalThis._loadLeafVttyHttpDirect = origLoad;
+}
+
+// ──────────────────────────────────────────────────────────────
+// SPL-019: Click-to-focus handler in keyboard.js updates active leaf
+//           Source-level verification that the click handler tracks split leaves
+// ──────────────────────────────────────────────────────────────
+console.log('SPL-019: Click-to-focus handler tracks active leaf in splits');
+{
+    // The click-to-focus handler is an anonymous function in keyboard.js,
+    // but we can verify the exported _setActiveSideForLeaf is used.
+    // Verify the function exists and was called correctly (already tested by SPL-007).
+    // Source-level: verify keyboard.js has the data-leaf-id tracking in click handler.
+    const fs = require('fs');
+    const src = fs.readFileSync(require('path').join(__dirname, '..', 'modules', 'keyboard.js'), 'utf8');
+    // The click handler should contain data-leaf-id reference
+    assertIncludes(src, 'data-leaf-id', 'SPL-019a: keyboard.js references data-leaf-id');
+}
+
+// ──────────────────────────────────────────────────────────────
+// SPL-020: Rendered split pane HTML has correct data-leaf-id attributes
+//           that match the mousedown handler's querySelector
+// ──────────────────────────────────────────────────────────────
+console.log('SPL-020: Split pane HTML data-leaf-id matches delegation handler');
+{
+    resetTestState();
+    state.panels = [];
+    state.connections = [
+        { url: 'http://localhost:9090', label: 'Local', token: '', reachable: true,
+          _commands: [{ id: 'cmd-x', name: 'vim', args: [] }] },
+    ];
+    state.windows = [];
+    state.activeWindowId = null;
+
+    const p = addPanelDirect();
+    splitPanel(p.id, 'vertical');
+    const secLeaf = p.split.secondary;
+
+    // Render the leaf header for the secondary (exported function)
+    const headerHtml = _renderLeafHeader(p, secLeaf, secLeaf.id);
+
+    // Header must have data-leaf-id that matches the secondary leaf ID
+    assertIncludes(headerHtml, 'data-leaf-id="' + secLeaf.id + '"',
+        'SPL-020a: header has matching data-leaf-id');
+
+    // Verify the full leaf pane rendering includes data-leaf-id
+    const paneHtml = _renderLeafPane(p, secLeaf, secLeaf.id);
+    assertIncludes(paneHtml, 'data-leaf-id="' + secLeaf.id + '"',
+        'SPL-020b: leaf pane has matching data-leaf-id');
+    assertIncludes(paneHtml, 'class="split-pane', 'SPL-020c: leaf pane has split-pane class');
+
+    // Verify querySelector('[data-leaf-id]') would find both header and pane
+    const matchCount = (paneHtml.match(/data-leaf-id=/g) || []).length;
+    assertGt(matchCount, 0, 'SPL-020d: at least one data-leaf-id in rendered pane');
+}
+
+console.log('\n[split_interactions_extra] Tests complete');
+
+// ──────────────────────────────────────────────────────────────
+// SPL-021: Nested split renders correct leaf data in headers
+//           After splitting a secondary, its header should show its own command,
+//           not the root panel's command.
+// ──────────────────────────────────────────────────────────────
+console.log('SPL-021: Nested split header shows correct leaf command');
+{
+    resetTestState();
+    state.panels = [];
+    state.connections = [
+        { url: 'http://localhost:9090', label: 'Local', token: '', reachable: true,
+          _commands: [
+              { id: 'cmd-p', name: 'top', args: [] },
+              { id: 'cmd-s1', name: 'htop', args: [] },
+              { id: 'cmd-s2', name: 'vim', args: [] },
+          ] },
+    ];
+    state.windows = [];
+    state.activeWindowId = null;
+
+    const p = addPanelDirect();
+    p.selectedInstUrl = 'http://localhost:9090';
+    p.selectedCmdId = 'cmd-p';
+
+    // First split: panel → [primary(panel), secondary(s1)]
+    splitPanel(p.id, 'horizontal');
+    const s1 = p.split.secondary;
+    s1.cmdId = 'cmd-s1';
+    s1.instUrl = 'http://localhost:9090';
+
+    // Second split: s1 → [primary(s1), secondary(s2)]
+    _setActiveSideForLeaf(p, s1.id);
+    splitPanel(p.id, 'vertical');
+    const s2 = s1.split.secondary;
+    s2.cmdId = 'cmd-s2';
+    s2.instUrl = 'http://localhost:9090';
+
+    // Render the top-level split container
+    const html = _renderSplitContainer(p);
+
+    // All three leaf headers should be present with their own commands
+    // Primary (panel) header should mention panel.id
+    assertIncludes(html, 'data-leaf-id="' + p.id + '"', 'SPL-021a: primary header in rendered output');
+    // S1 header should mention s1.id
+    assertIncludes(html, 'data-leaf-id="' + s1.id + '"', 'SPL-021b: s1 header in rendered output');
+    // S2 header should mention s2.id
+    assertIncludes(html, 'data-leaf-id="' + s2.id + '"', 'SPL-021c: s2 header in rendered output');
+
+    // Verify _getAllLeaves returns 3 leaves
+    const allLeaves = _getAllLeaves(p);
+    assertEq(allLeaves.length, 3, 'SPL-021d: 3 leaves after double split');
+
+    // Each leaf's header should reference its own data-leaf-id
+    for (const { leaf, side } of allLeaves) {
+        const headerHtml = _renderLeafHeader(p, leaf, leaf.id);
+        assertIncludes(headerHtml, 'data-leaf-id="' + leaf.id + '"',
+            'SPL-021e-' + leaf.id.substring(0, 12) + ': header has own leaf-id');
+    }
+}

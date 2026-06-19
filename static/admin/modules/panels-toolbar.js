@@ -91,10 +91,20 @@ function _setupPanelDelegation() {
         if (!panelEl) return;
         const pid = panelEl.id;
         focusPanel(pid);
-        const el = e.target.closest('.vtty-container') || e.target.closest('.split-header');
+        const el = e.target.closest('[data-leaf-id]');
         if (el) {
-            const side = el.getAttribute('data-split-side');
-            if (side) { const p = state.panels.find(pp => pp.id === pid); if (p?.split) p.split.activeSide = side; }
+            const leafId = el.getAttribute('data-leaf-id');
+            const p = state.panels.find(pp => pp.id === pid);
+            if (p?.split) {
+                // Update active leaf tracking (recursive tree walk)
+                if (typeof window._setActiveSideForLeaf === 'function') {
+                    window._setActiveSideForLeaf(p, leafId);
+                }
+                // Update visual focus on split panes without re-render
+                panelEl.querySelectorAll('.split-pane').forEach(function(sp) {
+                    sp.classList.toggle('focused', sp.getAttribute('data-leaf-id') === leafId);
+                });
+            }
         }
     });
 
