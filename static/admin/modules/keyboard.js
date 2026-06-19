@@ -75,8 +75,20 @@ function _openSearch(panelId) {
     if (si) { si.focus(); si.select(); }
 }
 
+// _withPanel resolves the target ID for panel-level operations.
+// For split panels, returns the focused leaf ID instead of the panel ID,
+// so that shortcuts like copy/export/restart target the correct leaf.
 function _withPanel(fn) {
-    return (e) => { const p = getSelectedPanel(); if (p) { e.preventDefault(); fn(p.id); } };
+    return (e) => {
+        const p = getSelectedPanel();
+        if (!p) return;
+        e.preventDefault();
+        const panelObj = state.panels.find(pp => pp.id === p.id);
+        const targetId = (panelObj && panelObj.split)
+            ? (panelObj._focusedLeafId || p.id)
+            : p.id;
+        fn(targetId);
+    };
 }
 
 function _getPanelObj(e) {

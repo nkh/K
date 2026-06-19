@@ -13,10 +13,25 @@ function _getResizeDims(pid) {
 }
 
 // ─── Export Terminal Output ───
-function copyTerminalSelection(panelId) {
+function _resolveTargetLeaf(targetId) {
+    // Resolve a panel ID or leaf ID to { panelObj, leaf, cmdId, instUrl }
+    const panelObj = state.panels.find(p => p.id === targetId);
+    if (!panelObj) return null;
+    if (!panelObj.split || targetId === panelObj.id) {
+        return { panelObj, leaf: panelObj, cmdId: panelObj.selectedCmdId, instUrl: panelObj.selectedInstUrl, isPrimary: true };
+    }
+    const found = typeof _findLeafState === 'function' ? _findLeafState(panelObj, targetId) : null;
+    if (found && found.leaf) {
+        return { panelObj, leaf: found.leaf, cmdId: found.leaf.cmdId, instUrl: found.leaf.instUrl, isPrimary: false };
+    }
+    return { panelObj, leaf: panelObj, cmdId: panelObj.selectedCmdId, instUrl: panelObj.selectedInstUrl, isPrimary: true };
+}
+
+function copyTerminalSelection(targetId) {
     let text = window.getSelection()?.toString().trim() || '';
-    if (!text) { const pre = document.querySelector(`#${panelId} pre`); if (pre) text = pre.textContent || pre.innerText || ''; }
+    if (!text) { const pre = document.querySelector(`#vtty-${targetId} pre`); if (pre) text = pre.textContent || pre.innerText || ''; }
     if (!text) return;
+    const panelId = state.panels.find(p => p.id === targetId) ? targetId : (state.panels.find(p => p.split && p._focusedLeafId === targetId) ? state.panels.find(p => p._focusedLeafId === targetId).id : targetId);
     navigator.clipboard.writeText(text).then(() => _showCopyFeedback(panelId)).catch(() => {
         const ta = document.createElement('textarea');
         ta.value = text; ta.style.cssText = 'position:fixed;opacity:0;';
@@ -26,11 +41,13 @@ function copyTerminalSelection(panelId) {
     });
 }
 
-function exportTerminal(panelId) {
-    const pre = document.querySelector(`#${panelId} pre`);
+function exportTerminal(targetId) {
+    const resolved = _resolveTargetLeaf(targetId);
+    if (!resolved) return;
+    const pre = document.querySelector(`#vtty-${targetId} pre`);
     if (!pre) return;
     const text = pre.textContent || pre.innerText || '';
-    const cmd = _findCmd(state.selectedInstUrl, state.selectedCmdId);
+    const cmd = _findCmd(resolved.instUrl, resolved.cmdId);
     const cmdName = cmd ? (cmd.name || cmd.id).replace(/\//g, '_') : 'terminal';
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
