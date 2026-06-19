@@ -159,7 +159,8 @@ const _defaultShortcuts = [
         if (!t) return;
         if (t.classList.contains('panel-header') && t.dataset.panelId) {
             const r = t.getBoundingClientRect();
-            showPanelContextMenu({ preventDefault(){}, clientX: r.left + r.width/2, clientY: r.bottom }, t.dataset.panelId);
+            const leafId = t.dataset.leafId || t.dataset.panelId;
+            showPanelContextMenu({ preventDefault(){}, clientX: r.left + r.width/2, clientY: r.bottom }, t.dataset.panelId, leafId);
         }
         if (t.classList.contains('cmd-item') && t.dataset.instUrl) {
             const r = t.getBoundingClientRect();
