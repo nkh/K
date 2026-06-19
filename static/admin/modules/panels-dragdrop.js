@@ -141,28 +141,20 @@ function onPanelDrop(e, targetPanelId) {
             if (!panelObj) return;
             // Check if the drop landed on a specific leaf in a split panel
             const leafEl = e.target && e.target.closest ? e.target.closest('[data-leaf-id]') : null;
-            if (panelObj.split) {
-                const leafId = leafEl ? leafEl.getAttribute('data-leaf-id') : null;
+            if (panelObj.split && leafEl) {
+                const leafId = leafEl.getAttribute('data-leaf-id');
                 if (leafId && leafId !== panelObj.id) {
-                    // Dropped on a specific branch leaf
+                    // Dropped on a specific branch leaf — assign to it
                     const found = (typeof _findLeafState === 'function') ? _findLeafState(panelObj, leafId) : null;
                     if (found && found.leaf) {
                         _selectLeafCommand(panelObj, found.leaf, cmdData.instUrl, cmdData.cmdId);
                     }
-                } else if (!panelObj.selectedCmdId) {
-                    _pushPanelHistory(panelObj);
-                    _selectCommandForPanel(panelObj, cmdData.instUrl, cmdData.cmdId);
-                } else {
-                    _openCommandInNewPane(cmdData.instUrl, cmdData.cmdId, cmdData.cmdName);
+                    return;
                 }
-            } else if (!panelObj.selectedCmdId) {
-                // Non-split panel with no command — assign to this panel
-                _pushPanelHistory(panelObj);
-                _selectCommandForPanel(panelObj, cmdData.instUrl, cmdData.cmdId);
-            } else {
-                // Non-split panel already has a command — open a new pane
-                _openCommandInNewPane(cmdData.instUrl, cmdData.cmdId, cmdData.cmdName);
             }
+            // Dropped on a pane (root or non-split) — assign command to it
+            _pushPanelHistory(panelObj);
+            _selectCommandForPanel(panelObj, cmdData.instUrl, cmdData.cmdId);
             return;
         }
     } catch {}
@@ -182,7 +174,15 @@ function onPanelAreaDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect 
 
 function onPanelAreaDrop(e) {
     e.preventDefault();
-    try { const d = JSON.parse(e.dataTransfer.getData('application/x-cmd')); if (d?.cmdId) _openCommandInNewPane(d.instUrl, d.cmdId, d.cmdName); } catch {}
+    // This fires when dropping on the panel-area container itself (not on a specific pane).
+    // Assign to the currently focused pane instead of creating a new one.
+    try {
+        const d = JSON.parse(e.dataTransfer.getData('application/x-cmd'));
+        if (d?.cmdId) {
+            const panelObj = state.panels.find(p => p.id === state._focusedPanelId) || state.panels[0];
+            if (panelObj) { _pushPanelHistory(panelObj); _selectCommandForPanel(panelObj, d.instUrl, d.cmdId); }
+        }
+    } catch {}
 }
 
 // ─── Drag-and-Drop (Sidebar Commands) ───

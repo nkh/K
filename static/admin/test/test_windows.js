@@ -423,15 +423,17 @@ console.log('WIN-011: onPanelDrop on root-leaf side of split pane creates new pa
 
     onPanelDrop(ev, p.id);
 
-    // Root leaf already has a command — drop creates a new pane
-    assertEq(state.panels.length, panelCountBefore + 1,
-        'WIN-011a: new pane created when dropping on root-leaf with existing command');
+    // Root leaf already has a command — drop replaces it
+    assertEq(state.panels.length, panelCountBefore,
+        'WIN-011a: no new pane created when dropping on root-leaf (command replaced)');
+    assertEq(p.selectedCmdId, 'cmd-replaced',
+        'WIN-011b: root-leaf got the dropped command');
 }
 
 // ──────────────────────────────────────────────────────────────
-// WIN-012: onPanelDrop on non-split panel WITH existing command creates new pane
+// WIN-012: onPanelDrop on non-split panel WITH existing command replaces it
 // ──────────────────────────────────────────────────────────────
-console.log('WIN-012: onPanelDrop on non-split panel with command creates new pane');
+console.log('WIN-012: onPanelDrop on non-split panel with command replaces it');
 {
     state.windows = [];
     state.activeWindowId = null;
@@ -464,9 +466,11 @@ console.log('WIN-012: onPanelDrop on non-split panel with command creates new pa
 
     onPanelDrop(ev, p.id);
 
-    // Should have created a new panel (panel already has a command)
-    assertEq(state.panels.length, panelCountBefore + 1,
-        'WIN-012a: new pane created when dropping on non-split panel that has a command');
+    // Should replace the existing command (not create a new pane)
+    assertEq(state.panels.length, panelCountBefore,
+        'WIN-012a: no new pane created when dropping on non-split panel');
+    assertEq(p.selectedCmdId, 'cmd-dropped',
+        'WIN-012b: dropped command replaces existing command');
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -554,9 +558,7 @@ console.log('WIN-014: onPanelDrop on split panel without specific side uses acti
     headerDiv.className = 'panel-header';
     // No data-split-side attribute — simulates dropping on the panel header
 
-    // Drop on header (no data-leaf-id) with activeSide=branch:
-    // The new code falls through since there's no leaf target,
-    // and the panel already has a command, so a new pane is created.
+    // Drop on header (no data-leaf-id) — assigns to the panel root leaf
     const ev = {
         preventDefault: function() {},
         stopPropagation: function() {},
@@ -568,9 +570,11 @@ console.log('WIN-014: onPanelDrop on split panel without specific side uses acti
 
     onPanelDrop(ev, p.id);
 
-    // New pane created since panel already has a command and no specific leaf targeted
-    assertEq(state.panels.length, panelCountBefore + 1,
-        'WIN-014a: new pane created when dropping on split panel header with existing command');
+    // Command replaces the panel root leaf's existing command (no new pane)
+    assertEq(state.panels.length, panelCountBefore,
+        'WIN-014a: no new pane created when dropping on split panel header');
+    assertEq(p.selectedCmdId, 'cmd-new',
+        'WIN-014b: dropped command replaces root leaf command');
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -806,12 +810,12 @@ console.log('WIN-019: mousedown drag drop targets existing panel/split');
     assert(calledWith && calledWith.fn === 'select' && calledWith.panelId === p2.id,
         'WIN-019a: HTML5 drop on empty panel assigns command to that panel');
 
-    // Test: HTML5 drop on panel with existing command → should create new pane
+    // Test: HTML5 drop on panel with existing command → replaces it
     calledWith = null;
     const mockEvt2 = { preventDefault: () => {}, stopPropagation: () => {}, dataTransfer: { getData: () => JSON.stringify({ instUrl: 'http://localhost:9090', cmdId: 'cmd-drop2', cmdName: 'test2' }) }, target: null };
     onPanelDrop(mockEvt2, p1.id);
-    assert(calledWith && calledWith.fn === 'newPane',
-        'WIN-019b: HTML5 drop on panel with existing command creates new pane');
+    assert(calledWith && calledWith.fn === 'select' && calledWith.panelId === p1.id,
+        'WIN-019b: HTML5 drop on panel with existing command replaces it');
 
     // Test: HTML5 drop on split pane branch side
     p1.split = { direction: 'horizontal', splitRatio: 0.5, activeSide: 'panel', branch: { id: p1.id + '-branch1', cmdId: null, instUrl: null } };
@@ -825,13 +829,13 @@ console.log('WIN-019: mousedown drag drop targets existing panel/split');
     assert(calledWith && calledWith.fn === 'leafCommand' && calledWith.panelId === p1.id,
         'WIN-019c: HTML5 drop on split pane branch side calls _selectLeafCommand');
 
-    // Test: HTML5 drop on split pane root-leaf side (has existing command → new pane)
+    // Test: HTML5 drop on split pane root-leaf side (has existing command → replaces it)
     calledWith = null;
     splitDiv.dataset.leafId = p1.id;
     const mockEvt4 = { preventDefault: () => {}, stopPropagation: () => {}, dataTransfer: { getData: () => JSON.stringify({ instUrl: 'http://localhost:9090', cmdId: 'cmd-drop4', cmdName: 'test4' }) }, target: splitDiv };
     onPanelDrop(mockEvt4, p1.id);
-    assert(calledWith && calledWith.fn === 'newPane',
-        'WIN-019d: HTML5 drop on split pane root-leaf side with existing command creates new pane');
+    assert(calledWith && calledWith.fn === 'select' && calledWith.panelId === p1.id,
+        'WIN-019d: HTML5 drop on split pane root-leaf side replaces existing command');
 
     // Restore
     globalThis._selectCommandForPanel = origSelect;

@@ -122,7 +122,7 @@ function _selectActiveLeafCommand(panelObj, instUrl, cmdId) {
         _selectCommandForPanel(panelObj, instUrl, cmdId, { cache: true, resetBuffers: true, scrollback: true });
         return;
     }
-    const leafId = (typeof _getFocusedLeafId === 'function') ? _getFocusedLeafId(panelObj) : panelObj.id;
+    const leafId = panelObj._focusedLeafId || panelObj.id;
     if (leafId === panelObj.id) {
         // Panel root leaf
         _selectCommandForPanel(panelObj, instUrl, cmdId, { cache: true, resetBuffers: true, scrollback: true });
