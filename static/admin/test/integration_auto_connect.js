@@ -256,12 +256,12 @@ function traceWebUIFlow() {
 
   loadSnapshot():
     1. _snapshotLoaded = true
-    2. primaryInst = state.connections[0]  ← the one with url: window.location.origin
-    3. fetch(apiUrl('/api/snapshot', primaryInst))
-       → apiUrl builds: primaryInst.url + '/api/snapshot' = 'http://localhost:9090/api/snapshot'
+    2. localInst = state.connections[0]  ← the one with url: window.location.origin
+    3. fetch(apiUrl('/api/snapshot', localInst))
+       → apiUrl builds: localInst.url + '/api/snapshot' = 'http://localhost:9090/api/snapshot'
     4. On success:
-       → primaryInst._commands = commands || []
-       → primaryInst.reachable = true
+       → localInst._commands = commands || []
+       → localInst.reachable = true
        → hasAnyCommands = commands && commands.length > 0
        → firstCmd = commands.find(c => c.alive) || commands[0]
        → shouldShowWelcome = !hasAnyCommands && !state.selectedCmdId && !state.serverReachable
@@ -270,12 +270,12 @@ function traceWebUIFlow() {
            the snapshot loads before serverReachable is set to true.
            But: if hasAnyCommands is true, shouldShowWelcome is false anyway.
        → If vtty.html exists && firstCmd:
-         → state.selectedInstUrl = primaryInst.url
+         → state.selectedInstUrl = localInst.url
          → state.selectedCmdId = firstCmd.id
          → CRITICAL: panelObj = state.panels.find(p => p.id === (state._focusedPanelId || state.panels[0].id))
            ⚠ PROBLEM: state._focusedPanelId is null!
              → Falls back to state.panels[0].id
-             → Sets panelObj.selectedInstUrl = primaryInst.url
+             → Sets panelObj.selectedInstUrl = localInst.url
              → Sets panelObj.selectedCmdId = firstCmd.id
          → Gets DOM element for panel
          → Writes VTTY HTML into <pre>
@@ -285,7 +285,7 @@ function traceWebUIFlow() {
              → Checks panelObj.selectedCmdId === null → should be set now ✓
              → If push mode: connectPanelWs(panelId) ✓
     5. On failure (catch):
-       → primaryInst.reachable = false
+       → localInst.reachable = false
        → loadCommands() fallback
 
   POTENTIAL ISSUES:
@@ -335,10 +335,10 @@ function traceWebUIFlow() {
     console.log('    → renderPanels() shows welcome (no commands)');
     console.log('');
     console.log('  After loadSnapshot() succeeds:');
-    console.log('    → primaryInst._commands = [commands...]');
-    console.log('    → primaryInst.reachable = true');
+    console.log('    → localInst._commands = [commands...]');
+    console.log('    → localInst.reachable = true');
     console.log('    → panelObj.selectedCmdId = firstCmd.id');
-    console.log('    → panelObj.selectedInstUrl = primaryInst.url');
+    console.log('    → panelObj.selectedInstUrl = localInst.url');
     console.log('    → VTTY HTML written to <pre>');
     console.log('    → startPanelUpdateMode(panelId) → connectPanelWs(panelId)');
     console.log('');

@@ -328,7 +328,7 @@ console.log('SPL-010: Split pane headers match non-split headers');
     // Render non-split header
     const nonSplitHeader = _renderLeafHeader(p, p, p.id);
 
-    // Now split and render the secondary header
+    // Now split and render the branch leaf header
     splitPanel(p.id, 'vertical');
     const branchLeaf = p.split.branch;
     branchLeaf.cmdId = 'cmd-h';
@@ -380,12 +380,12 @@ console.log('SPL-011: connectPanelWs connects WS for all split leaves');
     // connectPanelWs should not throw
     assert(() => { connectPanelWs(p.id); }, 'SPL-011: connectPanelWs with split does not throw');
 
-    // Primary should be subscribed via shared pool
+    // Root-leaf should be subscribed via shared pool
     const priKey = 'http://localhost:9090/cmd-pri';
-    assertOk(_sharedSubs[priKey], 'SPL-011a: primary subscribed in shared pool');
-    assertOk(_sharedSubs[priKey].panels.has(p.id), 'SPL-011b: panel ID in primary subscription');
+    assertOk(_sharedSubs[priKey], 'SPL-011a: root-leaf subscribed in shared pool');
+    assertOk(_sharedSubs[priKey].panels.has(p.id), 'SPL-011b: panel ID in root-leaf subscription');
 
-    // Secondary should have its own WS (via _connectLeafWs)
+    // Branch leaf should have its own WS (via _connectLeafWs)
     // In the mock, WebSocket constructor creates a mock — just verify it was called
     assertOk(branchLeaf.ws !== null || branchLeaf.wsInstUrl === 'http://localhost:9090',
         'SPL-011c: branch leaf WS state initialized');
@@ -454,7 +454,7 @@ console.log('SPL-012: _applyLeafDiff applies cell-level updates');
 
 // ──────────────────────────────────────────────────────────────
 // SPL-013: Recursive split — split a pane that is already split
-//           (the secondary of a split can itself be split)
+//           (the branch of a split can itself be split)
 // ──────────────────────────────────────────────────────────────
 console.log('SPL-013: Recursive split — branch can be split again');
 {
@@ -484,7 +484,7 @@ console.log('SPL-013: Recursive split — branch can be split again');
     // Verify _getAllLeaves returns 3 leaves
     const allLeaves = _getAllLeaves(p);
     assertEq(allLeaves.length, 3, 'SPL-013f: 3 leaves after double split');
-    assertEq(allLeaves[0].leaf.id, p.id, 'SPL-013g: leaf 0 is panel (primary)');
+    assertEq(allLeaves[0].leaf.id, p.id, 'SPL-013g: leaf 0 is panel root');
     assertEq(allLeaves[1].leaf.id, branch1.id, 'SPL-013h: leaf 1 is first branch');
     assertEq(allLeaves[2].leaf.id, branch2.id, 'SPL-013i: leaf 2 is second-level branch');
 
@@ -526,7 +526,7 @@ console.log('SPL-014: Context menu resolves correct leaf command');
 }
 
 // ──────────────────────────────────────────────────────────────
-// SPL-015: unsplitPanel resets activeSide to primary after collapse
+// SPL-015: unsplitPanel removes split tree after collapse
 // ──────────────────────────────────────────────────────────────
 console.log('SPL-015: unsplitPanel resets activeSide after collapse');
 {
@@ -584,9 +584,9 @@ console.log('SPL-017: _setupPanelDelegation reads data-leaf-id');
 }
 
 // ──────────────────────────────────────────────────────────────
-// SPL-018: Full flow — split, click secondary, selectCommand routes to secondary
-//           Simulates: Alt+| split → click on secondary pane → click cmd in sidebar
-//           This is the exact bug that was fixed: secondary panes were unselectable.
+// SPL-018: Full flow — split, click branch, selectCommand routes to branch
+//           Simulates: Alt+| split → click on branch pane → click cmd in sidebar
+//           This is the exact bug that was fixed: branch panes were unselectable.
 // ──────────────────────────────────────────────────────────────
 console.log('SPL-018: Full user flow — split, click branch, selectCommand');
 {
@@ -637,7 +637,7 @@ console.log('SPL-018: Full user flow — split, click branch, selectCommand');
 
     selectCommand('http://localhost:9090', 'cmd-b', 'htop');
 
-    // Step 6: Verify command was routed to the SECONDARY leaf (not primary)
+    // Step 6: Verify command was routed to the branch leaf (not root)
     assertEq(branchLeaf.cmdId, 'cmd-b', 'SPL-018f: branch leaf received cmd-b');
     assertEq(branchLeaf.instUrl, 'http://localhost:9090', 'SPL-018g: branch leaf received correct instUrl');
     assertEq(loadLeafId, branchLeaf.id, 'SPL-018h: VTTY loader called for branch leaf');
@@ -706,7 +706,7 @@ console.log('\n[split_interactions_extra] Tests complete');
 
 // ──────────────────────────────────────────────────────────────
 // SPL-021: Nested split renders correct leaf data in headers
-//           After splitting a secondary, its header should show its own command,
+//           After splitting a branch, its header should show its own command,
 //           not the root panel's command.
 // ──────────────────────────────────────────────────────────────
 console.log('SPL-021: Nested split header shows correct leaf command');
@@ -728,13 +728,13 @@ console.log('SPL-021: Nested split header shows correct leaf command');
     p.selectedInstUrl = 'http://localhost:9090';
     p.selectedCmdId = 'cmd-p';
 
-    // First split: panel → [primary(panel), secondary(branch1)]
+    // First split: panel → [panel-root, branch1]
     splitPanel(p.id, 'horizontal');
     const branch1 = p.split.branch;
     branch1.cmdId = 'cmd-branch1';
     branch1.instUrl = 'http://localhost:9090';
 
-    // Second split: branch1 → [primary(branch1), secondary(branch2)]
+    // Second split: branch1 → [branch1-root, branch2]
     _setActiveSideForLeaf(p, branch1.id);
     splitPanel(p.id, 'vertical');
     const branch2 = branch1.split.branch;
@@ -745,8 +745,8 @@ console.log('SPL-021: Nested split header shows correct leaf command');
     const html = _renderSplitContainer(p);
 
     // All three leaf headers should be present with their own commands
-    // Primary (panel) header should mention panel.id
-    assertIncludes(html, 'data-leaf-id="' + p.id + '"', 'SPL-021a: primary header in rendered output');
+    // Panel root header should mention panel.id
+    assertIncludes(html, 'data-leaf-id="' + p.id + '"', 'SPL-021a: panel root header in rendered output');
     // S1 header should mention branch1.id
     assertIncludes(html, 'data-leaf-id="' + branch1.id + '"', 'SPL-021b: branch1 header in rendered output');
     // S2 header should mention branch2.id

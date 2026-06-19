@@ -674,7 +674,7 @@ const _crossDeps = (() => {
     const names = new Set([
     'updateDisconnectedUI', 'getSelectedPanel', 'getActivePanelId', 'loadSnapshot',
     'handlePeerEvent', 'notifyCommandEnded', 'connectLogWs',
-    'disconnectLogWs', 'scheduleSecondaryVttyHttp', 'startRefresh',
+    'disconnectLogWs', 'startRefresh',
     'loadCommands', 'updatePanelCommandInfo',
     'updateTerminalDisconnectedOverlay', 'updateSidebarSelection',
     'updateSharedToolbar', 'updateCmdToolbarVisibility',
@@ -721,7 +721,7 @@ const _crossDeps = (() => {
     'togglePanelLayout', 'toggleLayoutPresetMenu', 'applyLayoutPreset',
     '_resizePanelTo', '_hex',
     '_cacheVtty', '_setupPanelDelegation', '_setToggleBtn',
-    '_doFreezeThaw', '_handleSecondarySelect',
+    '_doFreezeThaw',
     '_selectLeafCommand', '_selectActiveLeafCommand', '_getFocusedLeafId',
     'unsplitLeaf', '_connectLeafWs', '_findLeafState', '_getAllLeaves',
     '_findParentSplit', '_getLeafCmdState', '_disconnectLeafTree', '_disconnectSingleLeaf',

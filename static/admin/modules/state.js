@@ -103,7 +103,7 @@ const state = {
     showResources: localStorage.getItem('vrw_show_resources') === 'true',
     // Sound notifications
     soundEnabled: localStorage.getItem('vrw_sound') !== 'false',
-    // Whether the primary instance is reachable (fetched from /api/info)
+    // Whether the local instance is reachable (fetched from /api/info)
     serverReachable: false,
     // ID of the panel that last received user interaction (click, key, etc.).
     // VTTY updates (HTTP + WS diff) are routed to ALL panels, but

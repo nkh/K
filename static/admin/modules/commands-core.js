@@ -262,14 +262,14 @@
     async function loadSnapshot() {
         if (_snapshotLoaded) { loadCommands(); return; }
         _snapshotLoaded = true;
-        const primary = state.connections[0];
-        if (!primary) { loadCommands(); return; }
+        const localInst = state.connections[0];
+        if (!localInst) { loadCommands(); return; }
         try {
-            const json = await api.getSnapshot(primary.url);
+            const json = await api.getSnapshot(localInst.url);
             if (json.status !== 'ok' || !json.data) throw new Error('bad snapshot');
             const { commands, vtty, resources } = json.data;
-            primary._commands = commands || [];
-            primary.reachable = true; primary._lastError = null;
+            localInst._commands = commands || [];
+            localInst.reachable = true; localInst._lastError = null;
             if (resources) for (const [k, v] of Object.entries(resources)) state._resourceCache[k] = v;
             const peersDone = Promise.all(state.connections.slice(1).map(async inst => {
                 try {
@@ -283,11 +283,11 @@
             const showWelcome = !hasAny && !state.selectedCmdId && !state.serverReachable;
             if (showWelcome !== state._showingWelcome) { state._showingWelcome = showWelcome; renderPanels(); }
             if (vtty && vtty.html !== undefined && firstCmd) {
-                state.selectedInstUrl = primary.url;
+                state.selectedInstUrl = localInst.url;
                 state.selectedCmdId = firstCmd.id;
                 state.bufferView = 'current';
                 const panelObj = state.panels.find(p => p.id === (state._focusedPanelId || state.panels[0].id));
-                if (panelObj) { panelObj.selectedInstUrl = primary.url; panelObj.selectedCmdId = firstCmd.id; }
+                if (panelObj) { panelObj.selectedInstUrl = localInst.url; panelObj.selectedCmdId = firstCmd.id; }
                 getSelectedPanel();
                 if (vtty.generation !== undefined) state._lastGeneration[(panelObj ? panelObj.id : 'panel-0') + '/' + firstCmd.id] = vtty.generation;
                 const panelEl = document.getElementById(panelObj ? panelObj.id : (state._focusedPanelId || (state.panels[0] || {}).id));
@@ -307,8 +307,8 @@
             await peersDone;
             _debouncedBuildSidebar();
         } catch (e) {
-            primary._commands = primary._commands || [];
-            primary.reachable = false; primary._lastError = 'connection lost';
+            localInst._commands = localInst._commands || [];
+            localInst.reachable = false; localInst._lastError = 'connection lost';
             updateDisconnectedUI();
             loadCommands();
         }

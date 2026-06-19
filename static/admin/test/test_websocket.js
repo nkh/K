@@ -71,8 +71,8 @@ assertEq(splitP.wsReconnectCount, 0, 'reconnect count reset');
 assertEq(splitP.wsPingSendTime, 0, 'ping send time reset');
 assertEq(splitP.wsLatency, 0, 'latency reset');
 // Note: branch WS state cleanup depends on _disconnectSingleLeaf internals
-// Only verify the primary WS was disconnected
-assert(splitP.ws === null || splitP.ws.readyState === 3, 'primary WS disconnected');
+// Only verify the root-leaf WS was disconnected
+assert(splitP.ws === null || splitP.ws.readyState === 3, 'root-leaf WS disconnected');
 
 // ── disconnectAllPanelWs ──
 console.log('disconnectAllPanelWs tests');

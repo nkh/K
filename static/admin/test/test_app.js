@@ -103,7 +103,7 @@ console.log('panel creation from init');
 resetTestState();
 globalThis.renderPanels = function() {};
 state.connections = [{ url: 'http://localhost:9090', label: 'Local', token: '', reachable: undefined }];
-// App calls addConnection for primary then addPanelDirect
+// App calls addConnection for the local instance then addPanelDirect
 const conn = addConnection(state.connections[0].url, state.connections[0].label, state.connections[0].token);
 assertEq(state.connections.length, 1, 'connection added');
 const panel = addPanelDirect();

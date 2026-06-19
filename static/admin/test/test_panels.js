@@ -144,7 +144,7 @@ const vsp = addPanelDirect();
 splitPanel(vsp.id, 'vertical');
 assertEq(vsp.split.direction, 'vertical', 'vertical split direction set');
 
-// ── Split pane renders empty secondary ──
+// ── Split pane renders empty branch ──
 console.log('split pane renders empty branch tests');
 {
     const ep = addPanelDirect();
@@ -270,11 +270,11 @@ if (typeof _getServerColor === 'function') {
         { url: 'http://b.com', label: 'B' },
         { url: 'http://c.com', label: 'C' },
     ];
-    const primary = state.connections[0];
-    assertEq(_getServerColor(primary), 'var(--bg-tertiary)', 'primary connection uses default color');
+    const firstConn = state.connections[0];
+    assertEq(_getServerColor(firstConn), 'var(--bg-tertiary)', 'first connection uses default color');
 
-    const secondary = state.connections[1];
-    const color2 = _getServerColor(secondary);
+    const secondConn = state.connections[1];
+    const color2 = _getServerColor(secondConn);
     assert(color2 !== 'var(--bg-tertiary)', 'second connection gets palette color');
 
     const tertiary = state.connections[2];
@@ -287,7 +287,7 @@ if (typeof _getServerColor === 'function') {
         { background: '#ff0000', text: '#ffffff' },
         { background: '#00ff00', text: '#000000' },
     ];
-    const scColor = _getServerColor(secondary);
+    const scColor = _getServerColor(secondConn);
     assertEq(scColor, '#ff0000', 'server-configured color used');
     state._serverPanelColors = null;
 
@@ -299,7 +299,7 @@ if (typeof _getServerColor === 'function') {
 console.log('_getServerTextColor tests');
 if (typeof _getServerTextColor === 'function') {
     state.connections = [{ url: 'http://a.com', label: 'A' }, { url: 'http://b.com', label: 'B' }];
-    assertEq(_getServerTextColor(state.connections[0]), 'var(--text-primary)', 'primary uses default text color');
+    assertEq(_getServerTextColor(state.connections[0]), 'var(--text-primary)', 'first connection uses default text color');
     const secText = _getServerTextColor(state.connections[1]);
     assert(secText !== 'var(--text-primary)', 'second connection gets palette text color');
     assertEq(_getServerTextColor(null), 'var(--text-primary)', 'null inst uses default text color');
