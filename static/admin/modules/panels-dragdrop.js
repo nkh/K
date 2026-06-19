@@ -296,8 +296,9 @@ function _cmdReorderMouseUp() {
                 _selectCommandForPanel(targetPanelObj, instUrl, cmdId);
             }
         } else {
-            // Dropped on the terminal area but not on a specific panel — open new pane
-            _openCommandInNewPane(instUrl, cmdId, cmdName);
+            // FIX: Assign to focused panel instead of creating a new pane (Bug 3)
+            const focusedPanel = state.panels.find(pp => pp.id === state._focusedPanelId) || state.panels[0];
+            if (focusedPanel) { _pushPanelHistory(focusedPanel); _selectCommandForPanel(focusedPanel, instUrl, cmdId); }
         }
         _reorderState = null;
         return;

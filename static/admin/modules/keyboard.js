@@ -30,24 +30,21 @@ function _handleEscape() {
     return true;
 }
 
-// Find which leaf ID is focused within a panel (from the last click on a vtty-container)
+// Find which leaf ID is focused within a panel.
+// FIX: Use the explicit _focusedLeafId (set by click/keyboard) instead of
+// walking the tree via activeSide. Tree walking via activeSide was unreliable
+// because activeSide wasn't always updated correctly after unsplit operations.
 function _getFocusedLeafId(panel) {
-    // Check if the panel has a split tree, and which leaf was last interacted with
-    if (!panel.split) return panel.id;
-    // Walk the tree using the activeSide at each level
-    let current = panel.split;
-    let leafId = panel.id; // default to panel itself
-    while (current) {
-        if (current.activeSide === 'branch' && current.branch) {
-            leafId = current.branch.id;
-            current = current.branch.split;
-        } else {
-            // Panel side — at the top level this is the panel, deeper it would be
-            // the leaf that has the split. So if activeSide is 'panel', stop here.
-            break;
-        }
+    if (!panel) return null;
+    // Use the explicit _focusedLeafId, NOT tree walking via activeSide.
+    // This fixes the bug where tree walking returns the wrong pane.
+    if (!panel._focusedLeafId) return panel.id;
+    // Validate that the focused leaf still exists in the tree
+    if (panel._focusedLeafId !== panel.id && panel.split) {
+        const found = _findLeafState(panel, panel._focusedLeafId);
+        if (found && found.leaf) return panel._focusedLeafId;
     }
-    return leafId;
+    return panel.id;
 }
 
 // Given a vtty-container element, find the leaf state it belongs to

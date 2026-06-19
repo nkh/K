@@ -308,10 +308,17 @@ function splitPanel(panelId, direction, leafId) {
         }
     }
 
+    // FIX: If resolved to root but already split, redirect to branch leaf (Bug 1a)
+    if (leafId === p.id && p.split) {
+        leafId = (p._focusedLeafId && p._focusedLeafId !== p.id)
+            ? p._focusedLeafId
+            : (p.split.branch ? p.split.branch.id : null);
+        if (!leafId) return;
+    }
+
     // Find the leaf to split
     if (leafId === p.id) {
-        // Splitting the panel itself
-        if (p.split) return; // already has top-level split
+        // First split — create top-level split
         const sid = _nextLeafId(p.id);
         p.split = {
             direction, splitRatio: 0.5, activeSide: 'panel',
@@ -322,14 +329,25 @@ function splitPanel(panelId, direction, leafId) {
     } else {
         // Splitting a branch (or deeper) leaf
         const found = _findLeafState(p, leafId);
-        if (!found || !found.leaf || found.leaf.split) return; // already split
+        if (!found || !found.leaf) return;
+        // FIX: If leaf already split, find a non-split target leaf (Bug 1b)
+        let target = found.leaf;
+        while (target.split && target.split.branch) {
+            const subId = target._focusedLeafId && target._focusedLeafId !== target.id
+                ? target._focusedLeafId : target.split.branch.id;
+            const subFound = _findLeafState(p, subId);
+            if (!subFound || !subFound.leaf) { target = target.split.branch; if (!target.split) break; continue; }
+            target = subFound.leaf;
+            if (!target.split) break;
+        }
+        if (target.split) return;
         const sid = _nextLeafId(p.id);
-        found.leaf.split = {
+        target.split = {
             direction, splitRatio: 0.5, activeSide: 'panel',
             branch: _newLeafState(sid),
         };
         // Keep focus on the leaf that was just split
-        p._focusedLeafId = leafId;
+        p._focusedLeafId = target.id;
     }
     renderPanels();
 }
