@@ -306,7 +306,11 @@ document.addEventListener('keydown', (e) => {
         const panel = getSelectedPanel();
         if (panel) {
             const panelObj = state.panels.find(p => p.id === panel.id);
-            if (panelObj && panelObj.focused && state.selectedCmdId) {
+            // Check if the terminal is focused (click-to-focus) and has a command to send to.
+            // For split panels, the focused leaf's command may differ from state.selectedCmdId.
+            const hasCommand = state.selectedCmdId
+                || (panelObj && panelObj.split && panelObj._focusedLeafId);
+            if (panelObj && panelObj.focused && hasCommand) {
                 const searchBar = document.getElementById('searchBar-' + panel.id);
                 if (searchBar && searchBar.classList.contains('visible') &&
                     document.activeElement && document.activeElement.id === 'searchInput-' + panel.id) {

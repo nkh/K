@@ -260,12 +260,22 @@ async function confirmAddServer() {
 }
 
 // ─── Restart Command ───
-async function restartCommand(panelId) {
-    const p = state.panels.find(p => p.id === panelId);
-    if (!p || !p.selectedInstUrl || !p.selectedCmdId) return;
-    const inst = state.connections.find(i => i.url === p.selectedInstUrl);
+async function restartCommand(targetId) {
+    // targetId may be a panel ID or a leaf ID (from _withPanel in split context)
+    const p = state.panels.find(pp => pp.id === targetId);
+    if (!p) return;
+    let instUrl, cmdId;
+    if (!p.split || targetId === p.id) {
+        instUrl = p.selectedInstUrl; cmdId = p.selectedCmdId;
+    } else {
+        const found = typeof _findLeafState === 'function' ? _findLeafState(p, targetId) : null;
+        if (found && found.leaf) { instUrl = found.leaf.instUrl; cmdId = found.leaf.cmdId; }
+        else { instUrl = p.selectedInstUrl; cmdId = p.selectedCmdId; }
+    }
+    if (!instUrl || !cmdId) return;
+    const inst = state.connections.find(i => i.url === instUrl);
     if (!inst || !inst._commands) return;
-    await restartCommandById(p.selectedInstUrl, p.selectedCmdId);
+    await restartCommandById(instUrl, cmdId);
 }
 
 async function restartCommandById(instUrl, cmdId) {
