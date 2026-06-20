@@ -206,8 +206,9 @@ function connectPanelWs(panelId) {
         panelObj.ws = _sharedSubs[key] ? _sharedSubs[key].ws : null;
     }
 
-    // Connect WS for all leaves in the split tree
-    if (panelObj.split && typeof _getAllLeaves === 'function') {
+    // Connect WS for all leaves in both split trees (panel.split AND panel._rootSplit).
+    // MUST check both — missing one means leaf WS connections are silently dropped.
+    if ((panelObj.split || panelObj._rootSplit) && typeof _getAllLeaves === 'function') {
         const leaves = _getAllLeaves(panelObj);
         for (const { leaf, side } of leaves) {
             if (!side) continue; // skip panel root leaf (handled above)
@@ -239,8 +240,9 @@ function disconnectPanelWs(panelId) {
     panelObj.wsReconnectCount = 0;
     panelObj.wsPingSendTime = 0;
     panelObj.wsLatency = 0;
-    // Disconnect all leaves in the split tree
-    if (panelObj.split && typeof _getAllLeaves === 'function') {
+    // Disconnect all leaves in both split trees (panel.split AND panel._rootSplit).
+    // MUST check both — missing one means leaf WS connections leak.
+    if ((panelObj.split || panelObj._rootSplit) && typeof _getAllLeaves === 'function') {
         const leaves = _getAllLeaves(panelObj);
         for (const { leaf, side } of leaves) {
             if (!side) continue;
@@ -372,7 +374,7 @@ async function _doFetchVttyDiff(panelId, instUrl, cmdId, isBranch) {
         if (panelEl) {
             panelObj = state.panels.find(p => p.id === panelEl.id);
         }
-        if (panelObj && panelObj.split && typeof _findLeafState === 'function') {
+        if (panelObj && (panelObj.split || panelObj._rootSplit) && typeof _findLeafState === 'function') {
             const found = _findLeafState(panelObj, panelId);
             if (found) leaf = found.leaf;
         }

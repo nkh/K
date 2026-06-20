@@ -43,7 +43,7 @@ function renderPanels() {
             continue;
         }
         _cacheVtty(panel.id, document.getElementById('vtty-' + panel.id), panel.selectedCmdId, cached);
-        if (panel.split && typeof _getAllLeaves === 'function') {
+        if ((panel.split || panel._rootSplit) && typeof _getAllLeaves === 'function') {
             const allLeaves = _getAllLeaves(panel);
             for (const { leaf, side } of allLeaves) {
                 if (!side) continue;
@@ -160,7 +160,7 @@ ${multi ? `<div class="panel-resize-handle" data-panel="${panel.id}"></div>` : '
                 }
             }
             // Fetch for all branch/deeper leaves in the split tree
-            if (p.split && typeof _getAllLeaves === 'function') {
+            if ((p.split || p._rootSplit) && typeof _getAllLeaves === 'function') {
                 const leaves = _getAllLeaves(p);
                 for (const { leaf, side } of leaves) {
                     if (!side || !leaf.cmdId || !leaf.instUrl) continue;

@@ -95,7 +95,8 @@ function _setupPanelDelegation() {
         if (el) {
             const leafId = el.getAttribute('data-leaf-id');
             const p = state.panels.find(pp => pp.id === pid);
-            if (p?.split) {
+            // MUST check both split trees — _rootSplit leaves are valid targets too.
+            if (p?.split || p?._rootSplit) {
                 // Update active leaf tracking (recursive tree walk)
                 if (typeof window._setActiveSideForLeaf === 'function') {
                     window._setActiveSideForLeaf(p, leafId);

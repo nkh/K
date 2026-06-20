@@ -17,7 +17,7 @@ function _resolveTargetLeaf(targetId) {
     // Resolve a panel ID or leaf ID to { panelObj, leaf, cmdId, instUrl }
     const panelObj = state.panels.find(p => p.id === targetId);
     if (!panelObj) return null;
-    if (!panelObj.split || targetId === panelObj.id) {
+    if (!(panelObj.split || panelObj._rootSplit) || targetId === panelObj.id) {
         return { panelObj, leaf: panelObj, cmdId: panelObj.selectedCmdId, instUrl: panelObj.selectedInstUrl, isPanelLeaf: true };
     }
     const found = typeof _findLeafState === 'function' ? _findLeafState(panelObj, targetId) : null;
@@ -31,7 +31,7 @@ function copyTerminalSelection(targetId) {
     let text = window.getSelection()?.toString().trim() || '';
     if (!text) { const pre = document.querySelector(`#vtty-${targetId} pre`); if (pre) text = pre.textContent || pre.innerText || ''; }
     if (!text) return;
-    const panelId = state.panels.find(p => p.id === targetId) ? targetId : (state.panels.find(p => p.split && p._focusedLeafId === targetId) ? state.panels.find(p => p._focusedLeafId === targetId).id : targetId);
+    const panelId = state.panels.find(p => p.id === targetId) ? targetId : (state.panels.find(p => (p.split || p._rootSplit) && p._focusedLeafId === targetId) ? state.panels.find(p => p._focusedLeafId === targetId).id : targetId);
     navigator.clipboard.writeText(text).then(() => _showCopyFeedback(panelId)).catch(() => {
         const ta = document.createElement('textarea');
         ta.value = text; ta.style.cssText = 'position:fixed;opacity:0;';

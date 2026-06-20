@@ -88,7 +88,7 @@ function showPanelContextMenu(e, panelId, leafId) {
     if (!panel) return;
     // Determine which leaf's command to show in the menu
     let instUrl, cmdId;
-    if (leafId && leafId !== panelId && panel.split) {
+    if (leafId && leafId !== panelId && (panel.split || panel._rootSplit)) {
         const found = (typeof _findLeafState === 'function') ? _findLeafState(panel, leafId) : null;
         if (found && found.leaf) {
             instUrl = found.leaf.instUrl;

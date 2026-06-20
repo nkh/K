@@ -30,34 +30,34 @@ function _handleEscape() {
     return true;
 }
 
-// Find which leaf ID is focused within a panel.
-// FIX: Use the explicit _focusedLeafId (set by click/keyboard) instead of
-// walking the tree via activeSide. Tree walking via activeSide was unreliable
-// because activeSide wasn't always updated correctly after unsplit operations.
+// Find which leaf ID is focused within a panel (from the last click on a vtty-container)
 function _getFocusedLeafId(panel) {
-    if (!panel) return null;
-    // Use the explicit _focusedLeafId, NOT tree walking via activeSide.
-    // This fixes the bug where tree walking returns the wrong pane.
-    if (!panel._focusedLeafId) return panel.id;
-    // Validate that the focused leaf still exists in the tree.
-    // MUST check both panel.split AND panel._rootSplit — they are parallel
-    // split trees. Missing either means _focusedLeafId is silently dropped.
-    if (panel._focusedLeafId !== panel.id && (panel.split || panel._rootSplit)) {
-        const found = _findLeafState(panel, panel._focusedLeafId);
-        if (found && found.leaf) return panel._focusedLeafId;
+    // Check if the panel has a split tree, and which leaf was last interacted with
+    if (!panel.split) return panel.id;
+    // Walk the tree using the activeSide at each level
+    let current = panel.split;
+    let leafId = panel.id; // default to panel itself
+    while (current) {
+        if (current.activeSide === 'branch' && current.branch) {
+            leafId = current.branch.id;
+            current = current.branch.split;
+        } else {
+            // Panel side — at the top level this is the panel, deeper it would be
+            // the leaf that has the split. So if activeSide is 'panel', stop here.
+            break;
+        }
     }
-    return panel.id;
+    return leafId;
 }
 
 // Given a vtty-container element, find the leaf state it belongs to
 function _getLeafFromVtty(vc, panelObj) {
     if (!panelObj) return null;
-    // Check if this vtty belongs to a leaf in the split tree.
-    // MUST check both split trees — _rootSplit leaves are valid targets.
+    // Check if this vtty belongs to a leaf in the split tree
     const leafId = vc.getAttribute('data-leaf-id');
     if (!leafId) return { leaf: panelObj, isPanelLeaf: true };
     if (leafId === panelObj.id) return { leaf: panelObj, isPanelLeaf: true };
-    if (panelObj.split || panelObj._rootSplit) {
+    if (panelObj.split) {
         const found = _findLeafState(panelObj, leafId);
         if (found) return { leaf: found.leaf, isPanelLeaf: false };
     }
@@ -83,7 +83,7 @@ function _withPanel(fn) {
         if (!p) return;
         e.preventDefault();
         const panelObj = state.panels.find(pp => pp.id === p.id);
-        const targetId = (panelObj && (panelObj.split || panelObj._rootSplit))
+        const targetId = (panelObj && panelObj.split)
             ? (panelObj._focusedLeafId || p.id)
             : p.id;
         fn(targetId);
@@ -97,10 +97,9 @@ function _getPanelObj(e) {
     if (!pe) return null;
     const panelObj = state.panels.find(p => p.id === pe.id) || null;
     if (!panelObj) return null;
-    // Track which leaf is active in the split tree.
-    // MUST check both split trees — _rootSplit leaves are valid targets too.
+    // Track which leaf is active in the split tree
     const leafId = vc.getAttribute('data-leaf-id');
-    if ((panelObj.split || panelObj._rootSplit) && leafId) {
+    if (panelObj.split && leafId) {
         // Update activeSide for the appropriate split level
         _setActiveSideForLeaf(panelObj, leafId);
     }
@@ -113,38 +112,24 @@ function _setActiveSideForLeaf(panel, leafId) {
     panel._focusedLeafId = leafId;
     if (leafId === panel.id) {
         if (panel.split) panel.split.activeSide = 'panel';
-        if (panel._rootSplit) panel._rootSplit.activeSide = 'panel';
         return;
-    }
-    // Check if the leaf is in the root's own split tree (_rootSplit)
-    if (panel._rootSplit) {
-        const foundInRoot = _setActiveSideInNode(panel._rootSplit, leafId);
-        if (foundInRoot) {
-            // Leaf found in root split tree — also set top-level split to 'panel' side
-            if (panel.split) panel.split.activeSide = 'panel';
-            return;
-        }
     }
     if (!panel.split) return;
     _setActiveSideInNode(panel.split, leafId);
 }
 
 function _setActiveSideInNode(splitNode, leafId) {
-    if (!splitNode || !splitNode.branch) return false;
+    if (!splitNode || !splitNode.branch) return;
     if (splitNode.branch.id === leafId) {
         splitNode.activeSide = 'branch';
-        return true;
+        return;
     }
     // The leaf might be deeper in the branch's tree
     if (splitNode.branch.split) {
-        const found = _setActiveSideInNode(splitNode.branch.split, leafId);
-        if (found) {
-            // If found deeper, this level's activeSide should be 'branch'
-            splitNode.activeSide = 'branch';
-            return true;
-        }
+        _setActiveSideInNode(splitNode.branch.split, leafId);
+        // If found deeper, this level's activeSide should be 'branch'
+        splitNode.activeSide = 'branch';
     }
-    return false;
 }
 
 function _saveScrollback(offset) {
@@ -220,7 +205,7 @@ const _defaultShortcuts = [
     { id: 'unsplit', key: 'u', alt: true, noInput: true, action(e) {
         e.preventDefault();
         const id = getActivePanelId();
-        if (id) { const p = state.panels.find(x => x.id === id); if (p && (p.split || p._rootSplit)) {
+        if (id) { const p = state.panels.find(x => x.id === id); if (p && p.split) {
             const leafId = _getFocusedLeafId(p);
             unsplitPanel(id, leafId);
         }}
@@ -323,7 +308,7 @@ document.addEventListener('keydown', (e) => {
             // Check if the terminal is focused (click-to-focus) and has a command to send to.
             // For split panels, the focused leaf's command may differ from state.selectedCmdId.
             const hasCommand = state.selectedCmdId
-                || (panelObj && (panelObj.split || panelObj._rootSplit) && panelObj._focusedLeafId);
+                || (panelObj && panelObj.split && panelObj._focusedLeafId);
             if (panelObj && panelObj.focused && hasCommand) {
                 const searchBar = document.getElementById('searchBar-' + panel.id);
                 if (searchBar && searchBar.classList.contains('visible') &&
@@ -408,8 +393,7 @@ document.addEventListener('click', (e) => {
 
         // Track which leaf is active in split panes
         const leafId = vttyContainer.getAttribute('data-leaf-id');
-        // MUST check both split trees — _rootSplit leaves are valid targets too.
-        if ((panelObj.split || panelObj._rootSplit) && leafId) {
+        if (panelObj.split && leafId) {
             _setActiveSideForLeaf(panelObj, leafId);
         }
 
