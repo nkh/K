@@ -43,8 +43,8 @@ function _getServerLabel(inst, instUrl) {
     } catch { return instUrl; }
 }
 
-const _serverBg = ['var(--bg-tertiary)','#2d1f3d','#1f3d2d','#3d2d1f','#1f2d3d','#3d1f2d','#2d3d1f','#1f3d3d'];
-const _serverFg = ['var(--text-primary)','#d4b8e8','#b8e8d4','#e8d4b8','#b8d4e8','#e8b8d4','#d4e8b8','#b8e8e8'];
+const _serverBg = ['var(--bg-tertiary)','var(--server-tint-1-bg)','var(--server-tint-2-bg)','var(--server-tint-3-bg)','var(--server-tint-4-bg)','var(--server-tint-5-bg)','var(--server-tint-6-bg)','var(--server-tint-7-bg)'];
+const _serverFg = ['var(--text-primary)','var(--server-tint-1-fg)','var(--server-tint-2-fg)','var(--server-tint-3-fg)','var(--server-tint-4-fg)','var(--server-tint-5-fg)','var(--server-tint-6-fg)','var(--server-tint-7-fg)'];
 
 function _getServerColor(inst) {
     if (!inst) return 'var(--bg-tertiary)';
