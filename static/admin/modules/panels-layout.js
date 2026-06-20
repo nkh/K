@@ -609,13 +609,15 @@ ${_renderLeafVtty(panel, leaf, leafId)}
 // ─── Header updates ───
 
 function _updateSplitHeaders(panelObj) {
-    if (!panelObj?.split) return;
+    if (!panelObj?.split && !panelObj?._rootSplit) return;
     const el = document.getElementById(panelObj.id);
     if (!el) return;
     // Update panel root leaf
     _updateOneSplitHeader(el, panelObj.id, panelObj.selectedInstUrl, panelObj.selectedCmdId);
-    // Walk tree for all branch leaves
-    _updateTreeHeaders(el, panelObj.split);
+    // Walk root's own split tree (_rootSplit)
+    if (panelObj._rootSplit) _updateTreeHeaders(el, panelObj._rootSplit);
+    // Walk top-level split tree
+    if (panelObj.split) _updateTreeHeaders(el, panelObj.split);
 }
 
 function _updateTreeHeaders(container, splitNode) {

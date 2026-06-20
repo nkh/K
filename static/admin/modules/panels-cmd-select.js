@@ -94,6 +94,7 @@ function _selectCommandForPanel(panelObj, instUrl, cmdId, { cache = false, reset
     updatePanelCommandInfo();
     updateTerminalDisconnectedOverlay();
     updateSidebarSelection();
+    if (panelObj.split || panelObj._rootSplit) _updateSplitHeaders(panelObj);
     loadVttyHttpForPanel(panelObj.id, instUrl, cmdId);
     startPanelUpdateMode(panelObj.id);
 }
@@ -112,13 +113,13 @@ function _selectLeafCommand(panelObj, leaf, instUrl, cmdId) {
     // Connect WS or start polling for this leaf
     if (state.updateMode === 'push') _connectLeafWs(leaf);
     else leaf.pollTimer = setInterval(() => { if (leaf.cmdId && typeof _loadLeafVttyHttpDirect === 'function') _loadLeafVttyHttpDirect(leaf); }, state.pollInterval);
-    if (panelObj.split) _updateSplitHeaders(panelObj);
+    if (panelObj.split || panelObj._rootSplit) _updateSplitHeaders(panelObj);
     updateSidebarSelection();
 }
 
 function _selectActiveLeafCommand(panelObj, instUrl, cmdId) {
     // Select a command into the currently active leaf of the panel
-    if (!panelObj.split) {
+    if (!panelObj.split && !panelObj._rootSplit) {
         _selectCommandForPanel(panelObj, instUrl, cmdId, { cache: true, resetBuffers: true, scrollback: true });
         return;
     }
