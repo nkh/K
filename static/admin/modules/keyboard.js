@@ -26,7 +26,7 @@ function _handleEscape() {
     const panel = getSelectedPanel();
     if (panel) vttySearchClose(panel.id);
     closeContextMenu();
-    closeShortcuts();
+    window.closeShortcuts();
     return true;
 }
 
@@ -196,7 +196,7 @@ const _defaultShortcuts = [
     { id: 'copy', key: 'c', ctrl: true, shift: true, action: _withPanel(copyTerminalSelection), label: 'Copy selection' },
     { id: 'selection-mode', key: 's', ctrl: true, shift: true, action: _withPanel(toggleSelectionMode), label: 'Toggle selection mode' },
     { id: 'selection-mode-alt', key: 's', alt: true, action: _withPanel(toggleSelectionMode), label: 'Toggle selection mode (Alt)' },
-    { id: 'shortcuts-help', key: '?', noInput: true, action: showShortcuts, label: 'Show shortcuts' },
+    { id: 'shortcuts-help', key: '?', noInput: true, action: window.showShortcuts, label: 'Show shortcuts' },
     { id: 'export', key: 'e', ctrl: true, shift: true, noInput: true, action: _withPanel(exportTerminal), label: 'Export terminal' },
     { id: 'restart', key: 'r', ctrl: true, shift: true, noInput: true, action: _withPanel(restartCommand), label: 'Restart command' },
     { id: 'panel-theme', key: 't', alt: true, noInput: true, action(e) { e.preventDefault(); const id = getActivePanelId(); if (id) togglePanelTheme(id); }, label: 'Toggle panel theme' },

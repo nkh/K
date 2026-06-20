@@ -459,6 +459,39 @@ function clearLogSearch() {
     state._logSearchReconnectTimer = setTimeout(() => { state._logSearchReconnectTimer = null; if (state.currentView === 'log') connectLogWs(); }, 500);
 }
 
+// ─── Keyboard Shortcuts Panel ───
+// Must be defined before keyboard.js loads (keyboard.js references
+// window.showShortcuts and window.closeShortcuts in _defaultShortcuts).
+function showShortcuts() {
+    closeContextMenu();
+    window.closeShortcuts();
+    const overlay = document.createElement('div');
+    overlay.className = 'shortcuts-overlay';
+    overlay.id = 'shortcutsOverlay';
+
+    const shortcuts = (typeof _defaultShortcuts !== 'undefined') ? _defaultShortcuts : [];
+    let rows = '';
+    for (const s of shortcuts) {
+        let keys = [];
+        if (s.ctrl) keys.push('Ctrl');
+        if (s.shift && typeof s.shift !== 'string') keys.push('Shift');
+        if (s.alt) keys.push('Alt');
+        if (s.meta) keys.push('Meta');
+        const keyLabel = (s.shift && typeof s.shift === 'string') ? s.shift : s.key;
+        keys.push(keyLabel);
+        rows += '<tr><td>' + escHtml(keys.join('+')) + '</td><td>' + escHtml(s.label || '') + '</td></tr>';
+    }
+
+    overlay.innerHTML = '<div class="shortcuts-panel"><h2>Keyboard Shortcuts</h2><table>' + rows + '</table><div style="text-align:center;margin-top:0.5rem;"><button class="btn" onclick="closeShortcuts()">Close</button></div></div>';
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeShortcuts(); });
+    document.body.appendChild(overlay);
+}
+
+function closeShortcuts() {
+    const overlay = document.getElementById('shortcutsOverlay');
+    if (overlay) overlay.remove();
+}
+
 Object.assign(window, {
     _syncRefreshMsUI, saveToken, changeFontSize, applyFontSize, changePanelFontSize,
     changeRefreshMs, applyRefreshMs, toggleSelectionMode, startRefresh,
@@ -470,4 +503,5 @@ Object.assign(window, {
     showAddTemplateForm, hideAddTemplateForm, saveTemplate,
     connectLogWs, disconnectLogWs, loadLog, searchLogs, clearLogSearch,
     _updateLogTransportIndicator, _scheduleLogWsReconnect,
+    showShortcuts, closeShortcuts,
 });
