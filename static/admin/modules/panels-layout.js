@@ -404,6 +404,10 @@ function unsplitPanel(panelId, leafId) {
         _disconnectLeafTree(p._rootSplit);
         p.split = null;
         p._rootSplit = null;
+        // CRITICAL: reset _focusedLeafId to panel root.
+        // If _focusedLeafId pointed to a deleted branch, subsequent
+        // selectCommand calls would silently drop the command.
+        p._focusedLeafId = p.id;
         renderPanels();
         return;
     }
@@ -423,6 +427,16 @@ function unsplitPanel(panelId, leafId) {
 
     // Disconnect the leaf being closed
     const closingLeaf = parentSplit.branch;
+
+    // CRITICAL: If the focused leaf was in the closing subtree, reset to panel root.
+    // Without this, _focusedLeafId points to a deleted leaf and subsequent
+    // selectCommand calls silently drop the command.
+    if (p._focusedLeafId && p._focusedLeafId !== p.id) {
+        if (p._focusedLeafId === leafId || (closingLeaf && _leafIdInSubtree(closingLeaf, p._focusedLeafId))) {
+            p._focusedLeafId = p.id;
+        }
+    }
+
     if (closingLeaf) _disconnectSingleLeaf(closingLeaf);
 
     // If the closing leaf itself was split, disconnect its whole subtree
@@ -482,6 +496,17 @@ function _disconnectSingleLeaf(leaf) {
     leaf.wsReconnectCount = 0;
     leaf.wsInstUrl = null;
     leaf.wsCmdId = null;
+}
+
+// Check if a leafId exists anywhere in a leaf's subtree (for _focusedLeafId validation)
+function _leafIdInSubtree(leaf, targetId) {
+    if (!leaf || !targetId) return false;
+    if (leaf.id === targetId) return true;
+    if (leaf.split && leaf.split.branch) {
+        if (leaf.split.branch.id === targetId) return true;
+        return _leafIdInSubtree(leaf.split.branch, targetId);
+    }
+    return false;
 }
 
 function _renderVttyContainer(panel) {
@@ -867,7 +892,7 @@ function startRenameWindow(winId) {
         // Recursive split tree
         _findLeafState, _getAllLeaves, _findParentSplit,
         _getLeafCmdState, _disconnectLeafTree, _disconnectSingleLeaf,
-        _newLeafState, _nextLeafId,
+        _newLeafState, _nextLeafId, _leafIdInSubtree,
     });
 
     // UnsplitLeaf action — close a specific leaf (from close button in split header)

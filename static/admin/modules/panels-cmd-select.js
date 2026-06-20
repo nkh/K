@@ -6,9 +6,11 @@
 function _isTerminalVisible() { return state.currentView === 'vtty' && !!state.selectedCmdId; }
 
 function _cacheTerminalForSwitch() {
-    const panel = getSelectedPanel();
-    if (!panel) return;
-    const vttyEl = panel.querySelector('.vtty-container');
+    const panelObj = state.panels.find(p => p.id === state._focusedPanelId);
+    if (!panelObj) return;
+    // Target the FOCUSED leaf's vtty container, not just the first one.
+    const leafId = panelObj._focusedLeafId || panelObj.id;
+    const vttyEl = document.getElementById('vtty-' + leafId);
     const pre = vttyEl?.querySelector('pre');
     if (!pre || !state.selectedCmdId) return;
     const frag = document.createDocumentFragment();
@@ -20,9 +22,11 @@ function _cacheTerminalForSwitch() {
 function _restoreCachedDom(cmdId) {
     const frag = state._cachedDomPre[cmdId];
     if (!frag) return;
-    const panel = getSelectedPanel();
-    if (!panel) return;
-    const vttyEl = panel.querySelector('.vtty-container');
+    const panelObj = state.panels.find(p => p.id === state._focusedPanelId);
+    if (!panelObj) return;
+    // Target the FOCUSED leaf's vtty container, not just the first one.
+    const leafId = panelObj._focusedLeafId || panelObj.id;
+    const vttyEl = document.getElementById('vtty-' + leafId);
     const pre = vttyEl?.querySelector('pre');
     if (!pre) return;
     pre.appendChild(frag);
@@ -118,12 +122,17 @@ function _selectLeafCommand(panelObj, leaf, instUrl, cmdId) {
 }
 
 function _selectActiveLeafCommand(panelObj, instUrl, cmdId) {
-    // Select a command into the currently active leaf of the panel
+    // Select a command into the currently active leaf of the panel.
+    // MUST use _getFocusedLeafId to validate the focused leaf still exists.
+    // Using raw _focusedLeafId can point to a deleted leaf (after unsplit),
+    // causing _findLeafState to return null and the command to SILENTLY DISAPPEAR.
     if (!panelObj.split && !panelObj._rootSplit) {
         _selectCommandForPanel(panelObj, instUrl, cmdId, { cache: true, resetBuffers: true, scrollback: true });
         return;
     }
-    const leafId = panelObj._focusedLeafId || panelObj.id;
+    const leafId = (typeof _getFocusedLeafId === 'function')
+        ? _getFocusedLeafId(panelObj)
+        : (panelObj._focusedLeafId || panelObj.id);
     if (leafId === panelObj.id) {
         // Panel root leaf
         _selectCommandForPanel(panelObj, instUrl, cmdId, { cache: true, resetBuffers: true, scrollback: true });
@@ -131,6 +140,10 @@ function _selectActiveLeafCommand(panelObj, instUrl, cmdId) {
         const found = (typeof _findLeafState === 'function') ? _findLeafState(panelObj, leafId) : null;
         if (found && found.leaf) {
             _selectLeafCommand(panelObj, found.leaf, instUrl, cmdId);
+        } else {
+            // Leaf no longer exists (was unsplit) — fall back to root leaf.
+            // This prevents commands from silently disappearing.
+            _selectCommandForPanel(panelObj, instUrl, cmdId, { cache: true, resetBuffers: true, scrollback: true });
         }
     }
 }
