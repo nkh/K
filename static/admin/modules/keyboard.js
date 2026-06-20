@@ -162,10 +162,6 @@ function _updateScrollbackUI(po, panelEl) {
     }
 }
 
-function _loadPanel(po) {
-    loadVttyHttpForPanel(po.id, po.selectedInstUrl, state.selectedCmdId);
-}
-
 // ─── Keyboard shortcut bindings ───
 // Default shortcuts — can be overridden by user-defined shortcuts (localStorage).
 // Each entry: { key, ctrl?, shift?, alt?, meta?, noInput?, action, label?, id? }
@@ -343,7 +339,13 @@ document.addEventListener('keydown', (e) => {
         }
     }
 
+    // FIX: Try shortcuts BEFORE auto-focusing keyInput.
+    // Previously, auto-focus ran first, making _inInput(e) return true,
+    // which caused noInput:true shortcuts (Alt+|, Alt+-, etc.) to be skipped.
+    _tryShortcut(e);
+
     // Focus key input when not in an input field and a command is selected
+    // (only if no shortcut was matched above)
     if (state.currentView === 'vtty' && state.selectedCmdId && !_inInput(e)) {
         const panel = getSelectedPanel();
         if (panel) { const input = document.getElementById('keyInput-' + panel.id); if (input) input.focus(); }
@@ -359,9 +361,6 @@ document.addEventListener('keydown', (e) => {
             return;
         }
     }
-
-    // Shortcut table dispatch (for non-focused paths)
-    _tryShortcut(e);
 });
 
 // ─── Direct key sending (when terminal is focused) ───
@@ -413,22 +412,34 @@ document.addEventListener('click', (e) => {
             _setActiveSideForLeaf(panelObj, leafId);
         }
 
-        if (panelObj.focused) {
-            panelObj.focused = false;
-            vttyContainer.style.outline = '';
-        } else {
-            state.panels.forEach(p => p.focused = false);
-            document.querySelectorAll('.vtty-container').forEach(v => v.style.outline = '');
-            panelObj.focused = true;
-            vttyContainer.style.outline = '2px solid var(--accent)';
-            vttyContainer.setAttribute('tabindex', '0');
-            vttyContainer.focus();
-        }
+        // FIX: Always focus on click (no toggle). Single click selects + focuses.
+        // If already focused on THIS container, re-focus it (handles blur cases).
+        state.panels.forEach(p => p.focused = false);
+        document.querySelectorAll('.vtty-container').forEach(v => v.style.outline = '');
+        panelObj.focused = true;
+        vttyContainer.style.outline = '2px solid var(--accent)';
+        vttyContainer.setAttribute('tabindex', '0');
+        vttyContainer.focus();
     } else if (!vttyContainer) {
         state.panels.forEach(p => p.focused = false);
         document.querySelectorAll('.vtty-container').forEach(v => v.style.outline = '');
     }
 });
+
+function _loadLeaf(po, leafId) {
+    // Load VTTY content for a specific leaf in a split pane
+    const vc = document.getElementById('vtty-' + leafId);
+    if (!vc) return;
+    const leafInfo = _getLeafFromVtty(vc, po);
+    const cmdId = leafInfo.isPanelLeaf ? po.selectedCmdId : leafInfo.leaf.cmdId;
+    const instUrl = leafInfo.isPanelLeaf ? po.selectedInstUrl : leafInfo.leaf.instUrl;
+    if (!cmdId || !instUrl) return;
+    if (leafInfo.isPanelLeaf) {
+        loadVttyHttpForPanel(po.id, instUrl, cmdId);
+    } else if (typeof _loadLeafVttyHttpDirect === 'function') {
+        _loadLeafVttyHttpDirect(leafInfo.leaf);
+    }
+}
 
 // ─── Mouse wheel / scrollback handling ───
 let _wheelScrollRafId = null, _wheelScrollPanel = null, _wheelScrollAccum = 0;
@@ -441,6 +452,7 @@ document.addEventListener('wheel', (e) => {
     if (panelObj.selectionMode) return;
 
     const vc = e.target.closest('.vtty-container');
+    const leafId = vc ? (vc.getAttribute('data-leaf-id') || panelObj.id) : panelObj.id;
 
     if (panelObj.mouseTracking) {
         e.preventDefault();
@@ -454,7 +466,7 @@ document.addEventListener('wheel', (e) => {
             e.preventDefault();
             panelObj.scrollbackOffset += 3;
             _saveScrollback(panelObj.scrollbackOffset);
-            _loadPanel(panelObj);
+            _loadLeaf(panelObj, leafId);
             _updateScrollbackUI(panelObj, panelEl);
         }
         return;
@@ -484,7 +496,7 @@ document.addEventListener('wheel', (e) => {
             p.scrollbackOffset += lines;
         }
         _saveScrollback(p.scrollbackOffset);
-        _loadPanel(p);
+        _loadLeaf(p, leafId);
         _updateScrollbackUI(p, panelEl);
     });
 }, { passive: false });

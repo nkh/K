@@ -118,6 +118,7 @@ const _sigs = {
     'data-panel':    function(el) { return [el.dataset.panel]; },
 
     // Pass (panelId, leafId) from data-panel and data-leaf attributes
+    // Used by freeze/thaw button in split pane headers where each leaf has its own command
     'data-panel+leaf': function(el) { return [el.dataset.panel, el.dataset.leaf]; },
 };
 
@@ -226,6 +227,7 @@ const _actions = {
     'ApplyLayoutPreset':        { handler: 'applyLayoutPreset', sig: 'preset' },
     'ToggleSelectionMode':      { handler: 'toggleSelectionMode', sig: 'panelId' },
     'TogglePauseRunPanel':      { handler: 'togglePauseRunPanel', sig: 'panelId' },
+    'TogglePauseRunLeaf':      { handler: '_togglePauseRunLeaf', sig: 'data-panel+leaf', stop: true },
     'CopyTerminalSelection':    { handler: 'copyTerminalSelection', sig: 'panelId' },
     'ExportTerminal':           { handler: 'exportTerminal', sig: 'panelId' },
     'ScreenshotPanel':          { handler: 'screenshotPanel', sig: 'panelId' },

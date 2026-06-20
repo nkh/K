@@ -355,6 +355,14 @@ class MockElement {
     focus() {}
     blur() {}
     scrollIntoView() {}
+    contains(other) {
+        let el = other;
+        while (el) {
+            if (el === this) return true;
+            el = el.parentElement || null;
+        }
+        return false;
+    }
     click() { this.dispatchEvent({ type: 'click', target: this, preventDefault() {}, stopPropagation() {} }); }
     get classList() {
         const self = this; // capture MockElement reference

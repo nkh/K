@@ -23,6 +23,23 @@ async function togglePauseRunPanel(panelId) {
     try { await _doFreezeThaw(p.selectedInstUrl, p.selectedCmdId); loadCommands(); } catch (e) {}
 }
 
+// Freeze/thaw for a specific leaf in a split pane (uses leaf's own cmdId/instUrl)
+async function _togglePauseRunLeaf(panelId, leafId) {
+    const p = state.panels.find(pp => pp.id === panelId);
+    if (!p) return;
+    let instUrl, cmdId;
+    if (leafId && leafId !== panelId && p.split) {
+        const found = typeof _findLeafState === 'function' ? _findLeafState(p, leafId) : null;
+        if (found && found.leaf && found.leaf.instUrl && found.leaf.cmdId) {
+            instUrl = found.leaf.instUrl;
+            cmdId = found.leaf.cmdId;
+        }
+    }
+    if (!cmdId) { instUrl = p.selectedInstUrl; cmdId = p.selectedCmdId; }
+    if (!instUrl || !cmdId) return;
+    try { await _doFreezeThaw(instUrl, cmdId); loadCommands(); } catch (e) {}
+}
+
 // ─── VTTY Update Modes (Push / Poll) ───
 async function fetchServerConfig() {
     try {
@@ -319,7 +336,7 @@ async function spawnFromWelcome() {
 }
 
     Object.assign(window, {
-        _doFreezeThaw, togglePauseRun, togglePauseRunPanel, fetchServerConfig, applyUpdateModeUI,
+        _doFreezeThaw, togglePauseRun, togglePauseRunPanel, _togglePauseRunLeaf, fetchServerConfig, applyUpdateModeUI,
         switchUpdateMode, applyPollInterval, loadCertificates, updateCertDropdown,
         updateInstanceDropdown, addConnection, _saveConnections, _restoreConnections,
         healthCheckConnections, _fetchServerName, removeConnection, disconnectServer,

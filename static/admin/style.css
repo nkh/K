@@ -1,60 +1,18 @@
 .hidden { display: none !important; }
 :root {
-    /* ── Base palette ── */
     --bg-primary: #0d1117;
     --bg-secondary: #161b22;
     --bg-tertiary: #21262d;
     --border: #30363d;
-    /* ── Text hierarchy ── */
     --text-primary: #c9d1d9;
     --text-secondary: #8b949e;
     --text-muted: #484f58;
-    /* ── Accent & status colors ── */
     --accent: #58a6ff;
     --accent-dim: #1f6feb22;
     --green: #3fb950;
     --red: #f85149;
     --yellow: #d29922;
     --purple: #bc8cff;
-    /* ── Panel / split-pane visuals ── */
-    --focused-pane-border: var(--accent);
-    --focused-header-bg: color-mix(in srgb, var(--bg-primary) 70%, var(--focused-pane-border));
-    --panel-header-bg: var(--bg-tertiary);
-    --panel-header-text: var(--text-secondary);
-    --panel-header-cmd: var(--text-primary);
-    --panel-header-muted: var(--text-muted);
-    /* ── Sidebar ── */
-    --sidebar-bg: var(--bg-secondary);
-    --sidebar-header-bg: var(--bg-tertiary);
-    --sidebar-header-text: var(--text-muted);
-    --sidebar-item-text: var(--text-secondary);
-    --sidebar-item-active-bg: var(--bg-tertiary);
-    --sidebar-item-active-text: var(--accent);
-    --sidebar-item-hover-bg: var(--bg-primary);
-    --sidebar-item-hover-text: var(--text-primary);
-    /* ── Toolbar / topbar ── */
-    --toolbar-bg: var(--bg-secondary);
-    --toolbar-text: var(--text-secondary);
-    --toolbar-border: var(--border);
-    /* ── Window tabs ── */
-    --window-tab-bg: var(--bg-secondary);
-    --window-tab-text: var(--text-muted);
-    --window-tab-active-bg: var(--bg-primary);
-    --window-tab-active-text: var(--text-primary);
-    --window-tab-border: var(--border);
-    /* ── Terminal ── */
-    --vtty-bg: var(--bg-primary);
-    --vtty-cursor: var(--text-primary);
-    --vtty-selection: color-mix(in srgb, var(--accent) 25%, transparent);
-    /* ── Context menu ── */
-    --ctx-menu-bg: var(--bg-secondary);
-    --ctx-menu-border: var(--border);
-    --ctx-menu-hover-bg: var(--bg-tertiary);
-    --ctx-menu-text: var(--text-primary);
-    /* ── Scrollbar ── */
-    --scrollbar-thumb: var(--border);
-    --scrollbar-track: transparent;
-    /* ── Fonts ── */
     --font-mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
     --font-sans: system-ui, -apple-system, sans-serif;
     --font-size: 10px;
@@ -164,7 +122,7 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .panel { flex: 1 1 0; display: flex; flex-direction: column; min-width: 100px; position: relative; }
 .panel + .panel { border-left: 1px solid var(--border); }
 .panel.focused { box-shadow: inset 0 0 0 2px var(--focused-pane-border, var(--accent)); z-index: 1; }
-.panel.focused > .panel-header { background: var(--focused-header-bg, color-mix(in srgb, var(--ph-bg, var(--bg-primary)) 70%, var(--focused-pane-border, var(--accent)))) !important; }
+.panel.focused > .panel-header { background: color-mix(in srgb, var(--ph-bg, var(--bg-tertiary)) 25%, var(--focused-pane-border, var(--accent))) !important; }
 /* Vertical (stacked) panel layout — swap border direction */
 .panel-area[style*="column"] .panel + .panel { border-left: none; border-top: 1px solid var(--border); }
 .panel-area[style*="column"] .panel.focused { box-shadow: inset 3px 0 0 0 var(--focused-pane-border, var(--accent)); }
@@ -210,15 +168,15 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .layout-preset-menu button:hover { background: var(--accent); color: var(--bg-primary); }
 .cmd-history-btn { padding: 0 0.2rem; font-size: var(--ui-fs); opacity: 0.7; }
 .cmd-history-btn:hover { opacity: 1; }
-.panel-header { display: flex; align-items: center; gap: 0.1rem; padding: 0 0.1rem; background: var(--panel-header-bg); flex-shrink: 0; overflow: hidden; white-space: nowrap; cursor: grab; border: none; -webkit-user-drag: none; user-select: none; }
+.panel-header { display: flex; align-items: center; gap: 0.1rem; padding: 0 0.1rem; background: var(--bg-tertiary); flex-shrink: 0; overflow: hidden; white-space: nowrap; cursor: grab; border: none; -webkit-user-drag: none; user-select: none; }
 .panel-header:active { cursor: grabbing; }
-.panel-header .panel-server-badge { font-family: var(--font-mono); color: var(--panel-header-text); font-size: var(--ui-fs); }
-.panel-header .title { font-size: var(--ui-fs); color: var(--panel-header-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; }
+.panel-header .panel-server-badge { font-family: var(--font-mono); color: var(--text-secondary); font-size: var(--ui-fs); }
+.panel-header .title { font-size: var(--ui-fs); color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; }
 .panel-header .cmd-info { display: flex; flex-direction: column; min-width: 0; flex-shrink: 1; gap: 0; overflow: hidden; margin-right: 0.5rem; }
-.panel-header .cmd-fullname { font-family: var(--font-mono); font-size: var(--ui-fs); color: var(--panel-header-cmd); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.panel-header .cmd-fullname { font-family: var(--font-mono); font-size: var(--ui-fs); color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .panel-header .cmd-fullname.panel-title-editing { outline: 1px solid var(--accent); outline-offset: 1px; background: var(--bg-primary); padding: 0 0.15rem; border-radius: 2px; cursor: text; overflow: visible; text-overflow: unset; white-space: pre; min-width: 3ch; }
-.panel-header .cmd-args { font-family: var(--font-mono); font-size: var(--ui-fs); color: var(--panel-header-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.panel-header .panel-header-meta { font-family: var(--font-mono); font-size: var(--ui-fs); color: var(--panel-header-muted); font-weight: 300; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: 0.3rem; }
+.panel-header .cmd-args { font-family: var(--font-mono); font-size: var(--ui-fs); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.panel-header .panel-header-meta { font-family: var(--font-mono); font-size: var(--ui-fs); color: var(--text-muted); font-weight: 300; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: 0.3rem; }
 .panel-freeze-btn { flex-shrink: 0; }
 .panel-header .instance-url { font-size: var(--ui-fs); color: var(--text-muted); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
 .panel-header-label { font-size: var(--ui-fs); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; font-family: var(--font-mono); }
@@ -278,7 +236,7 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .split-pane + .split-pane { border-left: 1px solid var(--border); }
 .split-container.vertical .split-pane + .split-pane { border-left: none; border-top: 1px solid var(--border); }
 .split-pane.focused { box-shadow: inset 0 0 0 2px var(--focused-pane-border, var(--accent)); z-index: 1; }
-.split-pane.focused > .panel-header { background: var(--focused-header-bg, color-mix(in srgb, var(--ph-bg, var(--bg-primary)) 70%, var(--focused-pane-border, var(--accent)))) !important; }
+.split-pane.focused > .panel-header { background: color-mix(in srgb, var(--ph-bg, var(--bg-tertiary)) 50%, var(--focused-pane-border, var(--accent))) !important; color: var(--ph-fg, var(--text-primary)) !important; }
 .split-container .vtty-container { flex: 1 1 0; min-width: 0; min-height: 0; }
 .split-divider { flex-shrink: 0; background: var(--border); z-index: 5; transition: background 0.15s; }
 .split-divider:hover, .split-divider.active { background: var(--accent); }

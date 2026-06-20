@@ -559,7 +559,7 @@ function _renderLeafHeader(panel, leaf, leafId) {
     <span class="panel-exit-banner hidden"></span>
     <span class="panel-reach-dot unknown" title="Server state"></span>
     <span class="panel-header-meta"></span>
-    <button class="cmd-freeze-btn panel-freeze-btn hidden" data-action="TogglePauseRunPanel" data-panel="${panel.id}" data-leaf="${leafId}" title="Freeze/Thaw command">&#8545;</button>
+    <button class="cmd-freeze-btn panel-freeze-btn hidden" data-action="TogglePauseRunLeaf" data-panel="${panel.id}" data-leaf="${leafId}" title="Freeze/Thaw command">&#8545;</button>
     <button class="panel-close-btn" data-action="${closeAction}" ${closeData} title="Close pane">&#x2715;</button>
 </div>`;
 }

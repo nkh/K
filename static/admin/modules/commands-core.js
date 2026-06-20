@@ -146,65 +146,91 @@
         _debouncedBuildSidebar();
     }
 
+    // Helper: update a single leaf header's command info (works for both
+    // top-level non-split panels AND split-pane leaf headers).
+    function _updateLeafHeaderInfo(container, leafId, instUrl, cmdId, customTitle) {
+        const h = container.querySelector(`.panel-header[data-leaf-id="${leafId}"]`);
+        if (!h) return;
+        const inst = instUrl ? state.connections.find(i => i.url === instUrl) : null;
+        const cmd = inst && inst._commands ? inst._commands.find(c => c.id === cmdId) : null;
+        const nameEl = h.querySelector('.cmd-fullname');
+        const argsEl = h.querySelector('.cmd-args');
+        const metaEl = h.querySelector('.panel-header-meta');
+        const freezeBtn = h.querySelector('.panel-freeze-btn');
+        const reachDot = h.querySelector('.panel-reach-dot');
+        const exitBanner = h.querySelector('.panel-exit-banner');
+
+        // Reach dot
+        if (reachDot && inst) {
+            const rCls = inst.reachable === true ? 'reachable' : inst.reachable === false ? 'unreachable' : 'unknown';
+            reachDot.className = 'panel-reach-dot ' + rCls;
+            reachDot.title = inst.reachable === true ? 'Server connected' : inst.reachable === false ? 'Server unreachable' : 'Checking server...';
+        }
+        // Meta
+        if (metaEl && cmd) {
+            const sLabel = _getServerLabel(inst, instUrl);
+            const pid = cmd.pid || '';
+            metaEl.textContent = (sLabel || '') + (pid ? ' - ' + pid : '');
+            metaEl.title = instUrl || '';
+        } else if (metaEl) {
+            metaEl.textContent = '';
+        }
+        // Command name, args
+        if (nameEl && cmd) {
+            const fullName = cmd.name || cmd.id;
+            nameEl.textContent = customTitle || fullName;
+            nameEl.title = fullName + (customTitle ? ' (title: ' + customTitle + ')' : '');
+            if (argsEl) { const a = (cmd.args || []).join(' '); argsEl.textContent = a ? ' ' + a : ''; argsEl.title = a || ''; }
+        } else if (nameEl) {
+            nameEl.textContent = customTitle || '';
+            if (argsEl) argsEl.textContent = '';
+        }
+        // Freeze button
+        if (freezeBtn && cmd && cmd.alive !== false) {
+            freezeBtn.classList.remove('hidden');
+            freezeBtn.textContent = cmd.frozen ? '\u25B6' : '\u2161';
+            freezeBtn.title = cmd.frozen ? 'Thaw command' : 'Freeze command';
+            freezeBtn.classList.toggle('active', cmd.frozen);
+        } else if (freezeBtn) { freezeBtn.classList.add('hidden'); }
+        // Exit banner
+        if (exitBanner && cmd && cmd.alive === false && cmd.frozen !== true) {
+            const ec = cmd.exit_code != null ? cmd.exit_code : '?';
+            exitBanner.innerHTML = `&#9632; exited <span class="exit-badge ${cmd.exit_code === 0 ? 'success' : 'failure'}">${ec}</span>`;
+            exitBanner.classList.remove('hidden');
+        } else if (exitBanner) { exitBanner.classList.add('hidden'); }
+    }
+
     function updatePanelCommandInfo() {
         for (const p of state.panels) {
-            if (!p.selectedInstUrl || !p.selectedCmdId) continue;
             const el = document.getElementById(p.id);
             if (!el) continue;
-            const inst = state.connections.find(i => i.url === p.selectedInstUrl);
-            const cmd = inst && inst._commands ? inst._commands.find(c => c.id === p.selectedCmdId) : null;
-            const nameEl = el.querySelector(':scope > .panel-header .cmd-fullname');
-            const argsEl = el.querySelector(':scope > .panel-header .cmd-args');
-            const metaEl = el.querySelector(':scope > .panel-header .panel-header-meta');
-            const freezeBtn = el.querySelector(':scope > .panel-header .panel-freeze-btn');
-            const reachDot = el.querySelector(':scope > .panel-header .panel-reach-dot');
-            if (reachDot && inst) {
-                const rCls = inst.reachable === true ? 'reachable' : inst.reachable === false ? 'unreachable' : 'unknown';
-                reachDot.className = 'panel-reach-dot ' + rCls;
-                reachDot.title = inst.reachable === true ? 'Server connected' : inst.reachable === false ? 'Server unreachable' : 'Checking server...';
+
+            // Update root leaf header (works for both split and non-split)
+            if (p.selectedInstUrl && p.selectedCmdId) {
+                _updateLeafHeaderInfo(el, p.id, p.selectedInstUrl, p.selectedCmdId, p.customTitle);
+            } else {
+                _updateLeafHeaderInfo(el, p.id, null, null, p.customTitle);
             }
-            if (metaEl && cmd) {
-                const sLabel = _getServerLabel(inst, p.selectedInstUrl);
-                const pid = cmd.pid || '';
-                metaEl.textContent = (sLabel || '') + (pid ? ' - ' + pid : '');
-                metaEl.title = p.selectedInstUrl || '';
+
+            // Update all branch/deeper leaf headers in the split tree
+            if (p.split && typeof _getAllLeaves === 'function') {
+                const leaves = _getAllLeaves(p);
+                for (const { leaf, side } of leaves) {
+                    if (!side) continue; // skip root (handled above)
+                    if (leaf.cmdId && leaf.instUrl) {
+                        _updateLeafHeaderInfo(el, leaf.id, leaf.instUrl, leaf.cmdId, '');
+                    } else {
+                        _updateLeafHeaderInfo(el, leaf.id, null, null, '');
+                    }
+                }
             }
-            if (nameEl && cmd) {
-                const fullName = cmd.name || cmd.id;
-                nameEl.textContent = p.customTitle || fullName;
-                nameEl.title = fullName + (p.customTitle ? ' (title: ' + p.customTitle + ')' : '');
-                if (argsEl) { const a = (cmd.args || []).join(' '); argsEl.textContent = a ? ' ' + a : ''; argsEl.title = a || ''; }
+
+            // Restart button (top-level panel only)
+            if (p.selectedCmdId) {
                 const restartBtn = el.querySelector('[id^="restartBtn-"]');
                 if (restartBtn) restartBtn.classList.remove('hidden');
-                if (freezeBtn && cmd.alive !== false) {
-                    freezeBtn.classList.remove('hidden');
-                    freezeBtn.textContent = cmd.frozen ? '\u25B6' : '\u2161';
-                    freezeBtn.title = cmd.frozen ? 'Thaw command' : 'Freeze command';
-                    freezeBtn.classList.toggle('active', cmd.frozen);
-                } else if (freezeBtn) { freezeBtn.classList.add('hidden'); }
-                const resEl = el.querySelector('[id^="resourceBadge-"]');
-                if (resEl) {
-                    const res = state._resourceCache[cmd.id];
-                    if (state.showResources && res && (res.cpu_percent != null || res.memory_mb != null)) {
-                        resEl.classList.remove('hidden');
-                        resEl.textContent = (res.cpu_percent != null ? 'CPU ' + res.cpu_percent.toFixed(1) + '%' : '') +
-                            (res.cpu_percent != null && res.memory_mb != null ? ' | ' : '') +
-                            (res.memory_mb != null ? res.memory_mb.toFixed(1) + 'MB' : '');
-                    } else { resEl.textContent = ''; if (!state.showResources) resEl.classList.add('hidden'); }
-                }
-                const exitBanner = el.querySelector(':scope > .panel-header .panel-exit-banner');
-                if (exitBanner) {
-                    if (cmd.alive === false && cmd.frozen !== true) {
-                        const ec = cmd.exit_code != null ? cmd.exit_code : '?';
-                        exitBanner.innerHTML = `&#9632; exited <span class="exit-badge ${cmd.exit_code === 0 ? 'success' : 'failure'}">${ec}</span>`;
-                        exitBanner.classList.remove('hidden');
-                    } else exitBanner.classList.add('hidden');
-                }
-            } else if (nameEl) {
-                nameEl.textContent = p.customTitle || '';
-                if (argsEl) argsEl.textContent = '';
+            } else {
                 const rb = el.querySelector('[id^="restartBtn-"]'); if (rb) rb.classList.add('hidden');
-                const eb = el.querySelector(':scope > .panel-header .panel-exit-banner'); if (eb) eb.classList.add('hidden');
             }
         }
         const fp = state.panels.find(p => p.id === state._focusedPanelId);

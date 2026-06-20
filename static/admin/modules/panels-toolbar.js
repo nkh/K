@@ -65,22 +65,38 @@ function _setupPanelDelegation() {
             e.preventDefault();
             const pid = divider.getAttribute('data-panel');
             const panelObj = state.panels.find(p => p.id === pid);
-            if (!panelObj?.split) return;
+            if (!panelObj) return;
+
+            // FIX: Find the correct split container (may be nested, not just top-level)
             const splitContainer = divider.parentElement;
-            const dir = panelObj.split.direction;
+            const dir = splitContainer.classList.contains('vertical') ? 'vertical' : 'horizontal';
             divider.classList.add('active');
             const startPos = dir === 'horizontal' ? e.clientX : e.clientY;
             const cSize = dir === 'horizontal' ? splitContainer.offsetWidth : splitContainer.offsetHeight;
-            const startRatio = panelObj.split.splitRatio || 0.5;
+
+            // Find the two direct children panes of this split container
+            const childPanes = [];
+            let child = splitContainer.firstElementChild;
+            while (child) {
+                if (child.classList.contains('split-pane') || (child.classList.contains('split-container') && child !== divider)) {
+                    childPanes.push(child);
+                    if (childPanes.length >= 2) break;
+                }
+                child = child.nextElementSibling;
+            }
+            if (childPanes.length < 2) return;
+
+            // Determine current ratio from the first pane's flex
+            const currentFlex = childPanes[0].style.flex || '0 0 50%';
+            const match = currentFlex.match(/([\d.]+)%/);
+            const startRatio = match ? parseFloat(match[1]) / 100 : 0.5;
+
             const onMove = (ev) => {
                 const pos = dir === 'horizontal' ? ev.clientX : ev.clientY;
                 let ratio = Math.max(0.1, Math.min(0.9, startRatio + (pos - startPos) / cSize));
-                panelObj.split.splitRatio = ratio;
-                const panes = splitContainer.querySelectorAll('.split-pane');
-                if (panes.length === 2) {
-                    const p1 = (ratio * 100).toFixed(1), p2 = (100 - parseFloat(p1)).toFixed(1);
-                    panes[0].style.flex = `0 0 ${p1}%`; panes[1].style.flex = `0 0 ${p2}%`;
-                }
+                const p1 = (ratio * 100).toFixed(1), p2 = (100 - parseFloat(p1)).toFixed(1);
+                childPanes[0].style.flex = `0 0 ${p1}%`;
+                childPanes[1].style.flex = `0 0 ${p2}%`;
             };
             const onUp = () => { divider.classList.remove('active'); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
             document.addEventListener('mousemove', onMove);
