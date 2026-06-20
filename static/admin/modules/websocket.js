@@ -418,7 +418,7 @@ async function _doFetchVttyDiff(panelId, instUrl, cmdId, isBranch) {
                 }
             } else {
                 // Incremental diff — apply cell-level patches directly to the target element
-                _applyLeafDiff(targetEl, panelId, json.data);
+                _applyLeafDiff(targetEl, panelId, cmdId, instUrl, json.data);
             }
         }
     } catch (e) {
@@ -427,10 +427,10 @@ async function _doFetchVttyDiff(panelId, instUrl, cmdId, isBranch) {
 }
 
 // Apply incremental cell-level diff to a vtty-container element (works for ANY leaf)
-function _applyLeafDiff(vttyEl, leafId, data) {
+function _applyLeafDiff(vttyEl, leafId, cmdId, instUrl, data) {
     const pre = vttyEl ? vttyEl.querySelector('pre') : null;
     if (!pre) return;
-    const genKey = leafId + '/' + (data._cmdId || '');
+    const genKey = leafId + '/' + (cmdId || '');
     if (data.generation !== undefined && state._lastGeneration[genKey] === data.generation) {
         if (data.cursor || data.dimensions) _updateLeafMetadata(vttyEl, data);
         return;
@@ -452,20 +452,20 @@ function _applyLeafDiff(vttyEl, leafId, data) {
 
     if (!state._level3Enabled || !data.cells || !data.cells.length) {
         // No cell grid or no cells — fall back to full HTTP fetch
-        _loadLeafVttyHttpDirect({ id: leafId, instUrl: data._instUrl, cmdId: data._cmdId });
+        _loadLeafVttyHttpDirect({ id: leafId, instUrl: instUrl, cmdId: cmdId });
         return;
     }
 
     const cg = state._cellGrids[genKey];
     if (!cg) {
-        _loadLeafVttyHttpDirect({ id: leafId, instUrl: data._instUrl, cmdId: data._cmdId });
+        _loadLeafVttyHttpDirect({ id: leafId, instUrl: instUrl, cmdId: cmdId });
         return;
     }
 
     const dims = data.dimensions || {};
     if (dims.rows !== cg.rows || dims.cols !== cg.cols) {
         delete state._cellGrids[genKey];
-        _loadLeafVttyHttpDirect({ id: leafId, instUrl: data._instUrl, cmdId: data._cmdId });
+        _loadLeafVttyHttpDirect({ id: leafId, instUrl: instUrl, cmdId: cmdId });
         return;
     }
 

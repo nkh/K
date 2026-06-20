@@ -265,11 +265,27 @@ if (typeof _applyLeafDiff === 'function') {
 
     // No pre → no crash
     const emptyVtty = document.createElement('div');
-    assert(() => { _applyLeafDiff(emptyVtty, 'test-leaf', {}); }, '_applyLeafDiff no-pre no crash');
+    assert(() => { _applyLeafDiff(emptyVtty, 'test-leaf', null, null, {}); }, '_applyLeafDiff no-pre no crash');
 
-    // With html data
-    const htmlData = { html: '<span>test</span>', generation: 1, _cmdId: 'c1' };
-    assert(() => { _applyLeafDiff(vttyEl, 'test-leaf', htmlData); }, '_applyLeafDiff with html does not throw');
+    // With html data — genKey must use explicit cmdId, not data._cmdId
+    const htmlData = { html: '<span>test</span>', generation: 1 };
+    assert(() => { _applyLeafDiff(vttyEl, 'test-leaf', 'c1', 'http://localhost:9090', htmlData); }, '_applyLeafDiff with html does not throw');
+    // Verify generation stored at correct key (leafId + '/' + cmdId)
+    assertEq(state._lastGeneration['test-leaf/c1'], 1, '_applyLeafDiff stores generation at leafId/cmdId key');
+
+    // Different cmdId → different genKey (no collision)
+    assert(state._lastGeneration['test-leaf/c2'] === undefined, 'different cmdId has separate genKey');
+
+    // Duplicate generation → early return (no innerHTML overwrite)
+    const preContent = pre.innerHTML;
+    const dupData = { html: '<span>updated</span>', generation: 1 };
+    _applyLeafDiff(vttyEl, 'test-leaf', 'c1', 'http://localhost:9090', dupData);
+    assertEq(pre.innerHTML, preContent, '_applyLeafDiff skips duplicate generation');
+
+    // New generation → updates
+    const newData = { html: '<span>updated</span>', generation: 2 };
+    _applyLeafDiff(vttyEl, 'test-leaf', 'c1', 'http://localhost:9090', newData);
+    assert(pre.innerHTML.includes('updated'), '_applyLeafDiff applies new generation');
 }
 
 console.log('\n[websocket.js] Tests complete');
