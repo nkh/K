@@ -441,7 +441,7 @@ fn spawn_process_waiter(
                 .get(&watch_id)
                 .map(|h| (h.name.clone(), h.pid))
                 .unwrap_or_else(|| (watch_id.clone(), 0));
-            logger.log("exited", &format!("id={} pid={} name={} code={}", watch_id, cmd_pid, cmd_name, exit_status.code().map_or("signal".to_string(), |c| c.to_string())));
+            logger.log("exited", &format!("id={} pid={} name={} code={}", watch_id, cmd_pid, cmd_name, exit_status.code.map_or("signal".to_string(), |c: i32| c.to_string())));
 
             let _ = child_exit_tx.send(true);
 
@@ -493,7 +493,7 @@ fn spawn_process_waiter(
                 manager_cmds.remove(&watch_id);
                 tracing::info!(id = %watch_id, "Command removed after exit");
             }
-            logger.log("exit", &format!("id={} pid={} name={} retained={} code={}", watch_id, cmd_pid, cmd_name, retain, exit_status.code().map_or("signal".to_string(), |c| c.to_string())));
+            logger.log("exit", &format!("id={} pid={} name={} retained={} code={}", watch_id, cmd_pid, cmd_name, retain, exit_status.code.map_or("signal".to_string(), |c: i32| c.to_string())));
 
             let _ = exit_tx.send(exit_status);
         }
