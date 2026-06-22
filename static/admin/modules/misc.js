@@ -8,7 +8,7 @@ function saveToken() {
 }
 
 function changeFontSize(delta) {
-    state.fontSize = Math.max(8, Math.min(28, state.fontSize + delta));
+    state.fontSize = Math.max(2, Math.min(28, state.fontSize + delta));
     applyFontSize();
 }
 
@@ -22,7 +22,7 @@ function applyFontSize() {
 function changePanelFontSize(panelId, delta) {
     const panelObj = state.panels.find(p => p.id === panelId);
     if (!panelObj) return;
-    panelObj.fontSize = Math.max(8, Math.min(28, panelObj.fontSize + delta));
+    panelObj.fontSize = Math.max(2, Math.min(28, panelObj.fontSize + delta));
     localStorage.setItem('vrw_panel_font_' + panelId, panelObj.fontSize.toString());
     const vttyEl = document.getElementById('vtty-' + panelId);
     if (vttyEl) vttyEl.style.fontSize = panelObj.fontSize + 'px';
