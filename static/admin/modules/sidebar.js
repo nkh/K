@@ -166,9 +166,11 @@ function _buildSidebar() {
     for (const inst of state.connections) {
         for (const cmd of (Array.isArray(inst._commands) ? inst._commands : [])) {
             const cmdName = cmd.name || cmd.id;
+            const serverLabel = (inst.label || inst.url).toLowerCase();
             if (filterLower && !cmdName.toLowerCase().includes(filterLower) &&
                 !(cmd.args || []).join(' ').toLowerCase().includes(filterLower) &&
-                !String(cmd.pid).includes(filterLower)) continue;
+                !String(cmd.pid).includes(filterLower) &&
+                !serverLabel.includes(filterLower)) continue;
             allCmds.push({ inst, cmd, cmdName });
         }
     }
