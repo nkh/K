@@ -1,11 +1,28 @@
 # Keyboard Shortcuts
 
-The web UI provides several keyboard shortcuts for common actions.
+The web UI provides keyboard shortcuts for common actions. Windowing and pane-splitting shortcuts use a **prefix key** system modelled after screen(1) and tmux(1): press `Ctrl+A` then a second key.
+
+## Prefix Key (`Ctrl+A`)
+
+Press `Ctrl+A` to enter prefix mode (a "PREFIX" indicator appears in the bottom-right corner). Within 1 second, press the second key. If no matching key is pressed, prefix mode cancels automatically.
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+A` then `\|` | Split pane vertically |
+| `Ctrl+A` then `-` | Split pane horizontally |
+| `Ctrl+A` then `!` | Close pane (remove split) |
+| `Ctrl+A` then `c` | Create new panel |
+| `Ctrl+A` then `w` | Create new window |
+| `Ctrl+A` then `W` | Close current window |
+| `Ctrl+A` then `t` | Toggle panel theme (inherit / light / dark) |
+| `Ctrl+A` then `1`–`9` | Switch to window N |
+| `Escape` (while in prefix) | Cancel prefix mode |
 
 ## Global Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
+| `Ctrl+A` | Prefix key — enter command mode for window/pane shortcuts |
 | `Ctrl+Shift+C` | Copy terminal text selection to clipboard |
 | `Ctrl+Shift+E` | Export terminal as text |
 | `Ctrl+Shift+R` | Restart the command in the active panel |
@@ -17,6 +34,20 @@ The web UI provides several keyboard shortcuts for common actions.
 | `Shift+F10` / Context Menu key | Open context menu for the focused element (command item or panel header) |
 | `Escape` | Close any open modal, overlay, search bar, or context menu |
 | `Any key` | Focus the key input field (when not already in an input/textarea/select) |
+
+## Legacy Alt+ Shortcuts (still available)
+
+The Alt+ shortcuts for windowing/pane operations remain available as alternatives to the prefix system:
+
+| Shortcut | Action |
+|----------|--------|
+| `Alt+\|` | Split pane vertically |
+| `Alt+-` | Split pane horizontally |
+| `Alt+U` | Remove split (close pane) |
+| `Alt+N` | New panel |
+| `Alt+W` | New window |
+| `Alt+Shift+W` | Close window |
+| `Alt+1`–`Alt+9` | Switch to window N |
 
 ## Terminal Shortcuts (when terminal is focused)
 
@@ -55,6 +86,23 @@ When the terminal panel is focused (after clicking on it), keystrokes are sent d
 | `Tab` | Move to next focusable element within modal |
 | `Shift+Tab` | Move to previous focusable element within modal |
 | `Escape` | Close the modal and restore focus |
+
+## Customizing Shortcuts
+
+Shortcuts are stored in the browser's `localStorage` under the key `vrw_custom_shortcuts`. To customize, open the browser DevTools console and run:
+
+```js
+// Change the prefix key from Ctrl+A to Ctrl+B:
+localStorage.setItem('vrw_custom_shortcuts', JSON.stringify({
+    "prefix": { key: "b", ctrl: true, isPrefix: true },
+    // Re-point prefix shortcuts to the new prefix:
+    "p-split-vertical": { key: "|", prefix: true },
+    "p-split-horizontal": { key: "-", prefix: true },
+    "p-unsplit": { key: "!", prefix: true }
+}));
+```
+
+Then reload the page. Only the `key` and modifier fields are customizable; the action always comes from the built-in default.
 
 ## Shortcuts Reference Overlay
 

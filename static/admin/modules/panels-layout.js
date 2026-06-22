@@ -395,6 +395,8 @@ function splitPanel(panelId, direction, leafId) {
         // Focus the NEW pane so the user can immediately select a command.
         p._focusedLeafId = sid;
     }
+    // Ensure the panel is focused at the panel level too
+    if (state._focusedPanelId !== panelId) focusPanel(panelId);
     renderPanels();
 }
 

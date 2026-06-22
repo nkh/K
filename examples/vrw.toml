@@ -68,3 +68,34 @@ stderr_file = "/tmp/vrw.err"
 #     { name = "debug", sink = "file", path = "./logs/debug-{id}.log" },
 #     { name = "aux", sink = "vtty" },
 # ]
+
+[web]
+# Client-side web UI keyboard shortcuts are configurable via the browser's
+# localStorage (stored per-origin). They are NOT set in this config file.
+#
+# The web UI uses a prefix key system (like screen/tmux):
+#   Ctrl+A then key   — prefix-mode shortcuts (split, windows, panels)
+#   Alt+key           — legacy shortcuts (still available)
+#
+# Default prefix-mode shortcuts:
+#   Ctrl+A |    — Split pane vertically
+#   Ctrl+A -    — Split pane horizontally
+#   Ctrl+A !    — Close pane (remove split)
+#   Ctrl+A c    — New panel
+#   Ctrl+A w    — New window
+#   Ctrl+A W    — Close window
+#   Ctrl+A t    — Toggle panel theme
+#   Ctrl+A 1-9  — Switch to window N
+#
+# Legacy Alt+ shortcuts (still available):
+#   Alt+|  /  Alt+-  — Split pane
+#   Alt+u            — Remove split
+#   Alt+n            — New panel
+#   Alt+w            — New window
+#   Alt+1-9          — Switch to window N
+#
+# To customize, open browser DevTools console and run:
+#   localStorage.setItem('vrw_custom_shortcuts', JSON.stringify({
+#     "p-split-horizontal": { key: "%", prefix: true }
+#   }))
+# Then reload the page.

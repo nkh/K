@@ -473,6 +473,7 @@ function showShortcuts() {
     let rows = '';
     for (const s of shortcuts) {
         let keys = [];
+        if (s.prefix) keys.push('Ctrl+A');
         if (s.ctrl) keys.push('Ctrl');
         if (s.shift && typeof s.shift !== 'string') keys.push('Shift');
         if (s.alt) keys.push('Alt');

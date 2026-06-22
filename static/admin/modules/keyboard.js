@@ -162,15 +162,62 @@ function _updateScrollbackUI(po, panelEl) {
     }
 }
 
+// ─── Prefix key system ───
+// A prefix key (default: Ctrl+A) activates "prefix mode". The next keystroke
+// is then checked against prefix-bound shortcuts. If no match within 1 second,
+// prefix mode cancels automatically. This is modelled after screen(1)/tmux(1).
+//
+// Prefix shortcuts have { prefix: true } — they only match when prefix mode is active.
+// The prefix key itself is a regular shortcut with { isPrefix: true }.
+
+let _prefixActive = false;
+let _prefixTimer = null;
+const _PREFIX_TIMEOUT_MS = 1000;
+
+function _activatePrefix() {
+    _prefixActive = true;
+    if (_prefixTimer) clearTimeout(_prefixTimer);
+    _prefixTimer = setTimeout(_cancelPrefix, _PREFIX_TIMEOUT_MS);
+    // Show visual indicator
+    let indicator = document.getElementById('prefixIndicator');
+    if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.id = 'prefixIndicator';
+        indicator.style.cssText = 'position:fixed;bottom:0.5rem;right:0.5rem;background:var(--accent);color:var(--color-on-accent);padding:0.15rem 0.5rem;border-radius:3px;font-size:var(--ui-fs);font-family:var(--font-mono);z-index:99999;pointer-events:none;opacity:0.9;';
+        document.body.appendChild(indicator);
+    }
+    indicator.textContent = state._prefixLabel || 'PREFIX';
+}
+
+function _cancelPrefix() {
+    _prefixActive = false;
+    if (_prefixTimer) { clearTimeout(_prefixTimer); _prefixTimer = null; }
+    const indicator = document.getElementById('prefixIndicator');
+    if (indicator) indicator.remove();
+}
+
 // ─── Keyboard shortcut bindings ───
 // Default shortcuts — can be overridden by user-defined shortcuts (localStorage).
 // Each entry: { key, ctrl?, shift?, alt?, meta?, noInput?, action, label?, id? }
 // 'id' is a stable name used for user customization (e.g. 'split-vertical').
+// 'prefix: true' — only matches when prefix mode is active (after Ctrl+A).
+// 'isPrefix: true' — this shortcut IS the prefix key (activates prefix mode).
 
 function _switchWindowByIndex(e, idx) {
     e.preventDefault();
     if (!state.windows || !state.windows.length) return;
     if (idx < state.windows.length) switchWindow(state.windows[idx].id);
+}
+
+function _splitAction(direction) {
+    return function(e) {
+        e.preventDefault();
+        const id = getActivePanelId();
+        if (id) { const p = state.panels.find(x => x.id === id); if (p) {
+            const leafId = _getFocusedLeafId(p);
+            splitPanel(id, direction, leafId);
+        }}
+    };
 }
 
 const _defaultShortcuts = [
@@ -195,24 +242,43 @@ const _defaultShortcuts = [
     { id: 'shortcuts-help', key: '?', noInput: true, action: window.showShortcuts, label: 'Show shortcuts' },
     { id: 'export', key: 'e', ctrl: true, shift: true, noInput: true, action: _withPanel(exportTerminal), label: 'Export terminal' },
     { id: 'restart', key: 'r', ctrl: true, shift: true, noInput: true, action: _withPanel(restartCommand), label: 'Restart command' },
-    { id: 'panel-theme', key: 't', alt: true, noInput: true, action(e) { e.preventDefault(); const id = getActivePanelId(); if (id) togglePanelTheme(id); }, label: 'Toggle panel theme' },
-    { id: 'new-panel', key: 'n', alt: true, noInput: true, action(e) { e.preventDefault(); addPanel(); }, label: 'New panel' },
-    { id: 'split-vertical', key: '|', alt: true, noInput: true, action(e) {
+
+    // ── Prefix key ──
+    { id: 'prefix', key: 'a', ctrl: true, isPrefix: true, action(e) { e.preventDefault(); _activatePrefix(); }, label: 'Prefix key (enter command mode)' },
+
+    // ── Prefix-mode shortcuts (after Ctrl+A) ──
+    { id: 'p-split-vertical', key: '|', prefix: true, noInput: true, action: _splitAction('vertical'), label: 'Split pane vertically' },
+    { id: 'p-split-horizontal', key: '-', prefix: true, noInput: true, action: _splitAction('horizontal'), label: 'Split pane horizontally' },
+    { id: 'p-unsplit', key: '!', prefix: true, noInput: true, action(e) {
         e.preventDefault();
         const id = getActivePanelId();
-        if (id) { const p = state.panels.find(x => x.id === id); if (p) {
+        if (id) { const p = state.panels.find(x => x.id === id); if (p && (p.split || p._rootSplit)) {
             const leafId = _getFocusedLeafId(p);
-            splitPanel(id, 'vertical', leafId);
+            unsplitPanel(id, leafId);
         }}
-    }, label: 'Split pane vertically' },
-    { id: 'split-horizontal', key: '-', alt: true, noInput: true, action(e) {
+    }, label: 'Remove split (close pane)' },
+    { id: 'p-new-panel', key: 'c', prefix: true, noInput: true, action(e) { e.preventDefault(); addPanel(); }, label: 'New panel' },
+    { id: 'p-panel-theme', key: 't', prefix: true, noInput: true, action(e) { e.preventDefault(); const id = getActivePanelId(); if (id) togglePanelTheme(id); }, label: 'Toggle panel theme' },
+    { id: 'p-new-window', key: 'w', prefix: true, noInput: true, action(e) { e.preventDefault(); createWindow(); }, label: 'New window' },
+    { id: 'p-close-window', key: 'W', prefix: true, noInput: true, action(e) {
         e.preventDefault();
-        const id = getActivePanelId();
-        if (id) { const p = state.panels.find(x => x.id === id); if (p) {
-            const leafId = _getFocusedLeafId(p);
-            splitPanel(id, 'horizontal', leafId);
-        }}
-    }, label: 'Split pane horizontally' },
+        if (state.activeWindowId) closeWindow(state.activeWindowId);
+    }, label: 'Close window' },
+    { id: 'p-win-1', key: '1', prefix: true, noInput: true, action(e) { _switchWindowByIndex(e, 0); }, label: 'Switch to window 1' },
+    { id: 'p-win-2', key: '2', prefix: true, noInput: true, action(e) { _switchWindowByIndex(e, 1); }, label: 'Switch to window 2' },
+    { id: 'p-win-3', key: '3', prefix: true, noInput: true, action(e) { _switchWindowByIndex(e, 2); }, label: 'Switch to window 3' },
+    { id: 'p-win-4', key: '4', prefix: true, noInput: true, action(e) { _switchWindowByIndex(e, 3); }, label: 'Switch to window 4' },
+    { id: 'p-win-5', key: '5', prefix: true, noInput: true, action(e) { _switchWindowByIndex(e, 4); }, label: 'Switch to window 5' },
+    { id: 'p-win-6', key: '6', prefix: true, noInput: true, action(e) { _switchWindowByIndex(e, 5); }, label: 'Switch to window 6' },
+    { id: 'p-win-7', key: '7', prefix: true, noInput: true, action(e) { _switchWindowByIndex(e, 6); }, label: 'Switch to window 7' },
+    { id: 'p-win-8', key: '8', prefix: true, noInput: true, action(e) { _switchWindowByIndex(e, 7); }, label: 'Switch to window 8' },
+    { id: 'p-win-9', key: '9', prefix: true, noInput: true, action(e) { _switchWindowByIndex(e, 8); }, label: 'Switch to window 9' },
+
+    // ── Legacy Alt+ shortcuts (kept as alternatives) ──
+    { id: 'panel-theme', key: 't', alt: true, noInput: true, action(e) { e.preventDefault(); const id = getActivePanelId(); if (id) togglePanelTheme(id); }, label: 'Toggle panel theme (Alt+T)' },
+    { id: 'new-panel', key: 'n', alt: true, noInput: true, action(e) { e.preventDefault(); addPanel(); }, label: 'New panel (Alt+N)' },
+    { id: 'split-vertical', key: '|', alt: true, noInput: true, action: _splitAction('vertical'), label: 'Split vertically (Alt+|)' },
+    { id: 'split-horizontal', key: '-', alt: true, noInput: true, action: _splitAction('horizontal'), label: 'Split horizontally (Alt+-)' },
     { id: 'unsplit', key: 'u', alt: true, noInput: true, action(e) {
         e.preventDefault();
         const id = getActivePanelId();
@@ -220,21 +286,21 @@ const _defaultShortcuts = [
             const leafId = _getFocusedLeafId(p);
             unsplitPanel(id, leafId);
         }}
-    }, label: 'Remove split' },
-    { id: 'new-window', key: 'w', alt: true, noInput: true, action(e) { e.preventDefault(); createWindow(); }, label: 'New window' },
+    }, label: 'Remove split (Alt+U)' },
+    { id: 'new-window', key: 'w', alt: true, noInput: true, action(e) { e.preventDefault(); createWindow(); }, label: 'New window (Alt+W)' },
     { id: 'close-window', key: 'W', alt: true, noInput: true, action(e) {
         e.preventDefault();
         if (state.activeWindowId) closeWindow(state.activeWindowId);
-    }, label: 'Close window' },
-    { id: 'win-1', key: '1', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 0); }, label: 'Switch to window 1' },
-    { id: 'win-2', key: '2', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 1); }, label: 'Switch to window 2' },
-    { id: 'win-3', key: '3', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 2); }, label: 'Switch to window 3' },
-    { id: 'win-4', key: '4', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 3); }, label: 'Switch to window 4' },
-    { id: 'win-5', key: '5', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 4); }, label: 'Switch to window 5' },
-    { id: 'win-6', key: '6', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 5); }, label: 'Switch to window 6' },
-    { id: 'win-7', key: '7', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 6); }, label: 'Switch to window 7' },
-    { id: 'win-8', key: '8', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 7); }, label: 'Switch to window 8' },
-    { id: 'win-9', key: '9', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 8); }, label: 'Switch to window 9' },
+    }, label: 'Close window (Alt+W)' },
+    { id: 'win-1', key: '1', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 0); }, label: 'Window 1 (Alt+1)' },
+    { id: 'win-2', key: '2', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 1); }, label: 'Window 2 (Alt+2)' },
+    { id: 'win-3', key: '3', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 2); }, label: 'Window 3 (Alt+3)' },
+    { id: 'win-4', key: '4', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 3); }, label: 'Window 4 (Alt+4)' },
+    { id: 'win-5', key: '5', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 4); }, label: 'Window 5 (Alt+5)' },
+    { id: 'win-6', key: '6', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 5); }, label: 'Window 6 (Alt+6)' },
+    { id: 'win-7', key: '7', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 6); }, label: 'Window 7 (Alt+7)' },
+    { id: 'win-8', key: '8', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 7); }, label: 'Window 8 (Alt+8)' },
+    { id: 'win-9', key: '9', alt: true, noInput: true, action(e) { _switchWindowByIndex(e, 8); }, label: 'Window 9 (Alt+9)' },
     { id: 'nav-prev', key: 'ArrowLeft', alt: true, noInput: true, action(e) {
         const p = getSelectedPanel(), po = p && state.panels.find(x => x.id === p.id);
         if (!(po && po.focused)) { e.preventDefault(); navigatePrevCommand(); }
@@ -267,6 +333,8 @@ function _saveCustomShortcut(id, binding) {
         if (binding.shift) customs[id].shift = true;
         if (binding.alt) customs[id].alt = true;
         if (binding.meta) customs[id].meta = true;
+        if (binding.prefix) customs[id].prefix = true;
+        if (binding.isPrefix) customs[id].isPrefix = true;
     }
     localStorage.setItem('vrw_custom_shortcuts', JSON.stringify(customs));
     _rebuildShortcuts();
@@ -296,16 +364,30 @@ _rebuildShortcuts();
 // ─── Shortcut matching (extracted so it can be called from focused-terminal path) ───
 function _tryShortcut(e) {
     for (const s of _shortcuts) {
+        // Skip prefix-only shortcuts when not in prefix mode
+        if (s.prefix && !_prefixActive) continue;
+        // Skip non-prefix shortcuts when in prefix mode (except prefix key itself and Escape)
+        if (!s.prefix && !s.isPrefix && _prefixActive && s.key !== 'Escape') continue;
+
         const keyMatch = e.key === s.key || (s.shift && typeof s.shift === 'string' && e.shiftKey && e.key === s.shift);
         if (!keyMatch) continue;
+        // For prefix shortcuts, no modifiers should be held (just the bare key after prefix)
+        if (s.prefix && (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey)) continue;
         const ctrlOk = !s.ctrl || e.ctrlKey || e.metaKey;
         const altOk = s.alt ? e.altKey : !e.altKey;
         const shiftOk = !s.shift || e.shiftKey;
         const metaOk = !s.meta || e.metaKey;
         if (ctrlOk && altOk && shiftOk && metaOk) {
-            if (!(s.noInput && _inInput(e))) { s.action(e); return true; }
+            if (!(s.noInput && _inInput(e))) {
+                // Cancel prefix after executing a prefix-mode shortcut
+                if (_prefixActive) _cancelPrefix();
+                s.action(e);
+                return true;
+            }
         }
     }
+    // If prefix was active but no match found, cancel it
+    if (_prefixActive && !e.ctrlKey && !e.altKey && !e.metaKey) _cancelPrefix();
     return false;
 }
 
@@ -572,5 +654,5 @@ async function sendMouseEvent(panelObj, eventType, button, e) {
     } catch (err) { /* best-effort */ }
 }
 
-Object.assign(window, { _KEY_MAP, _defaultShortcuts, _loadCustomShortcuts, _saveCustomShortcut, _rebuildShortcuts, _getFocusedLeafId, _getLeafFromVtty, _setActiveSideForLeaf });
+Object.assign(window, { _KEY_MAP, _defaultShortcuts, _loadCustomShortcuts, _saveCustomShortcut, _rebuildShortcuts, _getFocusedLeafId, _getLeafFromVtty, _setActiveSideForLeaf, _activatePrefix, _cancelPrefix, _prefixActive: (() => _prefixActive) });
 })();
