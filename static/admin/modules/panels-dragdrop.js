@@ -87,7 +87,7 @@ function _panelDragMouseUp() {
         // Find drop target using last known mouse position
         const under = document.elementFromPoint(d.lastX, d.lastY);
         const targetPanel = under?.closest('.panel');
-        const container = document.getElementById('view-vtty');
+        const container = document.getElementById('panelArea') || document.getElementById('view-vtty');
         if (targetPanel && targetPanel.id !== d.panelId && container) {
             const rect = targetPanel.getBoundingClientRect();
             const midX = rect.left + rect.width / 2;
@@ -111,6 +111,7 @@ function _panelDragMouseUp() {
             container.querySelectorAll('.panel').forEach(p => { const pp = state.panels.find(x => x.id === p.id); if (pp) newOrder.push(pp); });
             state.panels = newOrder;
             localStorage.setItem('vrw_panel_order', JSON.stringify(newOrder.map(p => p.id)));
+            renderPanels();
         } else {
             if (d.placeholder && d.placeholder.parentNode) d.placeholder.remove();
         }

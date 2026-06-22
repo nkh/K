@@ -424,15 +424,37 @@ function unsplitPanel(panelId, leafId) {
     if (!p) return;
     if (!p.split && !p._rootSplit) return;
 
-    if (!leafId || leafId === p.id) {
-        // Remove the entire top-level split (and root split)
+    // Closing the ROOT leaf (panel.id): promote the branch to become the new root.
+    // This preserves all other panes in the split tree.
+    if (leafId === p.id && p.split && p.split.branch) {
+        const branch = p.split.branch;
+        // Transfer branch's command data to the panel root
+        if (branch.cmdId) p.selectedCmdId = branch.cmdId;
+        if (branch.instUrl) p.selectedInstUrl = branch.instUrl;
+        // If the branch itself has children (was split), those become the new top-level split.
+        // If no children, the split is fully removed.
+        _disconnectSingleLeaf(branch); // disconnect branch's own ws/poll
+        if (branch.split && branch.split.branch) {
+            // Branch has children — the children become the new top-level split
+            p.split = branch.split;
+        } else {
+            p.split = null;
+        }
+        // Also handle _rootSplit: if root was split, its tree becomes the only remaining split
+        if (p._rootSplit) {
+            // Keep _rootSplit as-is (it was the root's own split tree)
+        }
+        p._focusedLeafId = p.id;
+        renderPanels();
+        return;
+    }
+
+    // No leafId or clearing all splits (used by explicit "remove all" action)
+    if (!leafId) {
         _disconnectLeafTree(p.split);
         _disconnectLeafTree(p._rootSplit);
         p.split = null;
         p._rootSplit = null;
-        // CRITICAL: reset _focusedLeafId to panel root.
-        // If _focusedLeafId pointed to a deleted branch, subsequent
-        // selectCommand calls would silently drop the command.
         p._focusedLeafId = p.id;
         renderPanels();
         return;
@@ -588,12 +610,10 @@ function _renderLeafHeader(panel, leaf, leafId) {
     const color = _getServerColor(inst);
     const textColor = _getServerTextColor(inst);
     const isTopLevel = (leafId === panel.id);
-    // For the root leaf in a split, close removes the split.
-    // For deeper leaves, close removes just that leaf.
-    const closeAction = isTopLevel ? 'UnsplitPanel' : 'UnsplitLeaf';
-    const closeData = isTopLevel
-        ? `data-panel="${panel.id}"`
-        : `data-panel="${panel.id}" data-leaf="${leafId}"`;
+    // For ALL leaves (including root), close removes just that leaf.
+    // If the root is closed, the branch is promoted to become the new root.
+    const closeAction = 'UnsplitLeaf';
+    const closeData = `data-panel="${panel.id}" data-leaf="${leafId}"`;
     return `<div class="panel-header" data-panel-id="${panel.id}" data-leaf-id="${leafId}" oncontextmenu="showPanelContextMenu(event,'${panel.id}','${leafId}')" tabindex="0" role="button" style="--ph-bg:${color};--ph-fg:${textColor}">
     <button class="btn btn-xs cmd-history-btn hidden" data-action="PanelHistoryBack" data-panel="${panel.id}" data-leaf="${leafId}" title="Back">&#x25C0;</button>
     <button class="btn btn-xs cmd-history-btn hidden" data-action="PanelHistoryForward" data-panel="${panel.id}" data-leaf="${leafId}" title="Forward">&#x25B6;</button>
@@ -665,7 +685,11 @@ function _renderSplitNode(panel, splitNode, panelLeafId, isTopLevel) {
 
     const containerId = isTopLevel ? 'split-' + panel.id : '';
     const containerIdAttr = containerId ? ' id="' + containerId + '"' : '';
-    return `<div class="split-container ${dir}"${containerIdAttr} data-panel="${panel.id}" style="display:flex;flex:1;min-width:0;min-height:0;${dir === 'vertical' ? 'flex-direction:column;' : ''}">${panelSideHtml}<div class="split-divider" data-panel="${panel.id}"></div>${branchHtml}</div>`;
+    // Only the top-level split container gets flex:1 to fill the panel.
+    // Nested split containers must NOT have flex:1 — they are children of their
+    // parent split and should respect the parent's splitRatio (same as leaf panes).
+    const flexStyle = isTopLevel ? 'flex:1;' : '';
+    return `<div class="split-container ${dir}"${containerIdAttr} data-panel="${panel.id}" style="display:flex;${flexStyle}min-width:0;min-height:0;${dir === 'vertical' ? 'flex-direction:column;' : ''}">${panelSideHtml}<div class="split-divider" data-panel="${panel.id}"></div>${branchHtml}</div>`;
 }
 
 function _renderLeafPane(panel, leaf, leafId) {
@@ -943,23 +967,26 @@ function startRenameWindow(winId) {
     // UnsplitLeaf action — close a specific leaf (from close button in split header)
     window.unsplitLeaf = function(panelId, leafId) { unsplitPanel(panelId, leafId); };
 
-    // Toolbar action handlers
+    // Toolbar action handlers — always use current active panel, not stale data-panel
     window.splitPaneVertical = function(panelId) {
-        if (!panelId) return;
-        const p = state.panels.find(x => x.id === panelId);
-        if (p) { const leafId = (typeof _getFocusedLeafId === 'function') ? _getFocusedLeafId(p) : p.id; splitPanel(panelId, 'horizontal', leafId); }
+        const id = getActivePanelId() || panelId;
+        if (!id) return;
+        const p = state.panels.find(x => x.id === id);
+        if (p) { const leafId = (typeof _getFocusedLeafId === 'function') ? _getFocusedLeafId(p) : p.id; splitPanel(id, 'horizontal', leafId); }
     };
     window.splitPaneHorizontal = function(panelId) {
-        if (!panelId) return;
-        const p = state.panels.find(x => x.id === panelId);
-        if (p) { const leafId = (typeof _getFocusedLeafId === 'function') ? _getFocusedLeafId(p) : p.id; splitPanel(panelId, 'vertical', leafId); }
+        const id = getActivePanelId() || panelId;
+        if (!id) return;
+        const p = state.panels.find(x => x.id === id);
+        if (p) { const leafId = (typeof _getFocusedLeafId === 'function') ? _getFocusedLeafId(p) : p.id; splitPanel(id, 'vertical', leafId); }
     };
     window.unsplitPaneAction = function(panelId) {
-        if (!panelId) return;
-        const p = state.panels.find(x => x.id === panelId);
+        const id = getActivePanelId() || panelId;
+        if (!id) return;
+        const p = state.panels.find(x => x.id === id);
         if (p && (p.split || p._rootSplit)) {
             const leafId = (typeof _getFocusedLeafId === 'function') ? _getFocusedLeafId(p) : p.id;
-            unsplitPanel(panelId, leafId);
+            unsplitPanel(id, leafId);
         }
     };
 })();

@@ -223,7 +223,7 @@ function _buildSidebar() {
             if (res && res.memory_mb != null) { const mb = res.memory_mb; dp.push(mb >= 1024 ? (mb / 1024).toFixed(1) + 'G' : mb.toFixed(1) + 'M'); }
             const unreachableTitle = inst.reachable === false ? ' [disconnected]' : '';
             const serverBadge = showServerBadge
-                ? `<span class="resource-badge" style="font-size:0.55rem;opacity:0.7;" title="${escHtml(inst.url)}">${escHtml(inst.label)}</span>`
+                ? `<span class="resource-badge" style="font-size:0.55rem;opacity:0.7;" title="${escHtml(inst.url)}">${escHtml(_shortLabel(inst))}</span>`
                 : '';
             const reachCls = inst.reachable === true ? 'reachable' : inst.reachable === false ? 'unreachable' : 'unknown';
             const dimStyle = inst.reachable === false ? 'opacity:0.4;' : ((isAlive || isFrozen) ? '' : 'opacity:0.6;');
