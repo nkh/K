@@ -8,13 +8,13 @@ Press `Ctrl+A` to enter prefix mode (a "PREFIX" indicator appears in the bottom-
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+A` then `\|` | Split pane vertically |
-| `Ctrl+A` then `-` | Split pane horizontally |
-| `Ctrl+A` then `!` | Close pane (remove split) |
+| `Ctrl+A` then `\|` | Split pane vertically (side by side) |
+| `Ctrl+A` then `-` | Split pane horizontally (top/bottom) |
+| `Ctrl+A` then `Ctrl+D` | Close pane (remove split) |
 | `Ctrl+A` then `c` | Create new panel |
 | `Ctrl+A` then `w` | Create new window |
 | `Ctrl+A` then `W` | Close current window |
-| `Ctrl+A` then `t` | Toggle panel theme (inherit / light / dark) |
+| `Ctrl+A` then `t` | Toggle panel theme (inherit / light / grey / dark) |
 | `Ctrl+A` then `1`–`9` | Switch to window N |
 | `Escape` (while in prefix) | Cancel prefix mode |
 
@@ -27,7 +27,7 @@ Press `Ctrl+A` to enter prefix mode (a "PREFIX" indicator appears in the bottom-
 | `Ctrl+Shift+E` | Export terminal as text |
 | `Ctrl+Shift+R` | Restart the command in the active panel |
 | `Ctrl+Shift+S` / `Alt+S` | Toggle selection mode in the terminal panel |
-| `Alt+T` | Toggle panel theme (inherit / light / dark) |
+| `Alt+T` | Toggle panel theme (inherit / light / grey / dark) |
 | `Alt+N` | Add a new panel |
 | `Alt+Left` / `Alt+Right` | Navigate to previous/next command in the list |
 | `?` | Show keyboard shortcuts overlay |
@@ -41,9 +41,9 @@ The Alt+ shortcuts for windowing/pane operations remain available as alternative
 
 | Shortcut | Action |
 |----------|--------|
-| `Alt+\|` | Split pane vertically |
-| `Alt+-` | Split pane horizontally |
-| `Alt+U` | Remove split (close pane) |
+| `Alt+\|` | Split pane vertically (side by side) |
+| `Alt+-` | Split pane horizontally (top/bottom) |
+| `Alt+Ctrl+D` | Close pane (remove split) |
 | `Alt+N` | New panel |
 | `Alt+W` | New window |
 | `Alt+Shift+W` | Close window |
@@ -87,6 +87,17 @@ When the terminal panel is focused (after clicking on it), keystrokes are sent d
 | `Shift+Tab` | Move to previous focusable element within modal |
 | `Escape` | Close the modal and restore focus |
 
+## Window Bar Toolbar
+
+The window bar at the top of the panel area always contains action buttons:
+
+| Button | Action |
+|--------|--------|
+| `+ Win` | Create a new window |
+| `\| Split V` | Split pane vertically (side by side) |
+| `— Split H` | Split pane horizontally (top/bottom) |
+| `✕ Close` | Close the focused split pane |
+
 ## Customizing Shortcuts
 
 Shortcuts are stored in the browser's `localStorage` under the key `vrw_custom_shortcuts`. To customize, open the browser DevTools console and run:
@@ -98,7 +109,7 @@ localStorage.setItem('vrw_custom_shortcuts', JSON.stringify({
     // Re-point prefix shortcuts to the new prefix:
     "p-split-vertical": { key: "|", prefix: true },
     "p-split-horizontal": { key: "-", prefix: true },
-    "p-unsplit": { key: "!", prefix: true }
+    "p-unsplit": { key: "d", ctrl: true, prefix: true }
 }));
 ```
 

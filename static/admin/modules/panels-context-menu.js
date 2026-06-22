@@ -116,17 +116,17 @@ function showPanelContextMenu(e, panelId, leafId) {
     }
     _addCtxSep(menu);
     if (!panel.split) {
-        menu.appendChild(_createCtxMenuItem('Split Horizontal (Alt+-)', () => splitPanel(panelId, 'horizontal')));
-        menu.appendChild(_createCtxMenuItem('Split Vertical (Alt+|)', () => splitPanel(panelId, 'vertical')));
+        menu.appendChild(_createCtxMenuItem('Split Horizontal (Alt+-)', () => splitPanel(panelId, 'vertical')));
+        menu.appendChild(_createCtxMenuItem('Split Vertical (Alt+|)', () => splitPanel(panelId, 'horizontal')));
     } else {
         const targetLeaf = leafId || panelId;
         menu.appendChild(_createCtxMenuItem('Split Horizontal (Alt+-)', () => {
-            splitPanel(panelId, 'horizontal', targetLeaf);
-        }));
-        menu.appendChild(_createCtxMenuItem('Split Vertical (Alt+|)', () => {
             splitPanel(panelId, 'vertical', targetLeaf);
         }));
-        menu.appendChild(_createCtxMenuItem('Remove Split (Alt+u)', () => {
+        menu.appendChild(_createCtxMenuItem('Split Vertical (Alt+|)', () => {
+            splitPanel(panelId, 'horizontal', targetLeaf);
+        }));
+        menu.appendChild(_createCtxMenuItem('Remove Split (Ctrl+A Ctrl+D)', () => {
             unsplitPanel(panelId, targetLeaf);
         }));
     }

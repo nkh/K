@@ -138,16 +138,28 @@ function closeWindow(winId) {
 
 function _renderWindowBar() {
     _initWindows();
-    if (state.windows.length <= 1) return '';
     let html = '<div class="window-bar" id="windowBar">';
-    for (const w of state.windows) {
-        const active = w.id === state.activeWindowId;
-        const closeBtn = state.windows.length > 1
-            ? `<button class="window-tab-close" data-action="CloseWindow" data-window="${w.id}" title="Close window">&#x2715;</button>`
-            : '';
-        html += `<div class="window-tab${active ? ' active' : ''}" data-action="SwitchWindow" data-window="${w.id}" title="Window ${escHtml(w.name)}"><span class="window-tab-label" ondblclick="event.stopPropagation();startRenameWindow('${w.id}')">${escHtml(w.name)}</span>${closeBtn}</div>`;
+    // Action buttons (always visible)
+    html += '<div class="window-bar-actions">';
+    html += `<button class="window-bar-btn" data-action="CreateWindow" title="New window (Ctrl+A w)">+ Win</button>`;
+    const pid = getActivePanelId();
+    const p = pid ? state.panels.find(x => x.id === pid) : null;
+    const canSplit = p && !p.minimized;
+    html += `<button class="window-bar-btn${canSplit ? '' : ' disabled'}" data-action="SplitPaneVertical" data-panel="${pid || ''}" title="Split vertically — side by side (Ctrl+A |)">| Split V</button>`;
+    html += `<button class="window-bar-btn${canSplit ? '' : ' disabled'}" data-action="SplitPaneHorizontal" data-panel="${pid || ''}" title="Split horizontally — top/bottom (Ctrl+A -)">— Split H</button>`;
+    const canClose = p && (p.split || p._rootSplit);
+    html += `<button class="window-bar-btn${canClose ? '' : ' disabled'}" data-action="UnsplitPane" data-panel="${pid || ''}" title="Close pane (Ctrl+A Ctrl+D)">&#x2715; Close</button>`;
+    html += '</div>';
+    // Window tabs (only if >1 window)
+    if (state.windows.length > 1) {
+        for (const w of state.windows) {
+            const active = w.id === state.activeWindowId;
+            const closeBtn = state.windows.length > 1
+                ? `<button class="window-tab-close" data-action="CloseWindow" data-window="${w.id}" title="Close window">&#x2715;</button>`
+                : '';
+            html += `<div class="window-tab${active ? ' active' : ''}" data-action="SwitchWindow" data-window="${w.id}" title="Window ${escHtml(w.name)}"><span class="window-tab-label" ondblclick="event.stopPropagation();startRenameWindow('${w.id}')">${escHtml(w.name)}</span>${closeBtn}</div>`;
+        }
     }
-    html += `<button class="window-tab-add" data-action="CreateWindow" title="New window">+</button>`;
     html += '</div>';
     return html;
 }
@@ -160,7 +172,7 @@ function addPanelDirect() {
     const savedSelMode = localStorage.getItem('vrw_panel_sel_' + id);
     const selectionMode = savedSelMode === 'true';
     const savedTheme = localStorage.getItem('vrw_panel_theme_' + id);
-    const theme = (savedTheme === 'light' || savedTheme === 'dark') ? savedTheme : '';
+    const theme = (savedTheme === 'light' || savedTheme === 'dark' || savedTheme === 'grey') ? savedTheme : '';
     const customTitle = localStorage.getItem('vrw_panel_title_' + id) || '';
     const panel = { id, scrollbackOffset: 0, mouseTracking: false, mouseSgr: false, focused: false, fontSize, selectionMode, theme, customTitle, minimized: false, selectedCmdId: null, selectedInstUrl: null, _focusedLeafId: null,
         ws: null, wsCmdId: null, wsInstUrl: null, wsReconnectCount: 0, wsReconnectTimer: null, wsPingInterval: null, wsPingSendTime: 0, wsLatency: 0,
@@ -395,9 +407,16 @@ function splitPanel(panelId, direction, leafId) {
         // Focus the NEW pane so the user can immediately select a command.
         p._focusedLeafId = sid;
     }
-    // Ensure the panel is focused at the panel level too
-    if (state._focusedPanelId !== panelId) focusPanel(panelId);
     renderPanels();
+    // After render, ensure the panel is focused and split-pane focus classes are applied.
+    // renderPanels() rebuilds the DOM so we must re-apply focus on the new elements.
+    focusPanel(panelId);
+    const panelEl = document.getElementById(panelId);
+    if (panelEl && p._focusedLeafId && (p.split || p._rootSplit)) {
+        panelEl.querySelectorAll('.split-pane').forEach(function(sp) {
+            sp.classList.toggle('focused', sp.getAttribute('data-leaf-id') === p._focusedLeafId);
+        });
+    }
 }
 
 function unsplitPanel(panelId, leafId) {
@@ -923,4 +942,24 @@ function startRenameWindow(winId) {
 
     // UnsplitLeaf action — close a specific leaf (from close button in split header)
     window.unsplitLeaf = function(panelId, leafId) { unsplitPanel(panelId, leafId); };
+
+    // Toolbar action handlers
+    window.splitPaneVertical = function(panelId) {
+        if (!panelId) return;
+        const p = state.panels.find(x => x.id === panelId);
+        if (p) { const leafId = (typeof _getFocusedLeafId === 'function') ? _getFocusedLeafId(p) : p.id; splitPanel(panelId, 'horizontal', leafId); }
+    };
+    window.splitPaneHorizontal = function(panelId) {
+        if (!panelId) return;
+        const p = state.panels.find(x => x.id === panelId);
+        if (p) { const leafId = (typeof _getFocusedLeafId === 'function') ? _getFocusedLeafId(p) : p.id; splitPanel(panelId, 'vertical', leafId); }
+    };
+    window.unsplitPaneAction = function(panelId) {
+        if (!panelId) return;
+        const p = state.panels.find(x => x.id === panelId);
+        if (p && (p.split || p._rootSplit)) {
+            const leafId = (typeof _getFocusedLeafId === 'function') ? _getFocusedLeafId(p) : p.id;
+            unsplitPanel(panelId, leafId);
+        }
+    };
 })();

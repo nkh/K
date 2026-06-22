@@ -247,16 +247,16 @@ const _defaultShortcuts = [
     { id: 'prefix', key: 'a', ctrl: true, isPrefix: true, action(e) { e.preventDefault(); _activatePrefix(); }, label: 'Prefix key (enter command mode)' },
 
     // ── Prefix-mode shortcuts (after Ctrl+A) ──
-    { id: 'p-split-vertical', key: '|', prefix: true, noInput: true, action: _splitAction('vertical'), label: 'Split pane vertically' },
-    { id: 'p-split-horizontal', key: '-', prefix: true, noInput: true, action: _splitAction('horizontal'), label: 'Split pane horizontally' },
-    { id: 'p-unsplit', key: '!', prefix: true, noInput: true, action(e) {
+    { id: 'p-split-vertical', key: '|', prefix: true, noInput: true, action: _splitAction('horizontal'), label: 'Split pane vertically (side by side)' },
+    { id: 'p-split-horizontal', key: '-', prefix: true, noInput: true, action: _splitAction('vertical'), label: 'Split pane horizontally (top/bottom)' },
+    { id: 'p-unsplit', key: 'd', ctrl: true, prefix: true, noInput: true, action(e) {
         e.preventDefault();
         const id = getActivePanelId();
         if (id) { const p = state.panels.find(x => x.id === id); if (p && (p.split || p._rootSplit)) {
             const leafId = _getFocusedLeafId(p);
             unsplitPanel(id, leafId);
         }}
-    }, label: 'Remove split (close pane)' },
+    }, label: 'Close pane (remove split)' },
     { id: 'p-new-panel', key: 'c', prefix: true, noInput: true, action(e) { e.preventDefault(); addPanel(); }, label: 'New panel' },
     { id: 'p-panel-theme', key: 't', prefix: true, noInput: true, action(e) { e.preventDefault(); const id = getActivePanelId(); if (id) togglePanelTheme(id); }, label: 'Toggle panel theme' },
     { id: 'p-new-window', key: 'w', prefix: true, noInput: true, action(e) { e.preventDefault(); createWindow(); }, label: 'New window' },
@@ -277,16 +277,16 @@ const _defaultShortcuts = [
     // ── Legacy Alt+ shortcuts (kept as alternatives) ──
     { id: 'panel-theme', key: 't', alt: true, noInput: true, action(e) { e.preventDefault(); const id = getActivePanelId(); if (id) togglePanelTheme(id); }, label: 'Toggle panel theme (Alt+T)' },
     { id: 'new-panel', key: 'n', alt: true, noInput: true, action(e) { e.preventDefault(); addPanel(); }, label: 'New panel (Alt+N)' },
-    { id: 'split-vertical', key: '|', alt: true, noInput: true, action: _splitAction('vertical'), label: 'Split vertically (Alt+|)' },
-    { id: 'split-horizontal', key: '-', alt: true, noInput: true, action: _splitAction('horizontal'), label: 'Split horizontally (Alt+-)' },
-    { id: 'unsplit', key: 'u', alt: true, noInput: true, action(e) {
+    { id: 'split-vertical', key: '|', alt: true, noInput: true, action: _splitAction('horizontal'), label: 'Split vertically (Alt+|)' },
+    { id: 'split-horizontal', key: '-', alt: true, noInput: true, action: _splitAction('vertical'), label: 'Split horizontally (Alt+-)' },
+    { id: 'unsplit', key: 'd', ctrl: true, alt: true, noInput: true, action(e) {
         e.preventDefault();
         const id = getActivePanelId();
         if (id) { const p = state.panels.find(x => x.id === id); if (p && (p.split || p._rootSplit)) {
             const leafId = _getFocusedLeafId(p);
             unsplitPanel(id, leafId);
         }}
-    }, label: 'Remove split (Alt+U)' },
+    }, label: 'Close pane (Ctrl+D / Alt+Ctrl+D)' },
     { id: 'new-window', key: 'w', alt: true, noInput: true, action(e) { e.preventDefault(); createWindow(); }, label: 'New window (Alt+W)' },
     { id: 'close-window', key: 'W', alt: true, noInput: true, action(e) {
         e.preventDefault();
@@ -371,8 +371,16 @@ function _tryShortcut(e) {
 
         const keyMatch = e.key === s.key || (s.shift && typeof s.shift === 'string' && e.shiftKey && e.key === s.shift);
         if (!keyMatch) continue;
-        // For prefix shortcuts, no modifiers should be held (just the bare key after prefix)
-        if (s.prefix && (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey)) continue;
+        // For prefix shortcuts, block modifiers that aren't part of the shortcut definition.
+        // Allow Shift for keys that require it (e.g. | = Shift+\, ! = Shift+1).
+        // Allow Ctrl if the shortcut specifically declares ctrl:true (e.g. Ctrl+D to close).
+        if (s.prefix) {
+            const badCtrl = e.ctrlKey && !s.ctrl;
+            const badAlt = e.altKey && !s.alt;
+            const badMeta = e.metaKey && !s.meta;
+            const badShift = e.shiftKey && !(s.shift || (typeof s.shift === 'string'));
+            if (badCtrl || badAlt || badMeta || badShift) continue;
+        }
         const ctrlOk = !s.ctrl || e.ctrlKey || e.metaKey;
         const altOk = s.alt ? e.altKey : !e.altKey;
         const shiftOk = !s.shift || e.shiftKey;

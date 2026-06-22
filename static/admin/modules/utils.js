@@ -244,15 +244,15 @@ function updateThemeButton() {
 function togglePanelTheme(panelId) {
     const panelObj = state.panels.find(p => p.id === panelId);
     if (!panelObj) return;
-    const next = panelObj.theme === '' ? 'light' : panelObj.theme === 'light' ? 'dark' : '';
+    const next = panelObj.theme === '' ? 'light' : panelObj.theme === 'light' ? 'grey' : panelObj.theme === 'grey' ? 'dark' : '';
     panelObj.theme = next;
     localStorage.setItem('vrw_panel_theme_' + panelId, next);
     applyPanelTheme(panelId, next);
     if (panelId === getActivePanelId()) {
         const btn = document.getElementById('stPanelThemeBtn');
         if (btn) {
-            btn.textContent = next === 'light' ? '\u263E' : next === 'dark' ? '\u2600' : '\u25D0';
-            btn.title = next === 'light' ? 'Panel theme: light (click to toggle)' : next === 'dark' ? 'Panel theme: dark (click to toggle)' : 'Panel theme: inherit (click to toggle)';
+            btn.textContent = next === 'light' ? '\u263E' : next === 'grey' ? '\u25FC' : next === 'dark' ? '\u2600' : '\u25D0';
+            btn.title = next === 'light' ? 'Panel theme: light (click to toggle)' : next === 'grey' ? 'Panel theme: grey (click to toggle)' : next === 'dark' ? 'Panel theme: dark (click to toggle)' : 'Panel theme: inherit (click to toggle)';
         }
     }
 }
@@ -264,8 +264,8 @@ function applyPanelTheme(panelId, theme) {
     else vttyEl.removeAttribute('data-panel-theme');
     const btn = document.getElementById('panelThemeBtn-' + panelId);
     if (btn) {
-        btn.textContent = theme === 'light' ? '\u263E' : theme === 'dark' ? '\u2600' : '\u25D0';
-        btn.title = theme === 'light' ? 'Panel theme: light (click to toggle)' : theme === 'dark' ? 'Panel theme: dark (click to toggle)' : 'Panel theme: inherit (click to toggle)';
+        btn.textContent = theme === 'light' ? '\u263E' : theme === 'grey' ? '\u25FC' : theme === 'dark' ? '\u2600' : '\u25D0';
+        btn.title = theme === 'light' ? 'Panel theme: light (click to toggle)' : theme === 'grey' ? 'Panel theme: grey (click to toggle)' : theme === 'dark' ? 'Panel theme: dark (click to toggle)' : 'Panel theme: inherit (click to toggle)';
     }
 }
 window.initTheme = initTheme;

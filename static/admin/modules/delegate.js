@@ -253,6 +253,11 @@ const _actions = {
     'CreateWindow':             { handler: 'createWindow' },
     'CloseWindow':              { handler: 'closeWindow', sig: 'data-window', stop: true },
 
+    // ── Window bar toolbar buttons ──
+    'SplitPaneVertical':        { handler: 'splitPaneVertical', sig: 'data-panel' },
+    'SplitPaneHorizontal':      { handler: 'splitPaneHorizontal', sig: 'data-panel' },
+    'UnsplitPane':              { handler: 'unsplitPaneAction', sig: 'data-panel' },
+
     // ── Command manager modal ──
     'CloseCmdManager':          { handler: 'closeCmdManager' },
     'CmdManagerKillAll':        { handler: 'cmdManagerKillAll' },

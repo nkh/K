@@ -78,21 +78,27 @@ stderr_file = "/tmp/vrw.err"
 #   Alt+key           — legacy shortcuts (still available)
 #
 # Default prefix-mode shortcuts:
-#   Ctrl+A |    — Split pane vertically
-#   Ctrl+A -    — Split pane horizontally
-#   Ctrl+A !    — Close pane (remove split)
-#   Ctrl+A c    — New panel
-#   Ctrl+A w    — New window
-#   Ctrl+A W    — Close window
-#   Ctrl+A t    — Toggle panel theme
-#   Ctrl+A 1-9  — Switch to window N
+#   Ctrl+A |          — Split pane vertically (side by side)
+#   Ctrl+A -          — Split pane horizontally (top/bottom)
+#   Ctrl+A Ctrl+D     — Close pane (remove split)
+#   Ctrl+A c          — New panel
+#   Ctrl+A w          — New window
+#   Ctrl+A W          — Close window
+#   Ctrl+A t          — Toggle panel theme (inherit/light/grey/dark)
+#   Ctrl+A 1-9        — Switch to window N
 #
 # Legacy Alt+ shortcuts (still available):
-#   Alt+|  /  Alt+-  — Split pane
-#   Alt+u            — Remove split
-#   Alt+n            — New panel
-#   Alt+w            — New window
-#   Alt+1-9          — Switch to window N
+#   Alt+|  /  Alt+-   — Split pane
+#   Alt+Ctrl+D        — Close pane (remove split)
+#   Alt+n             — New panel
+#   Alt+w             — New window
+#   Alt+1-9           — Switch to window N
+#
+# Window bar toolbar buttons:
+#   + Win             — New window
+#   | Split V         — Split pane vertically (side by side)
+#   — Split H         — Split pane horizontally (top/bottom)
+#   ✕ Close          — Close pane
 #
 # To customize, open browser DevTools console and run:
 #   localStorage.setItem('vrw_custom_shortcuts', JSON.stringify({

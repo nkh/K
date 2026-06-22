@@ -9,8 +9,7 @@ function _setToggleBtn(ids, active, offTitle, onTitle) {
     if (btn) { btn.classList.toggle('btn-primary', active); btn.title = active ? onTitle : offTitle; }
 }
 
-function focusPanel(panelId) {
-    if (state._focusedPanelId === panelId) return;
+function focusPanel(panelId, force) {
     state._focusedPanelId = panelId;
     document.querySelectorAll('.panel').forEach(el => el.classList.toggle('focused', el.id === panelId));
     if (state._mobileTabbedLayout) {
@@ -29,7 +28,7 @@ function updateSharedToolbar() {
     _setText('stFontSize', panelObj.fontSize + 'px');
     const themeBtn = document.getElementById('stPanelThemeBtn');
     if (themeBtn) {
-        themeBtn.textContent = panelObj.theme === 'light' ? '\u263E' : panelObj.theme === 'dark' ? '\u2600' : '\u25D0';
+        themeBtn.textContent = panelObj.theme === 'light' ? '\u263E' : panelObj.theme === 'grey' ? '\u25FC' : panelObj.theme === 'dark' ? '\u2600' : '\u25D0';
         themeBtn.title = 'Panel theme: ' + (panelObj.theme || 'inherit') + ' (click to toggle)';
     }
     const selectBtn = document.getElementById('stSelectBtn');
