@@ -158,7 +158,7 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .panel { flex: 1 1 0; display: flex; flex-direction: column; min-width: 100px; position: relative; }
 .panel + .panel { border-left: 1px solid var(--border); }
 .panel.focused { box-shadow: inset 0 0 0 2px var(--focused-pane-border, var(--accent)); z-index: 1; }
-.panel.focused > .panel-header { background: color-mix(in srgb, var(--ph-bg, var(--bg-tertiary)) 25%, var(--focused-pane-border, var(--accent))) !important; color: var(--color-on-accent) !important; }
+.panel.focused > .panel-header { --ph-bg: color-mix(in srgb, var(--ph-bg, var(--bg-tertiary)) 25%, var(--focused-pane-border, var(--accent))) !important; --ph-fg: var(--color-on-accent) !important; }
 /* Vertical (stacked) panel layout — swap border direction */
 .panel-area[style*="column"] .panel + .panel { border-left: none; border-top: 1px solid var(--border); }
 .panel-area[style*="column"] .panel.focused { box-shadow: inset 3px 0 0 0 var(--focused-pane-border, var(--accent)); }
@@ -204,7 +204,7 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .layout-preset-menu button:hover { background: var(--accent); color: var(--bg-primary); }
 .cmd-history-btn { padding: 0 0.2rem; font-size: var(--ui-fs); opacity: 0.7; }
 .cmd-history-btn:hover { opacity: 1; }
-.panel-header { display: flex; align-items: center; gap: 0.1rem; padding: 0 0.1rem; background: var(--bg-tertiary); flex-shrink: 0; overflow: hidden; white-space: nowrap; cursor: grab; border: none; -webkit-user-drag: none; user-select: none; }
+.panel-header { display: flex; align-items: center; gap: 0.1rem; padding: 0 0.1rem; background: var(--ph-bg, var(--bg-tertiary)); color: var(--ph-fg, var(--text-primary)); flex-shrink: 0; overflow: hidden; white-space: nowrap; cursor: grab; border: none; -webkit-user-drag: none; user-select: none; }
 .panel-header:active { cursor: grabbing; }
 .panel-header .panel-server-badge { font-family: var(--font-mono); color: var(--text-secondary); font-size: var(--ui-fs); }
 .panel-header .title { font-size: var(--ui-fs); color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 0; }
@@ -272,7 +272,7 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .split-pane + .split-pane { border-left: 1px solid var(--border); }
 .split-container.vertical .split-pane + .split-pane { border-left: none; border-top: 1px solid var(--border); }
 .split-pane.focused { box-shadow: inset 0 0 0 2px var(--focused-pane-border, var(--accent)); z-index: 1; }
-.split-pane.focused > .panel-header { background: color-mix(in srgb, var(--ph-bg, var(--bg-tertiary)) 50%, var(--focused-pane-border, var(--accent))) !important; color: var(--color-on-accent) !important; }
+.split-pane.focused > .panel-header { --ph-bg: color-mix(in srgb, var(--ph-bg, var(--bg-tertiary)) 50%, var(--focused-pane-border, var(--accent))) !important; --ph-fg: var(--color-on-accent) !important; }
 .split-container .vtty-container { flex: 1 1 0; min-width: 0; min-height: 0; }
 .split-divider { flex-shrink: 0; background: var(--border); z-index: 5; transition: background 0.15s; }
 .split-divider:hover, .split-divider.active { background: var(--accent); }

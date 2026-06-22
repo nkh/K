@@ -549,7 +549,7 @@ function _renderLeafHeader(panel, leaf, leafId) {
     const closeData = isTopLevel
         ? `data-panel="${panel.id}"`
         : `data-panel="${panel.id}" data-leaf="${leafId}"`;
-    return `<div class="panel-header" data-panel-id="${panel.id}" data-leaf-id="${leafId}" oncontextmenu="showPanelContextMenu(event,'${panel.id}','${leafId}')" tabindex="0" role="button" style="--ph-bg:${color};--ph-fg:${textColor};background:var(--ph-bg);color:var(--ph-fg);">
+    return `<div class="panel-header" data-panel-id="${panel.id}" data-leaf-id="${leafId}" oncontextmenu="showPanelContextMenu(event,'${panel.id}','${leafId}')" tabindex="0" role="button" style="--ph-bg:${color};--ph-fg:${textColor}">
     <button class="btn btn-xs cmd-history-btn hidden" data-action="PanelHistoryBack" data-panel="${panel.id}" data-leaf="${leafId}" title="Back">&#x25C0;</button>
     <button class="btn btn-xs cmd-history-btn hidden" data-action="PanelHistoryForward" data-panel="${panel.id}" data-leaf="${leafId}" title="Forward">&#x25B6;</button>
     <div class="cmd-info">
@@ -655,8 +655,8 @@ function _updateOneSplitHeader(container, leafId, instUrl, cmdId) {
     const h = container.querySelector(`.panel-header[data-leaf-id="${leafId}"]`);
     if (!h) return;
     const inst = instUrl ? state.connections.find(i => i.url === instUrl) : null;
-    h.style.background = _getServerColor(inst);
-    h.style.color = _getServerTextColor(inst);
+    h.style.setProperty('--ph-bg', _getServerColor(inst));
+    h.style.setProperty('--ph-fg', _getServerTextColor(inst));
     // Update the command name (same as non-split panels)
     const nameEl = h.querySelector('.cmd-fullname');
     if (nameEl) {
