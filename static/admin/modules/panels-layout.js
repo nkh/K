@@ -327,8 +327,8 @@ function splitPanel(panelId, direction, leafId) {
                 direction, splitRatio: 0.5, activeSide: 'panel',
                 branch: _newLeafState(sid),
             };
-            // Initialize focused leaf to root after first split
-            if (p._focusedLeafId == null) p._focusedLeafId = p.id;
+            // Focus the NEW pane so the user can immediately select a command.
+            p._focusedLeafId = sid;
         } else {
             // Splitting the root pane when top-level split already exists.
             // Use _rootSplit — a separate split node for the root pane itself.
@@ -364,8 +364,13 @@ function splitPanel(panelId, direction, leafId) {
                     branch: _newLeafState(sid),
                 };
             }
-            // Keep focus on the root pane (which was selected to be split)
-            p._focusedLeafId = p.id;
+        }
+        // Focus the NEW pane — find it by walking the root split tree.
+        if (p._rootSplit && p._rootSplit.branch) {
+            // Find the deepest branch in _rootSplit to get the newly created leaf
+            let branch = p._rootSplit.branch;
+            while (branch.split && branch.split.branch) branch = branch.split.branch;
+            p._focusedLeafId = branch.id;
         }
     } else {
         // Splitting a branch (or deeper) leaf
@@ -387,8 +392,8 @@ function splitPanel(panelId, direction, leafId) {
             direction, splitRatio: 0.5, activeSide: 'panel',
             branch: _newLeafState(sid),
         };
-        // Keep focus on the leaf that was just split
-        p._focusedLeafId = target.id;
+        // Focus the NEW pane so the user can immediately select a command.
+        p._focusedLeafId = sid;
     }
     renderPanels();
 }
@@ -425,27 +430,46 @@ function unsplitPanel(panelId, leafId) {
     }
     if (!parentSplit) return;
 
-    // Disconnect the leaf being closed
+    // The leaf being closed
     const closingLeaf = parentSplit.branch;
 
-    // CRITICAL: If the focused leaf was in the closing subtree, reset to panel root.
-    // Without this, _focusedLeafId points to a deleted leaf and subsequent
-    // selectCommand calls silently drop the command.
+    // CRITICAL: If the focused leaf was the one being closed, refocus.
+    // If the closing leaf has children, try to focus the first child instead of root.
     if (p._focusedLeafId && p._focusedLeafId !== p.id) {
-        if (p._focusedLeafId === leafId || (closingLeaf && _leafIdInSubtree(closingLeaf, p._focusedLeafId))) {
-            p._focusedLeafId = p.id;
+        if (p._focusedLeafId === leafId) {
+            // Focused leaf is being closed. If it has a child split, focus that child.
+            if (closingLeaf && closingLeaf.split && closingLeaf.split.branch) {
+                p._focusedLeafId = closingLeaf.split.branch.id;
+            } else {
+                p._focusedLeafId = p.id;
+            }
+        } else if (closingLeaf && _leafIdInSubtree(closingLeaf, p._focusedLeafId)) {
+            // Focused leaf is in the closing leaf's subtree — check if it's in a child split
+            // that will be promoted. If not, reset to root.
+            if (closingLeaf.split && _leafIdInSubtree(closingLeaf.split.branch || {}, p._focusedLeafId)) {
+                // The focused leaf is in a child that will survive — keep focus
+            } else {
+                p._focusedLeafId = p.id;
+            }
         }
     }
 
+    // Disconnect only the closing leaf itself (not its children).
+    // If the leaf has a child split, the children will be promoted to replace it.
     if (closingLeaf) _disconnectSingleLeaf(closingLeaf);
 
-    // If the closing leaf itself was split, disconnect its whole subtree
-    if (closingLeaf && closingLeaf.split) _disconnectLeafTree(closingLeaf.split);
-
-    // Remove the split — the other side remains unchanged.
-    parentSplit.branch = null;
-    parentSplit.direction = null;
-    parentSplit.activeSide = 'panel';
+    if (closingLeaf && closingLeaf.split && closingLeaf.split.branch) {
+        // The closing leaf has children — promote the first child (branch) to take its place.
+        // This preserves sibling panes that were created by splitting this leaf.
+        parentSplit.branch = closingLeaf.split.branch;
+        // The promoted branch may have inherited splitRatio from the child split;
+        // keep the parent's splitRatio and direction unchanged.
+    } else {
+        // No children — simply remove the branch.
+        parentSplit.branch = null;
+        parentSplit.direction = null;
+        parentSplit.activeSide = 'panel';
+    }
 
     // Clean empty splits
     if (isRootSplit && p._rootSplit) {
