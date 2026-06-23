@@ -257,7 +257,14 @@
         const panel = getSelectedPanel();
         const hint = document.getElementById('autofitHint');
         if (!panel) { hint.textContent = 'No panel visible to measure'; return; }
-        const vttyEl = panel.querySelector('.vtty-container');
+        // Find the focused leaf's vtty-container, not just the first one.
+        const panelObj = state.panels.find(p => p.id === panel.id);
+        let vttyEl;
+        if (panelObj && (panelObj.split || panelObj._rootSplit) && typeof _getFocusedLeafId === 'function') {
+            const leafId = _getFocusedLeafId(panelObj);
+            vttyEl = document.getElementById('vtty-' + leafId);
+        }
+        if (!vttyEl) vttyEl = panel.querySelector('.vtty-container');
         if (!vttyEl) { hint.textContent = 'No terminal container found'; return; }
         const { width, height } = vttyEl.getBoundingClientRect();
         const cols = Math.max(20, Math.min(500, Math.floor(width / (state.fontSize * 0.6))));
