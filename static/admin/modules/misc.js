@@ -483,7 +483,7 @@ function showShortcuts() {
         rows += '<tr><td>' + escHtml(keys.join('+')) + '</td><td>' + escHtml(s.label || '') + '</td></tr>';
     }
 
-    overlay.innerHTML = '<div class="shortcuts-panel"><h2>Keyboard Shortcuts</h2><table>' + rows + '</table><div style="text-align:center;margin-top:0.5rem;"><button class="btn" onclick="closeShortcuts()">Close</button></div></div>';
+    overlay.innerHTML = '<div class="shortcuts-panel"><h2>Keyboard Shortcuts</h2><div class="shortcuts-scroll"><table>' + rows + '</table></div><div class="shortcuts-footer"><button class="btn" onclick="closeShortcuts()">Close</button></div></div>';
     overlay.addEventListener('click', (e) => { if (e.target === overlay) closeShortcuts(); });
     document.body.appendChild(overlay);
 }

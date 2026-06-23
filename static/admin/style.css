@@ -593,8 +593,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 
 /* Shortcuts help overlay */
 .shortcuts-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--black-alpha-60); z-index: 150; display: flex; align-items: center; justify-content: center; }
-.shortcuts-panel { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; min-width: 360px; max-width: 90vw; }
-.shortcuts-panel h2 { font-size: 1rem; color: var(--accent); margin-bottom: 0.75rem; }
+.shortcuts-panel { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; min-width: 360px; max-width: 90vw; max-height: 80vh; display: flex; flex-direction: column; }
+.shortcuts-panel h2 { font-size: 1rem; color: var(--accent); margin-bottom: 0.75rem; flex-shrink: 0; }
+.shortcuts-scroll { overflow-y: auto; flex: 1 1 0; min-height: 0; }
+.shortcuts-footer { text-align: center; margin-top: 0.75rem; flex-shrink: 0; }
 .shortcuts-panel table { width: 100%; border-collapse: collapse; margin-bottom: 0.5rem; }
 .shortcuts-panel td { padding: 0.25rem 0.5rem; font-size: var(--ui-fs); color: var(--text-secondary); border-bottom: 1px solid var(--border); }
 .shortcuts-panel td:first-child { color: var(--text-primary); font-family: var(--font-mono); white-space: nowrap; }
