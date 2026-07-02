@@ -309,6 +309,7 @@ const _defaultShortcuts = [
         const p = getSelectedPanel(), po = p && state.panels.find(x => x.id === p.id);
         if (!(po && po.focused)) { e.preventDefault(); navigateNextCommand(); }
     }, label: 'Next command' },
+    { id: 'screenshot', key: 'p', alt: true, noInput: true, action(e) { e.preventDefault(); const id = getActivePanelId(); if (id) screenshotPanel(id); }, label: 'Screenshot panel (Alt+P)' },
 ];
 
 // ─── User-definable shortcut system ───
