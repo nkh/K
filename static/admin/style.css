@@ -511,6 +511,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 ::-webkit-scrollbar-track { background: var(--bg-primary); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+/* Thin scrollbar for small font sizes */
+.thin-scrollbar { scrollbar-width: thin; }
+.thin-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
 
 /* Resize controls — global (topbar, now moved to panel header) */
 .resize-controls { display: flex; align-items: center; gap: 0.3rem; }

@@ -206,6 +206,7 @@ async function toggleMaxFont(panelId) {
         panelObj.fontSize = st.prevFontSize;
         localStorage.setItem('vrw_panel_font_' + panelId, String(panelObj.fontSize));
         vttyEl.style.fontSize = panelObj.fontSize + 'px';
+        vttyEl.classList.toggle('thin-scrollbar', panelObj.fontSize < 10);
         delete _maxFontState[panelId];
     } else {
         const rect = vttyEl.getBoundingClientRect();
@@ -216,6 +217,7 @@ async function toggleMaxFont(panelId) {
         panelObj.fontSize = maxFont;
         localStorage.setItem('vrw_panel_font_' + panelId, String(panelObj.fontSize));
         vttyEl.style.fontSize = panelObj.fontSize + 'px';
+        vttyEl.classList.toggle('thin-scrollbar', panelObj.fontSize < 10);
     }
 }
 

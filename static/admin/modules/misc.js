@@ -25,7 +25,10 @@ function changePanelFontSize(panelId, delta) {
     panelObj.fontSize = Math.max(2, Math.min(28, panelObj.fontSize + delta));
     localStorage.setItem('vrw_panel_font_' + panelId, panelObj.fontSize.toString());
     const vttyEl = document.getElementById('vtty-' + panelId);
-    if (vttyEl) vttyEl.style.fontSize = panelObj.fontSize + 'px';
+    if (vttyEl) {
+        vttyEl.style.fontSize = panelObj.fontSize + 'px';
+        vttyEl.classList.toggle('thin-scrollbar', panelObj.fontSize < 10);
+    }
     const stFontSize = document.getElementById('stFontSize');
     if (stFontSize && panelId === getActivePanelId()) stFontSize.textContent = panelObj.fontSize + 'px';
     const label = document.querySelector(`#${panelId} .panel-font-size`);
