@@ -110,6 +110,13 @@ function _panelDragMouseUp() {
             const newOrder = [];
             container.querySelectorAll('.panel').forEach(p => { const pp = state.panels.find(x => x.id === p.id); if (pp) newOrder.push(pp); });
             state.panels = newOrder;
+            // Update active window's panelIds to match new DOM order
+            const win = typeof _getActiveWindow === 'function' ? _getActiveWindow() : null;
+            if (win && win.panelIds) {
+                const newIds = newOrder.map(p => p.id);
+                const newIdSet = new Set(newIds);
+                win.panelIds = newIds.concat(win.panelIds.filter(id => !newIdSet.has(id)));
+            }
             localStorage.setItem('vrw_panel_order', JSON.stringify(newOrder.map(p => p.id)));
             renderPanels();
         } else {
