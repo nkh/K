@@ -37,6 +37,17 @@ const _sigs = {
     // Pass panelId (from getActivePanelId())
     'panelId':       function(el, ev, pid) { return [pid]; },
 
+    // Pass focused leaf ID in split panes, panel ID otherwise.
+    // Used by toolbar actions that need to target the focused leaf
+    // (restart, copy, export) — mirrors _withPanel() in keyboard.js.
+    'focusedLeaf':   function() {
+        const pid = typeof window.getActivePanelId === 'function' ? window.getActivePanelId() : null;
+        if (!pid || !window.state) return [pid];
+        const p = window.state.panels.find(pp => pp.id === pid);
+        if (p && (p.split || p._rootSplit) && p._focusedLeafId) return [p._focusedLeafId];
+        return [pid];
+    },
+
     // Pass (panelId, delta) for font size changes
     'panelId-delta': function(el, ev, pid) {
         return [pid, el.dataset.delta !== undefined ? parseInt(el.dataset.delta, 10) : undefined];
@@ -212,7 +223,7 @@ const _actions = {
     'ShowAddServerModal':       { handler: 'showAddServerModal', stop: true },
 
     // ── Shared toolbar ──
-    'RestartCommand':           { handler: 'restartCommand', sig: 'panelId' },
+    'RestartCommand':           { handler: 'restartCommand', sig: 'focusedLeaf' },
     'ToggleResources':          { handler: 'toggleResources' },
     'ChangePanelFontSize':      { handler: 'changePanelFontSize', sig: 'panelId-delta' },
     'ResizeTerminalPanel':      { handler: 'resizeTerminalPanel', sig: 'panelId' },
@@ -228,8 +239,8 @@ const _actions = {
     'ToggleSelectionMode':      { handler: 'toggleSelectionMode', sig: 'panelId' },
     'TogglePauseRunPanel':      { handler: 'togglePauseRunPanel', sig: 'panelId' },
     'TogglePauseRunLeaf':      { handler: '_togglePauseRunLeaf', sig: 'data-panel+leaf', stop: true },
-    'CopyTerminalSelection':    { handler: 'copyTerminalSelection', sig: 'panelId' },
-    'ExportTerminal':           { handler: 'exportTerminal', sig: 'panelId' },
+    'CopyTerminalSelection':    { handler: 'copyTerminalSelection', sig: 'focusedLeaf' },
+    'ExportTerminal':           { handler: 'exportTerminal', sig: 'focusedLeaf' },
     'ScreenshotPanel':          { handler: 'screenshotPanel', sig: 'panelId' },
     'TogglePanelTheme':         { handler: 'togglePanelTheme', sig: 'panelId' },
     'ToggleBufferDropdown':     { handler: null, sig: '__builtin__' },  // handled inline
