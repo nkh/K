@@ -2,6 +2,7 @@
 /// Verify that .vtty-container has touch-action: pan-y so touchpad
 /// scrolling works correctly in all browsers.
 'use strict';
+require('./setup');
 
 console.log('\n=== Fix 7.1: Touchpad scroll CSS verification ===\n');
 

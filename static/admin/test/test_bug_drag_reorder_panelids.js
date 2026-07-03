@@ -2,6 +2,7 @@
 /// After drag-reordering panels, window.panelIds must be updated to match
 /// the new DOM order. Otherwise panelIds and state.panels diverge.
 'use strict';
+require('./setup');
 
 const { createMockEvent } = require('./helpers');
 

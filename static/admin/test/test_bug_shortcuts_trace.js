@@ -2,6 +2,7 @@
 /// Verify all shortcuts have valid action functions and that
 /// commonly-needed shortcuts exist.
 'use strict';
+require('./setup');
 
 console.log('\n=== Fix 8.1-8.2: Shortcut trace and missing ones ===\n');
 

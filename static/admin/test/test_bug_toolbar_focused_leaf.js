@@ -2,6 +2,7 @@
 /// Toolbar buttons for restart/copy/export should pass the focused leaf ID
 /// in split panes, not the parent panel ID (matching keyboard shortcut behavior).
 'use strict';
+require('./setup');
 
 const { createMockEvent } = require('./helpers');
 
