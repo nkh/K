@@ -18,7 +18,7 @@ The web UI is divided into four main regions:
 
 | # | Region | Description |
 |---|--------|-------------|
-| 1 | **Sidebar** | Command list (with filter, kill all, pinning), spawn form, templates, environment presets, and certificate management. The sidebar has five tabs: Servers, Spawn, Templates, Envs, and Certs |
+| 1 | **Sidebar** | Command list (with filter, kill all, pinning), spawn form, templates, environment presets, and certificate management. The sidebar has four tabs: Servers, Templates, Certs, and Groups |
 | 2 | **Top Bar** | Global controls: sidebar toggle, command navigation, panel management, search, theme, sound, logs, status, auth token, docs, shortcuts |
 | 3 | **Panel Header** | Per-panel controls: command info, restart, resources, font size, terminal resize, buffer select, refresh throttle, send keys, copy, export, screenshot, panel theme. Controls act on the focused panel and maintain per-panel state |
 | 4 | **Terminal (VTTY)** | Real-time terminal output rendered in the browser with search, scrollback, and copy support. Each panel has its own dedicated WebSocket connection |

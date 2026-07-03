@@ -134,9 +134,9 @@ When spawning commands, specify which certificate is required to access them:
 
 ```bash
 vrw --tls \
-  --cert /etc/ssl/server.crt --key /etc/ssl/server.key \
-  --cmd "npm run dev" --name "frontend" --cert-name team-frontend \
-  --cmd "./server" --name "api" --cert-name team-backend
+  --cert-file /etc/ssl/server.crt --key-file /etc/ssl/server.key \
+  --certificate "team-frontend:/etc/ssl/clients/team-frontend.crt:/etc/ssl/clients/team-frontend.key" -- npm run dev \
+  --certificate "team-backend:/etc/ssl/clients/team-backend.crt:/etc/ssl/clients/team-backend.key" -- ./server
 ```
 
 ## Using Certificate Tokens for API Access

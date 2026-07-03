@@ -168,20 +168,9 @@ command exits with this flag, the daemon:
 2. **Preserves the VTTY scrollback buffer** so clients can view the final
    output.
 3. **Generates a final snapshot** if `--snapshot-on-exit` is also set.
-4. **Does NOT count the command toward "last-command-standing"** for daemon
-   shutdown purposes.
-
-Wait—actually, the retained command **does** count. The daemon's lifecycle loop
-checks:
-
-```rust
-if registry.is_empty() && !any_retained {
-    shutdown();
-}
-```
-
-But `is_empty()` returns `true` only when no entries (including retained ones)
-exist. So a retained command keeps the daemon alive.
+4. **Keeps the daemon alive** — Because the retained entry remains in the
+   instance registry, the registry is never empty, so the daemon's
+   last-command-standing check does not trigger shutdown.
 
 ```
   ┌──────────────────────────────────────────────┐

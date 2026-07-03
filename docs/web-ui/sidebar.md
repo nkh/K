@@ -1,6 +1,6 @@
 # Sidebar
 
-The sidebar provides the primary navigation for managing commands. It contains five tabs, each serving a distinct purpose: command management, spawning new commands, saved templates, environment presets, and certificate management. The Envs and Certs tabs remain in the sidebar (rather than the main toolbar) because they serve the command spawn workflow: environments define preconfigured panel/server/command sets that activate via the sidebar, and certificates are selected during command spawning from the Spawn form.
+The sidebar provides the primary navigation for managing commands. It contains four tabs: Servers, Templates, Certs, and Groups. The Certs tab remains in the sidebar (rather than the main toolbar) because it serves the command spawn workflow: certificates are selected during command spawning from the Spawn form.
 
 The sidebar width can be adjusted by dragging the resize handle on its right edge (minimum 150px, maximum 600px). It can also be fully collapsed via the toggle button in the top bar.
 

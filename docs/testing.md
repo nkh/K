@@ -243,7 +243,7 @@ vrc -- -- bash -c "for i in $(seq 1 1000); do echo \"Line $i: $(head -c 60 /dev/
 
 ### 7. Web UI JavaScript Tests (`static/admin/test/`)
 
-The web admin interface has a custom zero-dependency JavaScript test framework with mock DOM. Tests are located in `static/admin/test/` and are HTML files that run in a browser. Each test file loads the application modules and exercises UI components such as the sidebar, search, notifications, logs, onboarding, and spawn dialogs. To run: open the test HTML files in a browser or use a headless browser. Tests use a simple assertion framework with `assert()` and `assertEqual()` helpers.
+The web admin interface has a custom zero-dependency JavaScript test framework with jsdom-based DOM mocks. Tests are located in `static/admin/test/` and run via `node static/admin/test/run_all.js` from the project root. Each test file exercises UI components such as the sidebar, search, notifications, logs, onboarding, and spawn dialogs. Tests use a simple assertion framework with `assert()` and `assertEqual()` helpers.
 
 ### 8. VTTY Integration Tests
 

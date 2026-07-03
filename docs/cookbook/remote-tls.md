@@ -1,3 +1,5 @@
+> **Note:** This cookbook provides additional TLS details complementing [Remote Access with TLS](../how-to-guides/remote-tls.md).
+
 # Remote Access via TLS
 
 This recipe covers setting up vrw for secure remote access over TLS, including certificate configuration and client connectivity.

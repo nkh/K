@@ -52,8 +52,11 @@ standard help/version information.
 
 The config file is resolved in this order:
 
-1. Path given via `--config`.
-2. `./vrc.yaml` (or `./vrc.yml`).
+1. Path given via `--config` (supports `.yaml`, `.toml`, or `.json` by extension).
+2. Global config: `~/.config/vrc/config.yaml` (or `.toml`).
+3. Local config: `./vrc.yaml` (or `./vrc.yml` / `.toml`) in the current working directory.
+
+Local config values override global config values. CLI flags override both.
 
 ---
 

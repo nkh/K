@@ -2,15 +2,15 @@
 
 Learn how to use the vrw admin interface to monitor, interact with, and manage all spawned commands from a single browser window.
 
-> **The web dashboard is available only in vrw.** For local terminal monitoring in vrc, use `--display` / `--display-all` (see [Interactive Display](interactive-display.md)).
+> **The web dashboard is available only in vrw.** For local terminal monitoring in vrc, use `--display` (see [Interactive Display](interactive-display.md)).
 
 ## Accessing the Dashboard
 
 Start vrw with web UI enabled and open the admin interface in your browser:
 
 ```bash
-vrw --web --port 8080
-# Open http://localhost:8080/admin
+vrw --web --port 9090
+# Open http://localhost:9090/admin
 ```
 
 ## Layout Overview
@@ -139,20 +139,10 @@ The dashboard adapts to different screen sizes:
 Each command has a shareable URL based on its name:
 
 ```
-http://localhost:8080/admin/htop
-http://localhost:8080/admin/syslog
+http://localhost:9090/admin/htop
+http://localhost:9090/admin/syslog
 ```
 
 Bookmark or share these links to jump directly to a specific command's terminal view.
-
-## Multi-Instance View
-
-When running multiple vrw instances, you can configure the dashboard to show commands from several instances in a single view. Set the `VRW_PEERS` environment variable:
-
-```bash
-VRW_PEERS="http://host1:8080,http://host2:8080" vrw --web
-```
-
-Each command in the sidebar shows which instance it belongs to, with a colored indicator.
 
 For details on the underlying API endpoints, see [`../api.md`](../api.md).

@@ -54,19 +54,18 @@ vrc has a built-in interactive display:
 vrc --display -- htop
 ```
 
-> **With vrw:** `vrw --display -- htop` — vrw supports the same `--display`, `--display-all`, and `--tabs` flags.
+> **With vrw:** `vrw --display -- htop` — vrw supports the same `--display` and `--tabs` flags.
 
 The VTTY contents are mirrored to your terminal at the refresh interval (default: 100ms).
 
-- `--display`: Show terminal output in your current terminal
-- `--display-all`: Stay running after the command exits (monitor mode)
+- `--display`: Show terminal output in your current terminal and stay running after the command exits (monitor mode)
 - `--tabs`: Show a tab bar listing all commands
 
-**Exercise 2.1**: Run `vrc --display --display-all --tabs -- sleep 100`.
+**Exercise 2.1**: Run `vrc --display --tabs -- sleep 100`.
 While it's running, use `vrc spawn-in <pid> -- htop` in another terminal to add `htop`.
 Use `Ctrl+Right` to switch between them in the display.
 
-> **With vrw:** Use `vrw spawn -- htop` to add commands to a running instance, and open the web dashboard at `http://localhost:8080/admin` for a browser-based view.
+> **With vrw:** Use `vrw spawn -- htop` to add commands to a running instance, and open the web dashboard at `http://localhost:9090/admin` for a browser-based view.
 
 **Exercise 2.2**: Enable `kill_command` and `toggle_pause` keybindings in your config.
 Test them: kill a command with `Ctrl+K`, then freeze/thaw with `Ctrl+Z`.
@@ -200,7 +199,7 @@ Run vrc in the background:
 vrc --daemon -- ./my-long-running-server
 ```
 
-> **With vrw:** `vrw --daemon -- ./my-long-running-server` — works the same way. vrw also supports `--web --port 8080` to start the web dashboard alongside the daemon.
+> **With vrw:** `vrw --daemon -- ./my-long-running-server` — works the same way. vrw also supports `--web --port 9090` to start the web dashboard alongside the daemon.
 
 The process forks and returns immediately. Check status:
 

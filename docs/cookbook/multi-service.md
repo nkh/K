@@ -1,3 +1,5 @@
+> **Note:** This cookbook is a condensed recipe. For the full guide, see [Multi-Service Orchestration](../how-to-guides/multi-service.md).
+
 # Monitor Multiple Services
 
 Run multiple long-running services and monitor them from a single dashboard.

@@ -158,7 +158,7 @@ When the pair programming session is over, clean up:
 vrw cert remove pair-session
 
 # Stop vrw
-vrw daemon stop --port 8443
+vrw stop <pid>
 ```
 
 Delete the certificate files from both developers' machines.

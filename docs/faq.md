@@ -307,7 +307,7 @@ No. Each instance loads its own config file independently. However, you can use 
 
 ### The display exits immediately after my command finishes. Why?
 
-By default, when the CLI command exits, the display closes. Use `--display-all` to stay in display mode and switch to other running commands.
+By default, when the CLI command exits, the display closes. Use `--display` to stay in display mode and switch to other running commands.
 
 ### How do I debug terminal output issues?
 

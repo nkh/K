@@ -1,5 +1,8 @@
 # Event Hooks
 
+> **This is the authoritative reference for event hooks.** The how-to guide at
+> [`how-to-guides/hooks.md`](how-to-guides/hooks.md) provides practical examples.
+
 vrc supports event hooks — shell commands that run automatically when
 specific lifecycle events occur. Hooks are configured in `vrc.yaml`.
 
@@ -25,8 +28,14 @@ hooks:
 ## Per-Command Exit Handlers
 
 Per-command on_exit/on_error (set via API or CLI `--on-exit`/`--on-error`)
-take precedence over global hooks. If both are set, the per-command handler
-runs first, then the global hook runs.
+run first, followed by the global hook. Both fire for the same event — they
+do not replace each other.
+
+> **Note:** Per-command handlers (set via `--on-exit`/`--on-error`) do NOT
+> support placeholder substitution (`{name}`, `{id}`, `{pid}`, `{exit_code}`).
+> They receive the raw command string and split on whitespace to spawn.
+> Only global hooks configured in `vrc.yaml` support placeholder
+> substitution via `run_hook()`.
 
 ## Per-Command Exit Options
 

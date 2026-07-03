@@ -48,8 +48,8 @@ sudo ufw reload
 vrw --remote \
   --tls \
   --port 8443 \
-  --cert /etc/letsencrypt/live/vrw.example.com/fullchain.pem \
-  --key /etc/letsencrypt/live/vrw.example.com/privkey.pem \
+  --cert-file /etc/letsencrypt/live/vrw.example.com/fullchain.pem \
+  --key-file /etc/letsencrypt/live/vrw.example.com/privkey.pem \
   --daemon
 ```
 
@@ -155,10 +155,10 @@ vrw cert generate --name team-b --commands "database,migrations"
 
 ```bash
 vrw --tls \
-  --cert server-cert.pem --key server-key.pem \
-  --command "npm run dev" --name "frontend" --cert-team team-a \
-  --command "npm run dev" --name "backend" --cert-team team-a \
-  --command "./db-migrate" --name "migrations" --cert-team team-b
+  --cert-file server-cert.pem --key-file server-key.pem \
+  --certificate "team-a:/path/to/team-a-cert.pem:/path/to/team-a-key.pem" -- npm run dev \
+  --certificate "team-a:/path/to/team-a-cert.pem:/path/to/team-a-key.pem" -- npm run dev \
+  --certificate "team-b:/path/to/team-b-cert.pem:/path/to/team-b-key.pem" -- ./db-migrate
 ```
 
 ### Connect with Team Certificates

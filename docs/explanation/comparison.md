@@ -49,7 +49,7 @@ and **—** means not applicable.
 | 30 | Process auto-restart | ✗ | ~ | ~ | ✗ | ✗ | ✗ |
 | 31 | Scrollback buffer in UI | ✓ | ✓ | ✓ | ✓ | ~ | ~ |
 | 32 | Search in terminal output | ~ | ✓ | ✓ | ✗ | ✗ | ✗ |
-| 33 | Split panes / windows | ✗ | ✓ | ✓ | ~ | ✗ | ✗ |
+| 33 | Split panes / windows | ✓ | ✓ | ✓ | ~ | ✗ | ✗ |
 | 34 | Session sharing (multi-client) | ✓ | ✓ | ✓ | ✗ | ~ | ✓ |
 | 35 | Scripting / CI integration | ✓ | ✓ | ✓ | ~ | ✓ | ~ |
 

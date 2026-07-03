@@ -1,3 +1,5 @@
+> **Note:** This cookbook is a condensed recipe. For the full guide, see [Pair Programming](../how-to-guides/pair-programming.md).
+
 # Pair Programming Setup
 
 This recipe shows how to use vrw's web interface for pair programming, allowing two or more developers to share a terminal session through a browser.

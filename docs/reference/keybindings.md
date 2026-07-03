@@ -1,6 +1,6 @@
 # Keybindings Reference
 
-Complete reference for all keyboard shortcuts in the interactive terminal display. These keybindings are **shared by both vrc and vrw** when using `--display`, `--display-all`, or `--tabs` mode. Keybindings are divided into default bindings, user-configurable bindings, and hardcoded system shortcuts.
+Complete reference for all keyboard shortcuts in the interactive terminal display. These keybindings are **shared by both vrc and vrw** when using `--display` or `--tabs` mode. Keybindings are divided into default bindings, user-configurable bindings, and hardcoded system shortcuts.
 
 ---
 
@@ -11,15 +11,15 @@ These keybindings are active when the interactive display is attached (in both `
 
 | Key | Action | Mode |
 |-----|--------|------|
-| `Tab` | Switch to the next command pane / tab. | `display-all`, `always` |
-| `Shift+Tab` | Switch to the previous command pane / tab. | `display-all`, `always` |
-| `1` – `9` | Jump to tab by index (1-based). `0` jumps to tab 10. | `display-all`, `always` |
+| `Tab` | Switch to the next command pane / tab. | `multi-pane`, `always` |
+| `Shift+Tab` | Switch to the previous command pane / tab. | `multi-pane`, `always` |
+| `1` – `9` | Jump to tab by index (1-based). `0` jumps to tab 10. | `multi-pane`, `always` |
 | `Ctrl+B` | Toggle the log panel visibility. | `always` |
-| `Ctrl+N` | Spawn a new command prompt. | `always` |
+| `F12` | Spawn a new command prompt. | `always` |
 | `Ctrl+H` | Show the help overlay with all available keybindings. | `always` |
 | `Ctrl+K` | Kill the currently focused command (send `SIGKILL`). | `active` |
 | `Ctrl+P` | Pause / resume the currently focused command (`SIGSTOP` / `SIGCONT`). | `active` |
-| `Ctrl+W` | Toggle wide mode for the active pane (expand to full width). | `display-all` |
+| `Ctrl+W` | Toggle wide mode for the active pane (expand to full width). | `multi-pane` |
 | `Ctrl+L` | Force a full redraw of the display. | `always` |
 | `Ctrl+R` | Toggle raw output mode (show ANSI escapes as text). | `active` |
 | `?` | Show the help overlay (same as `Ctrl+H`). | `always` |
@@ -32,7 +32,7 @@ These keybindings are active when the interactive display is attached (in both `
 |------|-------------|
 | `always` | Available regardless of which command is focused or how many commands exist. |
 | `active` | Only available when a running command pane is focused. |
-| `display-all` | Only available when `--display-all` mode is enabled (multi-pane view). |
+| `multi-pane` | Only available when multiple command panes are visible. |
 
 ---
 
@@ -47,7 +47,7 @@ See [`../configuration.md`](../configuration.md) for the full syntax.
 | `keybindings.next_command` | `Tab` | Advance focus to the next command tab or pane. |
 | `keybindings.prev_command` | `Shift+Tab` | Move focus to the previous command tab or pane. |
 | `keybindings.toggle_log` | `Ctrl+B` | Show or hide the scrolling log panel overlay. |
-| `keybindings.spawn_command` | `Ctrl+N` | Open the spawn dialog to create a new command. |
+| `keybindings.spawn_command` | `F12` | Open the spawn dialog to create a new command. |
 | `keybindings.show_help` | `Ctrl+H` | Toggle the keybinding help overlay. |
 | `keybindings.quit` | `q` | Detach from the interactive display without stopping vrw. |
 | `keybindings.quit_all` | `Q` | Shut down the entire vrw instance. |
@@ -194,7 +194,7 @@ child:
 | `Tab` / `Shift+Tab` | Used for tab switching. |
 | `Ctrl+H` | Used for the help overlay (conflicts with backspace in some terminals). |
 | `Ctrl+P` | Used for pause toggle. |
-| `Ctrl+N` | Used for spawn dialog. |
+| `F12` | Used for spawn dialog. |
 | `q` | Used for quit. |
 | `Q` | Used for quit-all. |
 
@@ -206,7 +206,7 @@ keybinding and free the original key.
 
 ## Mouse Support
 
-When `--mouse` is enabled (the default), vrw captures and interprets mouse
+When `--mouse` is enabled, vrw captures and interprets mouse
 events in the terminal:
 
 | Event | Action |

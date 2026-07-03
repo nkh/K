@@ -169,6 +169,8 @@ curl -sk --cert team-backend-cert.pem --key team-backend-key.pem \
 # Search for errors
 curl -sk --cert team-backend-cert.pem --key team-backend-key.pem \
   "https://vrw.example.com:8443/api/commands/$API_ID/logs?search=ERROR"
+
+> **Note:** Log API endpoints are available but not yet documented in the API reference.
 ```
 
 ## Deployment Workflow

@@ -1,3 +1,5 @@
+> **Note:** This cookbook is a condensed recipe. For the full guide with detailed explanations, see [CI/CD Pipeline Integration](../how-to-guides/ci-pipeline.md).
+
 # CI Pipeline with vrw
 
 This recipe demonstrates how to integrate vrw into a CI/CD pipeline for running and monitoring terminal-aware build steps, with real-time log access and programmatic control.

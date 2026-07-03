@@ -1,3 +1,5 @@
+> **Note:** This cookbook is a condensed recipe. For the full guide, see [Development Server Workflow](../how-to-guides/dev-server.md).
+
 # Dev Server with Hot Reload
 
 Run multiple development services in a single vrw instance, all visible from one web dashboard.
@@ -63,7 +65,7 @@ Open `http://127.0.0.1:8080/admin` in your browser.
 - **Restart** — Kill a service and re-spawn it via the web UI or `vrw spawn`.
 - **Debug** — Use the scrollback feature to review past output by scrolling up in the terminal viewer.
 - **Kill all** — Use the "Kill All" button in the top bar to stop everything at once.
-- **Shutdown** — `vrw stop-command <PID>` or `curl -X POST http://127.0.0.1:8080/api/shutdown`.
+- **Shutdown** — `vrw stop-command <PID>` or `curl -X POST http://127.0.0.1:8080/api/shutdown` (undocumented endpoint).
 
 ## Tips
 

@@ -102,7 +102,7 @@ The service is killed and re-spawned with the same command, CWD, and environment
 Add a new service without restarting vrw:
 
 ```bash
-vrw spawn --command "redis-server" --name "redis" --port 8080
+vrw spawn redis-server
 ```
 
 The new service appears immediately in the dashboard.
@@ -135,15 +135,14 @@ curl -X POST "http://localhost:8080/api/commands/$CMD_ID/input" \
 Spawn a one-off migration command:
 
 ```bash
-vrw spawn --command "alembic upgrade head" --name "migrate" \
-  --cwd /home/user/project/backend --port 8080
+vrw spawn --cwd /home/user/project/backend alembic upgrade head
 ```
 
 Watch the migration output in the dashboard. When it finishes, the terminal shows the result and the status badge turns gray (exited).
 
 ### Debugging a Flaky Test
 
-1. Run your test in a terminal: `vrw spawn --command "npm run test:flaky" --name "flaky-test"`
+1. Run your test in a terminal: `vrw spawn npm run test:flaky`
 2. Watch the output in real time.
 3. When the test fails, use Ctrl+F to search for "FAIL" or "error".
 4. Use **Export Output** to save the terminal contents for analysis.

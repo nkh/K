@@ -92,7 +92,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/vrc --command "npm start" --name "app"
+ExecStart=/usr/local/bin/vrc --daemon --port 9090 -- npm start
 Restart=on-failure
 RestartSec=5
 
@@ -113,17 +113,17 @@ sudo systemctl status vrc
 ### Development background service:
 
 ```bash
-vrc --daemon --log /tmp/vrc-dev.log -- htop
+vrc --daemon --log-file /tmp/vrc-dev.log -- htop
 # With vrw:
-vrw --daemon --web --port 8080 --log /tmp/vrw-dev.log -- htop
+vrw --daemon --web --port 8080 --log-file /tmp/vrw-dev.log -- htop
 ```
 
 ### CI pipeline headless mode:
 
 ```bash
-vrc --daemon --log /tmp/vrc-ci.log -- npm run test
+vrc --daemon --log-file /tmp/vrc-ci.log -- npm run test
 # With vrw:
-vrw --daemon --log /tmp/vrw-ci.log -- npm run test
+vrw --daemon --log-file /tmp/vrw-ci.log -- npm run test
 # ... wait for completion ...
 vrc stop  # or: vrw stop
 ```

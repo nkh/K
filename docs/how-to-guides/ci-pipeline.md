@@ -36,7 +36,7 @@ test:
         --tls \
         --cert /etc/ssl/ci-cert.pem \
         --key /etc/ssl/ci-key.pem \
-        --log $VRW_LOG
+        --log-file $VRW_LOG
   script:
     # Spawn test commands
     - |
@@ -74,7 +74,7 @@ cleanup:
   stage: cleanup
   when: always
   script:
-    - vrw daemon stop --port $VRW_PORT || true
+    - vrw stop $VRW_PID || true
 ```
 
 ## Step 2: Start Builds from CI Scripts
@@ -128,7 +128,7 @@ Always stop the vrw instance at the end of the pipeline, even if earlier steps f
 
 ```yaml
 after_script:
-  - vrw daemon stop --port $VRW_PORT || true
+  - vrw stop $VRW_PID || true
 ```
 
 The `|| true` ensures cleanup runs even if vrw has already stopped or was never started.
@@ -146,11 +146,15 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install vrw
-        run: curl -fsSL https://get.vrw.dev | sh
+        run: |
+          git clone https://github.com/nkh/K.git
+          cd K
+          cargo build --release --features vrw
+          cp target/release/vrw /usr/local/bin/
 
       - name: Start vrw
         run: |
-          vrw --daemon --port 9090 --log /tmp/vrw.log
+          vrw --daemon --port 9090 --log-file /tmp/vrw.log
 
       - name: Run tests
         run: |
@@ -172,7 +176,7 @@ jobs:
 
       - name: Cleanup
         if: always()
-        run: vrw daemon stop --port 9090 || true
+        run: vrw stop $VRW_PID || true
 
       - name: Upload logs
         if: always()
@@ -195,8 +199,8 @@ jobs:
 If you don't need the web dashboard or remote browser monitoring, `vrc` provides a simpler local CI workflow:
 
 ```bash
-# Start vrc in daemon mode with display logging
-vrc --daemon --log /tmp/vrc-ci.log -- npm run test
+# Start vrc in daemon mode with file logging
+vrc --daemon --log-file /tmp/vrc-ci.log -- npm run test
 
 # Check status
 vrc list

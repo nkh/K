@@ -2,7 +2,7 @@
 
 Learn how to use the built-in terminal user interface (TUI) for local monitoring and interaction with spawned commands directly in your terminal.
 
-> **Both vrc and vrw** support `--display`, `--display-all`, and `--tabs` flags. The examples below use `vrc` but apply equally to `vrw` — just replace `vrc` with `vrw` in any command. vrw also provides a [web dashboard](web-dashboard.md) for browser-based monitoring.
+> **Both vrc and vrw** support `--display` and `--tabs` flags. The examples below use `vrc` but apply equally to `vrw` — just replace `vrc` with `vrw` in any command. vrw also provides a [web dashboard](web-dashboard.md) for browser-based monitoring.
 
 ## Enabling the Display
 
@@ -12,10 +12,10 @@ Use the `--display` flag to open the interactive TUI when vrc starts:
 vrc --display -- htop
 ```
 
-By default, `--display` shows only the first spawned command's terminal. Use `--display-all` to show all commands as split panes:
+By default, `--display` shows the first spawned command's terminal. Use `--display` with multiple commands to show them as split panes:
 
 ```bash
-vrc --display-all \
+vrc --display \
   -- htop \
   -- tail -f /var/log/syslog
 ```
@@ -35,8 +35,7 @@ vrc --tabs \
 
 | Flag | Layout |
 |------|--------|
-| `--display` | Single pane showing the first command |
-| `--display-all` | Split panes showing all commands simultaneously |
+| `--display` | Single pane showing the first command (or split panes with multiple commands) |
 | `--tabs` | Tabbed single pane with one command per tab |
 
 ## Keybindings
