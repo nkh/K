@@ -351,9 +351,10 @@ console.log('SPL-010: Split pane headers match non-split headers');
     assertIncludes(nonSplitHeader, 'panel-close-btn', 'SPL-010g: non-split has close button');
     assertIncludes(splitHeader, 'panel-close-btn', 'SPL-010h: split has close button');
 
-    // Split branch should use UnsplitLeaf action (not UnsplitPanel)
+    // Split branch should use UnsplitLeaf action
     assertIncludes(splitHeader, 'data-action="UnsplitLeaf"', 'SPL-010i: split branch uses UnsplitLeaf');
-    assertIncludes(nonSplitHeader, 'data-action="UnsplitPanel"', 'SPL-010j: top-level uses UnsplitPanel');
+    // All leaves (including root) use UnsplitLeaf — close removes just that leaf
+    assertIncludes(nonSplitHeader, 'data-action="UnsplitLeaf"', 'SPL-010j: top-level also uses UnsplitLeaf');
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -434,7 +435,7 @@ console.log('SPL-012: _applyLeafDiff applies cell-level updates');
         }]
     };
 
-    _applyLeafDiff(vttyEl, leafId, diffData);
+    _applyLeafDiff(vttyEl, leafId, cmdId, 'http://localhost:9090', diffData);
 
     // The span should now contain "B"
     assertEq(span.textContent, 'B', 'SPL-012a: cell updated from A to B');
@@ -444,7 +445,7 @@ console.log('SPL-012: _applyLeafDiff applies cell-level updates');
     // Second diff with same generation → no-op (metadata only)
     const sameGenData = { generation: 2, _cmdId: cmdId };
     const beforeHtml = span.textContent;
-    _applyLeafDiff(vttyEl, leafId, sameGenData);
+    _applyLeafDiff(vttyEl, leafId, cmdId, 'http://localhost:9090', sameGenData);
     assertEq(span.textContent, beforeHtml, 'SPL-012c: same generation skipped update');
 
     delete state._cellGrids[leafId + '/' + cmdId];
@@ -609,9 +610,9 @@ console.log('SPL-018: Full user flow — split, click branch, selectCommand');
     splitPanel(p.id, 'horizontal');
     const branchLeaf = p.split.branch;
 
-    // Step 2: Verify initial state — activeSide is panel (default)
+    // Step 2: Verify initial state — splitPanel focuses the new branch
     assertEq(p.split.activeSide, 'panel', 'SPL-018a: initial activeSide is panel');
-    assertEq(_getFocusedLeafId(p), p.id, 'SPL-018b: _getFocusedLeafId returns panel root');
+    assertEq(_getFocusedLeafId(p), branchLeaf.id, 'SPL-018b: _getFocusedLeafId returns branch (new pane)');
 
     // Step 3: Simulate user clicking on the branch pane's vtty-container
     // This is what the FIXED _setupPanelDelegation mousedown handler does:

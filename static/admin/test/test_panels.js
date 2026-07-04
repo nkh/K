@@ -166,7 +166,8 @@ console.log('split pane renders empty branch tests');
     const html = _renderSplitContainer(ep);
     assert(html.includes('No command selected'), 'split branch shows no command placeholder');
     // Verify the branch vtty container has the empty placeholder, not the panel root cmd
-    const secVttyMatch = html.match(/id="vtty-[^"]*L\d"[^>]*>.*?<pre>(.*?)<\/pre>/s);
+    // The branch vtty has id="vtty-${branchLeaf.id}" which contains '-L' in the ID.
+    const secVttyMatch = html.match(/id="vtty-[^"]*-L\d+"[^>]*>.*?<pre>(.*?)<\/pre>/s);
     assert(secVttyMatch && secVttyMatch[1].includes('No command selected'),
         'split branch vtty container has no-command text');
     globalThis.renderPanels = origRender;

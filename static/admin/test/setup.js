@@ -791,6 +791,26 @@ globalThis.restoreMock = function(saved) {
     }
 };
 
+// ── Listener save/restore for run_all.js ──
+// resetTestState() clears _listeners, which breaks tests that rely on
+// handlers registered during setup (e.g. keyboard.js click handler).
+// These helpers allow the test runner to snapshot and restore listeners.
+globalThis._saveListeners = function() {
+    const snap = new Map();
+    for (const [type, fns] of _listeners) {
+        snap.set(type, [...fns]);
+    }
+    return snap;
+};
+globalThis._restoreListeners = function(snap) {
+    _listeners.clear();
+    if (snap) {
+        for (const [type, fns] of snap) {
+            _listeners.set(type, [...fns]);
+        }
+    }
+};
+
 // ── Reset helper ──
 globalThis.resetTestState = function() {
     clearIntervalAll();

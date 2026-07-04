@@ -2,6 +2,7 @@
 'use strict';
 
 const { createMockEvent } = require('./helpers');
+require('./setup');
 
 console.log('\n=== delegate.js ===\n');
 
@@ -26,7 +27,7 @@ const expectedActions = [
     'DisconnectServer', 'SortSidebarBy', 'ToggleKeepCmd', 'TogglePauseRunByIdx',
     'TogglePinCmd', 'SelectCommand', 'ShowCmdContextMenu',
     'ClosePanelContent', 'PanelHistoryBack', 'PanelHistoryForward',
-    'StartRenamePanel', 'UnsplitPanel', 'UnsplitLeaf', 'ToggleMinimizePanel', 'FocusPanel',
+    'StartRenamePanel', 'SplitPaneHorizontal', 'SplitPaneVertical', 'UnsplitPanel', 'UnsplitLeaf', 'UnsplitPane', 'ToggleMinimizePanel', 'FocusPanel',
     'ScrollTerminalBottom', 'VttySearchNext', 'VttySearchPrev', 'VttySearchClose',
     'CloseSpecialKeysModal',
     'RestartCommandById', 'KillCommand', 'SelectAndViewCmd', 'OnSearchResultClick',
@@ -40,7 +41,7 @@ const expectedActions = [
     'ResizeTerminalPanel', 'ToggleMaxFit', 'ToggleMaxFont',
     'SwitchBufferPanel', 'ChangeRefreshMs', 'SendKeysToPanel',
     'ShowSpecialKeysHelp', 'TogglePanelLayout', 'ToggleLayoutPresetMenu',
-    'ApplyLayoutPreset', 'ToggleSelectionMode', 'TogglePauseRunPanel',
+    'ApplyLayoutPreset', 'ToggleSelectionMode', 'TogglePauseRunPanel', 'TogglePauseRunLeaf',
     'CopyTerminalSelection', 'ExportTerminal', 'ScreenshotPanel',
     'TogglePanelTheme', 'ToggleBufferDropdown',
     'SearchLogs', 'ClearLogSearch', 'LoadLog',
@@ -62,7 +63,8 @@ console.log('  (' + Object.keys(window._actions).length + ' actions registered)'
 // ── Signature registry ──
 const expectedSigs = ['none', 'event', 'tab-el', 'panelId', 'panelId-delta', 'preset', 'delta', 'panelId-value', 'value',
     'cmd-select', 'cmd-id', 'data-value', 'el-panelId', 'element',
-    'inst-url', 'cmd-name', 'index', 'value-str', 'name', 'name-index', 'cmd-context', 'data-panel'];
+    'inst-url', 'cmd-name', 'index', 'value-str', 'name', 'name-index', 'cmd-context', 'data-panel',
+    'data-panel+leaf', 'data-window', 'focusedLeaf'];
 for (const sig of expectedSigs) {
     assertProperty(window._sigs, sig, 'sigs has ' + sig);
     assertType(window._sigs[sig], 'function', 'sigs.' + sig + ' is a function');

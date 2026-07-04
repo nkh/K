@@ -50,11 +50,11 @@ console.log('BUG2-001: _focusedLeafId initialized after split');
     assert(p.split !== null, 'BUG2-001a: split created');
 
     // After split, _focusedLeafId MUST be initialized, not null.
-    // If null, selectCommand falls back to panel.id via ||,
-    // which happens to be correct for the root leaf, but it means
-    // there is no way to know which leaf the user intended.
-    assert(p._focusedLeafId === p.id,
-        'BUG2-001b: _focusedLeafId initialized to panel.id (root) after split');
+    // splitPanel intentionally focuses the NEW branch pane so the
+    // user can immediately select a command for it.
+    const branchLeaf = p.split.branch;
+    assert(p._focusedLeafId === branchLeaf.id,
+        'BUG2-001b: _focusedLeafId initialized to branch after split');
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -224,10 +224,10 @@ console.log('BUG2-006: _getFocusedLeafId returns correct leaf');
     splitPanel(p.id, 'horizontal');
     const branchLeaf = p.split.branch;
 
-    // Default activeSide is 'panel', so _getFocusedLeafId returns panel.id
+    // splitPanel focuses the newly created branch pane after split.
     let focusedId = _getFocusedLeafId(p);
-    assertEq(focusedId, p.id,
-        'BUG2-006a: default focused leaf is panel root');
+    assertEq(focusedId, branchLeaf.id,
+        'BUG2-006a: default focused leaf is branch (new pane)');
 
     // After clicking branch, activeSide is 'branch'
     _setActiveSideForLeaf(p, branchLeaf.id);

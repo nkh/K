@@ -79,8 +79,8 @@ console.log('SPT-001: Split root pane splits root, not branch');
     const rootBranch = p._rootSplit.branch;
     assert(rootBranch !== null, 'SPT-001f: _rootSplit has its own branch');
 
-    // Verify _focusedLeafId stayed on root (the selected pane)
-    assertEq(p._focusedLeafId, p.id, 'SPT-001g: focus stays on root after splitting root');
+    // Verify _focusedLeafId moved to the newly created branch (intentional: user can immediately select a command)
+    assertEq(p._focusedLeafId, rootBranch.id, 'SPT-001g: focus moved to root branch after splitting root');
 
     // Verify branch1 was NOT split (it should be untouched)
     assert(branch1.split === null, 'SPT-001h: branch1 was not split');
@@ -122,8 +122,8 @@ console.log('SPT-002: Split branch pane splits branch, not root');
     const branch1Sub = branch1.split.branch;
     assert(branch1Sub !== null, 'SPT-002d: branch1 split has sub-branch');
 
-    // Verify focus is on branch1 (the selected pane that was split)
-    assertEq(p._focusedLeafId, branch1Id, 'SPT-002e: focus stays on branch1');
+    // Verify focus moved to the newly created sub-branch (intentional: user can select a command)
+    assertEq(p._focusedLeafId, branch1Sub.id, 'SPT-002e: focus moved to branch1 sub-branch');
 }
 
 // ──────────────────────────────────────────────────────────────

@@ -42,6 +42,9 @@ const startTime = Date.now();
             }
         }
 
+        // Save event listeners (resetTestState clears them)
+        const savedListeners = globalThis._saveListeners ? globalThis._saveListeners() : null;
+
         // Clear any pending async test reference
         globalThis._asyncTest = null;
 
@@ -65,6 +68,9 @@ const startTime = Date.now();
         for (const [key, fn] of Object.entries(savedFns)) {
             globalThis[key] = fn;
         }
+
+        // Restore event listeners
+        if (globalThis._restoreListeners) globalThis._restoreListeners(savedListeners);
 
         const passed = globalThis._testPassed - beforePassed;
         const failed = globalThis._testFailed - beforeFailed;
