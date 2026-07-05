@@ -111,7 +111,7 @@ function applyVttyDiffForPanel(panelObj, panelEl, data) {
         const oldScrollHeight = vttyEl.scrollHeight;
         pre.innerHTML = data.html;
         if (state._level3Enabled && data.dimensions) {
-            buildCellGrid(cgKey, pre, data.dimensions.rows, data.dimensions.cols);
+            buildCellGrid(genKey, pre, data.dimensions.rows, data.dimensions.cols);
         }
         if (wasAtBottom) {
             vttyEl.scrollTop = vttyEl.scrollHeight;

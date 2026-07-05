@@ -152,7 +152,7 @@ const _actions = {
 
     // ── Sidebar ──
     'SwitchSidebarTab':         { handler: 'switchSidebarTab', sig: 'tab-el' },
-    'ShowAddServerModal':       { handler: 'showAddServerModal' },
+    'ShowAddServerModal':       { handler: 'showAddServerModal', stop: true },
     'KillAllCommands':          { handler: 'killAllCommands' },
     'FreezeAllCommands':        { handler: 'freezeAllCommands' },
     'LoadCommands':             { handler: 'loadCommands' },
@@ -220,7 +220,6 @@ const _actions = {
     'PickCommand':              { handler: 'pickCommand', sig: 'cmd-select' },
     'CloseWorkspaceManage':     { handler: 'closeWorkspaceManage' },
     'CloseSpawnModal':          { handler: '_closeSpawnModal' },
-    'ShowAddServerModal':       { handler: 'showAddServerModal', stop: true },
 
     // ── Shared toolbar ──
     'RestartCommand':           { handler: 'restartCommand', sig: 'focusedLeaf' },

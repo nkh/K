@@ -145,18 +145,20 @@ ${multi ? `<div class="panel-resize-handle" data-panel="${panel.id}"></div>` : '
             // Fetch for panel root leaf
             if (p.selectedCmdId && p.selectedInstUrl) {
                 const mustFetch = pending && pending.has(p.id);
-                const needsWs = !p.ws || (p.ws && p.ws.readyState !== WebSocket.OPEN);
                 if (mustFetch) {
                     loadVttyHttpForPanel(p.id, p.selectedInstUrl, p.selectedCmdId);
                 }
-                if (needsWs) {
-                    startPanelUpdateMode(p.id);
-                } else if (mustFetch && state.updateMode === 'push') {
+                // Check if this panel is already subscribed to a shared WS for its command.
+                // p.ws is a borrowed ref from _sharedSubs and may be null even when connected,
+                // so check the shared pool directly.
+                if (state.updateMode === 'push') {
                     const key = p.selectedInstUrl + '/' + p.selectedCmdId;
                     const sub = _sharedSubs ? _sharedSubs[key] : null;
                     if (!sub || !sub.panels || !sub.panels.has(p.id)) {
                         connectPanelWs(p.id);
                     }
+                } else {
+                    startPanelUpdateMode(p.id);
                 }
             }
             // Fetch for all branch/deeper leaves in the split tree
@@ -164,13 +166,20 @@ ${multi ? `<div class="panel-resize-handle" data-panel="${panel.id}"></div>` : '
                 const leaves = _getAllLeaves(p);
                 for (const { leaf, side } of leaves) {
                     if (!side || !leaf.cmdId || !leaf.instUrl) continue;
-                    if (typeof _loadLeafVttyHttpDirect === 'function') {
-                        _loadLeafVttyHttpDirect(leaf);
-                    }
-                    if (state.updateMode === 'push' && typeof _connectLeafWs === 'function') {
-                        _connectLeafWs(leaf);
-                    } else if (leaf.cmdId && typeof _loadLeafVttyHttpDirect === 'function') {
-                        leaf.pollTimer = setInterval(() => { _loadLeafVttyHttpDirect(leaf); }, state.pollInterval);
+                    // Only fetch/reconnect if the leaf's DOM was destroyed (mustFetch)
+                    // or if the leaf has no active WS/poll connection.
+                    const leafMustFetch = pending && pending.has(leaf.id);
+                    const hasWs = leaf.ws && leaf.ws.readyState === WebSocket.OPEN;
+                    const hasPoll = leaf.pollTimer;
+                    if (leafMustFetch || (!hasWs && !hasPoll)) {
+                        if (typeof _loadLeafVttyHttpDirect === 'function') {
+                            _loadLeafVttyHttpDirect(leaf);
+                        }
+                        if (state.updateMode === 'push' && typeof _connectLeafWs === 'function') {
+                            _connectLeafWs(leaf);
+                        } else if (leaf.cmdId && typeof _loadLeafVttyHttpDirect === 'function') {
+                            leaf.pollTimer = setInterval(() => { _loadLeafVttyHttpDirect(leaf); }, state.pollInterval);
+                        }
                     }
                 }
             }

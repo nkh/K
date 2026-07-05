@@ -115,7 +115,7 @@ function showPanelContextMenu(e, panelId, leafId) {
         menu.appendChild(_createCtxMenuItem(panel.minimized ? 'Restore Panel' : 'Minimize Panel', () => toggleMinimizePanel(panelId)));
     }
     _addCtxSep(menu);
-    if (!panel.split) {
+    if (!panel.split && !panel._rootSplit) {
         menu.appendChild(_createCtxMenuItem('Split Horizontal (Alt+-)', () => splitPanel(panelId, 'vertical')));
         menu.appendChild(_createCtxMenuItem('Split Vertical (Alt+|)', () => splitPanel(panelId, 'horizontal')));
     } else {
