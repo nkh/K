@@ -45,7 +45,7 @@
         overlay.addEventListener('click', e => {
             const item = e.target.closest('.cmd-item[data-cmd-id]');
             if (item) pickCommand(item.dataset.cmdId, item.dataset.cmdName);
-        });
+        }, { once: true });
         const panel = overlay.querySelector('div[style*="background:var(--bg-secondary)"]');
         if (panel) trapFocus(panel);
         const first = overlay.querySelector('.cmd-item');

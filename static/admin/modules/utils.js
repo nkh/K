@@ -6,7 +6,7 @@
 /// Format a runtime duration in seconds to a human-readable string.
 /// Handles null/undefined inputs gracefully.
 function formatRuntime(secs) {
-    if (!secs || secs < 0) return '';
+    if (secs == null || secs < 0) return '';
     if (secs < 60) return Math.floor(secs) + 's';
     if (secs < 3600) return Math.floor(secs / 60) + 'm ' + Math.floor(secs % 60) + 's';
     const h = Math.floor(secs / 3600);

@@ -167,13 +167,10 @@ function _renderWindowBar() {
 // ─── Panels (Multi-view) ───
 function addPanelDirect() {
     const id = 'panel-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
-    const savedFontSize = parseInt(localStorage.getItem('vrw_panel_font_' + id));
-    const fontSize = (savedFontSize >= 8 && savedFontSize <= 28) ? savedFontSize : state.fontSize;
-    const savedSelMode = localStorage.getItem('vrw_panel_sel_' + id);
-    const selectionMode = savedSelMode === 'true';
-    const savedTheme = localStorage.getItem('vrw_panel_theme_' + id);
-    const theme = (savedTheme === 'light' || savedTheme === 'dark' || savedTheme === 'grey') ? savedTheme : '';
-    const customTitle = localStorage.getItem('vrw_panel_title_' + id) || '';
+    const fontSize = state.fontSize;
+    const selectionMode = false;
+    const theme = '';
+    const customTitle = '';
     const panel = { id, scrollbackOffset: 0, mouseTracking: false, mouseSgr: false, focused: false, fontSize, selectionMode, theme, customTitle, minimized: false, selectedCmdId: null, selectedInstUrl: null, _focusedLeafId: null,
         ws: null, wsCmdId: null, wsInstUrl: null, wsReconnectCount: 0, wsReconnectTimer: null, wsPingInterval: null, wsPingSendTime: 0, wsLatency: 0,
         pollTimer: null,
@@ -614,7 +611,7 @@ function _renderLeafHeader(panel, leaf, leafId) {
     // If the root is closed, the branch is promoted to become the new root.
     const closeAction = 'UnsplitLeaf';
     const closeData = `data-panel="${panel.id}" data-leaf="${leafId}"`;
-    return `<div class="panel-header" data-panel-id="${panel.id}" data-leaf-id="${leafId}" oncontextmenu="showPanelContextMenu(event,'${panel.id}','${leafId}')" tabindex="0" role="button" style="--ph-bg:${color};--ph-fg:${textColor}">
+    return `<div class="panel-header" data-panel-id="${panel.id}" data-leaf-id="${leafId}" data-panel="${panel.id}" data-leaf="${leafId}" data-action="ShowPanelContextMenu" tabindex="0" role="button" style="--ph-bg:${color};--ph-fg:${textColor}">
     <button class="btn btn-xs cmd-history-btn hidden" data-action="PanelHistoryBack" data-panel="${panel.id}" data-leaf="${leafId}" title="Back">&#x25C0;</button>
     <button class="btn btn-xs cmd-history-btn hidden" data-action="PanelHistoryForward" data-panel="${panel.id}" data-leaf="${leafId}" title="Forward">&#x25B6;</button>
     <div class="cmd-info">

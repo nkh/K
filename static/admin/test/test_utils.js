@@ -7,7 +7,7 @@ resetTestState();
 
 // ── formatRuntime ──
 console.log('formatRuntime tests');
-assertEq(formatRuntime(0), '', '0 seconds → empty (not started)');
+assertEq(formatRuntime(0), '0s', '0 seconds → "0s"');
 assertEq(formatRuntime(null), '', 'null → empty');
 assertEq(formatRuntime(undefined), '', 'undefined → empty');
 assertEq(formatRuntime(-1), '', 'negative → empty');

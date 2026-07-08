@@ -131,6 +131,9 @@ const _sigs = {
     // Pass (panelId, leafId) from data-panel and data-leaf attributes
     // Used by freeze/thaw button in split pane headers where each leaf has its own command
     'data-panel+leaf': function(el) { return [el.dataset.panel, el.dataset.leaf]; },
+
+    // Contextmenu variant: passes (event, panelId, leafId) for showPanelContextMenu
+    'ctxmenu-panel+leaf': function(el, event) { return [event, el.dataset.panel, el.dataset.leaf]; },
 };
 
 // ── Action registry ──
@@ -183,6 +186,7 @@ const _actions = {
     'PanelHistoryBack':         { handler: 'panelHistoryBack', sig: 'data-panel', stop: true },
     'PanelHistoryForward':      { handler: 'panelHistoryForward', sig: 'data-panel', stop: true },
     'StartRenamePanel':         { handler: 'startRenamePanel', sig: 'data-panel', stop: true },
+    'ShowPanelContextMenu':     { handler: 'showPanelContextMenu', sig: 'ctxmenu-panel+leaf', stop: true },
     'UnsplitPanel':             { handler: 'unsplitPanel', sig: 'data-panel', stop: true },
     'UnsplitLeaf':              { handler: 'unsplitLeaf', sig: 'data-panel+leaf', stop: true },
     'ToggleMinimizePanel':      { handler: 'toggleMinimizePanel', sig: 'data-panel' },

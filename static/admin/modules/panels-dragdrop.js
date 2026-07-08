@@ -319,7 +319,9 @@ function _cmdReorderMouseUp() {
             const order = getCmdOrder();
             let instOrder = order[instUrl] || [];
             instOrder = instOrder.filter(id => id !== cmdId);
-            instOrder.splice((instOrder.indexOf(targetCmdId) + 1 || instOrder.length + 1) - 1, 0, cmdId);
+            const targetIdx = instOrder.indexOf(targetCmdId);
+            const insertIdx = targetIdx >= 0 ? targetIdx + 1 : instOrder.length;
+            instOrder.splice(insertIdx, 0, cmdId);
             order[instUrl] = instOrder;
             setCmdOrder(order); loadCommands();
         }

@@ -99,9 +99,10 @@ function toggleSelectionMode(panelId) {
 
 // ─── Refresh Loop ───
 function startRefresh() {
-    loadSnapshot();
-    if (state.refreshInterval) clearInterval(state.refreshInterval);
-    state.refreshInterval = setInterval(() => { loadCommands(); checkForExitedCommands(); }, 1000);
+    loadSnapshot().then(() => {
+        if (state.refreshInterval) clearInterval(state.refreshInterval);
+        state.refreshInterval = setInterval(() => { loadCommands(); checkForExitedCommands(); }, 1000);
+    });
     if (state._serverConfigInterval) clearInterval(state._serverConfigInterval);
     state._serverConfigInterval = setInterval(fetchServerConfig, 5000);
     if (state._resourceInterval) clearInterval(state._resourceInterval);

@@ -25,7 +25,6 @@ function _handleEscape() {
     if (cp) { releaseCurrentFocusTrap(); cp.remove(); return true; }
     const panel = getSelectedPanel();
     if (panel) vttySearchClose(panel.id);
-    closeContextMenu();
     window.closeShortcuts();
     return true;
 }

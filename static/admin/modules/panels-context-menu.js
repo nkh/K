@@ -34,7 +34,7 @@ function _positionCtxMenu(menu, x, y) {
 }
 
 function _setupCtxMenuListeners(menu) {
-    setTimeout(() => { document.addEventListener('click', closeContextMenu, { once: true }); }, 0);
+    document.addEventListener('click', closeContextMenu, { once: true });
     menu.addEventListener('keydown', (e) => {
         const items = menu.querySelectorAll('.ctx-menu-item');
         if (!items.length) return;

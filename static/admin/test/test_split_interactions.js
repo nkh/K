@@ -340,8 +340,8 @@ console.log('SPL-010: Split pane headers match non-split headers');
     assertIncludes(splitHeader, 'class="panel-header"', 'SPL-010b: split has panel-header class');
 
     // Both should have oncontextmenu for context menu
-    assertIncludes(nonSplitHeader, 'oncontextmenu="showPanelContextMenu', 'SPL-010c: non-split has context menu');
-    assertIncludes(splitHeader, 'oncontextmenu="showPanelContextMenu', 'SPL-010d: split has context menu');
+    assertIncludes(nonSplitHeader, 'data-action="ShowPanelContextMenu"', 'SPL-010c: non-split has context menu via delegation');
+    assertIncludes(splitHeader, 'data-action="ShowPanelContextMenu"', 'SPL-010d: split has context menu via delegation');
 
     // Both should have data-leaf-id
     assertIncludes(nonSplitHeader, 'data-leaf-id="' + p.id + '"', 'SPL-010e: non-split has data-leaf-id');
@@ -565,9 +565,9 @@ console.log('SPL-016: Split header oncontextmenu passes leafId');
     const branchLeaf = p.split.branch;
 
     const headerHtml = _renderLeafHeader(p, branchLeaf, branchLeaf.id);
-    // The oncontextmenu should pass 3 arguments: event, panelId, leafId
-    assertIncludes(headerHtml, "showPanelContextMenu(event,'" + p.id + "','" + branchLeaf.id + "')",
-        'SPL-016: branch header oncontextmenu passes leaf ID');
+    // The delegation should pass panel and leaf via data attributes
+    assertIncludes(headerHtml, 'data-panel="' + p.id + '"', 'SPL-016: branch header has data-panel');
+    assertIncludes(headerHtml, 'data-leaf="' + branchLeaf.id + '"', 'SPL-016: branch header has data-leaf');
 }
 
 console.log('\n[split_interactions] Tests complete');

@@ -7,6 +7,10 @@
 
 // ─── Shared Helpers ───
 
+const WS_PING_INTERVAL_MS = 10000;
+const WS_MAX_RECONNECT_ATTEMPTS = 5;
+const WS_RECONNECT_MAX_DELAY_MS = 30000;
+
 function _buildWsUrl(instUrl, cmdId) {
     const wsUrl = instUrl.replace(/^http/, 'ws');
     const token = state.authToken || (state.connections.find(i => i.url === instUrl) || {}).token || '';
@@ -36,7 +40,7 @@ function _connectSharedSub(sub) {
                     sub.pingSendTime = Date.now();
                     sub.ws.send(JSON.stringify({ type: 'ping' }));
                 }
-            }, 10000);
+            }, WS_PING_INTERVAL_MS);
             // Update conn status if any subscribed panel is focused
             _updateConnStatus(sub);
             updateWsQualityIndicator();
@@ -102,7 +106,8 @@ function _connectSharedSub(sub) {
             // Auto-reconnect (max 5 attempts) if still has subscribers
             if (sub.panels.size > 0 && !sub.reconnectTimer) {
                 sub.reconnectCount++;
-                if (sub.reconnectCount <= 5) {
+                if (sub.reconnectCount <= WS_MAX_RECONNECT_ATTEMPTS) {
+                    const delay = Math.min(1000 * Math.pow(2, sub.reconnectCount - 1), WS_RECONNECT_MAX_DELAY_MS);
                     sub.reconnectTimer = setTimeout(() => {
                         sub.reconnectTimer = null;
                         if (sub.panels.size > 0 && state.updateMode === 'push') {
@@ -111,7 +116,9 @@ function _connectSharedSub(sub) {
                                 _connectSharedSub(sub);
                             }
                         }
-                    }, 2000);
+                    }, delay);
+                } else {
+                    console.warn('WS shared sub reconnect failed after ' + WS_MAX_RECONNECT_ATTEMPTS + ' attempts for', sub.instUrl);
                 }
             }
         };
@@ -549,7 +556,7 @@ function _connectLeafWs(leaf) {
                     leaf.wsPingSendTime = Date.now();
                     leaf.ws.send(JSON.stringify({ type: 'ping' }));
                 }
-            }, 10000);
+            }, WS_PING_INTERVAL_MS);
         };
         ws.onmessage = (event) => {
             try {
@@ -574,12 +581,15 @@ function _connectLeafWs(leaf) {
             if (leaf.instUrl && leaf.cmdId) _fetchLeafDiff(leaf.id, leaf.instUrl, leaf.cmdId, 0);
             if (leaf.instUrl && leaf.cmdId && !leaf.wsReconnectTimer && state.updateMode === 'push') {
                 leaf.wsReconnectCount = (leaf.wsReconnectCount || 0) + 1;
-                if (leaf.wsReconnectCount <= 5) {
+                if (leaf.wsReconnectCount <= WS_MAX_RECONNECT_ATTEMPTS) {
+                    const delay = Math.min(1000 * Math.pow(2, leaf.wsReconnectCount - 1), WS_RECONNECT_MAX_DELAY_MS);
                     leaf.wsReconnectTimer = setTimeout(() => {
                         leaf.wsReconnectTimer = null;
                         const inst = state.connections.find(i => i.url === leaf.instUrl);
                         if (inst && inst.reachable !== false) _connectLeafWs(leaf);
-                    }, 2000);
+                    }, delay);
+                } else {
+                    console.warn('WS leaf reconnect failed after ' + WS_MAX_RECONNECT_ATTEMPTS + ' attempts for', leaf.id);
                 }
             }
         };
