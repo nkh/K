@@ -663,5 +663,6 @@ async function sendMouseEvent(panelObj, eventType, button, e) {
     } catch (err) { /* best-effort */ }
 }
 
-Object.assign(window, { _KEY_MAP, _defaultShortcuts, _loadCustomShortcuts, _saveCustomShortcut, _rebuildShortcuts, _getFocusedLeafId, _getLeafFromVtty, _setActiveSideForLeaf, _activatePrefix, _cancelPrefix, _prefixActive: (() => _prefixActive) });
+Object.assign(window, { _KEY_MAP, _defaultShortcuts, _loadCustomShortcuts, _saveCustomShortcut, _rebuildShortcuts, _getFocusedLeafId, _getLeafFromVtty, _setActiveSideForLeaf, _activatePrefix, _cancelPrefix });
+Object.defineProperty(window, '_prefixActive', { get: () => _prefixActive, configurable: true });
 })();

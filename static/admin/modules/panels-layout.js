@@ -785,6 +785,10 @@ function applyLayoutPreset(preset) {
         while (state.panels.length > neededCount) {
             const removed = state.panels.pop();
             disconnectPanelWs(removed.id); stopPanelPoll(removed.id);
+            // Remove from all windows' panelIds to prevent stale references
+            for (const w of state.windows) {
+                if (w.panelIds) w.panelIds = w.panelIds.filter(pid => pid !== removed.id);
+            }
         }
         while (state.panels.length < neededCount) addPanelDirect();
     }

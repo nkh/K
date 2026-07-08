@@ -5,15 +5,22 @@
     'use strict';
 
 // ─── Terminal Search ───
-const vttySearchState = { matchIndex: 0, matches: [], panelId: null };
+const _vttySearchStates = {};
+
+function _getSearchState(panelId) {
+    if (!_vttySearchStates[panelId]) {
+        _vttySearchStates[panelId] = { matchIndex: 0, matches: [], panelId: panelId };
+    }
+    return _vttySearchStates[panelId];
+}
 
 function vttySearch(panelId) {
     const input = document.getElementById('searchInput-' + panelId);
     const countEl = document.getElementById('searchCount-' + panelId);
     if (!input || !countEl) return;
+    const ss = _getSearchState(panelId);
     const query = input.value;
-    vttySearchState.panelId = panelId;
-    vttySearchState.matchIndex = 0;
+    ss.matchIndex = 0;
 
     const panel = document.getElementById(panelId);
     const pre = panel ? panel.querySelector('pre') : null;
@@ -22,7 +29,7 @@ function vttySearch(panelId) {
     vttyRemoveHighlights(pre);
 
     if (!query) {
-        vttySearchState.matches = [];
+        ss.matches = [];
         countEl.textContent = '';
         return;
     }
@@ -30,19 +37,19 @@ function vttySearch(panelId) {
     const text = pre.textContent || '';
     const lowerText = text.toLowerCase();
     const lowerQuery = query.toLowerCase();
-    vttySearchState.matches = [];
+    ss.matches = [];
 
     let pos = 0;
     while ((pos = lowerText.indexOf(lowerQuery, pos)) !== -1) {
-        vttySearchState.matches.push(pos);
+        ss.matches.push(pos);
         pos += lowerQuery.length;
     }
 
-    if (vttySearchState.matches.length > 0) {
+    if (ss.matches.length > 0) {
         vttyApplyHighlights(pre, text, query);
         vttyScrollToMatch(panelId, 0);
-        countEl.textContent = '1/' + vttySearchState.matches.length;
-        _updateSearchProgress(panelId, 0, vttySearchState.matches.length);
+        countEl.textContent = '1/' + ss.matches.length;
+        _updateSearchProgress(panelId, 0, ss.matches.length);
     } else {
         countEl.textContent = '0/0';
         _updateSearchProgress(panelId, 0, 0);
@@ -89,13 +96,14 @@ function vttyScrollToMatch(panelId, idx) {
 }
 
 function _vttySearchStep(panelId, direction) {
-    if (vttySearchState.matches.length === 0) return;
-    const total = vttySearchState.matches.length;
-    vttySearchState.matchIndex = (vttySearchState.matchIndex + direction + total) % total;
-    vttyScrollToMatch(panelId, vttySearchState.matchIndex);
+    const ss = _getSearchState(panelId);
+    if (ss.matches.length === 0) return;
+    const total = ss.matches.length;
+    ss.matchIndex = (ss.matchIndex + direction + total) % total;
+    vttyScrollToMatch(panelId, ss.matchIndex);
     const countEl = document.getElementById('searchCount-' + panelId);
-    if (countEl) countEl.textContent = (vttySearchState.matchIndex + 1) + '/' + total;
-    _updateSearchProgress(panelId, vttySearchState.matchIndex, total);
+    if (countEl) countEl.textContent = (ss.matchIndex + 1) + '/' + total;
+    _updateSearchProgress(panelId, ss.matchIndex, total);
 }
 
 function vttySearchNext(panelId) { _vttySearchStep(panelId, 1); }
@@ -116,8 +124,9 @@ function vttySearchClose(panelId) {
     if (searchBar) searchBar.classList.remove('visible');
     const pre = panel?.querySelector('pre');
     if (pre) vttyRemoveHighlights(pre);
-    vttySearchState.matches = [];
-    vttySearchState.matchIndex = 0;
+    const ss = _getSearchState(panelId);
+    ss.matches = [];
+    ss.matchIndex = 0;
     const countEl = document.getElementById('searchCount-' + panelId);
     if (countEl) countEl.textContent = '';
     const vtty = panel?.querySelector('.vtty-container');

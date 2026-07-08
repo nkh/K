@@ -503,8 +503,11 @@ function _updateLeafMetadata(vttyEl, data) {
     const cursorEl = vttyEl ? vttyEl.querySelector('.cursor-indicator') : null;
     const cursorHidden = data.cursor_visible === false;
     if (cursorEl && cursor.row !== undefined && !cursorHidden) {
-        const charW = 10 * 0.6;
-        const charH = 10 * 1.2;
+        const panelId = vttyEl ? vttyEl.getAttribute('data-panel') : null;
+        const panelObj = panelId ? state.panels.find(p => p.id === panelId) : null;
+        const fontSize = (panelObj && panelObj.fontSize) || parseFloat(vttyEl.style.fontSize) || 10;
+        const charW = fontSize * 0.6;
+        const charH = fontSize * 1.2;
         cursorEl.style.top = (cursor.row * charH) + 'px';
         cursorEl.style.left = (cursor.col * charW) + 'px';
         cursorEl.style.width = charW + 'px';

@@ -282,7 +282,7 @@ async function restartCommand(targetId) {
     const p = state.panels.find(pp => pp.id === targetId);
     if (!p) return;
     let instUrl, cmdId;
-    if (!p.split || targetId === p.id) {
+    if ((!p.split && !p._rootSplit) || targetId === p.id) {
         instUrl = p.selectedInstUrl; cmdId = p.selectedCmdId;
     } else {
         const found = typeof _findLeafState === 'function' ? _findLeafState(p, targetId) : null;

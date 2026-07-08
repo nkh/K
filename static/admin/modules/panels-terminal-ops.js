@@ -133,7 +133,7 @@ function showSpecialKeysHelp() {
 
 function copyCommandUrl(instUrl, cmdId, cmdName) {
     const base = cmdName.replace(/.*\//, '');
-    navigator.clipboard.writeText(instUrl.replace(/^http/, 'http') + '/' + encodeURIComponent(base)).catch(() => {});
+    navigator.clipboard.writeText(instUrl + '/' + encodeURIComponent(base)).catch(() => {});
 }
 
 async function togglePauseCmd(instUrl, cmdId) {

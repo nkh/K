@@ -615,6 +615,10 @@ function loadWorkspace(name) {
         if (p.pollTimer) { clearInterval(p.pollTimer); p.pollTimer = null; }
     }
     state.panels = [];
+    // Reset window state to prevent stale panel ID references
+    const winId = 'win-0';
+    state.windows = [{ id: winId, name: '1', panelIds: [] }];
+    state.activeWindowId = winId;
     const panelConfigs = ws.panels || [];
     if (panelConfigs.length === 0) { addPanelDirect(); }
     else { for (const cfg of panelConfigs) { const panel = addPanelDirect(); panel.fontSize = cfg.fontSize || state.fontSize; panel.theme = cfg.theme || ''; panel.customTitle = cfg.customTitle || ''; panel.selectedInstUrl = cfg.instUrl || null; panel.selectedCmdId = cfg.cmdId || null; } }
