@@ -157,7 +157,7 @@ function _renderWindowBar() {
             const closeBtn = state.windows.length > 1
                 ? `<button class="window-tab-close" data-action="CloseWindow" data-window="${w.id}" title="Close window">&#x2715;</button>`
                 : '';
-            html += `<div class="window-tab${active ? ' active' : ''}" data-action="SwitchWindow" data-window="${w.id}" title="Window ${escHtml(w.name)}"><span class="window-tab-label" ondblclick="event.stopPropagation();startRenameWindow('${w.id}')">${escHtml(w.name)}</span>${closeBtn}</div>`;
+            html += `<div class="window-tab${active ? ' active' : ''}" data-action="SwitchWindow" data-window="${w.id}" title="Window ${escHtml(w.name)}"><span class="window-tab-label" data-action-placeholder="StartRenameWindow" data-window-id="${w.id}">${escHtml(w.name)}</span>${closeBtn}</div>`;
         }
     }
     html += '</div>';
@@ -615,7 +615,7 @@ function _renderLeafHeader(panel, leaf, leafId) {
     <button class="btn btn-xs cmd-history-btn hidden" data-action="PanelHistoryBack" data-panel="${panel.id}" data-leaf="${leafId}" title="Back">&#x25C0;</button>
     <button class="btn btn-xs cmd-history-btn hidden" data-action="PanelHistoryForward" data-panel="${panel.id}" data-leaf="${leafId}" title="Forward">&#x25B6;</button>
     <div class="cmd-info">
-        <span class="cmd-fullname" data-leaf-id="${leafId}" ondblclick="event.stopPropagation();startRenamePanel('${panel.id}')" title="Double-click to rename"></span>
+        <span class="cmd-fullname" data-leaf-id="${leafId}" title="Double-click to rename"></span>
         <span class="cmd-args"></span>
     </div>
     <span class="panel-exit-banner hidden"></span>

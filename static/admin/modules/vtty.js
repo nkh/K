@@ -461,15 +461,19 @@ function updateVttyMetadataFromHttp(data, panelEl, panelObj, sbOffset) {
     window.buildCellGrid = buildCellGrid;
     window.updateVttyMetadataFromHttp = updateVttyMetadataFromHttp;
 
-
-function _applyScrollHtml(vttyEl, pre, html) {
-    const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
-    const oldScrollHeight = vttyEl.scrollHeight;
-    pre.innerHTML = html;
-    if (wasAtBottom) vttyEl.scrollTop = vttyEl.scrollHeight;
-    else vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
-}
-
     window._cellStyle = _cellStyle;
     window._splitAndUpdateCell = _splitAndUpdateCell;
+
+    // ─── Shared scroll preservation helper ───
+    // Call BEFORE modifying a vtty-container's content, then call
+    // the returned restore function AFTER the modification.
+    function preserveVttyScroll(vttyEl) {
+        const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
+        const oldScrollHeight = vttyEl.scrollHeight;
+        return function restoreScroll() {
+            if (wasAtBottom) vttyEl.scrollTop = vttyEl.scrollHeight;
+            else vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
+        };
+    }
+    window.preserveVttyScroll = preserveVttyScroll;
 })();

@@ -99,15 +99,15 @@ function toggleSelectionMode(panelId) {
 
 // ─── Refresh Loop ───
 function startRefresh() {
-    loadSnapshot().then(() => {
-        if (state.refreshInterval) clearInterval(state.refreshInterval);
-        state.refreshInterval = setInterval(() => { loadCommands(); checkForExitedCommands(); }, 1000);
-    });
     if (state._serverConfigInterval) clearInterval(state._serverConfigInterval);
     state._serverConfigInterval = setInterval(fetchServerConfig, 5000);
     if (state._resourceInterval) clearInterval(state._resourceInterval);
     pollResources();
     state._resourceInterval = setInterval(pollResources, 2000);
+    loadSnapshot().then(() => {
+        if (state.refreshInterval) clearInterval(state.refreshInterval);
+        state.refreshInterval = setInterval(() => { loadCommands(); checkForExitedCommands(); }, 1000);
+    });
 }
 
 const _notifiedExits = new Set();
@@ -377,7 +377,7 @@ function connectLogWs() {
                 c.appendChild(d); _autoScrollLog(c);
             }
             clearInterval(state._logWsPingTimer);
-            state._logWsPingTimer = setInterval(() => { if (state.logWs && state.logWs.readyState === WebSocket.OPEN) state.logWs.send(JSON.stringify({ type: 'ping' })); }, 30000);
+            state._logWsPingTimer = setInterval(() => { if (state.logWs && state.logWs.readyState === WebSocket.OPEN) state.logWs.send(JSON.stringify({ type: 'ping' })); }, 15000);
         };
         ws.onmessage = (event) => {
             try {
@@ -487,7 +487,7 @@ function showShortcuts() {
         rows += '<tr><td>' + escHtml(keys.join('+')) + '</td><td>' + escHtml(s.label || '') + '</td></tr>';
     }
 
-    overlay.innerHTML = '<div class="shortcuts-panel"><h2>Keyboard Shortcuts</h2><div class="shortcuts-scroll"><table>' + rows + '</table></div><div class="shortcuts-footer"><button class="btn" onclick="closeShortcuts()">Close</button></div></div>';
+    overlay.innerHTML = '<div class="shortcuts-panel"><h2>Keyboard Shortcuts</h2><div class="shortcuts-scroll"><table>' + rows + '</table></div><div class="shortcuts-footer"><button class="btn" data-action="CloseShortcuts">Close</button></div></div>';
     overlay.addEventListener('click', (e) => { if (e.target === overlay) closeShortcuts(); });
     document.body.appendChild(overlay);
 }

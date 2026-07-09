@@ -130,6 +130,15 @@ function _setupPanelDelegation() {
         const btn = vtty.querySelector('.scroll-bottom-btn');
         if (btn) btn.classList.toggle('visible', vtty.scrollHeight - vtty.scrollTop - vtty.clientHeight >= 50);
     }, true);
+
+    // Delegated dblclick for panel rename (replaces inline ondblclick on cmd-fullname)
+    container.addEventListener('dblclick', (e) => {
+        const nameEl = e.target.closest('.cmd-fullname[data-leaf-id]');
+        if (!nameEl) return;
+        e.stopPropagation();
+        const panelEl = nameEl.closest('.panel');
+        if (panelEl) startRenamePanel(panelEl.id);
+    });
 }
 
     // ── Exports ──

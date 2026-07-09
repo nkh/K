@@ -336,15 +336,9 @@ function updateFrozenIndicator() {
         if (!panelEl) continue;
         const indicator = document.createElement('div');
         indicator.className = 'search-frozen-indicator';
+        indicator.dataset.action = 'UnfreezeSearchPanel';
+        indicator.dataset.panel = panelId;
         indicator.textContent = 'VTTY frozen (click to unfreeze)';
-        indicator.onclick = () => {
-            state._searchFrozenPanelIds.delete(panelId);
-            indicator.remove();
-            const panelObj = state.panels.find(p => p.id === panelId);
-            if (panelObj && panelObj.selectedInstUrl && panelObj.selectedCmdId) {
-                startPanelUpdateMode(panelId);
-            }
-        };
         panelEl.style.position = 'relative';
         panelEl.appendChild(indicator);
     }
@@ -400,6 +394,15 @@ Object.assign(window, {
     _selectAndViewCmd(instUrl, cmdId, cmdName) {
         selectCommand(instUrl, cmdId, cmdName);
         closeCmdManager();
+    },
+    _unfreezeSearchPanel(panelId) {
+        state._searchFrozenPanelIds.delete(panelId);
+        const el = document.querySelector(`#${panelId} .search-frozen-indicator`);
+        if (el) el.remove();
+        const panelObj = state.panels.find(p => p.id === panelId);
+        if (panelObj && panelObj.selectedInstUrl && panelObj.selectedCmdId) {
+            startPanelUpdateMode(panelId);
+        }
     },
 });
 })();

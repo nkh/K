@@ -96,11 +96,11 @@ function renderPanels() {
             const focused = panel.id === state._focusedPanelId;
             const mHide = isMobile && multi && !focused ? ' hidden' : '';
             html += `<div class="panel${focused ? ' focused' : ''}" id="${panel.id}" ondragover="onPanelDragOver(event)" ondrop="onPanelDrop(event,'${panel.id}')" ondragleave="onPanelDragLeave(event)"${mHide}>
-${panel.split ? _renderSplitContainer(panel) : `<div class="panel-header" data-panel-id="${panel.id}" data-leaf-id="${panel.id}" oncontextmenu="showPanelContextMenu(event,'${panel.id}','${panel.id}')" tabindex="0" role="button" aria-label="Panel: ${escHtml(panel.selectedInstUrl || 'empty')}" style="--ph-bg:${color};--ph-fg:${textColor}">
+${panel.split ? _renderSplitContainer(panel) : `<div class="panel-header" data-panel-id="${panel.id}" data-leaf-id="${panel.id}" data-action="ShowPanelContextMenu" data-panel="${panel.id}" data-leaf="${panel.id}" tabindex="0" role="button" aria-label="Panel: ${escHtml(panel.selectedInstUrl || 'empty')}" style="--ph-bg:${color};--ph-fg:${textColor}">
     <button class="btn btn-xs cmd-history-btn hidden" id="histBack-${panel.id}" data-action="PanelHistoryBack" data-panel="${panel.id}" data-leaf="${panel.id}" title="Back">&#x25C0;</button>
     <button class="btn btn-xs cmd-history-btn hidden" id="histFwd-${panel.id}" data-action="PanelHistoryForward" data-panel="${panel.id}" data-leaf="${panel.id}" title="Forward">&#x25B6;</button>
     <div class="cmd-info" id="cmdInfo-${panel.id}">
-        <span class="cmd-fullname" id="cmdName-${panel.id}" data-leaf-id="${panel.id}" ondblclick="event.stopPropagation();startRenamePanel('${panel.id}')" title="Double-click to rename"></span>
+        <span class="cmd-fullname" id="cmdName-${panel.id}" data-leaf-id="${panel.id}" title="Double-click to rename"></span>
         <span class="cmd-args" id="cmdArgs-${panel.id}"></span>
     </div>
     <span class="panel-exit-banner hidden" id="exitedBanner-${panel.id}"></span>

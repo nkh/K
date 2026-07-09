@@ -198,6 +198,10 @@ const _actions = {
 
     // ── Special keys modal ──
     'CloseSpecialKeysModal':    { handler: 'closeSpecialKeysModal' },
+    'CloseShortcuts':            { handler: 'closeShortcuts' },
+
+    // ── Search frozen indicator ──
+    'UnfreezeSearchPanel':      { handler: '_unfreezeSearchPanel', sig: 'data-panel' },
 
     // ── Search: dynamic ──
     'RestartCommandById':       { handler: 'restartCommandById', sig: 'cmd-id', stop: true },

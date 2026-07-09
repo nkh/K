@@ -7,7 +7,7 @@
 
 // ─── Shared Helpers ───
 
-const WS_PING_INTERVAL_MS = 10000;
+const WS_PING_INTERVAL_MS = 15000;  // Unified ping interval for all WS connections
 const WS_MAX_RECONNECT_ATTEMPTS = 5;
 const WS_RECONNECT_MAX_DELAY_MS = 30000;
 
@@ -34,6 +34,7 @@ function _connectSharedSub(sub) {
         sub.ws = ws;
 
         ws.onopen = () => {
+            sub.reconnectCount = 0;  // Reset on successful connect
             clearInterval(sub.pingInterval);
             sub.pingInterval = setInterval(() => {
                 if (sub.ws && sub.ws.readyState === WebSocket.OPEN) {
@@ -339,14 +340,12 @@ async function _loadLeafVttyHttpDirect(leaf) {
                 state._lastGeneration[genKey] = json.data.generation;
             }
             if (json.data.html !== undefined && json.data.html !== null) {
-                const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
-                const oldScrollHeight = vttyEl.scrollHeight;
+                const restoreScroll = preserveVttyScroll(vttyEl);
                 pre.innerHTML = json.data.html;
+                restoreScroll();
                 if (state._level3Enabled && json.data.dimensions) {
                     buildCellGrid(genKey, pre, json.data.dimensions.rows, json.data.dimensions.cols);
                 }
-                if (wasAtBottom) vttyEl.scrollTop = vttyEl.scrollHeight;
-                else vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
             }
         }
     } catch (e) { /* ignore */ }
@@ -410,14 +409,12 @@ async function _doFetchVttyDiff(panelId, instUrl, cmdId, isBranch) {
                         htmlResp.data.html = htmlJson.data.html;
                         const pre = targetEl.querySelector('pre');
                         if (pre && htmlResp.data.html !== undefined) {
-                            const wasAtBottom = targetEl.scrollHeight - targetEl.scrollTop - targetEl.clientHeight < 50;
-                            const oldScrollHeight = targetEl.scrollHeight;
+                            const restoreScroll = preserveVttyScroll(targetEl);
                             pre.innerHTML = htmlResp.data.html;
+                            restoreScroll();
                             if (state._level3Enabled && htmlResp.data.dimensions) {
                                 buildCellGrid(blKey, pre, htmlResp.data.dimensions.rows, htmlResp.data.dimensions.cols);
                             }
-                            if (wasAtBottom) targetEl.scrollTop = targetEl.scrollHeight;
-                            else targetEl.scrollTop += targetEl.scrollHeight - oldScrollHeight;
                             const genKey = panelId + '/' + cmdId;
                             if (htmlResp.data.generation !== undefined) state._lastGeneration[genKey] = htmlResp.data.generation;
                         }
@@ -445,14 +442,12 @@ function _applyLeafDiff(vttyEl, leafId, cmdId, instUrl, data) {
     if (data.generation !== undefined) state._lastGeneration[genKey] = data.generation;
 
     if (data.html !== undefined) {
-        const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
-        const oldScrollHeight = vttyEl.scrollHeight;
+        const restoreScroll = preserveVttyScroll(vttyEl);
         pre.innerHTML = data.html;
+        restoreScroll();
         if (state._level3Enabled && data.dimensions) {
             buildCellGrid(genKey, pre, data.dimensions.rows, data.dimensions.cols);
         }
-        if (wasAtBottom) vttyEl.scrollTop = vttyEl.scrollHeight;
-        else vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
         _updateLeafMetadata(vttyEl, data);
         return;
     }
@@ -476,8 +471,7 @@ function _applyLeafDiff(vttyEl, leafId, cmdId, instUrl, data) {
         return;
     }
 
-    const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
-    const oldScrollHeight = vttyEl.scrollHeight;
+    const restoreScroll = preserveVttyScroll(vttyEl);
 
     for (let i = 0; i < data.cells.length; i++) {
         const c = data.cells[i];
@@ -498,8 +492,7 @@ function _applyLeafDiff(vttyEl, leafId, cmdId, instUrl, data) {
         }
     }
 
-    if (wasAtBottom) vttyEl.scrollTop = vttyEl.scrollHeight;
-    else vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
+    restoreScroll();
 
     _updateLeafMetadata(vttyEl, data);
 }
@@ -550,6 +543,7 @@ function _connectLeafWs(leaf) {
         leaf.wsInstUrl = leaf.instUrl;
         leaf.wsCmdId = leaf.cmdId;
         ws.onopen = () => {
+            leaf.wsReconnectCount = 0;  // Reset on successful connect
             clearInterval(leaf.wsPingInterval);
             leaf.wsPingInterval = setInterval(() => {
                 if (leaf.ws && leaf.ws.readyState === WebSocket.OPEN) {

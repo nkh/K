@@ -100,7 +100,7 @@ function showSpecialKeysHelp() {
     if (old) { old.remove(); return; }
     const overlay = document.createElement('div');
     overlay.id = 'specialKeysModal'; overlay.className = 'modal-overlay';
-    overlay.onclick = (e) => { if (e.target === overlay) { releaseCurrentFocusTrap(); overlay.remove(); } };
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) { releaseCurrentFocusTrap(); overlay.remove(); } });
     const rows = [
         ['Return / Enter', '<code>&lt;Enter&gt;</code> or <code>&lt;Return&gt;</code>', 'Send a newline (carriage return)'],
         ['Backspace', '<code>&lt;Backspace&gt;</code>', 'Delete character before cursor'],
