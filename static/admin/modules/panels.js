@@ -4,7 +4,7 @@
 
 function _renderSearchBar(pid) {
     return `<div class="search-bar" id="searchBar-${pid}">
-  <input type="text" id="searchInput-${pid}" placeholder="Search terminal..." oninput="vttySearch('${pid}')" onkeydown="if(event.key==='Enter'){event.shiftKey?vttySearchPrev('${pid}'):vttySearchNext('${pid}')}">
+  <input type="text" id="searchInput-${pid}" data-search-panel="${pid}" placeholder="Search terminal...">
   <span class="search-count" id="searchCount-${pid}" title="Click to jump: Shift+Click to reverse"></span>
   <div class="search-progress-bar hidden" id="searchProgress-${pid}"></div>
   <button data-action="VttySearchNext" data-panel="${pid}" title="Next (Enter)">&#x25BC;</button>
@@ -95,8 +95,8 @@ function renderPanels() {
             const textColor = _getServerTextColor(conn);
             const focused = panel.id === state._focusedPanelId;
             const mHide = isMobile && multi && !focused ? ' hidden' : '';
-            html += `<div class="panel${focused ? ' focused' : ''}" id="${panel.id}" ondragover="onPanelDragOver(event)" ondrop="onPanelDrop(event,'${panel.id}')" ondragleave="onPanelDragLeave(event)"${mHide}>
-${panel.split ? _renderSplitContainer(panel) : `<div class="panel-header" data-panel-id="${panel.id}" data-leaf-id="${panel.id}" data-action="ShowPanelContextMenu" data-panel="${panel.id}" data-leaf="${panel.id}" tabindex="0" role="button" aria-label="Panel: ${escHtml(panel.selectedInstUrl || 'empty')}" style="--ph-bg:${color};--ph-fg:${textColor}">
+            html += `<div class="panel${focused ? ' focused' : ''}" id="${panel.id}"${mHide}>
+${panel.split ? _renderSplitContainer(panel) : `<div class="panel-header" data-panel-id="${panel.id}" data-leaf-id="${panel.id}" data-ctxmenu="panel" data-panel="${panel.id}" data-leaf="${panel.id}" tabindex="0" role="button" aria-label="Panel: ${escHtml(panel.selectedInstUrl || 'empty')}" style="--ph-bg:${color};--ph-fg:${textColor}">
     <button class="btn btn-xs cmd-history-btn hidden" id="histBack-${panel.id}" data-action="PanelHistoryBack" data-panel="${panel.id}" data-leaf="${panel.id}" title="Back">&#x25C0;</button>
     <button class="btn btn-xs cmd-history-btn hidden" id="histFwd-${panel.id}" data-action="PanelHistoryForward" data-panel="${panel.id}" data-leaf="${panel.id}" title="Forward">&#x25B6;</button>
     <div class="cmd-info" id="cmdInfo-${panel.id}">

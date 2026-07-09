@@ -139,6 +139,44 @@ function _setupPanelDelegation() {
         const panelEl = nameEl.closest('.panel');
         if (panelEl) startRenamePanel(panelEl.id);
     });
+
+    // Delegated search input events (replaces inline oninput/onkeydown)
+    container.addEventListener('input', (e) => {
+        if (e.target.matches && e.target.matches('input[data-search-panel]')) {
+            vttySearch(e.target.dataset.searchPanel);
+        }
+    });
+    container.addEventListener('keydown', (e) => {
+        if (e.target.matches && e.target.matches('input[data-search-panel]') && e.key === 'Enter') {
+            const pid = e.target.dataset.searchPanel;
+            e.shiftKey ? vttySearchPrev(pid) : vttySearchNext(pid);
+        }
+    });
+
+    // Delegated drag events for panel area (replaces inline ondragover/ondrop on #view-vtty)
+    container.addEventListener('dragover', (e) => {
+        const panelEl = e.target.closest('.panel');
+        if (panelEl) {
+            e.preventDefault(); // panel-level drag
+        } else {
+            // Panel area background drop (sidebar command drag with no panel target)
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+        }
+    });
+    container.addEventListener('drop', (e) => {
+        const panelEl = e.target.closest('.panel');
+        if (panelEl) {
+            onPanelDrop(e, panelEl.id);
+        } else {
+            // Panel area background drop — assign to focused panel
+            onPanelAreaDrop(e);
+        }
+    });
+    container.addEventListener('dragleave', (e) => {
+        const panelEl = e.target.closest('.panel');
+        if (panelEl) { onPanelDragLeave(e); }
+    });
 }
 
     // ── Exports ──

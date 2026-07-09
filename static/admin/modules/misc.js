@@ -104,17 +104,29 @@ function startRefresh() {
     if (state._resourceInterval) clearInterval(state._resourceInterval);
     pollResources();
     state._resourceInterval = setInterval(pollResources, 2000);
+    // Guard against double-call: if snapshot is already loading, skip
+    if (state._snapshotLoading) return;
+    state._snapshotLoading = true;
     loadSnapshot().then(() => {
+        state._snapshotLoading = false;
         if (state.refreshInterval) clearInterval(state.refreshInterval);
         state.refreshInterval = setInterval(() => { loadCommands(); checkForExitedCommands(); }, 1000);
-    });
+    }).catch(() => { state._snapshotLoading = false; });
 }
 
 const _notifiedExits = new Set();
+const _NOTIFIED_MAX = 5000;
 
 function notifyCommandEnded(cmdId) {
     if (!cmdId || _notifiedExits.has(cmdId)) return;
     _notifiedExits.add(cmdId);
+    // Prevent unbounded growth: drop oldest entries when the set gets too large.
+    // This is purely defensive — command IDs are ~36 bytes each so even 5000
+    // entries is only ~180 KB.
+    if (_notifiedExits.size > _NOTIFIED_MAX) {
+        const ids = [..._notifiedExits];
+        for (let i = 0; i < Math.floor(_NOTIFIED_MAX / 2); i++) _notifiedExits.delete(ids[i]);
+    }
     let cmdName = cmdId, exitCode = null;
     for (const inst of state.connections) {
         if (inst._commands) {
@@ -221,6 +233,7 @@ function playExitSound(success) {
         gain.gain.value = 0.1;
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
         osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.5);
+        osc.onended = () => ctx.close();
     } catch (e) { /* ignore */ }
 }
 
@@ -488,7 +501,7 @@ function showShortcuts() {
     }
 
     overlay.innerHTML = '<div class="shortcuts-panel"><h2>Keyboard Shortcuts</h2><div class="shortcuts-scroll"><table>' + rows + '</table></div><div class="shortcuts-footer"><button class="btn" data-action="CloseShortcuts">Close</button></div></div>';
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeShortcuts(); });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeShortcuts(); }, { once: true });
     document.body.appendChild(overlay);
 }
 

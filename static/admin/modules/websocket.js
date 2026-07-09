@@ -190,6 +190,9 @@ function _unsubscribePanel(panelId, instUrl, cmdId) {
         _closeSharedSub(sub);
         delete _sharedSubs[key];
     }
+    // Clean up stale diff timer for this panel
+    const timerKey = '_diffTimer_' + panelId;
+    if (_diffTimers[timerKey]) { clearTimeout(_diffTimers[timerKey]); delete _diffTimers[timerKey]; }
 }
 
 // ─── Per-Panel WebSocket Management ───

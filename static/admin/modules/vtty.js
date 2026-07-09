@@ -22,17 +22,12 @@ function updateVttyDisplayForPanel(panelObj, panelEl, data) {
     }
 
     if (data.html !== undefined && data.html !== null) {
-        const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
-        const oldScrollHeight = vttyEl.scrollHeight;
+        const restoreScroll = preserveVttyScroll(vttyEl);
         pre.innerHTML = data.html;
         if (state._level3Enabled && data.dimensions) {
             buildCellGrid(genKey, pre, data.dimensions.rows, data.dimensions.cols);
         }
-        if (wasAtBottom) {
-            vttyEl.scrollTop = vttyEl.scrollHeight;
-        } else {
-            vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
-        }
+        restoreScroll();
     }
 
     updateVttyMetadataForPanel(panelObj, panelEl, vttyEl, data);
@@ -107,17 +102,12 @@ function applyVttyDiffForPanel(panelObj, panelEl, data) {
 
     // If full HTML is embedded (e.g. from vtty_dirty fallback), use it directly
     if (data.html !== undefined) {
-        const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
-        const oldScrollHeight = vttyEl.scrollHeight;
+        const restoreScroll = preserveVttyScroll(vttyEl);
         pre.innerHTML = data.html;
         if (state._level3Enabled && data.dimensions) {
             buildCellGrid(genKey, pre, data.dimensions.rows, data.dimensions.cols);
         }
-        if (wasAtBottom) {
-            vttyEl.scrollTop = vttyEl.scrollHeight;
-        } else {
-            vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
-        }
+        restoreScroll();
         updateVttyMetadataForPanel(panelObj, panelEl, vttyEl, data);
         return;
     }
@@ -146,8 +136,7 @@ function applyVttyDiffForPanel(panelObj, panelEl, data) {
     }
 
     // Save scroll position
-    const wasAtBottom = vttyEl.scrollHeight - vttyEl.scrollTop - vttyEl.clientHeight < 50;
-    const oldScrollHeight = vttyEl.scrollHeight;
+    const restoreScroll = preserveVttyScroll(vttyEl);
 
     // Apply each cell diff using the cell grid
     for (let i = 0; i < data.cells.length; i++) {
@@ -173,11 +162,7 @@ function applyVttyDiffForPanel(panelObj, panelEl, data) {
     }
 
     // Restore scroll position
-    if (wasAtBottom) {
-        vttyEl.scrollTop = vttyEl.scrollHeight;
-    } else {
-        vttyEl.scrollTop += vttyEl.scrollHeight - oldScrollHeight;
-    }
+    restoreScroll();
 
     updateVttyMetadataForPanel(panelObj, panelEl, vttyEl, data);
 }

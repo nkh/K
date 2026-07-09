@@ -381,8 +381,20 @@ function initDelegation() {
         _dispatchAction(event);
     });
 
-    // Contextmenu delegation for [data-action] elements
+    // Contextmenu delegation for [data-action] and [data-ctxmenu] elements
     document.addEventListener('contextmenu', function(event) {
+        // Check for data-ctxmenu="panel" (panel headers use this instead of data-action
+        // to prevent dual-fire from both click and contextmenu delegation)
+        const ctxEl = event.target.closest('[data-ctxmenu="panel"]');
+        if (ctxEl) {
+            event.preventDefault();
+            const panelId = ctxEl.dataset.panel;
+            const leafId = ctxEl.dataset.leaf;
+            if (typeof showPanelContextMenu === 'function') {
+                showPanelContextMenu(event, panelId, leafId);
+            }
+            return;
+        }
         const el = event.target.closest('[data-action]');
         if (!el) return;
         const action = el.dataset.action;
@@ -404,6 +416,102 @@ function initDelegation() {
     for (const modal of modals) {
         modal.addEventListener('click', _dispatchModalBackdrop);
     }
+
+    // ── Delegated input/change/keydown handlers (replaces inline on* attributes) ──
+    // These replace inline oninput/onchange/onkeydown/onfocus/onblur handlers
+    // on stable elements that exist at init time.
+
+    // #cmdFilter — filter commands on input
+    document.addEventListener('input', function(event) {
+        if (event.target.id === 'cmdFilter') { loadCommands(); }
+        // #cmdManagerFilter — filter command manager list
+        else if (event.target.id === 'cmdManagerFilter') { renderCmdManagerList(); }
+    });
+
+    // #logSearch — search logs on input
+    document.addEventListener('input', function(event) {
+        if (event.target.id === 'logSearch') searchLogs();
+    });
+
+    // #spawnInstance — track user's explicit instance choice
+    document.addEventListener('change', function(event) {
+        if (event.target.id === 'spawnInstance') window._userSpawnInstUrl = event.target.value;
+        // #cmdManagerSort — re-sort command manager list
+        else if (event.target.id === 'cmdManagerSort') renderCmdManagerList();
+        // #searchFreezeToggle — toggle search freeze
+        else if (event.target.id === 'searchFreezeToggle') _toggleSearchFreezeCommands();
+    });
+
+    // #addServerUrl — Enter to confirm add server
+    document.addEventListener('keydown', function(event) {
+        if (event.target.id === 'addServerUrl' && event.key === 'Enter') {
+            event.preventDefault(); confirmAddServer();
+        }
+    });
+
+    // #globalSearchInput — Enter to execute global search
+    document.addEventListener('keydown', function(event) {
+        if (event.target.id === 'globalSearchInput' && event.key === 'Enter') {
+            event.preventDefault(); executeGlobalSearch();
+        }
+    });
+
+    // #spawnCmd — complex keydown handler (history navigation, Enter, Tab, Escape)
+    document.addEventListener('keydown', function(event) {
+        if (event.target.id !== 'spawnCmd') return;
+        const dd = document.getElementById('spawnHistoryDropdown');
+        if (event.key === 'Enter' && dd && dd.querySelector('.spawn-history-item.selected')) {
+            _onSpawnCmdKeydownForHistory(event);
+        } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            _onSpawnCmdKeydownForHistory(event);
+        } else if (event.key === 'Enter') {
+            event.preventDefault(); spawnCommand();
+        } else if (event.key === 'Tab') {
+            event.preventDefault(); spawnCmdTabComplete(event);
+        } else if (event.key === 'Escape') {
+            _resetSpawnCompletion(); _removeSpawnHistoryDropdown();
+        }
+    });
+    // #spawnCmd — reset tab completion on input
+    document.addEventListener('input', function(event) {
+        if (event.target.id === 'spawnCmd') _resetSpawnCompletion();
+    });
+    // #spawnCmd — focus shows history dropdown
+    document.addEventListener('focus', function(event) {
+        if (event.target.id === 'spawnCmd') _onSpawnCmdFocus();
+    }, true);
+    // #spawnCmd — blur hides history dropdown (delayed)
+    document.addEventListener('blur', function(event) {
+        if (event.target.id === 'spawnCmd') setTimeout(_removeSpawnHistoryDropdown, 150);
+    }, true);
+
+    // #spawnEnv — Ctrl+Enter to spawn
+    document.addEventListener('keydown', function(event) {
+        if (event.target.id === 'spawnEnv' && event.key === 'Enter' && event.ctrlKey) {
+            event.preventDefault(); spawnCommand();
+        }
+    });
+
+    // #spawnDir — Enter to spawn
+    document.addEventListener('keydown', function(event) {
+        if (event.target.id === 'spawnDir' && event.key === 'Enter') {
+            event.preventDefault(); spawnCommand();
+        }
+    });
+
+    // #newGroupName — Enter to create group
+    document.addEventListener('keydown', function(event) {
+        if (event.target.id === 'newGroupName' && event.key === 'Enter') {
+            event.preventDefault(); createCmdGroup();
+        }
+    });
+
+    // #stKeyInput — Enter to send keys
+    document.addEventListener('keydown', function(event) {
+        if (event.target.id === 'stKeyInput' && event.key === 'Enter') {
+            event.preventDefault(); sendKeysToPanel(getActivePanelId());
+        }
+    });
 }
 
 // ── Exports ──

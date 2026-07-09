@@ -50,7 +50,7 @@
                 <!-- Servers tab (default) -->
                 <div id="tab-servers">
                     <div style="padding:0.2rem 0.3rem;display:flex;gap:0.2rem;align-items:center;">
-                        <input type="text" id="cmdFilter" placeholder="Filter commands..." oninput="loadCommands()" style="flex:1;min-width:0;font-size:var(--ui-fs);padding:0.1rem 0.3rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:2px;">
+                        <input type="text" id="cmdFilter" placeholder="Filter commands..." style="flex:1;min-width:0;font-size:var(--ui-fs);padding:0.1rem 0.3rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:2px;">
                     </div>
                     <div id="commandList"></div>
                 </div>
@@ -63,19 +63,19 @@
                         </div>
                         <div class="field">
                             <label>Target Instance</label>
-                            <select id="spawnInstance" onchange="_userSpawnInstUrl=this.value"></select>
+                            <select id="spawnInstance"></select>
                         </div>
                         <div class="field">
                             <label>Command</label>
-                            <input type="text" id="spawnCmd" placeholder="e.g. bash -i, htop, /usr/bin/htop --flag" autocomplete="off" onfocus="_onSpawnCmdFocus()" onblur="setTimeout(_removeSpawnHistoryDropdown,150)" onkeydown="if(event.key==='Enter'&&document.getElementById('spawnHistoryDropdown')&&document.getElementById('spawnHistoryDropdown').querySelector('.spawn-history-item.selected')){_onSpawnCmdKeydownForHistory(event)}else if(event.key==='ArrowDown'||event.key==='ArrowUp'){_onSpawnCmdKeydownForHistory(event)}else if(event.key==='Enter'){event.preventDefault();spawnCommand()}else if(event.key==='Tab'){event.preventDefault();spawnCmdTabComplete(event)}else if(event.key==='Escape'){_resetSpawnCompletion();_removeSpawnHistoryDropdown()}" oninput="_resetSpawnCompletion()">
+                            <input type="text" id="spawnCmd" placeholder="e.g. bash -i, htop, /usr/bin/htop --flag" autocomplete="off">
                         </div>
                         <div class="field">
                             <label>Environment Variables</label>
-                            <textarea id="spawnEnv" rows="2" placeholder="KEY=value&#10;PATH=/custom/bin" onkeydown="if(event.key==='Enter'&&event.ctrlKey){event.preventDefault();spawnCommand()}"></textarea>
+                            <textarea id="spawnEnv" rows="2" placeholder="KEY=value&#10;PATH=/custom/bin"></textarea>
                         </div>
                         <div class="field">
                             <label>Working Directory</label>
-                            <input type="text" id="spawnDir" placeholder="/home/user/project" onkeydown="if(event.key==='Enter'){event.preventDefault();spawnCommand()}">
+                            <input type="text" id="spawnDir" placeholder="/home/user/project">
                         </div>
                         <div class="autofit-row">
                             <div class="field">
@@ -141,7 +141,7 @@
                             <span style="font-size:var(--ui-fs);color:var(--text-secondary);">Command Groups</span>
                         </div>
                         <div style="display:flex;gap:0.2rem;margin-bottom:0.4rem;">
-                            <input type="text" id="newGroupName" placeholder="New group name..." style="flex:1;min-width:0;font-size:var(--ui-fs);padding:0.15rem 0.3rem;" onkeydown="if(event.key==='Enter'){event.preventDefault();createCmdGroup()}">
+                            <input type="text" id="newGroupName" placeholder="New group name..." style="flex:1;min-width:0;font-size:var(--ui-fs);padding:0.15rem 0.3rem;" >
                             <button class="btn btn-xs btn-primary" data-action="CreateCmdGroup">Create</button>
                         </div>
                         <div id="groupList"></div>
@@ -187,7 +187,7 @@
                     </span>
                     <span class="shared-toolbar-sep"></span>
                     <div class="panel-send-row" id="stSendRow">
-                        <input type="text" id="stKeyInput" placeholder="Send keys..." onkeydown="if(event.key==='Enter'){event.preventDefault();sendKeysToPanel(getActivePanelId())}">
+                        <input type="text" id="stKeyInput" placeholder="Send keys..." >
                         <button class="btn btn-xs" data-action="SendKeysToPanel" title="Send keys to terminal">Send</button>
                         <button class="btn btn-xs" data-action="ShowSpecialKeysHelp" title="Special keys reference">&#128430;</button>
                     </div>
@@ -211,14 +211,14 @@
                 </div>
             </div>
             <!-- Terminal view -->
-            <div id="view-vtty" class="panel-container" ondragover="onPanelAreaDragOver(event)" ondrop="onPanelAreaDrop(event)">
+            <div id="view-vtty" class="panel-container">
                 <!-- Panels are dynamically added here -->
             </div>
 
             <!-- Log view -->
             <div id="view-log" class="log-viewer hidden">
                 <div class="log-toolbar">
-                    <input type="text" id="logSearch" placeholder="Search logs..." oninput="searchLogs()">
+                    <input type="text" id="logSearch" placeholder="Search logs...">
                     <button class="btn btn-xs" data-action="ClearLogSearch">Clear</button>
                     <button class="btn btn-xs" data-action="LoadLog">Refresh</button>
                     <span id="logTransportIndicator" class="log-transport-indicator" data-mode="http">HTTP</span>
@@ -263,9 +263,9 @@
 <div class="search-modal hidden" id="globalSearchModal" data-close-action="CloseGlobalSearch">
     <div class="search-modal-content">
         <div class="search-modal-toolbar">
-            <input type="text" id="globalSearchInput" placeholder="Search command output..." onkeydown="if(event.key==='Enter'){event.preventDefault();executeGlobalSearch()}" autofocus>
+            <input type="text" id="globalSearchInput" placeholder="Search command output..." autofocus>
             <label style="font-size:var(--ui-fs);color:var(--text-muted);display:flex;align-items:center;gap:0.2rem;cursor:pointer;" title="Freeze (SIGSTOP) all running commands while searching to prevent text changes">
-                <input type="checkbox" id="searchFreezeToggle" onchange="_toggleSearchFreezeCommands()"> Freeze cmds
+                <input type="checkbox" id="searchFreezeToggle"> Freeze cmds
             </label>
             <button class="btn btn-xs btn-primary" data-action="ExecuteGlobalSearch">Search</button>
             <button class="btn btn-xs" data-action="CloseGlobalSearch">&#x2715;</button>
@@ -282,7 +282,7 @@
         <h2>Add Server Connection</h2>
         <div class="field">
             <label>Server URL</label>
-            <input type="text" id="addServerUrl" placeholder="http://localhost:9090" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmAddServer()}">
+            <input type="text" id="addServerUrl" placeholder="http://localhost:9090">
         </div>
         <div class="field">
             <label>Label (optional)</label>
@@ -307,8 +307,8 @@
     <div class="modal modal-lg">
         <h2>Command Manager</h2>
         <div class="cmd-manager-toolbar">
-            <input type="text" id="cmdManagerFilter" placeholder="Filter commands..." oninput="renderCmdManagerList()" style="flex:1;min-width:120px;">
-            <select id="cmdManagerSort" onchange="renderCmdManagerList()" style="font-size:var(--ui-fs);padding:0.1rem 0.2rem;">
+            <input type="text" id="cmdManagerFilter" placeholder="Filter commands..." style="flex:1;min-width:120px;">
+            <select id="cmdManagerSort" style="font-size:var(--ui-fs);padding:0.1rem 0.2rem;">
                 <option value="name">Sort: Name</option>
                 <option value="runtime">Sort: Runtime</option>
                 <option value="cpu">Sort: CPU</option>
