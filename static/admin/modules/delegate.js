@@ -132,6 +132,9 @@ const _sigs = {
     // Used by freeze/thaw button in split pane headers where each leaf has its own command
     'data-panel+leaf': function(el) { return [el.dataset.panel, el.dataset.leaf]; },
 
+    // Pass (windowId) from data-window-id attribute (window rename)
+    'data-window-id': function(el) { return [el.dataset.windowId]; },
+
     // Contextmenu variant: passes (event, panelId, leafId) for showPanelContextMenu
     'ctxmenu-panel+leaf': function(el, event) { return [event, el.dataset.panel, el.dataset.leaf]; },
 };
