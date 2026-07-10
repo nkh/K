@@ -274,7 +274,7 @@ function openGlobalSearch() {
     input.value = '';
     input.focus();
     document.getElementById('searchFreezeToggle').checked = false;
-    document.getElementById('globalSearchResults').innerHTML = '<div style="padding:1rem;color:var(--text-muted);text-align:center;font-size:0.75rem;">Type a query and press Enter to search across all command output</div>';
+    document.getElementById('globalSearchResults').innerHTML = '<div class="empty-state-fs">Type a query and press Enter to search across all command output</div>';
 }
 
 function closeGlobalSearch() {
@@ -348,7 +348,7 @@ async function executeGlobalSearch() {
     const query = document.getElementById('globalSearchInput').value.trim();
     if (!query) return;
     const resultsContainer = document.getElementById('globalSearchResults');
-    resultsContainer.innerHTML = '<div style="padding:1rem;color:var(--text-muted);text-align:center;font-size:0.75rem;">Searching...</div>';
+    resultsContainer.innerHTML = '<div class="empty-state-fs">Searching...</div>';
     let allResults = [];
     for (const inst of state.connections) {
         if (!inst._commands) continue;
@@ -371,7 +371,7 @@ async function executeGlobalSearch() {
         }
     }
     if (allResults.length === 0) {
-        resultsContainer.innerHTML = '<div style="padding:1rem;color:var(--text-muted);text-align:center;font-size:0.75rem;">No results found</div>';
+        resultsContainer.innerHTML = '<div class="empty-state-fs">No results found</div>';
         return;
     }
     resultsContainer.innerHTML = allResults.map(group => `

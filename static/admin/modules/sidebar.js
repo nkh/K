@@ -235,7 +235,7 @@ function _buildSidebar() {
     }
 
     rearrangePinnedCommands(container);
-    container.innerHTML = html || '<div style="padding:1rem;color:var(--text-muted);text-align:center;">No running commands</div>';
+    container.innerHTML = html || '<div class="empty-state">No running commands</div>';
     // Use click/dblclick handlers with delay to distinguish single from double click.
     // The cmd-items no longer have data-action="SelectCommand" — clicks are handled here.
     container.onclick = _handleCmdItemClick;
@@ -369,7 +369,7 @@ function showDocs() {
 
 async function loadDocs() {
     const container = document.getElementById('view-docs');
-    container.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--text-muted);">Loading documentation...</div>';
+    container.innerHTML = '<div class="empty-state-lg">Loading documentation...</div>';
     try { container.innerHTML = renderMarkdown(await api.getDocs()); return; } catch (e) { /* fall through */ }
     container.innerHTML = renderEmbeddedDocs();
 }
@@ -537,7 +537,7 @@ function renderGroups() {
     const groupNames = Object.keys(groups);
     const collapsed = getGroupCollapsedState();
     if (groupNames.length === 0) {
-        container.innerHTML = '<div style="padding:0.5rem;color:var(--text-muted);font-size:0.7rem;text-align:center;">No groups created yet. Right-click a command in the Servers tab to add it to a group.</div>';
+        container.innerHTML = '<div class="empty-state-sm">No groups created yet. Right-click a command in the Servers tab to add it to a group.</div>';
         return;
     }
     // Build a map from command name → array of { inst, cmd, cmdName } so that
@@ -597,7 +597,7 @@ function renderWorkspaceList() {
     if (!container) return;
     const workspaces = getWorkspaces();
     const names = Object.keys(workspaces);
-    if (names.length === 0) { container.innerHTML = '<div style="padding:0.3rem 0.5rem;color:var(--text-muted);font-size:0.65rem;">No saved workspaces</div>'; return; }
+    if (names.length === 0) { container.innerHTML = '<div class="empty-state-sm" style="padding:0.3rem 0.5rem;">No saved workspaces</div>'; return; }
     let html = '';
     for (const name of names) {
         const pc = (workspaces[name].panels || []).length;

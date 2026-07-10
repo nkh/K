@@ -336,7 +336,7 @@ function renderTemplates() {
     if (!container) return;
     const server = getServerTemplates(), user = getUserTemplates();
     if (!server.length && !user.length) {
-        container.innerHTML = '<div style="padding:0.5rem;color:var(--text-muted);font-size:0.7rem;text-align:center;">No templates configured. Add templates in your config file under [[templates]].</div>';
+        container.innerHTML = '<div class="empty-state-sm">No templates configured. Add templates in your config file under [[templates]].</div>';
         return;
     }
     let html = '';
@@ -443,7 +443,7 @@ async function loadLog() {
             const lines = json.data.lines || [];
             document.getElementById('logCount').textContent = `${json.data.filtered_lines}/${json.data.total_lines} lines`;
             if (!lines.length) {
-                c.innerHTML = '<div style="padding:1rem;color:var(--text-muted);text-align:center;">No log entries found.' + (json.data.message ? ' ' + json.data.message : '') + '</div>';
+                c.innerHTML = '<div class="empty-state">No log entries found.' + (json.data.message ? ' ' + json.data.message : '') + '</div>';
             } else {
                 c.innerHTML = lines.map(line => {
                     const cls = search && line.toLowerCase().includes(search.toLowerCase()) ? ' highlight' : '';

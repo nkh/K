@@ -1,4 +1,9 @@
 .hidden { display: none !important; }
+/* Empty / placeholder state — replaces ~10 inline-style duplicates */
+.empty-state { padding: 1rem; color: var(--text-muted); text-align: center; }
+.empty-state-sm { padding: 0.5rem; color: var(--text-muted); text-align: center; font-size: 0.7rem; }
+.empty-state-lg { padding: 2rem; color: var(--text-muted); text-align: center; }
+.empty-state-fs { padding: 1rem; color: var(--text-muted); text-align: center; font-size: 0.75rem; }
 :root {
     --bg-primary: #0d1117;
     --bg-secondary: #161b22;
