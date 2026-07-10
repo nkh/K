@@ -72,6 +72,9 @@ function vttyApplyHighlights(pre, text, query) {
         html = html.substring(0, idx) + '<mark class="' + cls + '" data-match-idx="' + i + '">' + html.substring(idx, endIdx) + '</mark>' + html.substring(endIdx);
     }
     pre.innerHTML = html;
+    // Highlights destroy the cell grid span references — invalidate all
+    // grids so the next WS diff falls back to a full HTML fetch.
+    state._cellGrids = {};
 }
 
 function vttyRemoveHighlights(pre) {
