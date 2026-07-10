@@ -54,8 +54,9 @@ function _pushPanelHistory(panelObj) {
 function _updatePanelHistoryBtns(panelId) {
     const p = state.panels.find(pp => pp.id === panelId);
     const backBtn = document.getElementById('histBack-' + panelId), fwdBtn = document.getElementById('histFwd-' + panelId);
-    if (backBtn) backBtn.classList.toggle('hidden', !(p && p.cmdHistoryIdx > 0));
-    if (fwdBtn) fwdBtn.classList.toggle('hidden', !(p && p.cmdHistoryIdx < p.cmdHistory.length - 1));
+    // Use disabled instead of hidden to maintain consistent header layout
+    if (backBtn) { backBtn.disabled = !(p && p.cmdHistoryIdx > 0); }
+    if (fwdBtn) { fwdBtn.disabled = !(p && p.cmdHistoryIdx < p.cmdHistory.length - 1); }
 }
 
 function panelHistoryBack(panelId) {

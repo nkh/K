@@ -400,7 +400,8 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 }
 
 /* Disabled kill button for unreachable instances */
-.cmd-kill-btn:disabled {
+.cmd-kill-btn:disabled,
+.btn:disabled, button:disabled {
     opacity: 0.3;
     cursor: not-allowed;
     pointer-events: none;
