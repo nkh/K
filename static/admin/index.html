@@ -14,7 +14,7 @@
 <body>
 <div class="app">
     <!-- Top bar -->
-    <div class="topbar">
+    <header class="topbar">
         <div class="topbar-group topbar-group-left">
             <button class="btn btn-xs" data-action="ToggleSidebar" title="Toggle sidebar">&#9776;</button>
             <button class="btn btn-xs" data-action="NavigatePrevCommand" title="Previous command">&#x25C0;</button>
@@ -35,11 +35,11 @@
             <button class="btn btn-xs" id="docsBtn" data-action="ShowDocs" title="Documentation" style="color:var(--text-muted);">📚</button>
             <button class="btn btn-xs" data-action="ShowShortcuts" title="Keyboard shortcuts">&#128430;</button>
         </div>
-    </div>
+    </header>
 
     <div class="main">
         <!-- Sidebar -->
-        <div class="sidebar" id="sidebar">
+        <nav class="sidebar" id="sidebar" aria-label="Command sidebar">
             <div class="sidebar-tabs">
                 <div class="sidebar-tab active" data-action="SwitchSidebarTab" data-tab="servers">Servers<span class="sidebar-tab-add-server-btn" data-action="ShowAddServerModal" title="Add server">+</span></div>
                 <div class="sidebar-tab" data-action="SwitchSidebarTab" data-tab="templates">Templates</div>
@@ -148,11 +148,11 @@
                     </div>
                 </div>
             </div>
-        </div>
+        </nav>
         <div class="sidebar-resize-handle" id="sidebarResizeHandle"></div>
 
         <!-- Content area -->
-        <div class="content-area" id="contentArea">
+        <main class="content-area" id="contentArea">
             <!-- Shared toolbar for terminal controls (acts on the focused panel) -->
             <div class="shared-toolbar hidden" id="sharedToolbar">
                 <div class="shared-toolbar-row shared-toolbar-main">
@@ -229,11 +229,11 @@
 
             <!-- Docs view -->
             <div id="view-docs" class="docs-page hidden"></div>
-        </div>
+        </main>
     </div>
 
     <!-- Bottom bar (hidden by default) -->
-    <div class="bottombar hidden" id="bottomBar">
+    <footer class="bottombar hidden" id="bottomBar" aria-label="Status bar">
         <span class="cmd-label" id="cmdLabel"></span>
         <span class="cursor-pos" id="cursorPos">Cursor: --</span>
         <span class="dims" id="termDims">--</span>
@@ -253,9 +253,7 @@
         <span class="refresh-val" style="font-size:var(--ui-fs);color:var(--text-muted);">off</span>
         <span id="wsQuality" class="ws-quality" title="">--</span>
         <span style="font-size:var(--ui-fs);color:var(--text-muted);" id="connStatus">Connected</span>
-    </div>
-
-    <!-- Auto-restart indicator (hidden by default) -->
+    </footer>
     <div id="autoRestartIndicator" class="auto-restart-indicator hidden"></div>
 </div>
 

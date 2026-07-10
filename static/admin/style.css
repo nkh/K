@@ -126,6 +126,8 @@
 body { font-family: var(--font-sans); background: var(--bg-primary); color: var(--text-primary); font-size: var(--font-size); overflow: hidden; height: 100vh; }
 
 /* Layout */
+nav.sidebar, main.content-area { display: contents; }
+header.topbar, footer.bottombar { display: flex; }
 .app { display: flex; flex-direction: column; height: 100vh; }
 .topbar { display: flex; align-items: center; gap: 0.4rem; padding: 0.05rem 0.2rem; background: var(--bg-secondary); flex-shrink: 0; z-index: 10; }
 .topbar h1 { font-size: var(--ui-fs); color: var(--accent); white-space: nowrap; margin-right: 0.15rem; }
