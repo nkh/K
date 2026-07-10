@@ -43,6 +43,11 @@ if (typeof _cellStyle === 'function') {
 
     const italicStyle = _cellStyle({ cell: { fg: [0,255,0], bg: [0,0,0], bold: false, italic: true, underline: false, width: 1 } });
     assert(italicStyle.includes('italic') || italicStyle.includes('font-style'), 'italic style includes font-style');
+
+    // Blink cell should produce animation:blink (CSS @keyframes blink must exist in style.css)
+    const blinkStyle = _cellStyle({ cell: { fg: [7,7,7], bg: [0,0,0], bold: false, italic: false, underline: false, width: 1, blink: true } });
+    assert(blinkStyle.includes('animation:blink'), 'blink cell includes animation:blink reference');
+    assert(blinkStyle.includes('step-end'), 'blink cell uses step-end timing function');
 }
 
 // ── updateVttyDisplayForPanel ──

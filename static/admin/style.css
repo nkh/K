@@ -800,6 +800,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .workspace-menu .ws-load-btn:hover { background: var(--accent-dim); }
 .workspace-menu .ws-load-btn span { white-space: nowrap; }
 
+/* VTTY terminal blink animation — referenced by vtty.js cell rendering */
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
 /* A11y focus indicators — keyboard navigation */
 .btn:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .panel-header:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
