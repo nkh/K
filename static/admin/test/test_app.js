@@ -23,7 +23,6 @@ globalThis.fetchServerTemplates = function() {};
 globalThis.fetchEnvironments = function() {};
 globalThis.fetchServerConfig = function() {};
 globalThis.applyUpdateModeUI = function() {};
-globalThis.updateSidebarTabsVisibility = function() {};
 globalThis.fetchPeers = function() {};
 globalThis.autoFitActiveTerminal = function() {};
 

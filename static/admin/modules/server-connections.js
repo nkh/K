@@ -47,7 +47,7 @@ async function fetchServerConfig() {
         const wasReachable = state.serverReachable;
         state.serverReachable = !!json.status;
         if (!wasReachable && state.serverReachable) loadCommands();
-        if (wasReachable !== state.serverReachable) { renderPanels(); updateSidebarTabsVisibility(); }
+        if (wasReachable !== state.serverReachable) { renderPanels(); }
         const d = json.data;
         if (json.status === 'ok' && d && d.web) {
             state.serverUpdateMode = d.web.update_mode;
@@ -68,7 +68,7 @@ async function fetchServerConfig() {
     } catch (e) {
         const wasReachable = state.serverReachable;
         state.serverReachable = false;
-        if (wasReachable !== state.serverReachable) { renderPanels(); updateSidebarTabsVisibility(); }
+        if (wasReachable !== state.serverReachable) { renderPanels(); }
     }
 }
 

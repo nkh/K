@@ -9,7 +9,6 @@ resetTestState();
 globalThis.renderPanels = function() {};
 globalThis.loadCommands = function() { return Promise.resolve(); };
 globalThis.updateDisconnectedUI = function() {};
-globalThis.updateSidebarTabsVisibility = function() {};
 globalThis.loadCertificates = function() { return Promise.resolve(); };
 globalThis.fetchServerTemplates = function() {};
 globalThis.updatePanelCommandInfo = function() {};

@@ -50,12 +50,6 @@ assert(() => { switchSidebarTab('templates', sidebarTab1); }, 'switchSidebarTab 
 assert(() => { switchSidebarTab('certs', sidebarTab1); }, 'switchSidebarTab certs does not throw');
 assert(() => { switchSidebarTab('groups', sidebarTab1); }, 'switchSidebarTab groups does not throw');
 
-// ── updateSidebarTabsVisibility ──
-console.log('updateSidebarTabsVisibility tests');
-if (typeof updateSidebarTabsVisibility === 'function') {
-    assert(() => { updateSidebarTabsVisibility(); }, 'updateSidebarTabsVisibility does not throw');
-}
-
 // ── toggleResources ──
 console.log('toggleResources tests');
 if (typeof toggleResources === 'function') {

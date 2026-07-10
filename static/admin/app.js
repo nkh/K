@@ -136,7 +136,6 @@
     fetchEnvironments();
     fetchServerConfig();
     applyUpdateModeUI();
-    updateSidebarTabsVisibility();
     fetchPeers();
     // Check if mobile layout should be active
     state._mobileTabbedLayout = window.innerWidth <= 768;

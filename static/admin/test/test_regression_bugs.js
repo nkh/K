@@ -16,7 +16,6 @@ globalThis.updateTerminalDisconnectedOverlay = function() {};
 globalThis.updateSidebarSelection = function() {};
 globalThis.updatePanelCommandInfo = function() {};
 globalThis.updateSharedToolbar = function() {};
-globalThis.updateCmdToolbarVisibility = function() {};
 globalThis.disconnectPanelWs = function() {};
 globalThis.stopPanelPoll = function() {};
 globalThis.connectPanelWs = function() {};

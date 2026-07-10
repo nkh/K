@@ -13,7 +13,6 @@ globalThis.updateSidebarSelection = function() {};
 globalThis.updatePanelCommandInfo = function() {};
 globalThis.loadVttyHttpForPanel = function() {};
 globalThis.updateSharedToolbar = function() {};
-globalThis.updateCmdToolbarVisibility = function() {};
 globalThis.connectPanelWs = function() {};
 globalThis.startPanelPoll = function() {};
 

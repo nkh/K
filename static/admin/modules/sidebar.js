@@ -84,10 +84,6 @@ function switchSidebarTab(tab, el) {
     if (tab === 'groups') renderGroups();
 }
 
-function updateSidebarTabsVisibility() {}
-
-function updateCmdToolbarVisibility() {}
-
 function _handleCmdItemClick(e) {
     // Skip clicks on buttons (kill, freeze, pin, keep, grab-handle, spawn) — they have their own handlers
     if (e.target.closest('button')) return;
@@ -241,7 +237,6 @@ function _buildSidebar() {
     container.onclick = _handleCmdItemClick;
     container.ondblclick = _handleCmdItemDblClick;
     updateInstanceDropdown();
-    updateCmdToolbarVisibility();
 
     if (!state.selectedCmdId) {
         const focusedPanel = state.panels.find(p => p.id === state._focusedPanelId);
@@ -310,9 +305,7 @@ function rearrangePinnedCommands(container) {
 // ─── Disconnected UI ───
 function updateDisconnectedUI() {
     updateSidebarBanner();
-    updateSidebarTabsVisibility();
     updateTerminalDisconnectedOverlay();
-    updateCmdToolbarVisibility();
 }
 
 function updateSidebarBanner() {
@@ -641,7 +634,7 @@ document.addEventListener('click', (e) => {
 
     Object.assign(window, {
         initBottombar, toggleSidebar, toggleBottombar, toggleLogsView, toggleResources,
-        switchSidebarTab, updateSidebarTabsVisibility, updateCmdToolbarVisibility,
+        switchSidebarTab,
         updateDisconnectedUI, updateSidebarBanner, updateTerminalDisconnectedOverlay,
         _buildSidebar, getPinnedNames, togglePinCmd, rearrangePinnedCommands,
         _sortSidebarBy(sortKey) { state._sidebarSort = sortKey; if (sortKey !== 'name') window._userSpawnInstUrl = sortKey; loadCommands(); },
