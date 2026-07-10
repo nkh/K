@@ -392,8 +392,11 @@ function updateVttyMetadataFromHttp(data, panelEl, panelObj, sbOffset) {
     const vttyEl = panelEl.querySelector('.vtty-container');
     const cursor = data.cursor || {};
     const dims = data.dimensions || {};
-    document.getElementById('cursorPos').textContent = `Cursor: ${(cursor.row + 1) || '-'},${(cursor.col + 1) || '-'}`;
-    document.getElementById('termDims').textContent = `${dims.rows || '-'}x${dims.cols || '-'}`;
+    // Only update bottombar metadata if this is the focused panel (consistent with WS path)
+    if (panelObj.id === state._focusedPanelId) {
+        document.getElementById('cursorPos').textContent = `Cursor: ${(cursor.row + 1) || '-'},${(cursor.col + 1) || '-'}`;
+        document.getElementById('termDims').textContent = `${dims.rows || '-'}x${dims.cols || '-'}`;
+    }
 
     // Update alt screen badge
     const badge = document.getElementById('altScreenBadge-' + panelObj.id);
