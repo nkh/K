@@ -26,11 +26,18 @@ function _createCtxMenuItem(label, onClick, isDanger) {
 }
 
 function _positionCtxMenu(menu, x, y) {
-    menu.style.left = x + 'px'; menu.style.top = y + 'px';
+    // Position off-DOM first to avoid layout thrash (append → measure → reposition)
+    menu.style.visibility = 'hidden';
+    menu.style.left = '0'; menu.style.top = '0';
     document.body.appendChild(menu);
     const rect = menu.getBoundingClientRect();
-    if (rect.right > window.innerWidth) menu.style.left = (window.innerWidth - rect.width - 4) + 'px';
-    if (rect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - rect.height - 4) + 'px';
+    menu.style.visibility = '';
+    let left = x, top = y;
+    if (left + rect.width > window.innerWidth) left = window.innerWidth - rect.width - 4;
+    if (top + rect.height > window.innerHeight) top = window.innerHeight - rect.height - 4;
+    if (left < 0) left = 4;
+    if (top < 0) top = 4;
+    menu.style.left = left + 'px'; menu.style.top = top + 'px';
 }
 
 function _setupCtxMenuListeners(menu) {
