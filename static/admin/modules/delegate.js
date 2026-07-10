@@ -379,34 +379,15 @@ function initDelegation() {
         _dispatchAction(event);
     });
 
-    // Contextmenu delegation for [data-action] and [data-ctxmenu] elements
+    // Contextmenu delegation for [data-action] elements
     document.addEventListener('contextmenu', function(event) {
-        // Check for data-ctxmenu="panel" (panel headers use this instead of data-action
-        // to prevent dual-fire from both click and contextmenu delegation)
-        const ctxEl = event.target.closest('[data-ctxmenu="panel"]');
-        if (ctxEl) {
+        const actionEl = event.target.closest('[data-action]');
+        if (!actionEl) return;
+        const action = actionEl.dataset.action;
+        if (action === 'ShowPanelContextMenu' || action === 'ShowCmdContextMenu') {
             event.preventDefault();
-            const panelId = ctxEl.dataset.panel;
-            const leafId = ctxEl.dataset.leaf;
-            if (typeof showPanelContextMenu === 'function') {
-                showPanelContextMenu(event, panelId, leafId);
-            }
-            return;
+            _dispatchAction(event);
         }
-        const el = event.target.closest('[data-action]');
-        if (!el) return;
-        const action = el.dataset.action;
-        const def = _actions[action];
-        if (!def) return;
-        // Only dispatch contextmenu for actions that explicitly handle it
-        if (action !== 'ShowCmdContextMenu' && action !== 'ShowPanelContextMenu') return;
-        event.preventDefault();
-        const handler = window[def.handler];
-        if (typeof handler !== 'function') return;
-        const sigKey = def.sig || 'none';
-        const sigFn = _sigs[sigKey] || _sigs['none'];
-        const args = sigFn(el, event, null);
-        handler.apply(null, args);
     });
 
     // Modal backdrop close: each modal overlay has data-close-action

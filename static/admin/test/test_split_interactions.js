@@ -339,10 +339,9 @@ console.log('SPL-010: Split pane headers match non-split headers');
     assertIncludes(nonSplitHeader, 'class="panel-header"', 'SPL-010a: non-split has panel-header class');
     assertIncludes(splitHeader, 'class="panel-header"', 'SPL-010b: split has panel-header class');
 
-    // Both should have data-ctxmenu for context menu (uses data-ctxmenu="panel" to
-    // avoid dual-fire with the click delegation system)
-    assertIncludes(nonSplitHeader, 'data-ctxmenu="panel"', 'SPL-010c: non-split has context menu via delegation');
-    assertIncludes(splitHeader, 'data-ctxmenu="panel"', 'SPL-010d: split has context menu via delegation');
+    // Both should have data-action for context menu via delegation
+    assertIncludes(nonSplitHeader, 'data-action="ShowPanelContextMenu"', 'SPL-010c: non-split has context menu via delegation');
+    assertIncludes(splitHeader, 'data-action="ShowPanelContextMenu"', 'SPL-010d: split has context menu via delegation');
 
     // Both should have data-leaf-id
     assertIncludes(nonSplitHeader, 'data-leaf-id="' + p.id + '"', 'SPL-010e: non-split has data-leaf-id');

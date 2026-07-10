@@ -611,7 +611,7 @@ function _renderLeafHeader(panel, leaf, leafId) {
     // If the root is closed, the branch is promoted to become the new root.
     const closeAction = 'UnsplitLeaf';
     const closeData = `data-panel="${panel.id}" data-leaf="${leafId}"`;
-    return `<div class="panel-header" data-panel-id="${panel.id}" data-leaf-id="${leafId}" data-ctxmenu="panel" data-panel="${panel.id}" data-leaf="${leafId}" tabindex="0" role="button" style="--ph-bg:${color};--ph-fg:${textColor}">
+    return `<div class="panel-header" data-panel-id="${panel.id}" data-leaf-id="${leafId}" data-action="ShowPanelContextMenu" data-panel="${panel.id}" data-leaf="${leafId}" tabindex="0" role="button" style="--ph-bg:${color};--ph-fg:${textColor}">
     <button class="btn btn-xs cmd-history-btn hidden" data-action="PanelHistoryBack" data-panel="${panel.id}" data-leaf="${leafId}" title="Back">&#x25C0;</button>
     <button class="btn btn-xs cmd-history-btn hidden" data-action="PanelHistoryForward" data-panel="${panel.id}" data-leaf="${leafId}" title="Forward">&#x25B6;</button>
     <div class="cmd-info">
