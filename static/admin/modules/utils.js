@@ -236,7 +236,7 @@ function updateThemeButton() {
         btn.textContent = '\u25FC';
         btn.title = 'Theme: Grey (click to toggle)';
     } else if (theme === 'dark') {
-        btn.textContent = '\u2600';
+        btn.textContent = '\u263E';
         btn.title = 'Theme: Dark (click to toggle)';
     }
 }
@@ -251,7 +251,7 @@ function togglePanelTheme(panelId) {
     if (panelId === getActivePanelId()) {
         const btn = document.getElementById('stPanelThemeBtn');
         if (btn) {
-            btn.textContent = next === 'light' ? '\u263E' : next === 'grey' ? '\u25FC' : next === 'dark' ? '\u2600' : '\u25D0';
+            btn.textContent = next === 'light' ? '\u2600' : next === 'grey' ? '\u25FC' : next === 'dark' ? '\u263E' : '\u25D0';
             btn.title = next === 'light' ? 'Panel theme: light (click to toggle)' : next === 'grey' ? 'Panel theme: grey (click to toggle)' : next === 'dark' ? 'Panel theme: dark (click to toggle)' : 'Panel theme: inherit (click to toggle)';
         }
     }

@@ -131,4 +131,34 @@ if (typeof _htmlEscapeChar === 'function') {
     assertEq(_htmlEscapeChar('a'), 'a', 'normal char unchanged');
 }
 
+// ── updateThemeButton — distinct icons per theme ──
+console.log('updateThemeButton icon tests');
+if (typeof updateThemeButton === 'function') {
+    const btn = document.getElementById('themeToggle');
+    // Auto (no data-theme) — depends on prefers-color-scheme; mock it
+    document.documentElement.removeAttribute('data-theme');
+    globalThis.matchMedia = function(q) { return { matches: false, addListener: function(){} }; };
+    updateThemeButton();
+    assertEq(btn.textContent, '\u2600', 'auto-dark shows sun icon');
+
+    globalThis.matchMedia = function(q) { return { matches: true, addListener: function(){} }; };
+    updateThemeButton();
+    assertEq(btn.textContent, '\u263E', 'auto-light shows moon icon');
+
+    document.documentElement.setAttribute('data-theme', 'light');
+    updateThemeButton();
+    assertEq(btn.textContent, '\u2600', 'light theme shows sun icon');
+
+    document.documentElement.setAttribute('data-theme', 'dark');
+    updateThemeButton();
+    assertEq(btn.textContent, '\u263E', 'dark theme shows moon icon (not sun)');
+
+    document.documentElement.setAttribute('data-theme', 'grey');
+    updateThemeButton();
+    assertEq(btn.textContent, '\u25FC', 'grey theme shows square icon');
+
+    // Cleanup
+    document.documentElement.removeAttribute('data-theme');
+}
+
 console.log('\n[utils.js] ' + _testPassed + ' passed so far');
