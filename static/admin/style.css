@@ -418,13 +418,6 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .btn-danger:hover { filter: brightness(1.12); }
 .btn-warning { background: var(--yellow); border: none; color: var(--color-on-warning); }
 .btn-warning:hover { filter: brightness(0.88); }
-/* Legacy button classes (backward compat with app.js generated HTML) */
-button.small { padding: 0 0.2rem; font-size: var(--ui-fs); line-height: 1; }
-button.primary { background: var(--green); border-color: var(--green); color: var(--color-on-accent); }
-button.primary:hover { filter: brightness(1.12); }
-button.danger { background: var(--red); border-color: var(--red); color: var(--color-on-accent); }
-button.danger:hover { filter: brightness(1.12); }
-button.icon-btn { padding: 0 0.2rem; font-size: var(--ui-fs); line-height: 1; }
 /* Compact select */
 .select-xs { font-size: var(--ui-fs); padding: 0.1rem 0.25rem; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: var(--radius-sm); }
 /* Alt screen badge */
