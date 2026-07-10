@@ -157,7 +157,7 @@ function _renderWindowBar() {
             const closeBtn = state.windows.length > 1
                 ? `<button class="window-tab-close" data-action="CloseWindow" data-window="${w.id}" title="Close window">&#x2715;</button>`
                 : '';
-            html += `<div class="window-tab${active ? ' active' : ''}" data-action="SwitchWindow" data-window="${w.id}" title="Window ${escHtml(w.name)}"><span class="window-tab-label" data-action-placeholder="StartRenameWindow" data-window-id="${w.id}">${escHtml(w.name)}</span>${closeBtn}</div>`;
+            html += `<div class="window-tab${active ? ' active' : ''}" data-action="SwitchWindow" data-window="${w.id}" title="Window ${escHtml(w.name)}"><span class="window-tab-label" data-action="StartRenameWindow" data-window-id="${w.id}">${escHtml(w.name)}</span>${closeBtn}</div>`;
         }
     }
     html += '</div>';

@@ -50,7 +50,7 @@ const expectedActions = [
     'CloseCmdManager', 'CmdManagerKillAll',
     'SwitchUpdateMode', 'ApplyPollInterval', 'ApplyRefreshMs',
     // Window management
-    'SwitchWindow', 'CreateWindow', 'CloseWindow',
+    'SwitchWindow', 'CreateWindow', 'CloseWindow', 'StartRenameWindow',
 ];
 
 for (const action of expectedActions) {
@@ -79,16 +79,7 @@ for (const sig of expectedSigs) {
     assertEq(_dispatchAction(ev), false, 'no data-action → returns false');
 }
 
-// 2. Returns false for data-action-placeholder
-{
-    const btn = document.createElement('button');
-    btn.setAttribute('data-action', 'Foo');
-    btn.setAttribute('data-action-placeholder', '');
-    const ev = createMockEvent({ target: btn });
-    assertEq(_dispatchAction(ev), false, 'data-action-placeholder → returns false');
-}
-
-// 3. Returns false for unknown action
+// 2. Unknown action returns false
 {
     const btn = document.createElement('button');
     btn.setAttribute('data-action', 'NonExistentAction');

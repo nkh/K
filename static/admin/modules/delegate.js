@@ -17,7 +17,7 @@
 ///   <button data-action="ApplyLayoutPreset" data-preset="grid-2x2">2x2</button>
 ///
 /// Special cases:
-///   data-action-placeholder="..." — element exists in HTML but action not yet migrated; ignored safely.
+///   data-action="..." — standard action dispatch via _actions registry
 
 'use strict';
 
@@ -186,6 +186,7 @@ const _actions = {
     'PanelHistoryBack':         { handler: 'panelHistoryBack', sig: 'data-panel', stop: true },
     'PanelHistoryForward':      { handler: 'panelHistoryForward', sig: 'data-panel', stop: true },
     'StartRenamePanel':         { handler: 'startRenamePanel', sig: 'data-panel', stop: true },
+    'StartRenameWindow':        { handler: 'startRenameWindow', sig: 'data-window-id', stop: true },
     'ShowPanelContextMenu':     { handler: 'showPanelContextMenu', sig: 'ctxmenu-panel+leaf', stop: true },
     'UnsplitPanel':             { handler: 'unsplitPanel', sig: 'data-panel', stop: true },
     'UnsplitLeaf':              { handler: 'unsplitLeaf', sig: 'data-panel+leaf', stop: true },
@@ -302,9 +303,6 @@ function _dispatchAction(event) {
 
     const action = el.dataset.action;
     if (!action || action === '') return false;
-
-    // data-action-placeholder means "this will be migrated later" — ignore safely
-    if (el.hasAttribute('data-action-placeholder')) return false;
 
     const def = _actions[action];
     if (!def) return false;
