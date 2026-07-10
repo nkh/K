@@ -400,94 +400,50 @@ function initDelegation() {
     // These replace inline oninput/onchange/onkeydown/onfocus/onblur handlers
     // on stable elements that exist at init time.
 
-    // #cmdFilter — filter commands on input
+    // Consolidated input handlers — one listener per event type
     document.addEventListener('input', function(event) {
-        if (event.target.id === 'cmdFilter') { loadCommands(); }
-        // #cmdManagerFilter — filter command manager list
-        else if (event.target.id === 'cmdManagerFilter') { renderCmdManagerList(); }
+        const id = event.target.id;
+        if (id === 'cmdFilter') loadCommands();
+        else if (id === 'cmdManagerFilter') renderCmdManagerList();
+        else if (id === 'logSearch') searchLogs();
+        else if (id === 'spawnCmd') _resetSpawnCompletion();
     });
 
-    // #logSearch — search logs on input
-    document.addEventListener('input', function(event) {
-        if (event.target.id === 'logSearch') searchLogs();
-    });
-
-    // #spawnInstance — track user's explicit instance choice
+    // Consolidated change handlers
     document.addEventListener('change', function(event) {
-        if (event.target.id === 'spawnInstance') window._userSpawnInstUrl = event.target.value;
-        // #cmdManagerSort — re-sort command manager list
-        else if (event.target.id === 'cmdManagerSort') renderCmdManagerList();
-        // #searchFreezeToggle — toggle search freeze
-        else if (event.target.id === 'searchFreezeToggle') _toggleSearchFreezeCommands();
+        const id = event.target.id;
+        if (id === 'spawnInstance') window._userSpawnInstUrl = event.target.value;
+        else if (id === 'cmdManagerSort') renderCmdManagerList();
+        else if (id === 'searchFreezeToggle') _toggleSearchFreezeCommands();
     });
 
-    // #addServerUrl — Enter to confirm add server
+    // Consolidated keydown handlers — one listener for all input-specific keydowns
     document.addEventListener('keydown', function(event) {
-        if (event.target.id === 'addServerUrl' && event.key === 'Enter') {
+        const id = event.target.id;
+        if (id === 'addServerUrl' && event.key === 'Enter') {
             event.preventDefault(); confirmAddServer();
-        }
-    });
-
-    // #globalSearchInput — Enter to execute global search
-    document.addEventListener('keydown', function(event) {
-        if (event.target.id === 'globalSearchInput' && event.key === 'Enter') {
+        } else if (id === 'globalSearchInput' && event.key === 'Enter') {
             event.preventDefault(); executeGlobalSearch();
-        }
-    });
-
-    // #spawnCmd — complex keydown handler (history navigation, Enter, Tab, Escape)
-    document.addEventListener('keydown', function(event) {
-        if (event.target.id !== 'spawnCmd') return;
-        const dd = document.getElementById('spawnHistoryDropdown');
-        if (event.key === 'Enter' && dd && dd.querySelector('.spawn-history-item.selected')) {
-            _onSpawnCmdKeydownForHistory(event);
-        } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-            _onSpawnCmdKeydownForHistory(event);
-        } else if (event.key === 'Enter') {
+        } else if (id === 'spawnCmd') {
+            const dd = document.getElementById('spawnHistoryDropdown');
+            if (event.key === 'Enter' && dd && dd.querySelector('.spawn-history-item.selected')) {
+                _onSpawnCmdKeydownForHistory(event);
+            } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                _onSpawnCmdKeydownForHistory(event);
+            } else if (event.key === 'Enter') {
+                event.preventDefault(); spawnCommand();
+            } else if (event.key === 'Tab') {
+                event.preventDefault(); spawnCmdTabComplete(event);
+            } else if (event.key === 'Escape') {
+                _resetSpawnCompletion(); _removeSpawnHistoryDropdown();
+            }
+        } else if (id === 'spawnEnv' && event.key === 'Enter' && event.ctrlKey) {
             event.preventDefault(); spawnCommand();
-        } else if (event.key === 'Tab') {
-            event.preventDefault(); spawnCmdTabComplete(event);
-        } else if (event.key === 'Escape') {
-            _resetSpawnCompletion(); _removeSpawnHistoryDropdown();
-        }
-    });
-    // #spawnCmd — reset tab completion on input
-    document.addEventListener('input', function(event) {
-        if (event.target.id === 'spawnCmd') _resetSpawnCompletion();
-    });
-    // #spawnCmd — focus shows history dropdown
-    document.addEventListener('focus', function(event) {
-        if (event.target.id === 'spawnCmd') _onSpawnCmdFocus();
-    }, true);
-    // #spawnCmd — blur hides history dropdown (delayed)
-    document.addEventListener('blur', function(event) {
-        if (event.target.id === 'spawnCmd') setTimeout(_removeSpawnHistoryDropdown, 150);
-    }, true);
-
-    // #spawnEnv — Ctrl+Enter to spawn
-    document.addEventListener('keydown', function(event) {
-        if (event.target.id === 'spawnEnv' && event.key === 'Enter' && event.ctrlKey) {
+        } else if (id === 'spawnDir' && event.key === 'Enter') {
             event.preventDefault(); spawnCommand();
-        }
-    });
-
-    // #spawnDir — Enter to spawn
-    document.addEventListener('keydown', function(event) {
-        if (event.target.id === 'spawnDir' && event.key === 'Enter') {
-            event.preventDefault(); spawnCommand();
-        }
-    });
-
-    // #newGroupName — Enter to create group
-    document.addEventListener('keydown', function(event) {
-        if (event.target.id === 'newGroupName' && event.key === 'Enter') {
+        } else if (id === 'newGroupName' && event.key === 'Enter') {
             event.preventDefault(); createCmdGroup();
-        }
-    });
-
-    // #stKeyInput — Enter to send keys
-    document.addEventListener('keydown', function(event) {
-        if (event.target.id === 'stKeyInput' && event.key === 'Enter') {
+        } else if (id === 'stKeyInput' && event.key === 'Enter') {
             event.preventDefault(); sendKeysToPanel(getActivePanelId());
         }
     });
