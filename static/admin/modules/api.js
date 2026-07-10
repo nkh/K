@@ -200,36 +200,6 @@
             };
         },
 
-        // ── WebSocket: Logs ──
-        connectLogWs(instUrl, { onMessage, onClose } = {}) {
-            const base = instUrl || getBaseUrl();
-            const wsBase = base.replace(/^http/, 'ws');
-            const wsUrl = wsBase + '/api/ws/logs';
-
-            const ws = new WebSocket(wsUrl);
-            let closed = false;
-
-            ws.onopen = () => {};
-            ws.onmessage = (event) => {
-                if (onMessage) onMessage(event.data);
-            };
-            ws.onclose = (event) => {
-                if (closed) return;
-                closed = true;
-                if (onClose) onClose(event);
-            };
-            ws.onerror = () => {};
-
-            return {
-                ws,
-                close() {
-                    if (closed) return;
-                    closed = true;
-                    ws.close();
-                },
-            };
-        },
-
         // ── Spawn completions ──
         getCompletions(instUrl, prefix) {
             return _jsonGet('/api/completions?prefix=' + encodeURIComponent(prefix), instUrl);

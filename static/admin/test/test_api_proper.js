@@ -269,33 +269,7 @@ const mainPromise = (async function main() {
     assertEq(wsClosed.length, 0, 'onClose NOT called on programmatic close (known api.js bug)');
     assertOk(true, 'close() does not crash');
 
-    // ─── Group 9: WebSocket connectLogWs ───
-    console.log('\nconnectLogWs WebSocket');
-
-    resetTestState();
-    const logMessages = [];
-    const logClosed = [];
-    const logHandle = api.connectLogWs('http://srv:9090', {
-        onMessage(data) { logMessages.push(data); },
-        onClose(evt) { logClosed.push(evt); },
-    });
-
-    assertNonNull(logHandle, 'connectLogWs returns handle');
-    assertType(logHandle.close, 'function', 'log handle has close method');
-
-    await new Promise(r => setTimeout(r, 5));
-
-    logHandle.ws.onmessage({ data: 'line 1 of log' });
-    assertEq(logMessages.length, 1, 'onMessage called for log data');
-    assertEq(logMessages[0], 'line 1 of log', 'log message passed as-is');
-
-    assertEq(logClosed.length, 0, 'onClose not called before close()');
-    logHandle.close();
-    // Same api.js bug: programmatic close doesn't trigger onClose callback
-    assertEq(logClosed.length, 0, 'onClose NOT called on programmatic close (known api.js bug)');
-    assertOk(true, 'close() does not crash');
-
-    // ─── Group 10: Interface completeness ───
+    // ─── Group 9: Interface completeness ───
     console.log('\nInterface completeness');
 
     const expectedMethods = [
@@ -303,7 +277,7 @@ const mainPromise = (async function main() {
         'getCommandResources', 'freeze', 'thaw', 'kill', 'killAll', 'restart',
         'keep', 'unkeep', 'purge', 'sendKeys', 'sendMouse', 'resize',
         'getVttyChanged', 'getVttyHtml', 'getVttyPng', 'connectVtty',
-        'connectLogWs', 'getCompletions', 'getTemplates', 'getLog',
+        'getCompletions', 'getTemplates', 'getLog',
         'getEnvironments', 'activateEnvironment', 'getDocs', 'getSnapshot',
         'getPeers', 'getVttyText', 'getJson',
     ];

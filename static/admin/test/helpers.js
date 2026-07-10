@@ -186,8 +186,6 @@ function createMockApi(opts = {}) {
         getVttyPng: stubResolve('getVttyPng', new Blob()),
         // WebSocket: VTTY
         connectVtty: stub('connectVtty', { ws: { readyState: 1, close: function() {} }, close: function() {}, get readyState() { return 1; } }),
-        // WebSocket: Logs
-        connectLogWs: stub('connectLogWs', { ws: { readyState: 1, close: function() {} }, close: function() {} }),
         // Spawn completions
         getCompletions: stubResolve('getCompletions', []),
         // Templates

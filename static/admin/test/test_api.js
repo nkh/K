@@ -15,7 +15,6 @@ assertOk(typeof api.spawnCommand === 'function', 'spawnCommand is a function');
 assertOk(typeof api.getVttyChanged === 'function', 'getVttyChanged is a function');
 assertOk(typeof api.getVttyHtml === 'function', 'getVttyHtml is a function');
 assertOk(typeof api.getVttyPng === 'function', 'getVttyPng is a function');
-assertOk(typeof api.connectLogWs === 'function', 'connectLogWs is a function');
 assertOk(typeof api.restart === 'function', 'restart is a function');
 assertOk(typeof api.keep === 'function', 'keep is a function');
 assertOk(typeof api.unkeep === 'function', 'unkeep is a function');
@@ -71,22 +70,6 @@ try {
     // WebSocket mock might not be perfect — that's ok, we just need the module to load
     console.log('  (WebSocket mock limitation: ' + e.message + ')');
     assert(true, 'connectVtty loads without crash');
-}
-
-// ── connectLogWs returns handle object ──
-console.log('connectLogWs returns handle');
-try {
-    const logResult = api.connectLogWs('http://srv1:9090', {
-        onMessage: () => {},
-        onClose: () => {},
-    });
-    assertOk(logResult !== undefined && logResult !== null, 'connectLogWs returns something');
-    if (logResult) {
-        assertOk(typeof logResult.close === 'function', 'log handle has close()');
-    }
-} catch (e) {
-    console.log('  (WebSocket mock limitation: ' + e.message + ')');
-    assert(true, 'connectLogWs loads without crash');
 }
 
 // ── Function count (smoke test for completeness) ──
