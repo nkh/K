@@ -29,7 +29,7 @@ const matches = [
 showCommandPicker(matches);
 const picker = document.getElementById('cmdPicker');
 assert(picker !== null, 'cmdPicker element created');
-assert(picker.style.cssText.includes('position:fixed'), 'picker is a fixed overlay');
+assert(picker.classList.contains('cmd-picker-overlay'), 'picker uses cmd-picker-overlay class');
 assert(picker.innerHTML.includes('Multiple commands matching'), 'picker shows header text');
 assert(picker.innerHTML.includes('cmd-1'), 'picker contains first match id');
 assert(picker.innerHTML.includes('htop'), 'picker contains first match name');

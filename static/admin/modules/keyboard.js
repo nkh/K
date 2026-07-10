@@ -182,7 +182,7 @@ function _activatePrefix() {
     if (!indicator) {
         indicator = document.createElement('div');
         indicator.id = 'prefixIndicator';
-        indicator.style.cssText = 'position:fixed;bottom:0.5rem;right:0.5rem;background:var(--accent);color:var(--color-on-accent);padding:0.15rem 0.5rem;border-radius:3px;font-size:var(--ui-fs);font-family:var(--font-mono);z-index:99999;pointer-events:none;opacity:0.9;';
+        indicator.className = 'prefix-indicator';
         document.body.appendChild(indicator);
     }
     indicator.textContent = state._prefixLabel || 'PREFIX';

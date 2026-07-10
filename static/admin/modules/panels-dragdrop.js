@@ -44,8 +44,7 @@ function _panelDragMouseMove(e) {
         if (!el) { _panelDragMouseUp(); return; }
         // Create placeholder
         const ph = document.createElement('div');
-        ph.className = 'panel';
-        ph.style.cssText = 'border:2px dashed var(--accent);opacity:0.3;min-height:100px;';
+        ph.className = 'panel drag-placeholder';
         d.placeholder = ph;
         el.parentNode.insertBefore(ph, el);
         Object.assign(el.style, {
@@ -237,8 +236,7 @@ function _cmdReorderMouseMove(e) {
     if (!s.placeholder) {
         if (!container) return;
         const ph = document.createElement('div');
-        ph.className = 'cmd-reorder-placeholder';
-        ph.style.cssText = 'border-top:2px solid var(--accent);margin:0;pointer-events:none;';
+        ph.className = 'cmd-reorder-placeholder drag-placeholder-inline';
         s.placeholder = ph;
         s.srcEl.parentNode.insertBefore(ph, s.srcEl);
         Object.assign(s.srcEl.style, { position: 'fixed', left: s.startRect.left + 'px', width: s.startRect.width + 'px', zIndex: '1000', opacity: '0.85', pointerEvents: 'none' });

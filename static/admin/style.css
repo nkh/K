@@ -816,3 +816,14 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .panel-freeze-btn:focus-visible, .cmd-freeze-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .minimized-panel-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
 input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+
+/* Prefix key indicator (keyboard.js) */
+.prefix-indicator { position: fixed; bottom: 0.5rem; right: 0.5rem; background: var(--accent); color: var(--color-on-accent); padding: 0.15rem 0.5rem; border-radius: var(--radius-sm); font-size: var(--ui-fs); font-family: var(--font-mono); z-index: 99999; pointer-events: none; opacity: 0.9; }
+
+/* Command picker overlay (commands-core.js) */
+.cmd-picker-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 100; display: flex; align-items: center; justify-content: center; }
+.cmd-picker-content { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: 1.25rem; min-width: 420px; max-width: 90vw; }
+
+/* Drag placeholder (panels-dragdrop.js) */
+.drag-placeholder { border: 2px dashed var(--accent); opacity: 0.3; min-height: 100px; }
+.drag-placeholder-inline { border-top: 2px solid var(--accent); margin: 0; pointer-events: none; }

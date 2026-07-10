@@ -33,9 +33,9 @@
         }).join('');
         const overlay = document.createElement('div');
         overlay.id = 'cmdPicker';
-        overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:100;display:flex;align-items:center;justify-content:center';
+        overlay.className = 'cmd-picker-overlay';
         overlay.addEventListener('click', (e) => { if (e.target === overlay) { releaseCurrentFocusTrap(); overlay.remove(); } });
-        overlay.innerHTML = `<div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:1.25rem;min-width:420px;max-width:90vw">
+        overlay.innerHTML = `<div class="cmd-picker-content">
             <h2 style="font-size:1rem;color:var(--accent);margin-bottom:.75rem">Multiple commands matching "${pathName}"</h2>
             <p style="font-size:.75rem;color:var(--text-secondary);margin-bottom:.75rem">Click a command to view its terminal:</p>
             <div style="max-height:50vh;overflow-y:auto">${items}</div>
