@@ -86,7 +86,29 @@ Right-clicking the panel header opens a context menu with additional actions:
 | **Pause/Resume** | Toggles SIGSTOP/SIGCONT for the selected command (freeze/thaw) |
 | **Restart** | Restarts the command with the same configuration |
 | **Kill** | Terminates the selected command |
+| **Share Terminal...** | Opens a modal to generate a shareable link for the terminal (see [Terminal Sharing](../share-viewer.md)) |
+| **Open in New Tab** | Opens a clean, distraction-free viewer for this terminal in a new browser tab |
+| **Rename Panel** | Opens an inline text editor to rename the panel |
+| **Minimize/Restore Panel** | Minimizes or restores the panel (multi-panel only) |
+| **Split Horizontal / Vertical** | Splits the panel into two sub-panes arranged horizontally or vertically |
+| **Remove Split** | Removes the split and returns to a single-pane view |
+| **New Window** | Creates a new window (multi-window layout) |
+| **Close Window** | Closes the active window (multi-window only) |
 | **Remove Panel** | Removes this panel from the display (multi-instance only) |
+
+### Share Terminal Modal
+
+The **Share Terminal...** context menu item opens a modal dialog that lets you create a URL anyone can open to view the terminal in real-time. The modal provides the following options:
+
+- **Allow viewers to type (interactive)** — a checkbox that enables keyboard input for the share link. When unchecked (the default), the share is read-only: viewers can watch the terminal but cannot send keystrokes, paste text, or resize the terminal.
+- **Expires in** — a dropdown to configure how long the share link remains valid. Options range from 1 hour to never.
+- **Create Link** — generates a UUID v4 token, stores it in server memory, and displays the full URL. The URL can be copied with the **Copy** button.
+
+The share link opens a standalone `viewer.html` page that connects via a dedicated WebSocket (`/api/share/:token/ws`). No login or bearer token is required — the token in the URL is the sole authentication mechanism.
+
+### Open in New Tab
+
+The **Open in New Tab** context menu item creates a short-lived (1-hour) viewer token with full keyboard access and opens `/viewer/{token}` in a new browser tab. This is the same `viewer.html` page used for share links, but authenticated as the owner. The token is created via the auth-protected `GET /api/viewer/:cmd_id` endpoint, so no share link management is needed.
 
 ## Terminal Switching
 

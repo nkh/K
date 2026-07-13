@@ -39,6 +39,15 @@ Right-click the panel header bar to see panel-specific options:
 | **Pause/Resume** | Toggles SIGSTOP/SIGCONT for the selected command |
 | **Restart** | Restarts the selected command |
 | **Kill** | Terminates the selected command |
+| **Share Terminal...** | Opens the share modal to create a real-time view-only or interactive link for the terminal. See [Terminal Sharing](../share-viewer.md) for full details. |
+| **Open in New Tab** | Opens a clean, fullscreen viewer for this terminal in a new browser tab. Full keyboard access is enabled. The viewer token expires after 1 hour. |
+| **Rename Panel** | Opens an inline text editor on the panel header to rename it |
+| **Minimize/Restore Panel** | Collapses or expands the panel (only when multiple panels exist) |
+| **Split Horizontal** | Splits the panel into two side-by-side sub-panes (shortcut: `Alt+-`) |
+| **Split Vertical** | Splits the panel into two stacked sub-panes (shortcut: `Alt+\|`) |
+| **Remove Split** | Removes the split and returns to a single-pane view (shortcut: `Ctrl+A Ctrl+D`) |
+| **New Window** | Creates a new window in the multi-window layout (shortcut: `Alt+w`) |
+| **Close Window** | Closes the active window (only when multiple windows exist) |
 | **Remove Panel** | Removes this panel from the display (multi-instance only) |
 
 ## Keyboard Navigation

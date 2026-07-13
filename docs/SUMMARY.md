@@ -33,6 +33,7 @@
 - [Configuration](./configuration.md)
 - [API Reference](./api.md)
 - [WebSocket Protocol](./websocket.md)
+- [Terminal Sharing & Viewer](./share-viewer.md)
 - [Usage](./usage.md)
 - [Hooks](./hooks.md)
 - [Certificates](./certificates.md)

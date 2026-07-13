@@ -142,7 +142,7 @@ pub async fn share_page(State(state): State<AppState>, Path(token): Path<String>
 /// Serve the viewer page for `/viewer/{token}` (authenticated "Open in New Tab").
 /// Unlike `/share/`, this is for the same user opening a clean terminal view.
 /// The token was created via `GET /api/viewer/:cmd_id` (auth-protected).
-pub async fn viewer_page(Path(token): Path<String>) -> Response {
+pub async fn viewer_page(Path(_token): Path<String>) -> Response {
     match AdminAssets::get("viewer.html") {
         Some(content) => no_cache_response("text/html; charset=utf-8", content.data.to_vec()),
         None => Response::builder()

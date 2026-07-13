@@ -188,6 +188,7 @@ pub async fn stop_command_by_id(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::Parser;
 
     /// Helper to create an InstanceInfo for testing.
     #[cfg(feature = "vrw")]

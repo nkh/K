@@ -23,6 +23,7 @@
     - [Add Server Modal](./modals.md#add-server-modal)
     - [Command Picker Modal](./modals.md#command-picker-modal)
     - [Special Keys Help Modal](./modals.md#special-keys-help-modal)
+    - [Share Terminal Modal](./modals.md#share-terminal-modal)
     - [Focus Management](./modals.md#focus-management)
 - [Themes](./themes.md)
 - [Welcome Screen](./welcome-screen.md)

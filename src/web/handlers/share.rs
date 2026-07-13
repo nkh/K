@@ -633,7 +633,8 @@ mod tests {
         // Verify the token actually exists in the store
         let entry = state.share_tokens.get(token);
         assert!(entry.is_some());
-        let share = entry.unwrap().value();
+        let entry = entry.unwrap();
+        let share = entry.value();
         assert_eq!(share.cmd_id, "cmd-1");
         assert_eq!(share.keyboard, true);
         assert!(share.expires_at.is_some());

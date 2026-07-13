@@ -93,6 +93,28 @@ See [Global Search](./global-search.md) for details.
 
 **Open**: Click the **🔍** button in the top bar.
 
+## Share Terminal Modal
+
+Opened from the panel context menu (**Share Terminal...**). This modal creates a URL that lets anyone view a terminal in real-time through a standalone viewer page.
+
+### Configuration Options
+
+| Option | Description |
+|--------|-------------|
+| **Allow viewers to type (interactive)** | When checked, viewers can send keystrokes, paste text, and resize the terminal. When unchecked (default), the share is read-only. |
+| **Expires in** | How long the share link remains valid: 1 hour, 4 hours, 24 hours (default), 3 days, 1 week, or never. |
+
+### Flow
+
+1. Click **Create Link**. The server generates a UUID v4 token and stores it in memory.
+2. The full URL is displayed in a read-only input field (e.g., `https://your-server/share/a1b2c3d4-...`).
+3. Click **Copy** to copy the URL to the clipboard.
+4. Send the URL to your teammate. They open it in any browser — no login required.
+
+The viewer connects via a dedicated WebSocket (`/api/share/:token/ws`). See [Terminal Sharing & Viewer](../share-viewer.md) for the full protocol and security model.
+
+**Open**: Right-click a panel header → **Share Terminal...**.
+
 ## Focus Management
 
 All modals implement focus trapping: while a modal is open, the Tab key cycles through the modal's interactive elements and cannot escape to the page behind it. Pressing Escape closes the modal and restores focus to the previously active element.

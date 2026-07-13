@@ -190,7 +190,6 @@ pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::config::schema::Config;
     use crate::process::manager::CommandManager;
     use crate::web::certs::CertificateStore;
