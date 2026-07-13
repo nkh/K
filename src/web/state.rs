@@ -18,6 +18,8 @@ pub struct ShareToken {
     pub keyboard: bool,
     /// When this token expires (None = never).
     pub expires_at: Option<Instant>,
+    /// Optional display label for the share.
+    pub label: Option<String>,
 }
 
 /// Shared application state, threaded through Axum's state extractor.
@@ -140,12 +142,14 @@ mod tests {
             cmd_id: "cmd1".to_string(),
             keyboard: false,
             expires_at: None,
+            label: None,
         });
         // Add an already-expired token
         state.share_tokens.insert("expired".to_string(), ShareToken {
             cmd_id: "cmd2".to_string(),
             keyboard: false,
             expires_at: Some(std::time::Instant::now() - std::time::Duration::from_secs(1)),
+            label: None,
         });
         assert_eq!(state.share_tokens.len(), 2);
         state.cleanup_expired_share_tokens();

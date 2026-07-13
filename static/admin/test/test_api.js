@@ -33,6 +33,8 @@ assertOk(typeof api.activateEnvironment === 'function', 'activateEnvironment is 
 assertOk(typeof api.getDocs === 'function', 'getDocs is a function');
 assertOk(typeof api.getCommandResources === 'function', 'getCommandResources is a function');
 assertOk(typeof api.lookupCommand === 'function', 'lookupCommand is a function');
+assertOk(typeof api.createShareToken === 'function', 'createShareToken is a function');
+assertOk(typeof api.createViewerToken === 'function', 'createViewerToken is a function');
 
 // ── Internal URL construction ──
 console.log('URL construction');

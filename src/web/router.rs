@@ -150,15 +150,20 @@ pub fn create_router(state: AppState, cors_config: &CorsConfig) -> Router {
         )
         .route("/api/ws/logs", get(handlers::ws::ws_log_stream))
         .route("/api/share/:token", get(handlers::share::get_share))
+        // Viewer token — authenticated "Open in New Tab"
+        .route("/api/viewer/:id", get(handlers::share::create_viewer_token))
         .route("/api/shutdown", post(handlers::commands::shutdown));
 
-    // Public routes — admin panel and static assets
+    // Public routes — admin panel, share pages, and static assets
     let public_routes = Router::new()
         .route("/", get(handlers::admin::admin_page))
         .route("/admin", get(handlers::admin::admin_page))
         .route("/admin/*path", get(handlers::admin::admin_assets))
         .route("/favicon.ico", get(handlers::admin::admin_favicon))
         .route("/share/:token", get(handlers::admin::share_page))
+        .route("/viewer/:token", get(handlers::admin::viewer_page))
+        // Share WebSocket — public, authenticated via share token in URL
+        .route("/api/share/:token/ws", get(handlers::share::ws_share_stream))
         // Smart fallback: serves embedded static assets (style.css, app.js, etc.)
         // with correct MIME types, or index.html for command-name URL routing.
         .fallback(handlers::admin::smart_fallback);

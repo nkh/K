@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Terminal</title>
+<link rel="icon" type="image/png" href="favicon-32x32.png">
+<style>
+:root {
+    --bg-primary: #0d1117;
+    --bg-secondary: #161b22;
+    --border: #30363d;
+    --text-primary: #c9d1d9;
+    --text-secondary: #8b949e;
+    --text-muted: #484f58;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --red: #f85149;
+    --yellow: #d29922;
+    --font-mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+    --font-size: 10px;
+    --bar-h: 36px;
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #000;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Top Bar ─── */
+#topbar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: var(--bar-h);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 14px;
+    background: rgba(13, 17, 23, 0.72);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+#topbar:hover { background: rgba(13, 17, 23, 0.88); }
+
+#topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex: 1;
+}
+
+#terminal-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: 0.01em;
+}
+
+#keyboard-badge {
+    display: none;
+    font-size: 9px;
+    color: var(--green);
+    background: rgba(63, 185, 80, 0.1);
+    border: 1px solid rgba(63, 185, 80, 0.25);
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    flex-shrink: 0;
+}
+
+#topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+/* Connection status */
+#conn-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--text-secondary);
+    cursor: default;
+    user-select: none;
+}
+#conn-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--red);
+    flex-shrink: 0;
+    transition: background 0.4s ease, box-shadow 0.4s ease;
+}
+#conn-dot.connected {
+    background: var(--green);
+    box-shadow: 0 0 6px rgba(63, 185, 80, 0.5);
+}
+#conn-dot.reconnecting {
+    background: var(--yellow);
+    box-shadow: 0 0 6px rgba(210, 153, 34, 0.4);
+    animation: pulse-dot 1.5s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+/* Follow toggle */
+#follow-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(88, 166, 255, 0.1);
+    border: 1px solid rgba(88, 166, 255, 0.25);
+    border-radius: 4px;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 3px 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+    white-space: nowrap;
+}
+#follow-btn:hover {
+    background: rgba(88, 166, 255, 0.18);
+    border-color: rgba(88, 166, 255, 0.4);
+}
+#follow-btn:active { transform: scale(0.96); }
+#follow-btn .icon {
+    font-size: 11px;
+    line-height: 1;
+    transition: transform 0.25s ease;
+}
+#follow-btn.active .icon { transform: rotate(180deg); }
+#follow-btn.active {
+    background: rgba(88, 166, 255, 0.2);
+    border-color: rgba(88, 166, 255, 0.5);
+}
+
+/* ─── Terminal Area ─── */
+#terminal-wrap {
+    position: fixed;
+    top: var(--bar-h);
+    left: 0; right: 0; bottom: 0;
+    background: #000;
+    overflow: hidden;
+}
+
+#terminal {
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    padding: 4px 6px;
+    outline: none;
+    cursor: default;
+    font-family: var(--font-mono);
+    font-size: var(--font-size);
+    line-height: 1.2;
+    color: #ccc;
+    -webkit-overflow-scrolling: touch;
+}
+
+#terminal pre {
+    margin: 0;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    white-space: pre;
+    min-height: 100%;
+}
+
+/* Custom scrollbar */
+#terminal::-webkit-scrollbar { width: 8px; height: 8px; }
+#terminal::-webkit-scrollbar-track { background: transparent; }
+#terminal::-webkit-scrollbar-thumb {
+    background: rgba(88, 166, 255, 0.18);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+#terminal::-webkit-scrollbar-thumb:hover { background: rgba(88, 166, 255, 0.32); background-clip: padding-box; }
+#terminal::-webkit-scrollbar-corner { background: transparent; }
+
+/* Firefox scrollbar */
+#terminal {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(88, 166, 255, 0.18) transparent;
+}
+
+/* ─── Error State ─── */
+#error-screen {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: var(--bg-primary);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 24px;
+    text-align: center;
+    animation: fadeIn 0.4s ease;
+}
+#error-screen.visible { display: flex; }
+
+#error-icon {
+    font-size: 40px;
+    opacity: 0.5;
+    line-height: 1;
+}
+#error-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+#error-message {
+    font-size: 12px;
+    color: var(--text-secondary);
+    max-width: 400px;
+    line-height: 1.6;
+}
+#error-back {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--accent);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    transition: color 0.2s;
+}
+#error-back:hover { color: #79c0ff; }
+
+/* ─── Loading State ─── */
+#loading-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 150;
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    transition: opacity 0.4s ease;
+}
+#loading-screen.fade-out { opacity: 0; pointer-events: none; }
+
+.loader {
+    width: 28px; height: 28px;
+    border: 2px solid rgba(88, 166, 255, 0.15);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.loader-text {
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+}
+
+/* ─── Session Ended Banner ─── */
+#ended-banner {
+    display: none;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 90;
+    background: rgba(13, 17, 23, 0.88);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border);
+    padding: 8px 16px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-secondary);
+    animation: slideUp 0.4s ease;
+}
+#ended-banner.visible { display: block; }
+@keyframes slideUp {
+    from { transform: translateY(100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+/* ─── Utilities ─── */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Auto-hide topbar */
+#topbar.auto-hide {
+    opacity: 0;
+    transform: translateY(-100%);
+    pointer-events: none;
+}
+#topbar:not(.auto-hide) {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+/* ─── Mobile ─── */
+@media (max-width: 600px) {
+    :root { --bar-h: 32px; }
+    #terminal-label { font-size: 10px; }
+    #follow-btn { padding: 2px 8px; font-size: 9px; }
+    #conn-status { font-size: 9px; }
+    #terminal { padding: 2px 4px; }
+}
+
+/* Blinking cursor animation (matching server output) */
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+</style>
+</head>
+<body>
+
+<!-- Loading screen -->
+<div id="loading-screen">
+    <div class="loader"></div>
+    <div class="loader-text">Connecting...</div>
+</div>
+
+<!-- Error screen -->
+<div id="error-screen">
+    <div id="error-icon">&#x2716;</div>
+    <div id="error-title">Terminal Unavailable</div>
+    <div id="error-message"></div>
+    <div id="error-back" onclick="history.back()">Go Back</div>
+</div>
+
+<!-- Top bar -->
+<header id="topbar">
+    <div id="topbar-left">
+        <span id="terminal-label">Shared Terminal</span>
+        <span id="keyboard-badge">Interactive</span>
+    </div>
+    <div id="topbar-right">
+        <div id="conn-status">
+            <span id="conn-dot"></span>
+            <span id="conn-text">Connecting</span>
+        </div>
+        <button id="follow-btn" class="active" title="Auto-scroll to bottom">
+            <span class="icon">&#x2193;</span>
+            <span>Follow</span>
+        </button>
+    </div>
+</header>
+
+<!-- Terminal -->
+<div id="terminal-wrap">
+    <div id="terminal" tabindex="0">
+        <pre id="vtty"></pre>
+    </div>
+</div>
+
+<!-- Session ended banner -->
+<div id="ended-banner">Terminal session ended</div>
+
+<script>
+(function() {
+'use strict';
+
+// ─── Configuration ───
+const PING_INTERVAL = 30000;
+const PONG_TIMEOUT  = 10000;
+const MAX_RECONNECT_DELAY = 30000;
+const BASE_RECONNECT_DELAY = 1000;
+
+// ─── Key Maps (matching admin panel) ───
+const KEY_MAP = {
+    'Enter': '\r', 'Backspace': '\x7f', 'Tab': '\t', 'Escape': '\x1b',
+    'Home': '\x1b[H', 'End': '\x1b[F', 'Delete': '\x1b[3~',
+    'ArrowUp': '\x1b[A', 'ArrowDown': '\x1b[B', 'ArrowRight': '\x1b[C', 'ArrowLeft': '\x1b[D',
+    'PageUp': '\x1b[5~', 'PageDown': '\x1b[6~', 'Insert': '\x1b[2~',
+    'F1': '\x1bOP', 'F2': '\x1bOQ', 'F3': '\x1bOR', 'F4': '\x1bOS',
+    'F5': '\x1b[15~', 'F6': '\x1b[17~', 'F7': '\x1b[18~', 'F8': '\x1b[19~',
+    'F9': '\x1b[20~', 'F10': '\x1b[21~', 'F11': '\x1b[23~', 'F12': '\x1b[24~',
+};
+const CTRL_MAP = { '[': '\x1b', '\\': '\x1c', ']': '\x1d', '^': '\x1e', '_': '\x1f' };
+
+// ─── State ───
+let token = '';
+let cmdId = null;
+let keyboard = false;
+let followMode = true;
+let baseline = null;
+let ws = null;
+let reconnectDelay = BASE_RECONNECT_DELAY;
+let reconnectTimer = null;
+let pingTimer = null;
+let pongTimer = null;
+let wsRetries = 0;
+let sessionEnded = false;
+let autoHideTimer = null;
+let manualScroll = false;
+let scrollTimeout = null;
+
+// ─── DOM refs ───
+const $loading    = document.getElementById('loading-screen');
+const $error      = document.getElementById('error-screen');
+const $errorTitle = document.getElementById('error-title');
+const $errorMsg   = document.getElementById('error-message');
+const $topbar     = document.getElementById('topbar');
+const $label      = document.getElementById('terminal-label');
+const $kbBadge    = document.getElementById('keyboard-badge');
+const $connDot    = document.getElementById('conn-dot');
+const $connText   = document.getElementById('conn-text');
+const $followBtn  = document.getElementById('follow-btn');
+const $terminal   = document.getElementById('terminal');
+const $vtty       = document.getElementById('vtty');
+const $ended      = document.getElementById('ended-banner');
+
+// ─── URL Parsing ───
+function init() {
+    // Extract token from last path segment
+    const segments = window.location.pathname.replace(/\/+$/, '').split('/');
+    token = segments[segments.length - 1] || '';
+
+    // Label from query param
+    const params = new URLSearchParams(window.location.search);
+    const label = params.get('label');
+    if (label) {
+        $label.textContent = decodeURIComponent(label);
+        document.title = decodeURIComponent(label) + ' \u2014 Terminal';
+    }
+
+    if (!token) {
+        showError('Invalid Link', 'No terminal token found in the URL. The link may be broken or incomplete.');
+        return;
+    }
+
+    load();
+}
+
+// ─── Initial Load ───
+async function load() {
+    try {
+        const res = await fetch('/api/share/' + encodeURIComponent(token));
+        if (!res.ok) {
+            if (res.status === 404 || res.status === 410) {
+                showError('Link Expired', 'This shared terminal link has expired or the session no longer exists.');
+            } else {
+                showError('Connection Error', 'Could not load the terminal session. Please check your connection and try again.');
+            }
+            return;
+        }
+        const data = await res.json();
+        if (data.status !== 'ok' || !data.data) {
+            showError('Invalid Session', data.error || 'The terminal session could not be loaded.');
+            return;
+        }
+
+        const info = data.data;
+        cmdId = info.cmd_id;
+        keyboard = !!info.keyboard;
+
+        // Set keyboard badge
+        if (keyboard) {
+            $kbBadge.style.display = 'inline-block';
+            $terminal.setAttribute('tabindex', '0');
+        }
+
+        // Render initial HTML
+        if (info.html) {
+            $vtty.innerHTML = info.html;
+        }
+
+        // Fade out loading
+        $loading.classList.add('fade-out');
+        setTimeout(() => { $loading.style.display = 'none'; }, 400);
+
+        // Setup keyboard
+        if (keyboard) setupKeyboard();
+
+        // Connect WebSocket
+        connectWS();
+
+        // Auto-scroll
+        if (followMode) scrollToBottom();
+
+    } catch (e) {
+        showError('Network Error', 'Unable to reach the server. Please check your internet connection and try again.');
+    }
+}
+
+// ─── Error Display ───
+function showError(title, message) {
+    $loading.style.display = 'none';
+    $errorTitle.textContent = title;
+    $errorMsg.textContent = message;
+    $error.classList.add('visible');
+    document.title = title;
+}
+
+// ─── WebSocket ───
+function connectWS() {
+    if (!token) return;
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const url = proto + '//' + location.host + '/api/share/' + encodeURIComponent(token) + '/ws';
+
+    setConnStatus('connecting');
+
+    try {
+        ws = new WebSocket(url);
+    } catch (e) {
+        scheduleReconnect();
+        return;
+    }
+
+    ws.onopen = () => {
+        reconnectDelay = BASE_RECONNECT_DELAY;
+        wsRetries = 0;
+        setConnStatus('connected');
+        startPing();
+    };
+
+    ws.onmessage = (e) => {
+        let msg;
+        try { msg = JSON.parse(e.data); } catch { return; }
+
+        switch (msg.type) {
+            case 'pong':
+                clearTimeout(pongTimer);
+                break;
+            case 'vtty_dirty':
+                handleVttyDirty();
+                break;
+            case 'command_ended':
+                sessionEnded = true;
+                $ended.classList.add('visible');
+                break;
+        }
+    };
+
+    ws.onclose = () => {
+        stopPing();
+        if (!sessionEnded) {
+            setConnStatus('disconnected');
+            scheduleReconnect();
+        }
+    };
+
+    ws.onerror = () => {
+        // onclose fires after this
+    };
+}
+
+function scheduleReconnect() {
+    if (sessionEnded) return;
+    clearTimeout(reconnectTimer);
+    setConnStatus('reconnecting');
+    reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connectWS();
+    }, reconnectDelay);
+    reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY);
+}
+
+// ─── Ping/Pong ───
+function startPing() {
+    stopPing();
+    pingTimer = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ping' }));
+            pongTimer = setTimeout(() => {
+                // Pong timeout — kill the socket to trigger reconnect
+                if (ws) ws.close();
+            }, PONG_TIMEOUT);
+        }
+    }, PING_INTERVAL);
+}
+
+function stopPing() {
+    clearInterval(pingTimer);
+    clearTimeout(pongTimer);
+    pingTimer = null;
+    pongTimer = null;
+}
+
+// ─── Connection Status ───
+function setConnStatus(state) {
+    $connDot.className = '';
+    switch (state) {
+        case 'connected':
+            $connDot.classList.add('connected');
+            $connText.textContent = 'Connected';
+            break;
+        case 'connecting':
+            $connText.textContent = 'Connecting';
+            break;
+        case 'reconnecting':
+            $connDot.classList.add('reconnecting');
+            $connText.textContent = 'Reconnecting';
+            break;
+        case 'disconnected':
+            $connText.textContent = 'Disconnected';
+            break;
+    }
+}
+
+// ─── VTTY Updates ───
+async function handleVttyDirty() {
+    if (!cmdId) return;
+
+    // Try diff first if we have a baseline
+    if (baseline) {
+        try {
+            const diffUrl = '/api/commands/' + cmdId + '/vtty/diff?baseline=' + encodeURIComponent(baseline);
+            const res = await fetch(diffUrl);
+            if (res.ok) {
+                const json = await res.json();
+                if (json.status === 'ok' && json.data) {
+                    if (json.data.full_sync_required) {
+                        await fetchFullHtml();
+                        return;
+                    }
+                    if (json.data.html !== undefined) {
+                        $vtty.innerHTML = json.data.html;
+                    }
+                    if (json.data.baseline) {
+                        baseline = json.data.baseline;
+                    }
+                    if (followMode) scrollToBottom();
+                    return;
+                }
+            }
+        } catch (e) { /* fall through to full */ }
+    }
+
+    // Fallback: full HTML
+    await fetchFullHtml();
+}
+
+async function fetchFullHtml() {
+    if (!cmdId) return;
+    try {
+        const res = await fetch('/api/commands/' + cmdId + '/vtty/html');
+        if (res.ok) {
+            const json = await res.json();
+            if (json.status === 'ok' && json.data && json.data.html !== undefined) {
+                $vtty.innerHTML = json.data.html;
+                if (json.data.baseline) baseline = json.data.baseline;
+                if (followMode) scrollToBottom();
+            }
+        }
+    } catch (e) { /* silent */ }
+}
+
+// ─── Keyboard Handling ───
+function setupKeyboard() {
+    $terminal.addEventListener('keydown', onKeyDown);
+    $terminal.addEventListener('paste', onPaste);
+    $terminal.addEventListener('click', () => $terminal.focus());
+    // Focus terminal on load
+    setTimeout(() => $terminal.focus(), 100);
+}
+
+function onKeyDown(e) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (!keyboard) return;
+
+    // Handle paste shortcut
+    if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+        return; // Let the paste event handle it
+    }
+
+    // Function keys and special keys
+    if (KEY_MAP[e.key]) {
+        e.preventDefault();
+        sendKeys(KEY_MAP[e.key]);
+        return;
+    }
+
+    // Ctrl + letter
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.length === 1) {
+        e.preventDefault();
+        const k = e.key.toUpperCase();
+        if (k >= 'A' && k <= 'Z') {
+            sendKeys(String.fromCharCode(k.charCodeAt(0) - 64));
+        } else if (CTRL_MAP[e.key]) {
+            sendKeys(CTRL_MAP[e.key]);
+        }
+        return;
+    }
+
+    // Regular printable characters
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        sendKeys(e.key);
+    }
+}
+
+function onPaste(e) {
+    if (!ws || ws.readyState !== WebSocket.OPEN || !keyboard) return;
+    e.preventDefault();
+    const text = e.clipboardData.getData('text/plain');
+    if (text) {
+        ws.send(JSON.stringify({ type: 'paste', text: text }));
+    }
+}
+
+function sendKeys(seq) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'keys', keys: seq }));
+}
+
+// ─── Follow Mode & Scrolling ───
+$followBtn.addEventListener('click', () => {
+    followMode = !followMode;
+    $followBtn.classList.toggle('active', followMode);
+    if (followMode) scrollToBottom();
+});
+
+$terminal.addEventListener('scroll', () => {
+    // Detect if user manually scrolled up
+    const atBottom = isAtBottom();
+    if (!atBottom && followMode) {
+        // User scrolled up — disable follow
+        followMode = false;
+        $followBtn.classList.remove('active');
+    }
+    // If user scrolled to bottom while follow is off, re-enable
+    if (atBottom && !followMode) {
+        followMode = true;
+        $followBtn.classList.add('active');
+    }
+});
+
+function isAtBottom() {
+    return $terminal.scrollHeight - $terminal.scrollTop - $terminal.clientHeight < 30;
+}
+
+function scrollToBottom() {
+    $terminal.scrollTop = $terminal.scrollHeight;
+}
+
+// ─── Auto-hide Topbar ───
+function setupAutoHide() {
+    let hideTimer = null;
+    let idleTimer = null;
+
+    function showBar() {
+        $topbar.classList.remove('auto-hide');
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(hideBar, 4000);
+    }
+
+    function hideBar() {
+        // Keep bar visible while terminal is focused (keyboard input active)
+        if (keyboard && document.activeElement === $terminal) return;
+        $topbar.classList.add('auto-hide');
+    }
+
+    document.addEventListener('mousemove', showBar);
+    document.addEventListener('touchstart', showBar, { passive: true });
+    $terminal.addEventListener('focus', () => {
+        clearTimeout(idleTimer);
+        $topbar.classList.remove('auto-hide');
+    });
+    $terminal.addEventListener('blur', () => {
+        idleTimer = setTimeout(hideBar, 4000);
+    });
+
+    // Start the idle timer
+    idleTimer = setTimeout(hideBar, 4000);
+}
+
+// ─── Resize handling ───
+window.addEventListener('resize', () => {
+    // If we're in follow mode, re-scroll to bottom after resize
+    if (followMode) {
+        requestAnimationFrame(scrollToBottom);
+    }
+});
+
+// ─── Reduced motion ───
+const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (prefersReduced) {
+    document.documentElement.style.setProperty('--bar-h', '36px');
+    // Disable auto-hide for reduced motion preference
+    // (the transition is already in the CSS, but the auto-hide adds motion)
+}
+
+// ─── Init ───
+init();
+if (!document.getElementById('error-screen').classList.contains('visible')) {
+    setupAutoHide();
+}
+
+})();
+</script>
+</body>
+</html>

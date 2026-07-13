@@ -247,6 +247,14 @@
             return _jsonGet('/api/commands/' + cmdId + '/vtty/text', instUrl);
         },
 
+        // ── Share & Viewer ──
+        createShareToken(instUrl, cmdId, opts) {
+            return _jsonPost('/api/commands/' + cmdId + '/share', instUrl, opts || {});
+        },
+        createViewerToken(instUrl, cmdId) {
+            return _jsonGet('/api/viewer/' + cmdId, instUrl);
+        },
+
         // ── Generic JSON GET (for variant VTTY endpoints like scrollback/buffer) ──
         getJson(path, instUrl) {
             return _jsonGet(path, instUrl);

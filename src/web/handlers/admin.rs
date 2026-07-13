@@ -85,10 +85,11 @@ fn guess_mime_type(path: &str) -> &'static str {
     }
 }
 
-/// Serve the minimal share page for `/share/{token}`.
-/// This is a public, standalone page — no sidebar, no topbar, just the terminal.
+/// Serve the share page for `/share/{token}`.
+/// Validates the token and serves the viewer.html page with the token embedded.
+/// The viewer page handles real-time WebSocket updates.
 pub async fn share_page(State(state): State<AppState>, Path(token): Path<String>) -> Response {
-    // Validate token
+    // Validate token exists and is not expired
     let Some(entry) = state.share_tokens.get(&token) else {
         return Response::builder()
             .status(StatusCode::NOT_FOUND)
@@ -126,140 +127,30 @@ pub async fn share_page(State(state): State<AppState>, Path(token): Path<String>
         }
     }
 
-    let keyboard = share.keyboard;
-    let cmd_id = share.cmd_id.clone();
-    drop(entry);
-
-    let html = format!(
-        r#"<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shared Terminal — vrw</title>
-<link rel="icon" type="image/x-icon" href="/favicon.ico">
-<style>
-:root {{
-    --bg-primary: #0d1117;
-    --bg-secondary: #161b22;
-    --bg-tertiary: #21262d;
-    --border: #30363d;
-    --text-primary: #c9d1d9;
-    --text-secondary: #8b949e;
-    --text-muted: #484f58;
-    --accent: #58a6ff;
-    --font-mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
-    --font-size: 10px;
-}}
-* {{ box-sizing: border-box; margin: 0; padding: 0; }}
-body {{ font-family: system-ui, -apple-system, sans-serif; background: var(--bg-primary); color: var(--text-primary); font-size: var(--font-size); overflow: hidden; height: 100vh; }}
-#terminal {{ flex: 1; overflow: auto; background: #000; cursor: {keyboard_css}; }}
-#terminal pre {{ margin: 0; padding: 0; font-family: var(--font-mono); font-size: var(--font-size); line-height: 1.2; min-width: 100%; min-height: 100%; }}
-.badge {{ position: fixed; top: 0.5rem; right: 0.5rem; z-index: 10; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 4px; padding: 0.2rem 0.5rem; font-size: 0.7rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.3rem; }}
-.badge .dot {{ width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }}
-.loading {{ display: flex; align-items: center; justify-content: center; height: 100vh; color: var(--text-muted); font-size: 0.9rem; }}
-::-webkit-scrollbar {{ width: 8px; height: 8px; }}
-::-webkit-scrollbar-track {{ background: var(--bg-primary); }}
-::-webkit-scrollbar-thumb {{ background: var(--border); border-radius: 4px; }}
-::-webkit-scrollbar-thumb:hover {{ background: var(--text-muted); }}
-</style>
-</head>
-<body style="display:flex;flex-direction:column;">
-<div id="terminal" {tabattr}><pre>Loading terminal...</pre></div>
-<div class="badge"><div class="dot"></div> Shared terminal</div>
-<script>
-const TOKEN = "{token}";
-const CMD_ID = "{cmd_id}";
-const KEYBOARD = {keyboard_js};
-let pollTimer = null;
-
-async function loadTerminal() {{
-    try {{
-        const res = await fetch('/api/share/' + TOKEN);
-        const json = await res.json();
-        if (json.status === 'ok' && json.data) {{
-            const d = json.data;
-            const terminal = document.getElementById('terminal');
-            const pre = terminal.querySelector('pre');
-            if (pre && d.html !== undefined) {{
-                pre.innerHTML = d.html;
-            }}
-        }} else {{
-            const terminal = document.getElementById('terminal');
-            const pre = terminal.querySelector('pre');
-            if (pre) pre.textContent = 'Error: ' + (json.error || 'Failed to load terminal');
-        }}
-    }} catch (e) {{
-        const terminal = document.getElementById('terminal');
-        const pre = terminal.querySelector('pre');
-        if (pre) pre.textContent = 'Network error: ' + e.message;
-    }}
-}}
-
-// Poll every 500ms
-function startPoll() {{
-    loadTerminal();
-    pollTimer = setInterval(loadTerminal, 500);
-}}
-startPoll();
-
-// Keyboard input if enabled
-{keyboard_code}
-</script>
-</body></html>"#,
-        token = token,
-        cmd_id = cmd_id,
-        keyboard_js = keyboard,
-        keyboard_css = if keyboard { "text" } else { "default" },
-        tabattr = if keyboard { "tabindex=\"0\"" } else { "" },
-        keyboard_code = if keyboard {
-            r#"
-const terminal = document.getElementById('terminal');
-terminal.addEventListener('keydown', async (e) => {
-    const keyMap = {
-        'Enter': '\r', 'Backspace': '\x7f', 'Tab': '\t', 'Escape': '\x1b',
-        'Home': '\x1b[H', 'End': '\x1b[F', 'Delete': '\x1b[3~',
-        'ArrowUp': '\x1b[A', 'ArrowDown': '\x1b[B', 'ArrowRight': '\x1b[C', 'ArrowLeft': '\x1b[D',
-        'PageUp': '\x1b[5~', 'PageDown': '\x1b[6~', 'Insert': '\x1b[2~',
-        'F1': '\x1bOP', 'F2': '\x1bOQ', 'F3': '\x1bOR', 'F4': '\x1bOS',
-        'F5': '\x1b[15~', 'F6': '\x1b[17~', 'F7': '\x1b[18~', 'F8': '\x1b[19~',
-        'F9': '\x1b[20~', 'F10': '\x1b[21~', 'F11': '\x1b[23~', 'F12': '\x1b[24~',
-    };
-    let seq = '';
-    if (e.ctrlKey && !e.altKey && !e.metaKey) {
-        if (e.key.length === 1 && e.key >= 'a' && e.key <= 'z') {
-            seq = String.fromCharCode(e.key.charCodeAt(0) - 96);
-        }
-    } else if (keyMap[e.key]) {
-        seq = keyMap[e.key];
-    } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
-        seq = e.key;
+    // Serve the viewer.html page — the JS will extract the token from the URL path
+    // and connect via WebSocket for real-time updates.
+    match AdminAssets::get("viewer.html") {
+        Some(content) => no_cache_response("text/html; charset=utf-8", content.data.to_vec()),
+        None => Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+            .body(Body::from("<h1>Viewer page not found</h1>"))
+            .unwrap(),
     }
-    if (!seq) return;
-    e.preventDefault();
-    try {
-        await fetch('/api/commands/' + CMD_ID + '/keys', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ keys: seq }),
-        });
-        // Trigger a refresh
-        setTimeout(loadTerminal, 50);
-    } catch (err) {}
-});
-terminal.focus();
-"#
-        } else {
-            ""
-        },
-    );
+}
 
-    Response::builder()
-        .status(StatusCode::OK)
-        .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
-        .header(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate")
-        .body(Body::from(html))
-        .unwrap()
+/// Serve the viewer page for `/viewer/{token}` (authenticated "Open in New Tab").
+/// Unlike `/share/`, this is for the same user opening a clean terminal view.
+/// The token was created via `GET /api/viewer/:cmd_id` (auth-protected).
+pub async fn viewer_page(Path(token): Path<String>) -> Response {
+    match AdminAssets::get("viewer.html") {
+        Some(content) => no_cache_response("text/html; charset=utf-8", content.data.to_vec()),
+        None => Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+            .body(Body::from("Viewer page not found"))
+            .unwrap(),
+    }
 }
 
 /// Smart catch-all fallback: if the requested path matches an embedded static
@@ -274,6 +165,7 @@ pub async fn smart_fallback(uri: Uri) -> Response {
         || path.starts_with("api/")
         || path.starts_with("admin")
         || path.starts_with("share/")
+        || path.starts_with("viewer/")
     {
         return admin_page().await;
     }

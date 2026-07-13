@@ -116,6 +116,9 @@ function showPanelContextMenu(e, panelId, leafId) {
         menu.appendChild(_createCtxMenuItem('Pause/Resume', () => togglePauseCmd(instUrl, cmdId)));
         menu.appendChild(_createCtxMenuItem('Restart', () => restartCommandById(instUrl, cmdId)));
         menu.appendChild(_createCtxMenuItem('Kill', () => killCommand(instUrl, cmdId), true));
+        _addCtxSep(menu);
+        menu.appendChild(_createCtxMenuItem('Share Terminal...', () => _showShareModal(instUrl, cmdId)));
+        menu.appendChild(_createCtxMenuItem('Open in New Tab', () => _openViewerTab(instUrl, cmdId)));
     }
     menu.appendChild(_createCtxMenuItem('Rename Panel', () => startRenamePanel(panelId)));
     if (state.panels.length > 1) {
@@ -155,6 +158,98 @@ function showPanelContextMenu(e, panelId, leafId) {
     _positionCtxMenu(menu, e.clientX, e.clientY);
     _setupCtxMenuListeners(menu);
 }
+
+    // ── Share Modal ──
+    function _showShareModal(instUrl, cmdId) {
+        closeContextMenu();
+        const cmd = _findCmd(instUrl, cmdId);
+        const cmdName = cmd ? (cmd.name || cmd.id) : cmdId;
+        // Remove existing modal if any
+        const existing = document.getElementById('shareModal');
+        if (existing) existing.remove();
+        const overlay = document.createElement('div');
+        overlay.id = 'shareModal';
+        overlay.className = 'modal-overlay';
+        overlay.innerHTML = `<div class="modal" style="min-width:380px">
+            <h2>Share Terminal</h2>
+            <p style="font-size:var(--ui-fs);color:var(--text-secondary);margin-bottom:0.75rem;">Create a link that lets others view${' '}<strong>${escHtml(cmdName)}</strong>'s terminal in real-time.</p>
+            <div class="field" style="margin-bottom:0.5rem;">
+                <label style="display:flex;align-items:center;gap:0.3rem;font-size:var(--ui-fs);color:var(--text-secondary);cursor:pointer;">
+                    <input type="checkbox" id="shareKeyboard" style="width:auto;"> Allow viewers to type (interactive)
+                </label>
+            </div>
+            <div class="field" style="margin-bottom:0.5rem;">
+                <label style="font-size:var(--ui-fs);color:var(--text-secondary);">Expires in</label>
+                <select id="shareExpires" style="font-size:var(--ui-fs);padding:0.15rem 0.3rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--radius-sm);width:100%;">
+                    <option value="1">1 hour</option>
+                    <option value="4">4 hours</option>
+                    <option value="24" selected>24 hours</option>
+                    <option value="72">3 days</option>
+                    <option value="168">1 week</option>
+                    <option value="0">Never</option>
+                </select>
+            </div>
+            <div class="field" id="shareResult" class="hidden" style="margin-bottom:0.5rem;display:none;">
+                <label style="font-size:var(--ui-fs);color:var(--text-secondary);">Share link</label>
+                <div style="display:flex;gap:0.2rem;">
+                    <input type="text" id="shareUrl" readonly style="flex:1;font-size:var(--ui-fs);padding:0.15rem 0.3rem;background:var(--bg-tertiary);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--radius-sm);">
+                    <button class="btn btn-xs btn-primary" id="shareCopyBtn">Copy</button>
+                </div>
+            </div>
+            <div class="actions">
+                <button class="btn btn-xs" id="shareCancelBtn">Cancel</button>
+                <button class="btn btn-xs btn-primary" id="shareCreateBtn">Create Link</button>
+            </div>
+        </div>`;
+        document.body.appendChild(overlay);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+        document.getElementById('shareCancelBtn').addEventListener('click', () => overlay.remove());
+        document.getElementById('shareCreateBtn').addEventListener('click', async () => {
+            const keyboard = document.getElementById('shareKeyboard').checked;
+            const expires = parseInt(document.getElementById('shareExpires').value, 10);
+            const btn = document.getElementById('shareCreateBtn');
+            btn.textContent = 'Creating...'; btn.disabled = true;
+            try {
+                const json = await api.createShareToken(instUrl, cmdId, { keyboard, expires_hours: expires });
+                if (json.status === 'ok') {
+                    const baseUrl = window.location.origin;
+                    const shareUrl = baseUrl + json.data.url;
+                    const result = document.getElementById('shareResult');
+                    result.style.display = '';
+                    document.getElementById('shareUrl').value = shareUrl;
+                    document.getElementById('shareCreateBtn').style.display = 'none';
+                    document.getElementById('shareCopyBtn').addEventListener('click', () => {
+                        navigator.clipboard.writeText(shareUrl).then(() => {
+                            document.getElementById('shareCopyBtn').textContent = 'Copied!';
+                            setTimeout(() => { document.getElementById('shareCopyBtn').textContent = 'Copy'; }, 2000);
+                        });
+                    });
+                } else {
+                    alert('Failed to create share link: ' + (json.error || 'unknown error'));
+                    btn.textContent = 'Create Link'; btn.disabled = false;
+                }
+            } catch (e) {
+                alert('Error: ' + (e.message || e));
+                btn.textContent = 'Create Link'; btn.disabled = false;
+            }
+        });
+        // Focus the create button
+        document.getElementById('shareCreateBtn').focus();
+    }
+
+    function _openViewerTab(instUrl, cmdId) {
+        closeContextMenu();
+        api.createViewerToken(instUrl, cmdId).then(json => {
+            if (json.status === 'ok' && json.data && json.data.token) {
+                const cmd = _findCmd(instUrl, cmdId);
+                const label = cmd ? encodeURIComponent(cmd.name || cmd.id) : '';
+                const url = window.location.origin + '/viewer/' + json.data.token + (label ? '?label=' + label : '');
+                window.open(url, '_blank');
+            } else {
+                alert('Failed to open viewer: ' + (json.error || 'unknown error'));
+            }
+        }).catch(e => alert('Error: ' + (e.message || e)));
+    }
 
     // ── Exports ──
     Object.assign(window, {
